@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist-electron/
+data/
+*.db
+.DS_Store
+Thumbs.db
+.claude/
+!/.claude/CLAUDE.md
+!/.claude/settings.json

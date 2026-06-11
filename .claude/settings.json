@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm *)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Bash(reg query *)",
+      "Bash(grep -rl \"ELECTRON_RUN_AS_NODE\" /etc/ /c/Users/ 2>/dev/null | head -5 *)",
+      "Read(//etc/**)",
+      "Read(//c/Users/徐志岩/**)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)"
+    ]
+  },
+  "autoCompactThreshold": 80
+}
