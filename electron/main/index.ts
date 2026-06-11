@@ -3,6 +3,7 @@ import { join } from 'path'
 import { initDatabase, getDbPath, closeDatabase } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
+import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -85,6 +86,7 @@ app.whenReady().then(async () => {
   registerWindowHandlers()
   registerEntryHandlers()
   registerTagHandlers()
+  registerScheduleHandlers()
   createWindow()
 
   app.on('activate', () => {

@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../types'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
 
 export const minimize = () => a().minimize()
@@ -18,3 +18,13 @@ export const getTags = () => a().getTags()
 export const createTag = (n: string, c?: string) => a().createTag(n, c)
 export const deleteTag = (id: string) => a().deleteTag(id)
 export const getDbPath = () => a().getDbPath()
+
+// schedule
+export const getScheduleTodos = (date: string) => a().getScheduleTodos(date)
+export const getScheduleDates = (yearMonth: string) => a().getScheduleDates(yearMonth)
+export const createScheduleTodo = (d: CreateScheduleTodoDTO) => a().createScheduleTodo(d)
+export const updateScheduleTodo = (id: string, d: UpdateScheduleTodoDTO) => a().updateScheduleTodo(id, d)
+export const deleteScheduleTodo = (id: string) => a().deleteScheduleTodo(id)
+export const getScheduleTags = () => a().getScheduleTags()
+export const createScheduleTag = (n: string, c?: string) => a().createScheduleTag(n, c)
+export const deleteScheduleTag = (id: string) => a().deleteScheduleTag(id)

@@ -19,7 +19,17 @@ const api = {
   getTags: () => ipcRenderer.invoke('db:getTags'),
   createTag: (name: string, color?: string) => ipcRenderer.invoke('db:createTag', name, color),
   deleteTag: (id: string) => ipcRenderer.invoke('db:deleteTag', id),
-  getDbPath: () => ipcRenderer.invoke('db:getPath')
+  getDbPath: () => ipcRenderer.invoke('db:getPath'),
+
+  // schedule
+  getScheduleTodos: (date: string) => ipcRenderer.invoke('schedule:getTodos', date),
+  getScheduleDates: (yearMonth: string) => ipcRenderer.invoke('schedule:getDatesWithTodos', yearMonth),
+  createScheduleTodo: (data: unknown) => ipcRenderer.invoke('schedule:createTodo', data),
+  updateScheduleTodo: (id: string, data: unknown) => ipcRenderer.invoke('schedule:updateTodo', id, data),
+  deleteScheduleTodo: (id: string) => ipcRenderer.invoke('schedule:deleteTodo', id),
+  getScheduleTags: () => ipcRenderer.invoke('schedule:getTags'),
+  createScheduleTag: (name: string, color?: string) => ipcRenderer.invoke('schedule:createTag', name, color),
+  deleteScheduleTag: (id: string) => ipcRenderer.invoke('schedule:deleteTag', id)
 }
 
 contextBridge.exposeInMainWorld('api', api)

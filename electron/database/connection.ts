@@ -103,6 +103,36 @@ function runMigrations(): void {
 
     db.run("INSERT INTO _migrations (name) VALUES ('001_init')")
   }
+
+  if (!applied.has('002_schedule')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS schedule_todos (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        date        TEXT NOT NULL,
+        time        TEXT,
+        quadrant    INTEGER DEFAULT 1,
+        task_type   TEXT DEFAULT 'plan',
+        tag_id      TEXT,
+        status      TEXT DEFAULT 'pending',
+        sort_order  INTEGER DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS schedule_tags (
+        id    TEXT PRIMARY KEY,
+        name  TEXT NOT NULL UNIQUE,
+        color TEXT DEFAULT '#6b7280'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_stodos_date ON schedule_todos(date);
+      CREATE INDEX IF NOT EXISTS idx_stodos_status ON schedule_todos(status);
+    `)
+
+    db.run("INSERT INTO _migrations (name) VALUES ('002_schedule')")
+  }
 }
 
 /**
