@@ -25,237 +25,196 @@ const QUADRANTS = [
 
 export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
   const [form, setForm] = useState<TodoForm>(initial)
-
-  // deadline datetime parts — derived once on open / type switch
-  const dp = parseDeadline(form.time)
   const [timeWarning, setTimeWarning] = useState('')
 
-  useEffect(() => { setForm(initial) }, [initial])
+  // Raw string state for each deadline part (independent of form.time parsing)
+  const dp0 = parseDeadline(form.time)
+  const [dStr, setDStr] = useState({
+    year: String(dp0.year),
+    month: String(dp0.month),
+    day: String(dp0.day),
+    hour: String(dp0.hour),
+    minute: String(dp0.minute),
+  })
+
+  useEffect(() => { setForm(initial); const dp = parseDeadline(initial.time); setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) }); setTimeWarning('') }, [initial])
 
   if (!open) return null
 
   const canSave = form.title.trim().length > 0
 
-  /** 规范化日期：月日时分超界自动修正到最近有效值 */
-  function correctDeadline(): string {
-    const d = { ...dp }
-    d.month = Math.max(1, Math.min(12, d.month))
-    // days in month
-    const dim = new Date(d.year, d.month, 0).getDate()
-    d.day = Math.max(1, Math.min(dim, d.day))
-    d.hour = Math.max(0, Math.min(23, d.hour))
-    d.minute = Math.max(0, Math.min(59, d.minute))
+  function buildDeadlineTime(p: typeof dStr): string {
+    const y = String(parseInt(p.year, 10) || new Date().getFullYear()).padStart(4, '0')
+    const mo = String(Math.max(1, Math.min(12, parseInt(p.month, 10) || 1))).padStart(2, '0')
+    const d = String(Math.max(1, Math.min(31, parseInt(p.day, 10) || 1))).padStart(2, '0')
+    const h = String(Math.max(0, Math.min(23, parseInt(p.hour, 10) || 0))).padStart(2, '0')
+    const mi = String(Math.max(0, Math.min(59, parseInt(p.minute, 10) || 0))).padStart(2, '0')
+    return `${y}-${mo}-${d} ${h}:${mi}`
+  }
 
-    const y = String(d.year).padStart(4, '0')
-    const m = String(d.month).padStart(2, '0')
-    const day = String(d.day).padStart(2, '0')
-    const h = String(d.hour).padStart(2, '0')
-    const mi = String(d.minute).padStart(2, '0')
-    return `${y}-${m}-${day} ${h}:${mi}`
+  function syncDeadline(p: typeof dStr) {
+    setDStr(p)
+    setForm(f => ({ ...f, time: buildDeadlineTime(p) }))
+  }
+
+  function fixInput(val: string, maxLen: number): string {
+    return val.replace(/\D/g, '').slice(0, maxLen)
+  }
+
+  /** 规范化 + 验证截止时间 */
+  function validateAndCorrect(): { corrected: string; warning: string } {
+    const parts = { ...dStr }
+    // clamp values
+    let y = parseInt(parts.year, 10) || new Date().getFullYear()
+    let mo = Math.max(1, Math.min(12, parseInt(parts.month, 10) || 1))
+    const dim = new Date(y, mo, 0).getDate()
+    let d = Math.max(1, Math.min(dim, parseInt(parts.day, 10) || 1))
+    const h = Math.max(0, Math.min(23, parseInt(parts.hour, 10) || 0))
+    const mi = Math.max(0, Math.min(59, parseInt(parts.minute, 10) || 0))
+
+    const corrected = `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')} ${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}`
+
+    // Check: deadline must not be before today
+    const targetDate = `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    const today = new Date().toISOString().split('T')[0]
+    if (targetDate < today) {
+      return { corrected, warning: `截止日期不能早于今天（${today}）` }
+    }
+
+    if (corrected !== form.time) {
+      return { corrected, warning: '时间已自动修正为有效值' }
+    }
+    return { corrected, warning: '' }
   }
 
   function handleSave() {
     if (!canSave) return
-    const corrected = correctDeadline()
-    if (corrected !== form.time) {
-      setTimeWarning('时间已自动修正为有效值')
-      const updated = { ...form, time: corrected }
-      setForm(updated)
+    const { corrected, warning } = validateAndCorrect()
+    const updated = { ...form, time: corrected }
+    setForm(updated)
+    // update dStr to match corrected
+    const dp = parseDeadline(corrected)
+    setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) })
+    if (warning) {
+      setTimeWarning(warning)
+      if (warning.includes('早于')) return // block save for past dates
       setTimeout(() => setTimeWarning(''), 2500)
-      onSave(updated)
-    } else {
-      onSave(form)
     }
+    onSave(updated)
   }
 
-  function setDeadline(part: 'year' | 'month' | 'day' | 'hour' | 'minute', val: string) {
-    const d = { ...dp,
-      year: dp.year, month: dp.month, day: dp.day, hour: dp.hour, minute: dp.minute,
-      [part]: parseInt(val, 10) || 0
-    }
-    const y = String(d.year).padStart(4, '0')
-    const m = String(d.month).padStart(2, '0')
-    const day = String(d.day).padStart(2, '0')
-    const h = String(d.hour).padStart(2, '0')
-    const mi = String(d.minute).padStart(2, '0')
-    setForm(f => ({ ...f, time: `${y}-${m}-${day} ${h}:${mi}` }))
+  function onDeadlinePartChange(field: keyof typeof dStr, raw: string) {
+    const clean = fixInput(raw, field === 'year' ? 4 : 2)
+    const next = { ...dStr, [field]: clean }
+    syncDeadline(next)
   }
+
+  const todayDate = new Date().toISOString().split('T')[0]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="bg-[#252526] border border-[#3c3c3c] rounded-lg w-[500px] shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* header */}
+      <div className="bg-[#252526] border border-[#3c3c3c] rounded-lg w-[500px] shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#3c3c3c]">
-          <h3 className="text-[14px] font-medium text-[#cccccc]">
-            {initial.title ? '编辑任务' : '新建任务'}
-          </h3>
-          <button onClick={onClose} className="p-1 text-[#6a6a6a] hover:text-[#cccccc]">
-            <X size={16} />
-          </button>
+          <h3 className="text-[14px] font-medium text-[#cccccc]">{initial.title ? '编辑任务' : '新建任务'}</h3>
+          <button onClick={onClose} className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"><X size={16} /></button>
         </div>
 
-        {/* body */}
         <div className="px-5 py-4 space-y-4">
           <Field label="标题">
-            <input
-              autoFocus
-              value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               placeholder="任务标题"
               className="w-full px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
             />
           </Field>
 
           <Field label="描述">
-            <textarea
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="可选描述"
-              rows={2}
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="可选描述" rows={2}
               className="w-full px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none resize-none"
             />
           </Field>
 
-          {/* 任务类型 */}
           <Field label="任务类型">
             <div className="flex gap-2">
-              <button
-                onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${
-                  form.taskType === 'plan'
-                    ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]'
-                    : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'
-                }`}
-              >
-                📋 计划类
-              </button>
-              <button
-                onClick={() => {
-                  const now = new Date()
-                  const t = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
-                  setForm(f => ({ ...f, taskType: 'deadline', time: t }))
-                }}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${
-                  form.taskType === 'deadline'
-                    ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]'
-                    : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'
-                }`}
-              >
-                ⏰ 截止类
-              </button>
+              <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+              >📋 计划类</button>
+              <button onClick={() => {
+                const n = new Date()
+                const t = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')} ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`
+                const dp = parseDeadline(t)
+                setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) })
+                setForm(f => ({ ...f, taskType: 'deadline', time: t }))
+              }}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+              >⏰ 截止类</button>
             </div>
           </Field>
 
-          {/* 截止时间（仅 deadline） */}
+          {/* 截止时间 */}
           {form.taskType === 'deadline' && (
             <Field label="截止时间">
               <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3c3c3c] space-y-3">
-                {/* 日期行 */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" min={2024} max={2035}
-                    value={dp.year}
-                    onChange={e => setDeadline('year', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
-                    placeholder="年"
-                  />
-                  <span className="text-[#6a6a6a] text-[15px] font-light">年</span>
-                  <input
-                    type="number" min={1} max={12}
-                    value={dp.month}
-                    onChange={e => setDeadline('month', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
-                    placeholder="月"
-                  />
-                  <span className="text-[#6a6a6a] text-[15px] font-light">月</span>
-                  <input
-                    type="number" min={1} max={31}
-                    value={dp.day}
-                    onChange={e => setDeadline('day', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
-                    placeholder="日"
-                  />
-                  <span className="text-[#6a6a6a] text-[15px] font-light">日</span>
-                </div>
-
-                {/* 时间行 */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" min={0} max={23}
-                    value={dp.hour}
-                    onChange={e => setDeadline('hour', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
-                    placeholder="时"
-                  />
-                  <span className="text-[#6a6a6a] text-[15px] font-light">时</span>
-                  <input
-                    type="number" min={0} max={59}
-                    value={dp.minute}
-                    onChange={e => setDeadline('minute', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
-                    placeholder="分"
-                  />
-                  <span className="text-[#6a6a6a] text-[15px] font-light">分</span>
+                {/* 日期 */}
+                <div className="flex items-center gap-1.5">
+                  <input type="text" inputMode="numeric" value={dStr.year}
+                    onChange={e => onDeadlinePartChange('year', e.target.value)}
+                    className="w-[72px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
+                  <span className="text-[#6a6a6a] text-[13px] shrink-0">年</span>
+                  <input type="text" inputMode="numeric" value={dStr.month}
+                    onChange={e => onDeadlinePartChange('month', e.target.value)}
+                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
+                  <span className="text-[#6a6a6a] text-[13px] shrink-0">月</span>
+                  <input type="text" inputMode="numeric" value={dStr.day}
+                    onChange={e => onDeadlinePartChange('day', e.target.value)}
+                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
+                  <span className="text-[#6a6a6a] text-[13px] shrink-0">日</span>
+                  <span className="text-[#555] text-[14px] shrink-0 ml-2 mr-1">·</span>
+                  <input type="text" inputMode="numeric" value={dStr.hour}
+                    onChange={e => onDeadlinePartChange('hour', e.target.value)}
+                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
+                  <span className="text-[#6a6a6a] text-[13px] shrink-0">时</span>
+                  <input type="text" inputMode="numeric" value={dStr.minute}
+                    onChange={e => onDeadlinePartChange('minute', e.target.value)}
+                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
+                  <span className="text-[#6a6a6a] text-[13px] shrink-0">分</span>
                 </div>
               </div>
               {timeWarning && (
-                <p className="text-[11px] text-yellow-400 mt-1">⚠ {timeWarning}</p>
+                <p className={`text-[11px] mt-1 ${timeWarning.includes('早于') ? 'text-red-400' : 'text-yellow-400'}`}>⚠ {timeWarning}</p>
               )}
             </Field>
           )}
 
-          {/* 结束标准（仅计划类） */}
           {form.taskType === 'plan' && (
             <Field label="结束标准">
-              <textarea
-                value={form.endCriteria}
-                onChange={e => setForm(f => ({ ...f, endCriteria: e.target.value }))}
-                placeholder="如：完成3个项目、读完5本书..."
-                rows={2}
+              <textarea value={form.endCriteria} onChange={e => setForm(f => ({ ...f, endCriteria: e.target.value }))}
+                placeholder="如：完成3个项目、读完5本书..." rows={2}
                 className="w-full px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none resize-none"
               />
             </Field>
           )}
 
-          {/* 四象限 */}
           <Field label="四象限">
             <div className="flex gap-2">
               {QUADRANTS.map(q => (
-                <button
-                  key={q.value}
-                  onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
-                  className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${
-                    form.quadrant === q.value
-                      ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]'
-                      : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'
-                  }`}
-                >
-                  {q.label}
-                </button>
+                <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
+                  className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+                >{q.label}</button>
               ))}
             </div>
           </Field>
 
-          {/* 标签（仅选择，创建移到外部） */}
           <Field label="标签">
             {tags.length === 0 ? (
               <p className="text-[12px] text-[#555] italic">暂无标签，使用右侧按钮创建</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {tags.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setForm(f => ({ ...f, tagId: f.tagId === t.id ? '' : t.id }))}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors ${
-                      form.tagId === t.id ? 'ring-1 ring-white/40' : ''
-                    }`}
+                  <button key={t.id} onClick={() => setForm(f => ({ ...f, tagId: f.tagId === t.id ? '' : t.id }))}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors ${form.tagId === t.id ? 'ring-1 ring-white/40' : ''}`}
                     style={{ backgroundColor: t.color + '30', color: t.color, border: `1px solid ${t.color}50` }}
-                  >
-                    {t.name}
-                  </button>
+                  >{t.name}</button>
                 ))}
               </div>
             )}
@@ -264,9 +223,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-[#3c3c3c]">
           <button onClick={onClose} className="px-4 py-1.5 text-[13px] text-[#969696] hover:text-[#cccccc]">取消</button>
-          <button
-            onClick={handleSave}
-            disabled={!canSave}
+          <button onClick={handleSave} disabled={!canSave}
             className="px-4 py-1.5 text-[13px] bg-[#007acc] text-white rounded hover:bg-[#1a8ad4] disabled:opacity-40"
           >保存</button>
         </div>

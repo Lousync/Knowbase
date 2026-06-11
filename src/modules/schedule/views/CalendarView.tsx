@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LayoutGrid, Clock, CalendarDays, Layers } from 'lucide-react'
+
+export type ViewMode = 'date' | 'deadline' | 'quadrant'
 
 interface Props {
   year: number
@@ -7,15 +9,23 @@ interface Props {
   selectedDate: string | null
   dotDates: Set<string>
   deadlineCounts: Map<string, number>
+  viewMode: ViewMode
   onSelectDate: (date: string) => void
   onPrevMonth: () => void
   onNextMonth: () => void
   onToday: () => void
+  onViewModeChange: (mode: ViewMode) => void
   onQuadrantChart: () => void
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+
+const VIEW_MODES: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
+  { id: 'date', label: '按日期', icon: <CalendarDays size={13} /> },
+  { id: 'deadline', label: '按截止', icon: <Clock size={13} /> },
+  { id: 'quadrant', label: '按象限', icon: <Layers size={13} /> },
+]
 
 function relativeTime(dateStr: string): string {
   if (!dateStr) return ''
@@ -31,7 +41,7 @@ function relativeTime(dateStr: string): string {
   return `${diff}天后`
 }
 
-export function CalendarView({ year, month, selectedDate, dotDates, deadlineCounts, onSelectDate, onPrevMonth, onNextMonth, onToday, onQuadrantChart }: Props) {
+export function CalendarView({ year, month, selectedDate, dotDates, deadlineCounts, viewMode, onSelectDate, onPrevMonth, onNextMonth, onToday, onViewModeChange, onQuadrantChart }: Props) {
   const today = new Date().toISOString().split('T')[0]
 
   const weeks = useMemo(() => {
@@ -83,6 +93,24 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
         {timeLabel && (
           <div className="text-center text-[11px] text-[#6a6a6a]">{timeLabel}</div>
         )}
+
+        {/* view mode buttons */}
+        <div className="flex gap-1">
+          {VIEW_MODES.map(m => (
+            <button
+              key={m.id}
+              onClick={() => onViewModeChange(m.id)}
+              title={m.label}
+              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] transition-colors ${
+                viewMode === m.id
+                  ? 'bg-[#007acc] text-white'
+                  : 'bg-[#2d2d2d] text-[#858585] hover:text-[#cccccc] hover:bg-[#3c3c3c]'
+              }`}
+            >
+              {m.icon}
+            </button>
+          ))}
+        </div>
 
         {/* quadrant chart button */}
         <button

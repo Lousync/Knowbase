@@ -69,10 +69,10 @@ export function registerScheduleHandlers(): void {
     return rows.map(rowToTodo)
   })
 
-  // 获取某月截止日期的任务计数（日历数字标记）
+  // 获取某月截止日期的任务计数（仅未完成）
   ipcMain.handle('schedule:getDeadlineCounts', (_e, yearMonth: string) => {
     const rows = queryAll<{ time: string }>(
-      "SELECT time FROM schedule_todos WHERE task_type = 'deadline' AND time IS NOT NULL"
+      "SELECT time FROM schedule_todos WHERE task_type = 'deadline' AND status = 'pending' AND time IS NOT NULL"
     )
     // time field stores "YYYY-MM-DD HH:MM" for deadlines; count per date in this month
     const map: Record<string, number> = {}

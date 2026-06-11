@@ -9,12 +9,27 @@ const QUADRANT_COLORS: Record<number, string> = {
 interface Props {
   todo: ScheduleTodo
   tag?: ScheduleTag | null
+  showRemaining?: boolean
   onClick: () => void
   onToggleDone: () => void
   onDelete: () => void
 }
 
-export function TodoItem({ todo, tag, onClick, onToggleDone, onDelete }: Props) {
+function remainingLabel(time: string): string {
+  if (!time) return ''
+  const match = time.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return ''
+  const target = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  if (diff < 0) return `已过期${Math.abs(diff)}天`
+  if (diff === 0) return '今天截止'
+  if (diff === 1) return '明天截止'
+  return `剩余${diff}天`
+}
+
+export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDelete }: Props) {
   const isDone = todo.status === 'done'
   const deadline = todo.taskType === 'deadline'
 
@@ -62,11 +77,16 @@ export function TodoItem({ todo, tag, onClick, onToggleDone, onDelete }: Props) 
         )}
       </div>
 
-      {/* 右下角：截止时间 */}
+      {/* 右下角：截止时间 / 剩余时间 */}
       {deadline && todo.time && (
-        <span className="text-[11px] text-[#569cd6] shrink-0 self-end">
-          ⏰ {todo.time}
+        <span className={`text-[11px] shrink-0 self-end ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
+          {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
         </span>
+      )}
+
+      {/* date label for non-date-grouped views */}
+      {showRemaining && (
+        <span className="text-[10px] text-[#6a6a6a] shrink-0 self-end ml-1">{todo.date}</span>
       )}
 
       {/* 删除 */}
