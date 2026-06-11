@@ -1,43 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code } from 'lucide-react'
+import { marked } from 'marked'
 
 interface Props {
   entryId: string; showLineNumbers: boolean; onSave: () => void; onCancel: () => void
 }
 
 function renderMarkdown(md: string): string {
-  let html = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const fenced: string[] = []
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-    const esc = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    fenced.push('<pre><code class="language-' + lang + '">' + esc + '</code></pre>')
-    return '\x00' + 'FC' + (fenced.length - 1) + '\x00'
-  })
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-  html = html.replace(/^###### (.+)$/gm, '<h6>$1</h6>')
-  html = html.replace(/^##### (.+)$/gm, '<h5>$1</h5>')
-  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-  html = html.replace(/^(-{3,}|\*{3,})$/gm, '<hr>')
-  html = html.replace(/^&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>')
-  html = html.replace(/^(\s*)[-*+]\s(.+)$/gm, '<li>$2</li>')
-  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
-  html = html.replace(/\n\n+/g, '</p><p>')
-  html = html.replace(/\n/g, '<br>')
-  html = '<p>' + html + '</p>'
-  html = html.replace(new RegExp('\x00FC(\\d+)\x00', 'g'), (_m, idx) => fenced[parseInt(idx)])
-  html = html.replace(/<p>\s*<\/p>/g, '')
-  html = html.replace(/<p><\/(h[1-6]|ul|ol|blockquote|pre|hr)>/g, '</$1>')
-  html = html.replace(/<(h[1-6]|ul|ol|blockquote|pre|hr)><\/p>/g, '<$1>')
-  return html
+  if (!md) return '<p></p>'
+  return marked.parse(md, { async: false }) as string
 }
 
 export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: Props) {

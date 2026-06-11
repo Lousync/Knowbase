@@ -94,6 +94,19 @@ input:focus, textarea:focus, select:focus {
 }
 .prose-content th { background: #2d2d2d; font-weight: 600; }
 
+/* ===== marked GFM 新增元素 ===== */
+.prose-content del { color: #6a6a6a; text-decoration: line-through; }
+.prose-content input[type="checkbox"] {
+  margin-right: 0.4rem; accent-color: #007acc; pointer-events: none;
+}
+.prose-content ol ol, .prose-content ul ul, .prose-content ol ul, .prose-content ul ol { margin: 0; }
+.prose-content details { margin: 0.6rem 0; padding: 0.5rem 1rem; border: 1px solid #3c3c3c; border-radius: 4px; }
+.prose-content summary { cursor: pointer; color: #cccccc; font-weight: 500; }
+.prose-content kbd {
+  background: #3c3c3c; color: #cccccc; padding: 0.1rem 0.4rem; border-radius: 3px;
+  border: 1px solid #555; font-size: 0.85em; font-family: inherit;
+}
+
 /* ===== Markdown 源码语法高亮 ===== */
 .syn-h1 { color: #569cd6; font-size: 1.5em; font-weight: 700; }
 .syn-h2 { color: #569cd6; font-size: 1.3em; font-weight: 600; }
