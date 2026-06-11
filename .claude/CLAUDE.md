@@ -311,10 +311,11 @@ CREATE TABLE export_backups (
 4. **CSP 策略**：`index.html` 限制了脚本/样式/图片来源，如需加载外部资源需修改 CSP
 5. **ELECTRON_RUN_AS_NODE 环境变量**：Windows 系统环境变量中若存在此变量，需删除。它会导致 Electron 以纯 Node.js 模式运行，无法启动桌面窗口
 6. **避免 C 盘用户目录**：用户目录路径含中文可能引发问题，项目放非 C 盘路径
+7. **项目计划文件**：所有实现方案 Plan 文件统一放在 `.claude/plans/` 目录中
 
 ---
 
-## 当前待解决问题：界面缩放（Ctrl+= / Ctrl+-）
+## 已解决：界面缩放（Ctrl+= / Ctrl+-）
 
 ### 需求
 - Ctrl+= 放大内容区文字（只缩放博客内容/编辑器，不缩放 TitleBar/ActivityBar/StatusBar）
