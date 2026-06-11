@@ -60,11 +60,13 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
 }
 
-/* ===== ProseMirror / Markdown 预览样式 ===== */
-.prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: #e0e0e0; }
-.prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: #d4d4d4; }
+/* ===== Markdown 预览样式（VS Code 风格）===== */
+.prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: #e0e0e0; padding-bottom: 0.35rem; border-bottom: 1px solid #3c3c3c; }
+.prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: #d4d4d4; padding-bottom: 0.25rem; border-bottom: 1px solid #2d2d2d; }
 .prose-content h3 { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.3rem; color: #d4d4d4; }
-.prose-content p { margin: 0.4rem 0; line-height: 1.7; }
+.prose-content p { margin: 0.4rem 0; line-height: 1.75; }
+.prose-content strong { color: #e8e8e8; font-weight: 700; }
+.prose-content em { color: #d4d4d4; font-style: italic; }
 .prose-content ul, .prose-content ol { padding-left: 1.5rem; margin: 0.4rem 0; }
 .prose-content li { margin: 0.2rem 0; }
 .prose-content blockquote {
@@ -91,6 +93,26 @@ input:focus, textarea:focus, select:focus {
   border: 1px solid #3c3c3c; padding: 0.4rem 0.6rem; text-align: left;
 }
 .prose-content th { background: #2d2d2d; font-weight: 600; }
+
+/* ===== Markdown 源码语法高亮 ===== */
+.syn-h1 { color: #569cd6; font-size: 1.5em; font-weight: 700; }
+.syn-h2 { color: #569cd6; font-size: 1.3em; font-weight: 600; }
+.syn-h3 { color: #569cd6; font-size: 1.15em; font-weight: 600; }
+.syn-h4 { color: #569cd6; font-weight: 600; }
+.syn-h5 { color: #569cd6; font-weight: 600; }
+.syn-h6 { color: #569cd6; font-weight: 600; }
+.syn-bold { color: #dcdcaa; font-weight: 700; }
+.syn-bold-italic { color: #dcdcaa; font-weight: 700; font-style: italic; }
+.syn-italic { color: #dcdcaa; font-style: italic; }
+.syn-inline-code { color: #ce9178; }
+.syn-codeblock { color: #9cdcfe; }
+.syn-quote { color: #6a9955; }
+.syn-list-marker { color: #b5cea8; font-weight: 700; }
+.syn-link { color: #569cd6; }
+.syn-image { color: #4ec9b0; }
+.syn-hr { color: #569cd6; }
+
+.hl-code { color: #d4d4d4; }
 
 /* ===== 工具类 ===== */
 .drag-region { -webkit-app-region: drag; }

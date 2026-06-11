@@ -311,3 +311,63 @@ CREATE TABLE export_backups (
 4. **CSP 策略**：`index.html` 限制了脚本/样式/图片来源，如需加载外部资源需修改 CSP
 5. **ELECTRON_RUN_AS_NODE 环境变量**：Windows 系统环境变量中若存在此变量，需删除。它会导致 Electron 以纯 Node.js 模式运行，无法启动桌面窗口
 6. **避免 C 盘用户目录**：用户目录路径含中文可能引发问题，项目放非 C 盘路径
+
+---
+
+## 当前待解决问题：界面缩放（Ctrl+= / Ctrl+-）
+
+### 需求
+- Ctrl+= 放大内容区文字（只缩放博客内容/编辑器，不缩放 TitleBar/ActivityBar/StatusBar）
+- Ctrl+- 缩小内容区文字
+- 有上下限（约 0.7x ~ 2.0x）
+- 缩放值持久化到 settings.json
+
+### 已尝试但失败的方法
+
+**方法 1：Electron `webFrame.setZoomLevel()`**
+- 文件：`electron/preload/index.ts` / `electron/main/index.ts`
+- 问题：ZoomLevel 会缩放整个 Electron 窗口的全部内容，包括 TitleBar、ActivityBar、StatusBar 等 chrome，不符合预期。而且 `Ctrl+=` 键盘事件在某些键盘布局下不触发。
+
+**方法 2：React 控制 `<main>` 的 `fontSize`**
+- 文件：`src/App.tsx`（设定 `style={{ fontSize: zoom + 'px' }}` 在 `<main>` 上）
+- 问题：不生效。TailwindCSS 使用 `rem` 单位，`rem` 相对于 `<html>` 根元素的 `font-size`，而不是 `<main>` 的。大多数元素尺寸不受 `<main>` 的 `fontSize` 影响。
+
+**方法 3：CSS `transform: scale()`**
+- 文件：`src/App.tsx`（当前代码）
+- 实现：
+  ```tsx
+  <main className="flex-1 overflow-hidden relative bg-[#1e1e1e]">
+     <div style={{
+       transform: `scale(${zoom})`,
+       transformOrigin: 'top left',
+       width: `${(1 / zoom) * 100}%`,
+       height: `${(1 / zoom) * 100}%`
+     }}>
+       {activeTab === 'blog' && <BlogModule ... />}
+      ...
+     </div>
+   </main>
+  ```
+- 问题：
+  1. CSS transform scale 是视觉缩放，不改变元素的实际布局尺寸。导致缩小时周围出现大片空白，放大时内容溢出被裁剪。
+  2. `width: ${(1/zoom)*100}%` 的逆向补偿计算不精确，且无法正确处理 flex 布局的子元素。
+  3. `overflow: hidden` 的父容器与 scaled 子元素之间的交互导致滚动条行为异常。
+
+### 影响范围
+- `src/App.tsx` — 缩放状态 + 键盘事件
+- `src/components/shared/TitleBar.tsx` — "重置缩放"菜单项调用 `zoomReset()`
+- `electron/main/index.ts` — 有 `zoom:in`/`zoom:out`/`zoom:reset` IPC handler（现在闲置）
+- `electron/preload/index.ts` — 已移除 zoom API
+- `src/types/index.ts` / `src/lib/ipc.ts` — 已移除 zoom 类型和函数
+
+### 可能的正确方向
+1. **用 CSS 变量 + `rem`**：`document.documentElement.style.fontSize = zoom + 'px'`，这样所有 rem 单位都会跟着变。TitleBar/ActivityBar/StatusBar 用 px 写死，不参与缩放。
+2. **Electron `webFrame.setZoomFactor()`**（Chromium API）vs `setZoomLevel()`：`setZoomFactor` 可能行为不同，但同样会缩 chrome。
+3. **MVVM 方式**：每个内容组件的顶层 `style={{ fontSize: zoom + 'px' }}` + 全部子元素用 `em` 单位（工作量大，不现实）。
+
+### 验证方式
+- 启动 `node scripts/launch.js start`
+- 按 Ctrl+= 看内容区是否放大
+- 按 Ctrl+- 看内容区是否缩小
+- 确认 TitleBar/ActivityBar/StatusBar 不变
+- 确认缩放后滚动条、列表、编辑器正常工作

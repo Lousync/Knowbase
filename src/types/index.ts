@@ -1,78 +1,35 @@
-// ===== 共享类型定义 =====
+// ===== 共享类型 =====
 
 export interface Entry {
-  id: string
-  title: string
-  contentMd: string
-  contentHtml: string
-  date: string
-  createdAt: string
-  updatedAt: string
-  isPinned: boolean
-  wordCount: number
-  tags?: Tag[]
+  id: string; title: string; contentMd: string; contentHtml: string
+  date: string; createdAt: string; updatedAt: string
+  isPinned: boolean; wordCount: number; tags?: Tag[]
 }
-
-export interface EntryFilter {
-  date?: string
-  tagId?: string
-  pinnedOnly?: boolean
-  limit?: number
-  offset?: number
-}
-
-export interface CreateEntryDTO {
-  title?: string
-  contentMd?: string
-  contentHtml?: string
-  date: string
-  tags?: string[]
-}
-
-export interface UpdateEntryDTO {
-  title?: string
-  contentMd?: string
-  contentHtml?: string
-  date?: string
-  isPinned?: boolean
-  tags?: string[]
-}
-
-export interface Tag {
-  id: string
-  name: string
-  color: string
-}
-
+export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boolean; limit?: number; offset?: number }
+export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[] }
+export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[] }
+export interface Tag { id: string; name: string; color: string }
 export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export'
+export interface AppSettings { showLineNumbers?: boolean }
 
 export interface ElectronAPI {
-  // 窗口控制
   minimize: () => Promise<void>
   maximize: () => Promise<void>
   close: () => Promise<void>
   isMaximized: () => Promise<boolean>
-  onMaximizeChange: (callback: (maximized: boolean) => void) => void
-
-  // 博文
-  getEntries: (filter: EntryFilter) => Promise<Entry[]>
+  onMaximizeChange: (cb: (v: boolean) => void) => void
+  getSetting: (key: string) => Promise<unknown>
+  setSetting: (key: string, value: unknown) => Promise<void>
+  getEntries: (f: EntryFilter) => Promise<Entry[]>
   getEntryById: (id: string) => Promise<(Entry & { tags: Tag[] }) | null>
-  createEntry: (data: CreateEntryDTO) => Promise<Entry>
-  updateEntry: (id: string, data: UpdateEntryDTO) => Promise<Entry>
+  createEntry: (d: CreateEntryDTO) => Promise<Entry>
+  updateEntry: (id: string, d: UpdateEntryDTO) => Promise<Entry>
   deleteEntry: (id: string) => Promise<void>
-  searchEntries: (query: string) => Promise<Entry[]>
-
-  // 标签
+  searchEntries: (q: string) => Promise<Entry[]>
   getTags: () => Promise<Tag[]>
-  createTag: (name: string, color?: string) => Promise<Tag>
+  createTag: (n: string, c?: string) => Promise<Tag>
   deleteTag: (id: string) => Promise<void>
-
-  // 数据库
   getDbPath: () => Promise<string>
 }
 
-declare global {
-  interface Window {
-    api: ElectronAPI
-  }
-}
+declare global { interface Window { api: ElectronAPI } }

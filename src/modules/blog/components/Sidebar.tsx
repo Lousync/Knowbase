@@ -1,70 +1,136 @@
-import { Tag } from '../../../types'
-import { SearchBar, TagBadge } from '../../../components/shared'
-import { Plus, List, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { Entry } from '../../../types'
+import { Edit3, ChevronRight, ChevronDown, FileText } from 'lucide-react'
 
 interface SidebarProps {
-  tags: Tag[]
-  activeTagId: string | null
-  onSelectTag: (tagId: string | null) => void
+  entries: Entry[]
+  selectedDate: string | null
+  onSelectDate: (date: string | null) => void
   onNewEntry: () => void
-  onRefresh: () => void
 }
 
-export function Sidebar({ tags, activeTagId, onSelectTag, onNewEntry, onRefresh }: SidebarProps) {
+type DayNode = { date: string; hasContent: boolean }
+type MonthMap = Record<string, DayNode[]>
+type YearMap = Record<string, MonthMap>
+
+const MONTH_NAMES: Record<string, string> = {
+  '01': '一月', '02': '二月', '03': '三月', '04': '四月',
+  '05': '五月', '06': '六月', '07': '七月', '08': '八月',
+  '09': '九月', '10': '十月', '11': '十一月', '12': '十二月'
+}
+
+function buildTree(entries: Entry[]): YearMap {
+  const tree: YearMap = {}
+  const seen = new Set<string>()
+  for (const e of entries) {
+    if (seen.has(e.date)) continue
+    seen.add(e.date)
+    const [y, m] = e.date.split('-')
+    if (!tree[y]) tree[y] = {}
+    if (!tree[y][m]) tree[y][m] = []
+    tree[y][m].push({ date: e.date, hasContent: e.contentMd.length > 0 })
+  }
+  for (const y of Object.values(tree)) {
+    for (const m of Object.values(y)) m.sort((a, b) => b.date.localeCompare(a.date))
+  }
+  return tree
+}
+
+export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
+  const tree = buildTree(entries)
+  const years = Object.keys(tree).sort((a, b) => b.localeCompare(a))
+  const today = new Date().toISOString().split('T')[0]
+  const hasToday = entries.some(e => e.date === today)
+
+  const thisYear = new Date().getFullYear().toString()
+  const thisMonth = (new Date().getMonth() + 1).toString().padStart(2, '0')
+
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const s = new Set<string>()
+    s.add(thisYear)
+    s.add(`${thisYear}-${thisMonth}`)
+    return s
+  })
+
+  const toggle = (key: string) => {
+    setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  }
+
   return (
     <aside className="w-56 bg-[#252526] border-r border-[#3c3c3c] flex flex-col h-full shrink-0">
-      {/* 模块标题 */}
       <div className="px-4 py-4 border-b border-[#3c3c3c]">
         <h1 className="text-sm font-semibold text-[#cccccc] select-none">📝 博客</h1>
       </div>
 
-      {/* 新建按钮 */}
+      {/* 今日按钮：文案按是否有文章切换 */}
       <div className="px-3 py-3">
         <button
           onClick={onNewEntry}
           className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[#007acc] text-white text-sm rounded hover:bg-[#1a8ad4] transition-colors"
         >
-          <Plus size={15} /> 新建博文
+          <Edit3 size={15} />
+          {hasToday ? '继续编写' : '今日文章编写'}
         </button>
       </div>
 
-      {/* 搜索 */}
-      <div className="px-3 pb-2">
-        <SearchBar />
-      </div>
+      {/* 树状归档 */}
+      <nav className="flex-1 overflow-y-auto px-1 py-1">
+        <div className="px-3 py-2 text-[11px] font-semibold text-[#6a6a6a] uppercase tracking-wider">
+          文章归档
+        </div>
 
-      {/* 导航 */}
-      <nav className="flex-1 overflow-y-auto px-2 py-1">
-        <button
-          onClick={() => onSelectTag(null)}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[13px] rounded mb-0.5 transition-colors ${activeTagId === null ? 'bg-[#37373d] text-white' : 'text-[#cccccc] hover:bg-[#2a2d2e]'}`}
-        >
-          <List size={15} /> 全部博文
-        </button>
-
-        {tags.length > 0 && (
-          <>
-            <div className="px-3 py-2 text-[11px] font-semibold text-[#6a6a6a] uppercase tracking-wider">标签</div>
-            {tags.map(tag => (
-              <button
-                key={tag.id}
-                onClick={() => onSelectTag(tag.id === activeTagId ? null : tag.id)}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[13px] rounded mb-0.5 transition-colors ${activeTagId === tag.id ? 'bg-[#37373d] text-white' : 'text-[#cccccc] hover:bg-[#2a2d2e]'}`}
-              >
-                <TagBadge name={tag.name} color={tag.color} size="sm" />
-                {tag.name}
-              </button>
-            ))}
-          </>
+        {years.length === 0 && (
+          <p className="px-3 py-4 text-[12px] text-[#6a6a6a] text-center">暂无文章</p>
         )}
-      </nav>
 
-      {/* 刷新 */}
-      <div className="px-3 py-2 border-t border-[#3c3c3c]">
-        <button onClick={onRefresh} className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs text-[#6a6a6a] hover:text-[#cccccc] hover:bg-[#2a2d2e] rounded transition-colors">
-          <RefreshCw size={13} /> 刷新
-        </button>
-      </div>
+        {years.map(year => {
+          const yearOpen = expanded.has(year)
+          const months = Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
+
+          return (
+            <div key={year}>
+              <button onClick={() => toggle(year)}
+                className="w-full flex items-center gap-1 px-2 py-1.5 text-[14px] text-[#cccccc] hover:bg-[#2a2d2e] rounded transition-colors">
+                {yearOpen
+                  ? <ChevronDown size={18} className="text-[#888] shrink-0" />
+                  : <ChevronRight size={18} className="text-[#888] shrink-0" />}
+                <span className="font-semibold">{year} 年</span>
+              </button>
+
+              {yearOpen && months.map(month => {
+                const mk = `${year}-${month}`
+                const mOpen = expanded.has(mk)
+                const days = tree[year][month]
+
+                return (
+                  <div key={mk} className="ml-3">
+                    <button onClick={() => toggle(mk)}
+                      className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] text-[#cccccc] hover:bg-[#2a2d2e] rounded transition-colors">
+                      {mOpen
+                        ? <ChevronDown size={18} className="text-[#888] shrink-0" />
+                        : <ChevronRight size={18} className="text-[#888] shrink-0" />}
+                      <span>{MONTH_NAMES[month] || `${month}月`}</span>
+                    </button>
+
+                    {mOpen && days.map(day => (
+                      <button key={day.date}
+                        onClick={() => onSelectDate(day.date === selectedDate ? null : day.date)}
+                        className={`w-full flex items-center gap-2 ml-5 px-2 py-1 text-[13px] rounded transition-colors ${
+                          selectedDate === day.date
+                            ? 'bg-[#37373d] text-white'
+                            : 'text-[#cccccc] hover:bg-[#2a2d2e]'
+                        }`}>
+                        <FileText size={14} className={`shrink-0 ${day.hasContent ? 'text-[#888]' : 'text-[#444]'}`} />
+                        <span>{day.date.slice(-2)} 日</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </nav>
     </aside>
   )
 }

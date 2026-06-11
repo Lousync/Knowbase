@@ -45,25 +45,36 @@ function createWindow(): void {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
-// ===== 窗口控制 IPC =====
+// ===== 窗口控制 + 缩放 + 设置 IPC =====
 function registerWindowHandlers(): void {
   ipcMain.handle('window:minimize', () => mainWindow?.minimize())
   ipcMain.handle('window:maximize', () => {
-    if (mainWindow?.isMaximized()) {
-      mainWindow.unmaximize()
-    } else {
-      mainWindow?.maximize()
-    }
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize()
+    else mainWindow?.maximize()
   })
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
-  // 窗口最大化变化时通知渲染进程
-  mainWindow?.on('maximize', () => {
-    mainWindow?.webContents.send('window:maximizeChange', true)
+  mainWindow?.on('maximize', () => mainWindow?.webContents.send('window:maximizeChange', true))
+  mainWindow?.on('unmaximize', () => mainWindow?.webContents.send('window:maximizeChange', false))
+
+  // 缩放 — 仅缩放内容区（不缩放 chrome）
+
+
+  // 设置持久化（存 JSON 文件）
+  const { readFileSync, writeFileSync, existsSync } = require('fs')
+  const settingsPath = join(app.getPath('userData'), 'settings.json')
+  function loadSettings(): Record<string, unknown> {
+    try { return existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} }
+    catch { return {} }
+  }
+  function saveSettings(s: Record<string, unknown>) { writeFileSync(settingsPath, JSON.stringify(s, null, 2)) }
+
+  ipcMain.handle('settings:get', (_e, key: string) => {
+    const s = loadSettings(); return s[key] ?? null
   })
-  mainWindow?.on('unmaximize', () => {
-    mainWindow?.webContents.send('window:maximizeChange', false)
+  ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
+    const s = loadSettings(); s[key] = value; saveSettings(s)
   })
 }
 

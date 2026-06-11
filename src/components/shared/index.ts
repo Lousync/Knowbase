@@ -1,5 +1,5 @@
 export { TitleBar } from './TitleBar'
-export { TabBar } from './TabBar'
+export { ActivityBar } from './ActivityBar'
 export { StatusBar } from './StatusBar'
 export { SearchBar } from './SearchBar'
 export { TagBadge } from './TagBadge'

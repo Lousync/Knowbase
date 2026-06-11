@@ -1,29 +1,20 @@
 import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag } from '../types'
+const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
 
-function api(): ElectronAPI {
-  if (!window.api) throw new Error('Electron API not available.')
-  return window.api
-}
-
-// ===== 窗口控制 =====
-export const minimize = () => api().minimize()
-export const maximize = () => api().maximize()
-export const close = () => api().close()
-export const isMaximized = () => api().isMaximized()
-export const onMaximizeChange = (cb: (v: boolean) => void) => api().onMaximizeChange(cb)
-
-// ===== 博文 =====
-export const getEntries = (f: EntryFilter = {}) => api().getEntries(f)
-export const getEntryById = (id: string) => api().getEntryById(id)
-export const createEntry = (d: CreateEntryDTO) => api().createEntry(d)
-export const updateEntry = (id: string, d: UpdateEntryDTO) => api().updateEntry(id, d)
-export const deleteEntry = (id: string) => api().deleteEntry(id)
-export const searchEntries = (q: string) => api().searchEntries(q)
-
-// ===== 标签 =====
-export const getTags = () => api().getTags()
-export const createTag = (n: string, c?: string) => api().createTag(n, c)
-export const deleteTag = (id: string) => api().deleteTag(id)
-
-// ===== 数据库 =====
-export const getDbPath = () => api().getDbPath()
+export const minimize = () => a().minimize()
+export const maximize = () => a().maximize()
+export const close = () => a().close()
+export const isMaximized = () => a().isMaximized()
+export const onMaximizeChange = (cb: (v: boolean) => void) => a().onMaximizeChange(cb)
+export const getSetting = (k: string) => a().getSetting(k)
+export const setSetting = (k: string, v: unknown) => a().setSetting(k, v)
+export const getEntries = (f: EntryFilter = {}) => a().getEntries(f)
+export const getEntryById = (id: string) => a().getEntryById(id)
+export const createEntry = (d: CreateEntryDTO) => a().createEntry(d)
+export const updateEntry = (id: string, d: UpdateEntryDTO) => a().updateEntry(id, d)
+export const deleteEntry = (id: string) => a().deleteEntry(id)
+export const searchEntries = (q: string) => a().searchEntries(q)
+export const getTags = () => a().getTags()
+export const createTag = (n: string, c?: string) => a().createTag(n, c)
+export const deleteTag = (id: string) => a().deleteTag(id)
+export const getDbPath = () => a().getDbPath()

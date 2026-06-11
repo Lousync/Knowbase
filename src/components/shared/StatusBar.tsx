@@ -1,5 +1,4 @@
 interface StatusBarProps {
-  wordCount?: number
   date?: string
   fileType?: string
   encoding?: string
@@ -7,7 +6,6 @@ interface StatusBarProps {
 }
 
 export function StatusBar({
-  wordCount = 0,
   date = '',
   fileType = 'Markdown',
   encoding = 'UTF-8',
@@ -17,13 +15,9 @@ export function StatusBar({
 
   return (
     <div className="flex items-center justify-between h-6 bg-[#0e639c] text-white text-[12px] select-none shrink-0 px-1">
-      {/* 左侧 */}
       <div className="flex items-center gap-0">
         <StatusItem>📅 {today}</StatusItem>
-        <StatusItem>📝 {wordCount} 字</StatusItem>
       </div>
-
-      {/* 右侧 */}
       <div className="flex items-center gap-0">
         <StatusItem>{fileType}</StatusItem>
         <StatusItem>{encoding}</StatusItem>
