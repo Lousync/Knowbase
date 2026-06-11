@@ -52,7 +52,7 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg w-[720px] max-h-[85vh] shadow-2xl flex flex-col"
+        className="bg-[#1e1e1e] border border-[#3c3c3c] rounded-lg w-[660px] shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* header */}
@@ -61,50 +61,43 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
           <button onClick={onClose} className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"><X size={16} /></button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
-          {/* Coordinate system container */}
-          <div className="relative w-full" style={{ paddingTop: '100%' }}>
+        <div className="flex-1 overflow-auto p-3">
+          <div className="relative w-full" style={{ height: '460px' }}>
             {/* Y-axis arrow: 重要 ▲  */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
               <span className="text-[12px] font-medium text-[#569cd6]">▲ 重要</span>
             </div>
 
             {/* X-axis arrow: 紧急 ▶ */}
-            <div className="absolute bottom-0 right-2 flex items-center z-10">
+            <div className="absolute -bottom-1 right-2 flex items-center z-10">
               <span className="text-[12px] font-medium text-[#d16969]">紧急 ▶</span>
             </div>
 
-            {/* X-axis opposite: ◀ 不紧急 */}
-            <div className="absolute bottom-0 left-2 flex items-center z-10">
-              <span className="text-[12px] text-[#555]">◀ 不紧急</span>
+            {/* X-axis opposite */}
+            <div className="absolute -bottom-1 left-2 flex items-center z-10">
+              <span className="text-[11px] text-[#555]">◀ 不紧急</span>
             </div>
 
-            {/* Y-axis opposite: 不重要 ▼ */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
-              <span className="text-[12px] text-[#555]">不重要 ▼</span>
+            {/* Y-axis opposite */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+              <span className="text-[11px] text-[#555]">不重要 ▼</span>
             </div>
 
-            {/* Axes: vertical line (Y) + horizontal line (X) */}
-            <div
-              className="absolute top-6 bottom-6 left-1/2 border-l border-[#4a4a4a] z-0"
-              style={{ width: 0 }}
-            />
-            <div
-              className="absolute left-10 right-10 top-1/2 border-t border-[#4a4a4a] z-0"
-              style={{ height: 0 }}
-            />
+            {/* Axes */}
+            <div className="absolute top-5 bottom-5 left-1/2 border-l border-[#4a4a4a] z-0" style={{ width: 0 }} />
+            <div className="absolute left-10 right-10 top-1/2 border-t border-[#4a4a4a] z-0" style={{ height: 0 }} />
 
             {/* Origin dot */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#6a6a6a] z-10" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#6a6a6a] z-10" />
 
-            {/* Four quadrant boxes positioned in the 2x2 grid */}
+            {/* Four quadrant boxes */}
             {([0, 1, 2, 3] as const).map(q => {
               const cfg = QUADRANT_CONFIG[q]
               const items = grouped.get(q) ?? []
-              const top = cfg.row === 0 ? '1.5rem' : 'calc(50% + 0.75rem)'
-              const left = cfg.col === 0 ? '1rem' : 'calc(50% + 0.75rem)'
-              const width = 'calc(50% - 2.25rem)'
-              const height = 'calc(50% - 2.25rem)'
+              const top = cfg.row === 0 ? '1rem' : 'calc(50% + 0.5rem)'
+              const left = cfg.col === 0 ? '0.75rem' : 'calc(50% + 0.5rem)'
+              const width = 'calc(50% - 1.75rem)'
+              const height = 'calc(50% - 1.75rem)'
 
               return (
                 <div
@@ -112,13 +105,13 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
                   className={`absolute ${cfg.bg} ${cfg.border} border rounded-lg p-3 flex flex-col overflow-hidden`}
                   style={{ top, left, width, height }}
                 >
-                  <h4 className="text-[12px] font-medium text-[#cccccc] mb-2 flex items-center gap-1 shrink-0">
+                  <h4 className="text-[12px] font-medium text-[#cccccc] mb-1.5 flex items-center gap-1 shrink-0">
                     <span>{cfg.emoji}</span> {cfg.label}
-                    <span className="text-[10px] text-[#6a6a6a] ml-1">({items.length})</span>
+                    <span className="text-[10px] text-[#6a6a6a] ml-0.5">({items.length})</span>
                   </h4>
-                  <div className="space-y-1 overflow-y-auto flex-1">
+                  <div className="space-y-0.5 overflow-y-auto flex-1">
                     {items.length === 0 ? (
-                      <p className="text-[11px] text-[#555] italic">暂无任务</p>
+                      <p className="text-[11px] text-[#555] italic">暂无</p>
                     ) : (
                       items.map(t => {
                         const tg = tagOf(t)

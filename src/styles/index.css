@@ -130,3 +130,8 @@ input:focus, textarea:focus, select:focus {
 /* ===== 工具类 ===== */
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
+
+/* 隐藏 number input 的上下箭头 */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spinner { -moz-appearance: textfield; }

@@ -28,12 +28,45 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 
   // deadline datetime parts — derived once on open / type switch
   const dp = parseDeadline(form.time)
+  const [timeWarning, setTimeWarning] = useState('')
 
   useEffect(() => { setForm(initial) }, [initial])
 
   if (!open) return null
 
   const canSave = form.title.trim().length > 0
+
+  /** 规范化日期：月日时分超界自动修正到最近有效值 */
+  function correctDeadline(): string {
+    const d = { ...dp }
+    d.month = Math.max(1, Math.min(12, d.month))
+    // days in month
+    const dim = new Date(d.year, d.month, 0).getDate()
+    d.day = Math.max(1, Math.min(dim, d.day))
+    d.hour = Math.max(0, Math.min(23, d.hour))
+    d.minute = Math.max(0, Math.min(59, d.minute))
+
+    const y = String(d.year).padStart(4, '0')
+    const m = String(d.month).padStart(2, '0')
+    const day = String(d.day).padStart(2, '0')
+    const h = String(d.hour).padStart(2, '0')
+    const mi = String(d.minute).padStart(2, '0')
+    return `${y}-${m}-${day} ${h}:${mi}`
+  }
+
+  function handleSave() {
+    if (!canSave) return
+    const corrected = correctDeadline()
+    if (corrected !== form.time) {
+      setTimeWarning('时间已自动修正为有效值')
+      const updated = { ...form, time: corrected }
+      setForm(updated)
+      setTimeout(() => setTimeWarning(''), 2500)
+      onSave(updated)
+    } else {
+      onSave(form)
+    }
+  }
 
   function setDeadline(part: 'year' | 'month' | 'day' | 'hour' | 'minute', val: string) {
     const d = { ...dp,
@@ -119,47 +152,58 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
           {/* 截止时间（仅 deadline） */}
           {form.taskType === 'deadline' && (
             <Field label="截止时间">
-              <div className="flex items-center gap-2 bg-[#2d2d2d] rounded-lg p-3 border border-[#3c3c3c]">
-                <input
-                  type="number" min={2024} max={2035}
-                  value={dp.year}
-                  onChange={e => setDeadline('year', e.target.value)}
-                  className="w-16 px-2 py-1.5 bg-[#3c3c3c] border border-[#555] rounded text-center text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
-                  placeholder="年"
-                />
-                <span className="text-[#6a6a6a]">/</span>
-                <input
-                  type="number" min={1} max={12}
-                  value={dp.month}
-                  onChange={e => setDeadline('month', e.target.value)}
-                  className="w-12 px-2 py-1.5 bg-[#3c3c3c] border border-[#555] rounded text-center text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
-                  placeholder="月"
-                />
-                <span className="text-[#6a6a6a]">/</span>
-                <input
-                  type="number" min={1} max={31}
-                  value={dp.day}
-                  onChange={e => setDeadline('day', e.target.value)}
-                  className="w-12 px-2 py-1.5 bg-[#3c3c3c] border border-[#555] rounded text-center text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
-                  placeholder="日"
-                />
-                <span className="text-[#6a6a6a] mx-1">—</span>
-                <input
-                  type="number" min={0} max={23}
-                  value={dp.hour}
-                  onChange={e => setDeadline('hour', e.target.value)}
-                  className="w-12 px-2 py-1.5 bg-[#3c3c3c] border border-[#555] rounded text-center text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
-                  placeholder="时"
-                />
-                <span className="text-[#6a6a6a]">:</span>
-                <input
-                  type="number" min={0} max={59}
-                  value={dp.minute}
-                  onChange={e => setDeadline('minute', e.target.value)}
-                  className="w-12 px-2 py-1.5 bg-[#3c3c3c] border border-[#555] rounded text-center text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
-                  placeholder="分"
-                />
+              <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3c3c3c] space-y-3">
+                {/* 日期行 */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={2024} max={2035}
+                    value={dp.year}
+                    onChange={e => setDeadline('year', e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
+                    placeholder="年"
+                  />
+                  <span className="text-[#6a6a6a] text-[15px] font-light">年</span>
+                  <input
+                    type="number" min={1} max={12}
+                    value={dp.month}
+                    onChange={e => setDeadline('month', e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
+                    placeholder="月"
+                  />
+                  <span className="text-[#6a6a6a] text-[15px] font-light">月</span>
+                  <input
+                    type="number" min={1} max={31}
+                    value={dp.day}
+                    onChange={e => setDeadline('day', e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
+                    placeholder="日"
+                  />
+                  <span className="text-[#6a6a6a] text-[15px] font-light">日</span>
+                </div>
+
+                {/* 时间行 */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={0} max={23}
+                    value={dp.hour}
+                    onChange={e => setDeadline('hour', e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
+                    placeholder="时"
+                  />
+                  <span className="text-[#6a6a6a] text-[15px] font-light">时</span>
+                  <input
+                    type="number" min={0} max={59}
+                    value={dp.minute}
+                    onChange={e => setDeadline('minute', e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none no-spinner"
+                    placeholder="分"
+                  />
+                  <span className="text-[#6a6a6a] text-[15px] font-light">分</span>
+                </div>
               </div>
+              {timeWarning && (
+                <p className="text-[11px] text-yellow-400 mt-1">⚠ {timeWarning}</p>
+              )}
             </Field>
           )}
 
@@ -221,7 +265,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-[#3c3c3c]">
           <button onClick={onClose} className="px-4 py-1.5 text-[13px] text-[#969696] hover:text-[#cccccc]">取消</button>
           <button
-            onClick={() => canSave && onSave(form)}
+            onClick={handleSave}
             disabled={!canSave}
             className="px-4 py-1.5 text-[13px] bg-[#007acc] text-white rounded hover:bg-[#1a8ad4] disabled:opacity-40"
           >保存</button>
