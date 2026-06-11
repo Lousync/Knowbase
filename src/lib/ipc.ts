@@ -22,6 +22,8 @@ export const getDbPath = () => a().getDbPath()
 // schedule
 export const getScheduleTodos = (date: string) => a().getScheduleTodos(date)
 export const getScheduleDates = (yearMonth: string) => a().getScheduleDates(yearMonth)
+export const getScheduleMonthTodos = (yearMonth: string) => a().getScheduleMonthTodos(yearMonth)
+export const getScheduleDeadlineCounts = (yearMonth: string) => a().getScheduleDeadlineCounts(yearMonth)
 export const createScheduleTodo = (d: CreateScheduleTodoDTO) => a().createScheduleTodo(d)
 export const updateScheduleTodo = (id: string, d: UpdateScheduleTodoDTO) => a().updateScheduleTodo(id, d)
 export const deleteScheduleTodo = (id: string) => a().deleteScheduleTodo(id)

@@ -117,6 +117,7 @@ function runMigrations(): void {
         tag_id      TEXT,
         status      TEXT DEFAULT 'pending',
         sort_order  INTEGER DEFAULT 0,
+        end_criteria TEXT DEFAULT '',
         created_at  TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -132,6 +133,12 @@ function runMigrations(): void {
     `)
 
     db.run("INSERT INTO _migrations (name) VALUES ('002_schedule')")
+  }
+
+  if (!applied.has('003_schedule_end_criteria')) {
+    // Add end_criteria column for existing databases
+    try { db.run("ALTER TABLE schedule_todos ADD COLUMN end_criteria TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('003_schedule_end_criteria')")
   }
 }
 

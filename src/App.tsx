@@ -72,7 +72,7 @@ export default function App() {
         <ActivityBar active={activeTab} onChange={handleTabChange} />
         <main className="flex-1 overflow-hidden bg-[#1e1e1e]">
           {activeTab === 'blog' && <BlogModule showLineNumbers={showLineNumbers} sidebarOpen={sidebarOpen} />}
-          {activeTab === 'schedule' && <ScheduleModule />}
+          {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} />}
           {activeTab === 'knowledge' && <KnowledgeModule />}
           {activeTab === 'export' && <ExportModule />}
         </main>
