@@ -17,6 +17,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [showRootInput, setShowRootInput] = useState(false)
 
   const toggleExpand = (id: string) => {
     setExpanded(prev => {
@@ -32,6 +33,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
     onCreate(newName.trim(), newCatParent)
     setNewName('')
     setNewCatParent(null)
+    setShowRootInput(false)
   }
 
   const handleStartRename = (id: string, name: string) => {
@@ -43,6 +45,11 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
     if (!editName.trim()) return
     onRename(id, editName.trim())
     setEditingId(null)
+  }
+
+  const handleCollapseAll = () => {
+    setExpanded(new Set())
+    onSelect(null)
   }
 
   const renderTree = (items: KnowledgeCategory[], depth: number) => {
@@ -118,7 +125,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
                 onChange={e => setNewName(e.target.value)}
                 onBlur={() => handleCreate()}
                 onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setNewCatParent(null); setNewName('') } }}
-                placeholder={depth === 0 ? '主题名称' : '分类名称'}
+                placeholder="分类名称"
                 autoFocus
               />
             </div>
@@ -132,44 +139,48 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#3c3c3c]">
+      {/* Header — 无加号 */}
+      <div className="px-3 py-2 border-b border-[#3c3c3c]">
         <span className="text-[12px] font-semibold text-[#969696] uppercase tracking-wide">知识主题</span>
-        <button
-          className="p-0.5 hover:text-[#cccccc] text-[#969696]"
-          onClick={() => { setNewCatParent(null); setNewName('') }}
-          title="新建根主题"
-        >
-          <Plus size={16} />
-        </button>
       </div>
-      <div className="flex-1 overflow-y-auto py-1">
-        {/* 全部页面 */}
-        <div
-          className={`flex items-center gap-1 py-1 px-3 cursor-pointer text-[14px] hover:bg-[#2a2d2e] ${
-            selectedId === null ? 'bg-[#094771] text-white' : 'text-[#cccccc]'
+
+      {/* 全部页面 按钮 + 新建主题 按钮 */}
+      <div className="px-2 py-1.5 border-b border-[#3c3c3c] space-y-1">
+        <button
+          onClick={handleCollapseAll}
+          className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-[14px] text-left hover:bg-[#2a2d2e] ${
+            selectedId === null ? 'bg-[#094771] text-white hover:bg-[#0b5a8f]' : 'text-[#cccccc]'
           }`}
-          onClick={() => onSelect(null)}
         >
-          <span className="w-4" />
-          <span className="text-[#969696]"><Folder size={16} /></span>
+          <Folder size={16} className="shrink-0" />
           <span>全部页面</span>
-        </div>
-        {/* 分类树 */}
-        {renderTree(rootCategories, 0)}
-        {/* 根级别新建 */}
-        {newCatParent === null && (
-          <div className="flex items-center gap-1 py-1 px-3 mt-1">
+        </button>
+        {!showRootInput ? (
+          <button
+            onClick={() => setShowRootInput(true)}
+            className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-[13px] text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e] text-left"
+          >
+            <Plus size={14} className="shrink-0" />
+            <span>新建主题</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1 px-2">
             <input
-              className="flex-1 bg-[#3c3c3c] border border-[#007acc] rounded px-1.5 text-[14px] outline-none text-[#cccccc]"
+              className="flex-1 bg-[#3c3c3c] border border-[#007acc] rounded px-1.5 py-1 text-[14px] outline-none text-[#cccccc]"
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onBlur={() => handleCreate()}
-              onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setNewCatParent(null); setNewName('') } }}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setShowRootInput(false); setNewName('') } }}
               placeholder="主题名称"
               autoFocus
             />
           </div>
         )}
+      </div>
+
+      {/* 树 */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {renderTree(rootCategories, 0)}
       </div>
     </div>
   )
