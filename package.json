@@ -1,6 +1,6 @@
 {
   "name": "knowledge-recorder",
-  "version": "1.0.0",
+  "version": "1.0.0-beta",
   "description": "本地 Windows 桌面博客/日程记录软件",
   "main": "./out/main/index.js",
   "scripts": {
@@ -46,13 +46,11 @@
             "x64"
           ]
         }
-      ],
-      "icon": "resources/icon.ico"
+      ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "resources/icon.ico"
+      "allowToChangeInstallationDirectory": true
     }
   }
 }
