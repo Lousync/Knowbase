@@ -174,10 +174,6 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
           </div>
         )}
 
-        <div className="flex items-center justify-between px-3 py-0.5 bg-[#007acc] text-[11px] text-white shrink-0">
-          <span>{content.length} 字</span>
-          <span>Ctrl+/ 预览 · Ctrl+S 保存 · [[链接]]</span>
-        </div>
       </div>
 
       {/* Right: Backlinks */}

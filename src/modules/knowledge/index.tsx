@@ -9,7 +9,7 @@ import {
 import { CategoryTree } from './components/CategoryTree'
 import { PageEditor } from './components/PageEditor'
 
-export function KnowledgeModule() {
+export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
   const [pages, setPages] = useState<KnowledgePage[]>([])
   const [starredPages, setStarredPages] = useState<KnowledgePage[]>([])
@@ -18,7 +18,7 @@ export function KnowledgeModule() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // 面板折叠状态
+  // 面板折叠状态（仅当全局 sidebarOpen 为 true 时有意义）
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showPageListPanel, setShowPageListPanel] = useState(true)
 
@@ -108,20 +108,23 @@ export function KnowledgeModule() {
   const hasSubCategories = selectedCatId ? categories.some(c => c.parentId === selectedCatId) : false
   const showStarred = selectedCatId === null && !searchQuery && starredPages.length > 0
 
+  // 全局 ActivityBar 折叠 → 隐藏所有侧栏
+  const panelsVisible = sidebarOpen
+
   return (
     <div className="flex h-full bg-[#1e1e1e]">
       {/* Left: Category Tree */}
-      {showCategoryPanel ? (
+      {panelsVisible && showCategoryPanel ? (
         <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
           {/* Panel header with collapse button */}
-          <div className="flex items-center justify-between px-2 py-1 border-b border-[#3c3c3c]">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#3c3c3c]">
             <span className="text-[11px] font-semibold text-[#969696] uppercase tracking-wide">知识主题</span>
             <button
               onClick={() => setShowCategoryPanel(false)}
-              className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc]"
-              title="折叠面板"
+              className="p-1 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc]"
+              title="折叠分类面板"
             >
-              <PanelLeftClose size={14} />
+              <PanelLeftClose size={16} />
             </button>
           </div>
           <CategoryTree
@@ -154,34 +157,34 @@ export function KnowledgeModule() {
             </div>
           )}
         </div>
-      ) : (
+      ) : panelsVisible ? (
         /* Collapsed category panel strip */
-        <div className="w-8 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center pt-1">
+        <div className="w-9 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center py-2 gap-2">
           <button
             onClick={() => setShowCategoryPanel(true)}
-            className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"
+            className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc]"
             title="展开分类面板"
           >
-            <PanelLeftOpen size={14} />
+            <PanelLeftOpen size={16} />
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Middle: Page List */}
-      {showPageListPanel ? (
+      {panelsVisible && showPageListPanel ? (
         <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
           {/* Panel header */}
-          <div className="flex items-center justify-between px-2 py-1 border-b border-[#3c3c3c]">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#3c3c3c]">
             <div className="flex items-center gap-1.5 min-w-0">
               <FileText size={13} className="text-[#969696] shrink-0" />
               <span className="text-[11px] text-[#969696] font-medium truncate uppercase">页面</span>
             </div>
             <button
               onClick={() => setShowPageListPanel(false)}
-              className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc]"
-              title="折叠面板"
+              className="p-1 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc]"
+              title="折叠页面面板"
             >
-              <PanelRightClose size={14} />
+              <PanelRightClose size={16} />
             </button>
           </div>
 
@@ -203,7 +206,7 @@ export function KnowledgeModule() {
             </div>
           </div>
 
-          {/* New page button — moved to top */}
+          {/* New page button — at top */}
           <div className="px-2 py-1.5 border-b border-[#3c3c3c]">
             <button onClick={handleCreatePage} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
               <Plus size={14} /> 新建页面
@@ -274,18 +277,18 @@ export function KnowledgeModule() {
             )}
           </div>
         </div>
-      ) : (
+      ) : panelsVisible ? (
         /* Collapsed page list panel strip */
-        <div className="w-8 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center pt-1">
+        <div className="w-9 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center py-2 gap-2">
           <button
             onClick={() => setShowPageListPanel(true)}
-            className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"
+            className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc]"
             title="展开页面列表面板"
           >
-            <PanelRightOpen size={14} />
+            <PanelRightOpen size={16} />
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Right: Editor */}
       <div className="flex-1 flex overflow-hidden">

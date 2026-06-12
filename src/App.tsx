@@ -73,7 +73,7 @@ export default function App() {
         <main className="flex-1 overflow-hidden bg-[#1e1e1e]">
           {activeTab === 'blog' && <BlogModule showLineNumbers={showLineNumbers} sidebarOpen={sidebarOpen} />}
           {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} />}
-          {activeTab === 'knowledge' && <KnowledgeModule />}
+          {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} />}
           {activeTab === 'export' && <ExportModule />}
         </main>
       </div>
