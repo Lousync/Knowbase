@@ -140,6 +140,66 @@ function runMigrations(): void {
     try { db.run("ALTER TABLE schedule_todos ADD COLUMN end_criteria TEXT DEFAULT ''") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('003_schedule_end_criteria')")
   }
+
+  if (!applied.has('004_knowledge')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS knowledge_categories (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        parent_id   TEXT REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+        sort_order  INTEGER DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS knowledge_pages (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL DEFAULT '',
+        content_md  TEXT NOT NULL DEFAULT '',
+        content_html TEXT DEFAULT '',
+        category_id TEXT REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_kpages_category ON knowledge_pages(category_id);
+      CREATE INDEX IF NOT EXISTS idx_kpages_updated ON knowledge_pages(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_kcat_parent ON knowledge_categories(parent_id);
+    `)
+
+    db.run("INSERT INTO _migrations (name) VALUES ('004_knowledge')")
+  }
+
+  if (!applied.has('005_knowledge_links')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS knowledge_links (
+        id              TEXT PRIMARY KEY,
+        source_page_id  TEXT NOT NULL REFERENCES knowledge_pages(id) ON DELETE CASCADE,
+        target_page_id  TEXT NOT NULL REFERENCES knowledge_pages(id) ON DELETE CASCADE,
+        UNIQUE(source_page_id, target_page_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_klinks_source ON knowledge_links(source_page_id);
+      CREATE INDEX IF NOT EXISTS idx_klinks_target ON knowledge_links(target_page_id);
+
+      CREATE TABLE IF NOT EXISTS knowledge_tags (
+        id    TEXT PRIMARY KEY,
+        name  TEXT NOT NULL UNIQUE,
+        color TEXT DEFAULT '#6b7280'
+      );
+
+      CREATE TABLE IF NOT EXISTS knowledge_page_tags (
+        page_id TEXT NOT NULL REFERENCES knowledge_pages(id) ON DELETE CASCADE,
+        tag_id  TEXT NOT NULL REFERENCES knowledge_tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (page_id, tag_id)
+      );
+    `)
+
+    db.run("INSERT INTO _migrations (name) VALUES ('005_knowledge_links')")
+  }
+
+  if (!applied.has('006_knowledge_star')) {
+    try { db.run("ALTER TABLE knowledge_pages ADD COLUMN is_starred INTEGER DEFAULT 0") } catch { /* column may exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('006_knowledge_star')")
+  }
 }
 
 /**

@@ -31,7 +31,26 @@ const api = {
   deleteScheduleTodo: (id: string) => ipcRenderer.invoke('schedule:deleteTodo', id),
   getScheduleTags: () => ipcRenderer.invoke('schedule:getTags'),
   createScheduleTag: (name: string, color?: string) => ipcRenderer.invoke('schedule:createTag', name, color),
-  deleteScheduleTag: (id: string) => ipcRenderer.invoke('schedule:deleteTag', id)
+  deleteScheduleTag: (id: string) => ipcRenderer.invoke('schedule:deleteTag', id),
+
+  // knowledge (Scheme A)
+  getKnowledgeCategories: () => ipcRenderer.invoke('knowledge:getCategories'),
+  createKnowledgeCategory: (data: unknown) => ipcRenderer.invoke('knowledge:createCategory', data),
+  updateKnowledgeCategory: (id: string, data: unknown) => ipcRenderer.invoke('knowledge:updateCategory', id, data),
+  deleteKnowledgeCategory: (id: string) => ipcRenderer.invoke('knowledge:deleteCategory', id),
+  getKnowledgePages: (categoryId?: string | null) => ipcRenderer.invoke('knowledge:getPages', categoryId),
+  getKnowledgePageById: (id: string) => ipcRenderer.invoke('knowledge:getPageById', id),
+  createKnowledgePage: (data: unknown) => ipcRenderer.invoke('knowledge:createPage', data),
+  updateKnowledgePage: (id: string, data: unknown) => ipcRenderer.invoke('knowledge:updatePage', id, data),
+  deleteKnowledgePage: (id: string) => ipcRenderer.invoke('knowledge:deletePage', id),
+  searchKnowledgePages: (q: string) => ipcRenderer.invoke('knowledge:searchPages', q),
+  getKnowledgeBacklinks: (pageId: string) => ipcRenderer.invoke('knowledge:getBacklinks', pageId),
+  updateKnowledgeLinks: (pageId: string, linkedTitles: string[]) => ipcRenderer.invoke('knowledge:updateLinks', pageId, linkedTitles),
+  getKnowledgeTags: () => ipcRenderer.invoke('knowledge:getTags'),
+  createKnowledgeTag: (n: string, c?: string) => ipcRenderer.invoke('knowledge:createTag', n, c),
+  deleteKnowledgeTag: (id: string) => ipcRenderer.invoke('knowledge:deleteTag', id),
+  toggleKnowledgeStar: (id: string) => ipcRenderer.invoke('knowledge:toggleStar', id),
+  getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages')
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -34,6 +34,23 @@ export interface UpdateScheduleTodoDTO {
   status?: string; endCriteria?: string
 }
 
+// knowledge
+export interface KnowledgeCategory {
+  id: string; name: string; parentId: string | null; sortOrder: number
+  children?: KnowledgeCategory[]
+}
+export interface KnowledgePage {
+  id: string; title: string; contentMd: string; contentHtml: string
+  categoryId: string | null; isStarred: boolean; createdAt: string; updatedAt: string
+  tags?: KnowledgeTag[]
+  backlinks?: KnowledgePage[]  // pages that link to this page
+}
+export interface KnowledgeTag { id: string; name: string; color: string }
+export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null }
+export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number }
+export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
+export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<void>
@@ -62,6 +79,24 @@ export interface ElectronAPI {
   getScheduleTags: () => Promise<ScheduleTag[]>
   createScheduleTag: (n: string, c?: string) => Promise<ScheduleTag>
   deleteScheduleTag: (id: string) => Promise<void>
+  // knowledge (Scheme A)
+  getKnowledgeCategories: () => Promise<KnowledgeCategory[]>
+  createKnowledgeCategory: (d: CreateKnowledgeCategoryDTO) => Promise<KnowledgeCategory>
+  updateKnowledgeCategory: (id: string, d: UpdateKnowledgeCategoryDTO) => Promise<KnowledgeCategory>
+  deleteKnowledgeCategory: (id: string) => Promise<void>
+  getKnowledgePages: (categoryId?: string | null) => Promise<KnowledgePage[]>
+  getKnowledgePageById: (id: string) => Promise<KnowledgePage | null>
+  createKnowledgePage: (d: CreateKnowledgePageDTO) => Promise<KnowledgePage>
+  updateKnowledgePage: (id: string, d: UpdateKnowledgePageDTO) => Promise<KnowledgePage>
+  deleteKnowledgePage: (id: string) => Promise<void>
+  searchKnowledgePages: (q: string) => Promise<KnowledgePage[]>
+  getKnowledgeBacklinks: (pageId: string) => Promise<KnowledgePage[]>
+  updateKnowledgeLinks: (pageId: string, linkedTitles: string[]) => Promise<void>
+  getKnowledgeTags: () => Promise<KnowledgeTag[]>
+  createKnowledgeTag: (n: string, c?: string) => Promise<KnowledgeTag>
+  deleteKnowledgeTag: (id: string) => Promise<void>
+  toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
+  getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
 }
 
 declare global { interface Window { api: ElectronAPI } }

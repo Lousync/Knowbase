@@ -4,6 +4,7 @@ import { initDatabase, getDbPath, closeDatabase } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
+import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRepo'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -87,6 +88,7 @@ app.whenReady().then(async () => {
   registerEntryHandlers()
   registerTagHandlers()
   registerScheduleHandlers()
+  registerKnowledgeHandlers()
   createWindow()
 
   app.on('activate', () => {
