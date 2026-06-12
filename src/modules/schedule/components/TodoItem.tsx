@@ -77,12 +77,16 @@ export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDe
         )}
       </div>
 
-      {/* 右下角：截止时间 / 剩余时间 */}
-      {deadline && todo.time && (
+      {/* 右下角：截止 / 计划结束标准 */}
+      {deadline && todo.time ? (
         <span className={`text-[11px] shrink-0 self-end ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
           {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
         </span>
-      )}
+      ) : !deadline && todo.endCriteria ? (
+        <span className="text-[11px] text-[#6a6a6a] shrink-0 self-end max-w-[120px] truncate" title={todo.endCriteria}>
+          🎯 {todo.endCriteria}
+        </span>
+      ) : null}
 
       {/* date label for non-date-grouped views */}
       {showRemaining && (

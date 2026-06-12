@@ -27,13 +27,18 @@ const VIEW_MODES: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
   { id: 'quadrant', label: '按象限', icon: <Layers size={13} /> },
 ]
 
+function localToday(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
+
 function relativeTime(dateStr: string): string {
   if (!dateStr) return ''
   const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const td = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const [y, m, d] = dateStr.split('-').map(Number)
   const target = new Date(y, m - 1, d)
-  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  const diff = Math.round((target.getTime() - td.getTime()) / 86400000)
   if (diff === 0) return '今天'
   if (diff === -1) return '昨天'
   if (diff === 1) return '明天'
@@ -42,7 +47,7 @@ function relativeTime(dateStr: string): string {
 }
 
 export function CalendarView({ year, month, selectedDate, dotDates, deadlineCounts, viewMode, onSelectDate, onPrevMonth, onNextMonth, onToday, onViewModeChange, onQuadrantChart }: Props) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localToday()
 
   const weeks = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1)
