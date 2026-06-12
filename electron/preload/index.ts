@@ -57,7 +57,12 @@ const api = {
   exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
   exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
   exportAllKnowledgeData: () => ipcRenderer.invoke('export:getAllKnowledgeData'),
-  exportAllData: () => ipcRenderer.invoke('export:getAllData')
+  exportAllData: () => ipcRenderer.invoke('export:getAllData'),
+  showExportSaveDialog: (opts: unknown) => ipcRenderer.invoke('export:showSaveDialog', opts),
+  showExportOpenDirDialog: () => ipcRenderer.invoke('export:showOpenDirDialog'),
+  writeExportTextFile: (filePath: string, content: string) => ipcRenderer.invoke('export:writeTextFile', filePath, content),
+  copyDbFile: (destPath: string) => ipcRenderer.invoke('export:copyDbFile', destPath),
+  writeMarkdownExport: (dirPath: string, files: unknown) => ipcRenderer.invoke('export:writeMarkdownExport', dirPath, files)
 }
 
 contextBridge.exposeInMainWorld('api', api)

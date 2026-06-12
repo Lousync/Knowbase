@@ -112,6 +112,11 @@ export interface ElectronAPI {
   exportAllScheduleData: () => Promise<ScheduleExportData>
   exportAllKnowledgeData: () => Promise<KnowledgeExportData>
   exportAllData: () => Promise<AllExportData>
+  showExportSaveDialog: (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => Promise<{ filePath: string | null }>
+  showExportOpenDirDialog: () => Promise<{ dirPath: string | null }>
+  writeExportTextFile: (filePath: string, content: string) => Promise<void>
+  copyDbFile: (destPath: string) => Promise<void>
+  writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[]) => Promise<void>
 }
 
 declare global { interface Window { api: ElectronAPI } }

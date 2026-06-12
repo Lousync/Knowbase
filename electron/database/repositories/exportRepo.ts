@@ -1,5 +1,7 @@
-import { ipcMain } from 'electron'
-import { getDatabase } from '../connection'
+import { ipcMain, dialog, BrowserWindow, app } from 'electron'
+import { getDatabase, getDbPath } from '../connection'
+import { writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs'
+import { join, basename } from 'path'
 
 // ---- row types ----
 interface EntryRow { id: string; title: string; content_md: string; content_html: string | null; date: string; created_at: string; updated_at: string; is_pinned: number; word_count: number }
@@ -142,6 +144,46 @@ export function registerExportHandlers(): void {
         pages: pages.map(p => ({ ...mapPage(p), tags: [] as TagRow[], backlinks: backlinkMap.get(p.id) || [] })),
         tags: knowledgeTags
       }
+    }
+  })
+
+  // ===== File dialogs =====
+  ipcMain.handle('export:showSaveDialog', async (_e, opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win) return { filePath: null }
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: opts.defaultName,
+      filters: opts.filters
+    })
+    return { filePath: result.canceled ? null : result.filePath ?? null }
+  })
+
+  ipcMain.handle('export:showOpenDirDialog', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win) return { dirPath: null }
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: '选择导出目录'
+    })
+    return { dirPath: result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0] }
+  })
+
+  // ===== File I/O =====
+  ipcMain.handle('export:writeTextFile', (_e, filePath: string, content: string) => {
+    writeFileSync(filePath, content, 'utf-8')
+  })
+
+  ipcMain.handle('export:copyDbFile', (_e, destPath: string) => {
+    copyFileSync(getDbPath(), destPath)
+  })
+
+  // ===== Markdown batch export: writes multiple files into a directory =====
+  ipcMain.handle('export:writeMarkdownExport', (_e, dirPath: string, files: { relPath: string; content: string }[]) => {
+    for (const f of files) {
+      const fullPath = join(dirPath, f.relPath)
+      const dir = join(fullPath, '..')
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      writeFileSync(fullPath, f.content, 'utf-8')
     }
   })
 }

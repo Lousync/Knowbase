@@ -57,6 +57,12 @@ export const exportAllScheduleData = () => a().exportAllScheduleData()
 export const exportAllKnowledgeData = () => a().exportAllKnowledgeData()
 export const exportAllData = () => a().exportAllData()
 
+export const showExportSaveDialog = (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => a().showExportSaveDialog(opts)
+export const showExportOpenDirDialog = () => a().showExportOpenDirDialog()
+export const writeExportTextFile = (filePath: string, content: string) => a().writeExportTextFile(filePath, content)
+export const copyDbFile = (destPath: string) => a().copyDbFile(destPath)
+export const writeMarkdownExport = (dirPath: string, files: { relPath: string; content: string }[]) => a().writeMarkdownExport(dirPath, files)
+
 // Utility: parse [[wiki links]] from markdown
 export function parseWikiLinks(md: string): string[] {
   const re = /\[\[([^\]]+)\]\]/g
