@@ -52,6 +52,15 @@ export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string |
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 
+// export
+export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Tag[] }
+export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
+export interface KnowledgeExportData { categories: KnowledgeCategory[]; pages: (KnowledgePage & { tags: KnowledgeTag[]; backlinks: string[] })[]; tags: KnowledgeTag[] }
+export interface AllExportData {
+  exportVersion: string; exportedAt: string
+  blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
+}
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<void>
@@ -99,6 +108,10 @@ export interface ElectronAPI {
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
+  exportAllBlogData: () => Promise<BlogExportData>
+  exportAllScheduleData: () => Promise<ScheduleExportData>
+  exportAllKnowledgeData: () => Promise<KnowledgeExportData>
+  exportAllData: () => Promise<AllExportData>
 }
 
 declare global { interface Window { api: ElectronAPI } }

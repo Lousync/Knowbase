@@ -51,6 +51,12 @@ export const toggleKnowledgeStar = (id: string) => a().toggleKnowledgeStar(id)
 export const getKnowledgeStarredPages = () => a().getKnowledgeStarredPages()
 export const moveKnowledgePage = (id: string, direction: 'up' | 'down') => a().moveKnowledgePage(id, direction)
 
+// export
+export const exportAllBlogData = () => a().exportAllBlogData()
+export const exportAllScheduleData = () => a().exportAllScheduleData()
+export const exportAllKnowledgeData = () => a().exportAllKnowledgeData()
+export const exportAllData = () => a().exportAllData()
+
 // Utility: parse [[wiki links]] from markdown
 export function parseWikiLinks(md: string): string[] {
   const re = /\[\[([^\]]+)\]\]/g

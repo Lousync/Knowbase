@@ -51,7 +51,13 @@ const api = {
   deleteKnowledgeTag: (id: string) => ipcRenderer.invoke('knowledge:deleteTag', id),
   toggleKnowledgeStar: (id: string) => ipcRenderer.invoke('knowledge:toggleStar', id),
   getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages'),
-  moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction)
+  moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction),
+
+  // export
+  exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
+  exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
+  exportAllKnowledgeData: () => ipcRenderer.invoke('export:getAllKnowledgeData'),
+  exportAllData: () => ipcRenderer.invoke('export:getAllData')
 }
 
 contextBridge.exposeInMainWorld('api', api)
