@@ -76,9 +76,9 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 
     // Check: deadline must not be before today
     const targetDate = `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-    const today = new Date().toISOString().split('T')[0]
-    if (targetDate < today) {
-      return { corrected, warning: `截止日期不能早于今天（${today}）` }
+    const td = localToday()
+    if (targetDate < td) {
+      return { corrected, warning: `截止日期不能早于今天（${td}）` }
     }
 
     if (corrected !== form.time) {
@@ -108,8 +108,6 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
     const next = { ...dStr, [field]: clean }
     syncDeadline(next)
   }
-
-  const todayDate = new Date().toISOString().split('T')[0]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -248,4 +246,9 @@ function parseDeadline(time: string | null | undefined) {
   const m = time.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/)
   if (!m) return d
   return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]), hour: Number(m[4]), minute: Number(m[5]) }
+}
+
+function localToday(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }

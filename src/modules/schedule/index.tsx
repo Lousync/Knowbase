@@ -15,9 +15,14 @@ import { TagManageModal } from './components/TagManageModal'
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-red-400', 1: 'text-blue-400', 2: 'text-yellow-400', 3: 'text-gray-400' }
 
+function localToday(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
+
 export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }) {
   const now = new Date()
-  const today = now.toISOString().split('T')[0]
+  const today = localToday()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [selectedDate, setSelectedDate] = useState(today)
@@ -123,7 +128,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   const doneTodos = useMemo(() => allWithTags.filter(t => t.status === 'done'), [allWithTags])
 
   // Today's date string
-  const todayDateStr = new Date().toISOString().split('T')[0]
+  const todayDateStr = localToday()
 
   // deadline mode: split pending deadline tasks into overdue vs upcoming
   const deadlineUpcoming = useMemo(() =>
@@ -219,9 +224,10 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           )}
 
           {/* ===== DEADLINE MODE ===== */}
-          {viewMode === 'deadline' && (
+          {viewMode === 'deadline' && (deadlineOverdue.length === 0 && deadlineUpcoming.length === 0 && deadlineDone.length === 0 ? (
+            <EmptyHint text="本月无截止类任务" />
+          ) : (
             <div className="space-y-4">
-              {/* 超期未完成 */}
               {deadlineOverdue.length > 0 && (
                 <div>
                   <h4 className="text-[12px] font-medium text-red-400 mb-2">⚠ 超期未完成 ({deadlineOverdue.length})</h4>
@@ -260,9 +266,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                 </div>
               )}
 
-              {deadlineOverdue.length === 0 && deadlineUpcoming.length === 0 && deadlineDone.length === 0 && <EmptyHint text="本月无截止类任务" />}
             </div>
-          )}
+          ))}
 
           {/* ===== QUADRANT MODE ===== */}
           {viewMode === 'quadrant' && (
