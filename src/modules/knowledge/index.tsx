@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle } from 'lucide-react'
+import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
@@ -17,6 +17,10 @@ export function KnowledgeModule() {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // 面板折叠状态
+  const [showCategoryPanel, setShowCategoryPanel] = useState(true)
+  const [showPageListPanel, setShowPageListPanel] = useState(true)
 
   const refreshCategories = useCallback(async () => {
     try { setCategories(await getKnowledgeCategories()) } catch (e) { console.error(e) }
@@ -100,142 +104,188 @@ export function KnowledgeModule() {
     return parts.join(' > ')
   }
 
-  // 当前选中的分类是否有子分类（即它本身是"笔记本"级别）
   const selectedCat = selectedCatId ? categories.find(c => c.id === selectedCatId) : null
   const hasSubCategories = selectedCatId ? categories.some(c => c.parentId === selectedCatId) : false
-
   const showStarred = selectedCatId === null && !searchQuery && starredPages.length > 0
 
   return (
     <div className="flex h-full bg-[#1e1e1e]">
-      {/* Left: Category Tree + Starred */}
-      <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
-        <CategoryTree
-          categories={categories}
-          selectedId={selectedCatId}
-          onSelect={(id) => { setSelectedCatId(id); setSelectedPageId(null); setSearchQuery('') }}
-          onCreate={handleCreateCategory}
-          onRename={handleRenameCategory}
-          onDelete={handleDeleteCategory}
-        />
-        {showStarred && (
-          <div className="border-t border-[#3c3c3c] flex-shrink-0">
-            <div className="px-3 py-1.5 text-[11px] font-semibold text-[#c5a332] uppercase flex items-center gap-1">
-              <Star size={11} fill="#c5a332" /> 收藏
-            </div>
-            <div className="max-h-[200px] overflow-y-auto">
-              {starredPages.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => handleSelectPage(p.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[14px] hover:bg-[#2a2d2e] ${
-                    selectedPageId === p.id ? 'bg-[#094771] text-white' : 'text-[#cccccc]'
-                  }`}
-                >
-                  <Star size={11} className="text-[#c5a332] shrink-0" fill="#c5a332" />
-                  <span className="truncate">{p.title || '无标题'}</span>
-                </div>
-              ))}
-            </div>
+      {/* Left: Category Tree */}
+      {showCategoryPanel ? (
+        <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
+          {/* Panel header with collapse button */}
+          <div className="flex items-center justify-between px-2 py-1 border-b border-[#3c3c3c]">
+            <span className="text-[11px] font-semibold text-[#969696] uppercase tracking-wide">知识主题</span>
+            <button
+              onClick={() => setShowCategoryPanel(false)}
+              className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc]"
+              title="折叠面板"
+            >
+              <PanelLeftClose size={14} />
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Middle: Page List */}
-      <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
-        <div className="p-2 border-b border-[#3c3c3c] space-y-2">
-          <div className="flex items-center gap-1.5 bg-[#3c3c3c] rounded px-2 py-1">
-            <Search size={13} className="text-[#6a6a6a] shrink-0" />
-            <input
-              className="flex-1 bg-transparent text-[12px] text-[#cccccc] outline-none placeholder:text-[#6a6a6a]"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="搜索标题或内容..."
-            />
-            {searchQuery && <button onClick={() => setSearchQuery('')} className="text-[#6a6a6a]"><X size={12} /></button>}
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] text-[#cccccc] font-medium truncate">{getCategoryPath(selectedCatId)}</span>
-            <span className="text-[10px] text-[#6a6a6a] shrink-0">{pages.length}</span>
-          </div>
-        </div>
-
-        {/* Hint: category has subcategories */}
-        {hasSubCategories && !searchQuery && (
-          <div className="flex items-start gap-1.5 px-3 py-1.5 text-[11px] text-[#c5a332] bg-[#2a2a1e] border-b border-[#3c3c3c]">
-            <AlertCircle size={12} className="shrink-0 mt-0.5" />
-            <span>此分类下还有子分类，页面直接属于本分类</span>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <div className="border-2 border-[#3c3c3c] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
-            </div>
-          ) : pages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-[#6a6a6a] px-4">
-              <FileText size={36} className="mb-3 opacity-40" />
-              <p className="text-xs text-center">{searchQuery ? '无匹配结果' : '此分类下暂无页面'}</p>
-              {!searchQuery && (
-                <button onClick={handleCreatePage} className="mt-3 px-4 py-1.5 text-xs bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
-                  创建第一篇
-                </button>
-              )}
-            </div>
-          ) : (
-            pages
-              .filter(p => !showStarred || !p.isStarred)
-              .map((p, idx) => (
-                <div
-                  key={p.id}
-                  onClick={() => handleSelectPage(p.id)}
-                  className={`px-3 py-2 cursor-pointer border-b border-[#2d2d2d] hover:bg-[#2a2d2e] group ${
-                    selectedPageId === p.id ? 'bg-[#094771]' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    {p.isStarred && <Star size={9} className="text-[#c5a332] fill-[#c5a332] shrink-0" />}
-                    <span className="text-[13px] text-[#cccccc] truncate flex-1">{p.title || '无标题'}</span>
-                    {p.backlinks && p.backlinks.length > 0 && (
-                      <span className="text-[10px] text-[#007acc] shrink-0">{p.backlinks.length}</span>
-                    )}
-                    {/* Move buttons */}
-                    {!searchQuery && (
-                      <div className="hidden group-hover:flex items-center gap-0 shrink-0">
-                        <button
-                          onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'up') }}
-                          disabled={idx === 0}
-                          className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
-                          title="上移"
-                        >
-                          <ChevronUp size={13} />
-                        </button>
-                        <button
-                          onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'down') }}
-                          disabled={idx === pages.length - 1}
-                          className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
-                          title="下移"
-                        >
-                          <ChevronDown size={13} />
-                        </button>
-                      </div>
-                    )}
+          <CategoryTree
+            categories={categories}
+            selectedId={selectedCatId}
+            onSelect={(id) => { setSelectedCatId(id); setSelectedPageId(null); setSearchQuery('') }}
+            onCreate={handleCreateCategory}
+            onRename={handleRenameCategory}
+            onDelete={handleDeleteCategory}
+          />
+          {showStarred && (
+            <div className="border-t border-[#3c3c3c] flex-shrink-0">
+              <div className="px-3 py-1.5 text-[11px] font-semibold text-[#c5a332] uppercase flex items-center gap-1">
+                <Star size={11} fill="#c5a332" /> 收藏
+              </div>
+              <div className="max-h-[200px] overflow-y-auto">
+                {starredPages.map(p => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectPage(p.id)}
+                    className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[14px] hover:bg-[#2a2d2e] ${
+                      selectedPageId === p.id ? 'bg-[#094771] text-white' : 'text-[#cccccc]'
+                    }`}
+                  >
+                    <Star size={11} className="text-[#c5a332] shrink-0" fill="#c5a332" />
+                    <span className="truncate">{p.title || '无标题'}</span>
                   </div>
-                  <div className="text-[10px] text-[#6a6a6a] mt-0.5">
-                    {p.updatedAt.slice(0, 10)} · {p.contentMd.length} 字
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
+            </div>
           )}
         </div>
-
-        <div className="p-2 border-t border-[#3c3c3c]">
-          <button onClick={handleCreatePage} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
-            <Plus size={14} /> 新建页面
+      ) : (
+        /* Collapsed category panel strip */
+        <div className="w-8 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center pt-1">
+          <button
+            onClick={() => setShowCategoryPanel(true)}
+            className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"
+            title="展开分类面板"
+          >
+            <PanelLeftOpen size={14} />
           </button>
         </div>
-      </div>
+      )}
+
+      {/* Middle: Page List */}
+      {showPageListPanel ? (
+        <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
+          {/* Panel header */}
+          <div className="flex items-center justify-between px-2 py-1 border-b border-[#3c3c3c]">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FileText size={13} className="text-[#969696] shrink-0" />
+              <span className="text-[11px] text-[#969696] font-medium truncate uppercase">页面</span>
+            </div>
+            <button
+              onClick={() => setShowPageListPanel(false)}
+              className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc]"
+              title="折叠面板"
+            >
+              <PanelRightClose size={14} />
+            </button>
+          </div>
+
+          {/* Search + New page button + path */}
+          <div className="p-2 border-b border-[#3c3c3c] space-y-2">
+            <div className="flex items-center gap-1.5 bg-[#3c3c3c] rounded px-2 py-1">
+              <Search size={13} className="text-[#6a6a6a] shrink-0" />
+              <input
+                className="flex-1 bg-transparent text-[12px] text-[#cccccc] outline-none placeholder:text-[#6a6a6a]"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="搜索标题或内容..."
+              />
+              {searchQuery && <button onClick={() => setSearchQuery('')} className="text-[#6a6a6a]"><X size={12} /></button>}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] text-[#cccccc] font-medium truncate">{getCategoryPath(selectedCatId)}</span>
+              <span className="text-[10px] text-[#6a6a6a] shrink-0">{pages.length}</span>
+            </div>
+          </div>
+
+          {/* New page button — moved to top */}
+          <div className="px-2 py-1.5 border-b border-[#3c3c3c]">
+            <button onClick={handleCreatePage} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
+              <Plus size={14} /> 新建页面
+            </button>
+          </div>
+
+          {/* Hint */}
+          {hasSubCategories && !searchQuery && (
+            <div className="flex items-start gap-1.5 px-3 py-1.5 text-[11px] text-[#c5a332] bg-[#2a2a1e] border-b border-[#3c3c3c]">
+              <AlertCircle size={12} className="shrink-0 mt-0.5" />
+              <span>此分类下还有子分类，页面直接属于本分类</span>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="border-2 border-[#3c3c3c] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
+              </div>
+            ) : pages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-[#6a6a6a] px-4">
+                <FileText size={36} className="mb-3 opacity-40" />
+                <p className="text-xs text-center">{searchQuery ? '无匹配结果' : '此分类下暂无页面'}</p>
+              </div>
+            ) : (
+              pages
+                .filter(p => !showStarred || !p.isStarred)
+                .map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectPage(p.id)}
+                    className={`px-3 py-2 cursor-pointer border-b border-[#2d2d2d] hover:bg-[#2a2d2e] group ${
+                      selectedPageId === p.id ? 'bg-[#094771]' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {p.isStarred && <Star size={9} className="text-[#c5a332] fill-[#c5a332] shrink-0" />}
+                      <span className="text-[13px] text-[#cccccc] truncate flex-1">{p.title || '无标题'}</span>
+                      {p.backlinks && p.backlinks.length > 0 && (
+                        <span className="text-[10px] text-[#007acc] shrink-0">{p.backlinks.length}</span>
+                      )}
+                      {!searchQuery && (
+                        <div className="hidden group-hover:flex items-center gap-0 shrink-0">
+                          <button
+                            onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'up') }}
+                            disabled={idx === 0}
+                            className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
+                            title="上移"
+                          >
+                            <ChevronUp size={13} />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'down') }}
+                            disabled={idx === pages.length - 1}
+                            className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
+                            title="下移"
+                          >
+                            <ChevronDown size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-[#6a6a6a] mt-0.5">
+                      {p.updatedAt.slice(0, 10)} · {p.contentMd.length} 字
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Collapsed page list panel strip */
+        <div className="w-8 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center pt-1">
+          <button
+            onClick={() => setShowPageListPanel(true)}
+            className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"
+            title="展开页面列表面板"
+          >
+            <PanelRightOpen size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Right: Editor */}
       <div className="flex-1 flex overflow-hidden">

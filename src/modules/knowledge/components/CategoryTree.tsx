@@ -139,11 +139,6 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — 无加号 */}
-      <div className="px-3 py-2 border-b border-[#3c3c3c]">
-        <span className="text-[12px] font-semibold text-[#969696] uppercase tracking-wide">知识主题</span>
-      </div>
-
       {/* 全部页面 按钮 + 新建主题 按钮 */}
       <div className="px-2 py-1.5 border-b border-[#3c3c3c] space-y-1">
         <button
