@@ -183,7 +183,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
   return (
     <div className="flex h-full bg-[#1e1e1e]">
-      {sidebarOpen && (
+      <div className={`shrink-0 transition-all duration-200 ease-out overflow-hidden ${sidebarOpen ? 'w-[280px]' : 'w-0'}`}>
         <CalendarView
           year={year} month={month} selectedDate={selectedDate}
           dotDates={dotDates} deadlineCounts={deadlineCounts}
@@ -193,7 +193,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           onToday={goToToday} onViewModeChange={handleViewModeChange}
           onQuadrantChart={openQuadrantChart}
         />
-      )}
+      </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#3c3c3c] bg-[#252526] shrink-0">

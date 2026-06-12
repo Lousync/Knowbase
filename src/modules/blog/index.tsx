@@ -68,14 +68,14 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true }: {
 
   return (
     <div className="flex h-full bg-[#1e1e1e]">
-      {sidebarOpen && (
+      <div className={`shrink-0 transition-all duration-200 ease-out overflow-hidden ${sidebarOpen ? 'w-56' : 'w-0'}`}>
         <Sidebar
           entries={entries}
           selectedDate={selectedDate}
           onSelectDate={handleSelectDate}
           onNewEntry={handleTodayEntry}
         />
-      )}
+      </div>
       <main className="flex-1 overflow-hidden">
         {view === 'list' && (
           <EntryList
