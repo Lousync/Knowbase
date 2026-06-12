@@ -200,6 +200,11 @@ function runMigrations(): void {
     try { db.run("ALTER TABLE knowledge_pages ADD COLUMN is_starred INTEGER DEFAULT 0") } catch { /* column may exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('006_knowledge_star')")
   }
+
+  if (!applied.has('007_page_sort_order')) {
+    try { db.run("ALTER TABLE knowledge_pages ADD COLUMN sort_order INTEGER DEFAULT 0") } catch { /* column may exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('007_page_sort_order')")
+  }
 }
 
 /**

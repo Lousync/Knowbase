@@ -41,9 +41,10 @@ export interface KnowledgeCategory {
 }
 export interface KnowledgePage {
   id: string; title: string; contentMd: string; contentHtml: string
-  categoryId: string | null; isStarred: boolean; createdAt: string; updatedAt: string
+  categoryId: string | null; isStarred: boolean; sortOrder: number
+  createdAt: string; updatedAt: string
   tags?: KnowledgeTag[]
-  backlinks?: KnowledgePage[]  // pages that link to this page
+  backlinks?: KnowledgePage[]
 }
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null }
@@ -97,6 +98,7 @@ export interface ElectronAPI {
   deleteKnowledgeTag: (id: string) => Promise<void>
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
+  moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
 }
 
 declare global { interface Window { api: ElectronAPI } }

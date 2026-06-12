@@ -49,6 +49,7 @@ export const createKnowledgeTag = (n: string, c?: string) => a().createKnowledge
 export const deleteKnowledgeTag = (id: string) => a().deleteKnowledgeTag(id)
 export const toggleKnowledgeStar = (id: string) => a().toggleKnowledgeStar(id)
 export const getKnowledgeStarredPages = () => a().getKnowledgeStarredPages()
+export const moveKnowledgePage = (id: string, direction: 'up' | 'down') => a().moveKnowledgePage(id, direction)
 
 // Utility: parse [[wiki links]] from markdown
 export function parseWikiLinks(md: string): string[] {

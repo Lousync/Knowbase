@@ -4,7 +4,7 @@ import { getDatabase, saveToDisk } from '../connection'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number }
-interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; created_at: string; updated_at: string }
+interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; created_at: string; updated_at: string }
 
 function mapPage(r: PageRow) {
   return {
@@ -12,6 +12,7 @@ function mapPage(r: PageRow) {
     contentMd: r.content_md, contentHtml: r.content_html || '',
     categoryId: r.category_id,
     isStarred: !!r.is_starred,
+    sortOrder: r.sort_order,
     createdAt: r.created_at, updatedAt: r.updated_at
   }
 }
@@ -94,18 +95,18 @@ export function registerKnowledgeHandlers(): void {
     let rows: PageRow[]
     if (categoryId) {
       rows = queryAll<PageRow>(
-        'SELECT * FROM knowledge_pages WHERE category_id = ? ORDER BY updated_at DESC',
+        'SELECT * FROM knowledge_pages WHERE category_id = ? ORDER BY sort_order, updated_at DESC',
         [categoryId]
       )
     } else if (categoryId === null) {
       // 未分类的页面
       rows = queryAll<PageRow>(
-        'SELECT * FROM knowledge_pages WHERE category_id IS NULL ORDER BY updated_at DESC'
+        'SELECT * FROM knowledge_pages WHERE category_id IS NULL ORDER BY sort_order, updated_at DESC'
       )
     } else {
       // 全部页面
       rows = queryAll<PageRow>(
-        'SELECT * FROM knowledge_pages ORDER BY updated_at DESC'
+        'SELECT * FROM knowledge_pages ORDER BY sort_order, updated_at DESC'
       )
     }
     return rows.map(mapPage)
@@ -115,32 +116,24 @@ export function registerKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:getPageById', (_e, id: string) => {
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     if (rows.length === 0) return null
-    const r = rows[0]
-    return {
-      id: r.id, title: r.title,
-      contentMd: r.content_md, contentHtml: r.content_html || '',
-      categoryId: r.category_id,
-      createdAt: r.created_at, updatedAt: r.updated_at
-    }
+    return mapPage(rows[0])
   })
 
   // 创建页面
   ipcMain.handle('knowledge:createPage', (_e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
+    const maxOrder = queryAll<{ m: number }>(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
+      [data.categoryId || null]
+    )
     run(
-      `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, now, now]
+      `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, now, now]
     )
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
-    const r = rows[0]
-    return {
-      id: r.id, title: r.title,
-      contentMd: r.content_md, contentHtml: r.content_html || '',
-      categoryId: r.category_id,
-      createdAt: r.created_at, updatedAt: r.updated_at
-    }
+    return mapPage(rows[0])
   })
 
   // 更新页面
@@ -156,13 +149,25 @@ export function registerKnowledgeHandlers(): void {
     params.push(id)
     run(`UPDATE knowledge_pages SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
-    const r = rows[0]
-    return {
-      id: r.id, title: r.title,
-      contentMd: r.content_md, contentHtml: r.content_html || '',
-      categoryId: r.category_id,
-      createdAt: r.created_at, updatedAt: r.updated_at
-    }
+    return mapPage(rows[0])
+  })
+
+  // 移动页面（上下排序）
+  ipcMain.handle('knowledge:movePage', (_e, id: string, direction: 'up' | 'down') => {
+    const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])[0]
+    if (!page) return
+    const catId = page.category_id
+    const cmp = direction === 'up' ? '<' : '>'
+    const ord = direction === 'up' ? 'DESC' : 'ASC'
+    // 找到相邻页面
+    const neighbor = queryAll<PageRow>(
+      `SELECT * FROM knowledge_pages WHERE category_id IS ? AND sort_order ${cmp} ? ORDER BY sort_order ${ord} LIMIT 1`,
+      [catId, page.sort_order]
+    )
+    if (neighbor.length === 0) return
+    // 交换 sort_order
+    run('UPDATE knowledge_pages SET sort_order = ? WHERE id = ?', [neighbor[0].sort_order, id])
+    run('UPDATE knowledge_pages SET sort_order = ? WHERE id = ?', [page.sort_order, neighbor[0].id])
   })
 
   // 删除页面

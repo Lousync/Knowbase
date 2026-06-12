@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Plus, Search, X, Star } from 'lucide-react'
+import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, createKnowledgePage, deleteKnowledgePage,
-  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages
+  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages, moveKnowledgePage
 } from '../../lib/ipc'
 import { CategoryTree } from './components/CategoryTree'
 import { PageEditor } from './components/PageEditor'
@@ -78,6 +78,11 @@ export function KnowledgeModule() {
     refreshPages(); refreshStarred()
   }
 
+  const handleMovePage = async (id: string, direction: 'up' | 'down') => {
+    await moveKnowledgePage(id, direction)
+    refreshPages()
+  }
+
   const handleBackToList = () => {
     setSelectedPageId(null)
     refreshPages(); refreshStarred()
@@ -95,12 +100,16 @@ export function KnowledgeModule() {
     return parts.join(' > ')
   }
 
+  // 当前选中的分类是否有子分类（即它本身是"笔记本"级别）
+  const selectedCat = selectedCatId ? categories.find(c => c.id === selectedCatId) : null
+  const hasSubCategories = selectedCatId ? categories.some(c => c.parentId === selectedCatId) : false
+
   const showStarred = selectedCatId === null && !searchQuery && starredPages.length > 0
 
   return (
     <div className="flex h-full bg-[#1e1e1e]">
       {/* Left: Category Tree + Starred */}
-      <div className="w-52 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
+      <div className="w-64 shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
         <CategoryTree
           categories={categories}
           selectedId={selectedCatId}
@@ -111,19 +120,19 @@ export function KnowledgeModule() {
         />
         {showStarred && (
           <div className="border-t border-[#3c3c3c] flex-shrink-0">
-            <div className="px-3 py-1.5 text-[10px] font-semibold text-[#c5a332] uppercase flex items-center gap-1">
-              <Star size={10} fill="#c5a332" /> 收藏
+            <div className="px-3 py-1.5 text-[11px] font-semibold text-[#c5a332] uppercase flex items-center gap-1">
+              <Star size={11} fill="#c5a332" /> 收藏
             </div>
             <div className="max-h-[200px] overflow-y-auto">
               {starredPages.map(p => (
                 <div
                   key={p.id}
                   onClick={() => handleSelectPage(p.id)}
-                  className={`flex items-center gap-2 px-3 py-1 cursor-pointer text-[12px] hover:bg-[#2a2d2e] ${
+                  className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[14px] hover:bg-[#2a2d2e] ${
                     selectedPageId === p.id ? 'bg-[#094771] text-white' : 'text-[#cccccc]'
                   }`}
                 >
-                  <Star size={10} className="text-[#c5a332] shrink-0" fill="#c5a332" />
+                  <Star size={11} className="text-[#c5a332] shrink-0" fill="#c5a332" />
                   <span className="truncate">{p.title || '无标题'}</span>
                 </div>
               ))}
@@ -151,6 +160,14 @@ export function KnowledgeModule() {
           </div>
         </div>
 
+        {/* Hint: category has subcategories */}
+        {hasSubCategories && !searchQuery && (
+          <div className="flex items-start gap-1.5 px-3 py-1.5 text-[11px] text-[#c5a332] bg-[#2a2a1e] border-b border-[#3c3c3c]">
+            <AlertCircle size={12} className="shrink-0 mt-0.5" />
+            <span>此分类下还有子分类，页面直接属于本分类</span>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-10">
@@ -169,11 +186,11 @@ export function KnowledgeModule() {
           ) : (
             pages
               .filter(p => !showStarred || !p.isStarred)
-              .map(p => (
+              .map((p, idx) => (
                 <div
                   key={p.id}
                   onClick={() => handleSelectPage(p.id)}
-                  className={`px-3 py-2 cursor-pointer border-b border-[#2d2d2d] hover:bg-[#2a2d2e] ${
+                  className={`px-3 py-2 cursor-pointer border-b border-[#2d2d2d] hover:bg-[#2a2d2e] group ${
                     selectedPageId === p.id ? 'bg-[#094771]' : ''
                   }`}
                 >
@@ -182,6 +199,27 @@ export function KnowledgeModule() {
                     <span className="text-[13px] text-[#cccccc] truncate flex-1">{p.title || '无标题'}</span>
                     {p.backlinks && p.backlinks.length > 0 && (
                       <span className="text-[10px] text-[#007acc] shrink-0">{p.backlinks.length}</span>
+                    )}
+                    {/* Move buttons */}
+                    {!searchQuery && (
+                      <div className="hidden group-hover:flex items-center gap-0 shrink-0">
+                        <button
+                          onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'up') }}
+                          disabled={idx === 0}
+                          className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
+                          title="上移"
+                        >
+                          <ChevronUp size={13} />
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'down') }}
+                          disabled={idx === pages.length - 1}
+                          className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
+                          title="下移"
+                        >
+                          <ChevronDown size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="text-[10px] text-[#6a6a6a] mt-0.5">
