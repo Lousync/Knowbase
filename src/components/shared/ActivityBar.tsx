@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Download, Settings } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Upload, Settings } from 'lucide-react'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={28} strokeWidth={1.5} /> },
   { id: 'schedule', label: '日程', icon: <Calendar size={28} strokeWidth={1.5} /> },
   { id: 'knowledge', label: '知识库', icon: <BookOpen size={28} strokeWidth={1.5} /> },
-  { id: 'export', label: '导出', icon: <Download size={28} strokeWidth={1.5} /> }
+  { id: 'export', label: '导出', icon: <Upload size={28} strokeWidth={1.5} /> }
 ]
 
 interface Props {

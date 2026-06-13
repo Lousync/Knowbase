@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Trash2, Upload } from 'lucide-react'
+import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Trash2, Download } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
@@ -270,7 +270,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1 }: { sidebarOpen?
                 <Plus size={21} /> 新建页面
               </button>
               <button onClick={handleDialogImport} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs border border-[#3c3c3c] text-[#969696] rounded hover:text-[#cccccc] hover:border-[#555] transition-colors">
-                <Upload size={18} /> 导入文件
+                <Download size={18} /> 导入文件
               </button>
             </div>
 
