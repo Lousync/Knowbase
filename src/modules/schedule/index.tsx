@@ -15,6 +15,12 @@ import { TagManageModal } from './components/TagManageModal'
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-red-400', 1: 'text-blue-400', 2: 'text-yellow-400', 3: 'text-gray-400' }
 
+const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; placeholder: string; meta: string; metaIcon: number; sectionTitle: string }> = {
+  sm: { icon: 14, text: 'text-[11px]', padY: 'py-1.5', placeholder: '零碎任务...', meta: 'text-[11px]', metaIcon: 10, sectionTitle: 'text-[12px]' },
+  md: { icon: 17, text: 'text-[13px]', padY: 'py-2', placeholder: '快速添加当日零碎任务...', meta: 'text-[12px]', metaIcon: 12, sectionTitle: 'text-[13px]' },
+  lg: { icon: 21, text: 'text-[15px]', padY: 'py-2.5', placeholder: '快速添加当日零碎任务...', meta: 'text-[13px]', metaIcon: 14, sectionTitle: 'text-[14px]' },
+}
+
 function localToday(): string {
   const n = new Date()
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
@@ -257,19 +263,19 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
-          <h3 className="text-[15px] font-medium text-[#cccccc]">{viewTitle}</h3>
+          <h3 className={`${INPUT_SZ[iconSize].sectionTitle} font-medium text-[#cccccc]`}>{viewTitle}</h3>
           <div className="flex items-center gap-2">
             <div className="relative" ref={sizeMenuRef}>
               <button onClick={() => setSizeMenuOpen(v => !v)}
-                className="px-2 py-1.5 text-[11px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors flex items-center gap-1"
+                className={`px-2 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors flex items-center gap-1`}
                 title="卡片大小">
-                <Maximize2 size={13} /> {iconSizeLabel}
+                <Maximize2 size={INPUT_SZ[iconSize].metaIcon + 3} /> {iconSizeLabel}
               </button>
               {sizeMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 w-24 bg-[#252526] border border-[#3c3c3c] rounded shadow-xl py-1 z-50" onClick={e => e.stopPropagation()}>
                   {(['sm', 'md', 'lg'] as const).map(s => (
                     <button key={s} onClick={() => setSize(s)}
-                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#2a2d2e] ${iconSize === s ? 'text-white bg-[#094771]' : 'text-[#969696]'}`}>
+                      className={`w-full text-left px-3 py-1.5 ${INPUT_SZ[iconSize].meta} hover:bg-[#2a2d2e] ${iconSize === s ? 'text-white bg-[#094771]' : 'text-[#969696]'}`}>
                       {s === 'sm' ? '小' : s === 'md' ? '中' : '大'}
                     </button>
                   ))}
@@ -277,28 +283,28 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
               )}
             </div>
             <button onClick={() => setTagManageOpen(true)}
-              className="px-3 py-1.5 text-[12px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors">
+              className={`px-3 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors`}>
               管理标签
             </button>
             <button onClick={() => { setEditTarget(null); setModalOpen(true) }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[#007acc] text-white rounded hover:bg-[#1a8ad4] transition-colors">
-              <Plus size={15} /> 添加任务
+              className={`flex items-center gap-1.5 px-3 py-1.5 ${INPUT_SZ[iconSize].meta} bg-[#007acc] text-white rounded hover:bg-[#1a8ad4] transition-colors`}>
+              <Plus size={INPUT_SZ[iconSize].metaIcon + 5} /> 添加任务
             </button>
           </div>
         </div>
 
         {/* 当日任务快速添加条 */}
-        <div className="flex items-center gap-2 px-6 py-2 border-b border-[#3c3c3c] bg-[#1e1e1e] shrink-0">
-          <Zap size={15} className="text-[#c5a332] shrink-0" />
+        <div className={`flex items-center gap-2 px-6 ${INPUT_SZ[iconSize].padY} border-b border-[#3c3c3c] bg-[#1e1e1e] shrink-0`}>
+          <Zap size={INPUT_SZ[iconSize].icon} className="text-[#c5a332] shrink-0" />
           <input
             value={dailyInput}
             onChange={e => setDailyInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAddDaily() }}
-            placeholder="快速添加当日零碎任务..."
-            className="flex-1 bg-transparent text-[12px] text-[#cccccc] outline-none placeholder:text-[#555]"
+            placeholder={INPUT_SZ[iconSize].placeholder}
+            className={`flex-1 bg-transparent ${INPUT_SZ[iconSize].text} text-[#cccccc] outline-none placeholder:text-[#555]`}
           />
           {dailyInput && (
-            <button onClick={handleAddDaily} className="px-2.5 py-1 text-[11px] bg-[#c5a332] text-[#1e1e1e] rounded font-medium">
+            <button onClick={handleAddDaily} className={`px-2.5 py-1 ${INPUT_SZ[iconSize].text} bg-[#c5a332] text-[#1e1e1e] rounded font-medium`}>
               添加
             </button>
           )}
@@ -308,19 +314,19 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           {/* ===== EXPIRED DAILY TASKS ===== */}
           {dailyExpired.length > 0 && (selectedDate === today || viewMode !== 'date') && (
             <div className="mb-4 p-3 bg-[#2a2a1e] border border-[#3c3c3c] rounded">
-              <p className="text-[11px] text-[#c5a332] mb-2">📌 {dailyExpired.length} 项过期当日任务</p>
+              <p className={`${INPUT_SZ[iconSize].meta} text-[#c5a332] mb-2`}>📌 {dailyExpired.length} 项过期当日任务</p>
               <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
                 {dailyExpired.map(t => (
-                  <div key={t.id} className="flex items-center gap-2 text-[11px] text-[#969696]">
+                  <div key={t.id} className={`flex items-center gap-2 ${INPUT_SZ[iconSize].meta} text-[#969696]`}>
                     <span className="flex-1 truncate line-through">{t.title}</span>
-                    <span className="text-[10px] text-[#555]">{t.date.slice(5)}</span>
+                    <span className={`${INPUT_SZ[iconSize].meta} text-[#555]`}>{t.date.slice(5)}</span>
                     <button onClick={() => handleMigrateDaily(t.id)}
-                      className="px-1.5 py-0.5 text-[10px] text-[#007acc] hover:bg-[#007acc20] rounded flex items-center gap-0.5">
-                      <RotateCcw size={10} /> 迁移到今天
+                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[#007acc] hover:bg-[#007acc20] rounded flex items-center gap-0.5`}>
+                      <RotateCcw size={INPUT_SZ[iconSize].metaIcon} /> 迁移
                     </button>
                     <button onClick={() => handleDelete(t.id)}
-                      className="px-1.5 py-0.5 text-[10px] text-[#6a6a6a] hover:text-[#e81123] hover:bg-[#e8112320] rounded flex items-center gap-0.5">
-                      <Trash2 size={10} /> 丢弃
+                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[#6a6a6a] hover:text-[#e81123] hover:bg-[#e8112320] rounded flex items-center gap-0.5`}>
+                      <Trash2 size={INPUT_SZ[iconSize].metaIcon} /> 丢弃
                     </button>
                   </div>
                 ))}
@@ -334,8 +340,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
               <div className="space-y-4">
                 {dateDaily.length > 0 && (
                   <div>
-                    <h4 className="text-[11px] font-medium text-[#c5a332] mb-2 flex items-center gap-1.5">
-                      <Zap size={13} /> {selectedDate === today ? '今日零碎任务' : '当日任务'} · {dateDaily.length}
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#c5a332] mb-2 flex items-center gap-1.5`}>
+                      <Zap size={INPUT_SZ[iconSize].metaIcon + 3} /> {selectedDate === today ? '今日零碎任务' : '当日任务'} · {dateDaily.length}
                     </h4>
                     <div className="space-y-1.5">
                       {dateDaily.map(todo => (
@@ -347,7 +353,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                 )}
                 {dateRegular.length > 0 && (
                   <div>
-                    {dateDaily.length > 0 && <h4 className="text-[11px] font-medium text-[#569cd6] mb-2">📋 正式任务 · {dateRegular.length}</h4>}
+                    {dateDaily.length > 0 && <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#569cd6] mb-2`}>📋 正式任务 · {dateRegular.length}</h4>}
                     <div className="space-y-2">
                       {dateRegular.map(todo => (
                         <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
@@ -367,7 +373,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
             <div className="space-y-4">
               {deadlineOverdue.length > 0 && (
                 <div>
-                  <h4 className="text-[12px] font-medium text-red-400 mb-2">⚠ 超期未完成 ({deadlineOverdue.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-red-400 mb-2`}>⚠ 超期未完成 ({deadlineOverdue.length})</h4>
                   <div className="space-y-2">
                     {deadlineOverdue.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
@@ -380,7 +386,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
               {/* 即将截止 */}
               {deadlineUpcoming.length > 0 && (
                 <div>
-                  <h4 className="text-[12px] font-medium text-[#569cd6] mb-2">⏰ 即将截止 ({deadlineUpcoming.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#569cd6] mb-2`}>⏰ 即将截止 ({deadlineUpcoming.length})</h4>
                   <div className="space-y-2">
                     {deadlineUpcoming.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
@@ -393,7 +399,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
               {/* 已完成 */}
               {deadlineDone.length > 0 && (
                 <div>
-                  <h4 className="text-[12px] font-medium text-[#6a6a6a] mb-2">✅ 已完成 ({deadlineDone.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#6a6a6a] mb-2`}>✅ 已完成 ({deadlineDone.length})</h4>
                   <div className="space-y-2">
                     {deadlineDone.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
@@ -413,8 +419,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                 const items = quadrantGrouped[q]
                 return (
                   <div key={q}>
-                    <h4 className={`text-[12px] font-medium ${QUADRANT_COLORS[q]} mb-2`}>{QUADRANT_LABELS[q]} ({items.length})</h4>
-                    {items.length === 0 ? <p className="text-[11px] text-[#555] italic ml-1">暂无</p> : (
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium ${QUADRANT_COLORS[q]} mb-2`}>{QUADRANT_LABELS[q]} ({items.length})</h4>
+                    {items.length === 0 ? <p className={`${INPUT_SZ[iconSize].meta} text-[#555] italic ml-1`}>暂无</p> : (
                       <div className="space-y-2">
                         {items.map(todo => (
                           <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
@@ -434,20 +440,20 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           <div className="border-t border-[#3c3c3c] shrink-0">
             <button
               onClick={() => setShowDone(v => !v)}
-              className="flex items-center justify-between w-full px-6 py-2.5 text-[12px] text-[#6a6a6a] hover:bg-[#2a2d2e] transition-colors"
+              className={`flex items-center justify-between w-full px-6 py-2.5 ${INPUT_SZ[iconSize].meta} text-[#6a6a6a] hover:bg-[#2a2d2e] transition-colors`}
             >
               <span className="flex items-center gap-2">
-                <Check size={14} />
+                <Check size={INPUT_SZ[iconSize].metaIcon + 4} />
                 已完成 · {doneTodos.length} 项
-                <span className="text-[10px] text-[#555]">（7天后自动清空）</span>
+                <span className={`${INPUT_SZ[iconSize].meta} text-[#555]`}>（7天后自动清空）</span>
               </span>
-              <ChevronDown size={14} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+              <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
             </button>
             {showDone && (
               <div className="px-6 py-3 max-h-[260px] overflow-y-auto space-y-3">
                 {doneByDate.map(([date, items]) => (
                   <div key={date}>
-                    <h4 className="text-[10px] font-medium text-[#555] mb-1.5">{date} · {items.length} 项</h4>
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#555] mb-1.5`}>{date} · {items.length} 项</h4>
                     <div className="space-y-1.5">
                       {items.map(todo => (
                         <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
