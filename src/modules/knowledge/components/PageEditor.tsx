@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { marked } from 'marked'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, deleteKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar } from '../../../lib/ipc'
+import { getKnowledgePageById, updateKnowledgePage, deleteKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting } from '../../../lib/ipc'
+import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 
@@ -23,6 +24,8 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
   const [preview, setPreview] = useState(false)
   const [backlinks, setBacklinks] = useState<KnowledgePage[]>([])
   const [saving, setSaving] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   const contentRef = useRef(content)
   const titleRef = useRef(title)
@@ -42,6 +45,12 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
       getKnowledgeBacklinks(pageId).then(setBacklinks)
     ])
   }, [pageId])
+
+  useEffect(() => {
+    getSetting('skipDeleteConfirm_knowledge').then(v => {
+      if (v === true) setSkipDeleteConfirm(true)
+    })
+  }, [])
 
   const doSave = useCallback(async (t: string, c: string) => {
     if (!pageRef.current) return
@@ -109,8 +118,12 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
 
   const handleDelete = async () => {
     if (!page) return
-    await deleteKnowledgePage(page.id)
-    onDeleted()
+    if (skipDeleteConfirm) {
+      await deleteKnowledgePage(page.id)
+      onDeleted()
+    } else {
+      setShowDeleteConfirm(true)
+    }
   }
 
   const handleToggleStar = async () => {
@@ -217,6 +230,24 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
           </div>
         )}
       </div>
+
+      {/* Delete confirm dialog */}
+      {page && (
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          title="确认删除"
+          message={`确定要删除知识页面「${page.title || '无标题'}」吗？删除后可在回收站恢复，30天后将自动清空。`}
+          onConfirm={(skipNext) => {
+            if (skipNext) {
+              setSetting('skipDeleteConfirm_knowledge', true)
+              setSkipDeleteConfirm(true)
+            }
+            setShowDeleteConfirm(false)
+            deleteKnowledgePage(page!.id).then(() => onDeleted())
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
 
       {/* Right: Backlinks */}
       {backlinks.length > 0 && (

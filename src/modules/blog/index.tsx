@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Trash2 } from 'lucide-react'
 import { Entry, Tag } from '../../types'
-import { getEntries, createEntry, deleteEntry, getEntryById } from '../../lib/ipc'
+import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
+import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
+import { ConfirmDialog } from '../../components/shared'
 import { Sidebar } from './components/Sidebar'
 import { EntryList } from './views/EntryList'
 import { MarkdownEditor } from './components/MarkdownEditor'
@@ -16,6 +19,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true }: {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showRecycleBin, setShowRecycleBin] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -69,12 +73,26 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true }: {
   return (
     <div className="flex h-full bg-[#1e1e1e]">
       <div className={`shrink-0 transition-all duration-200 ease-out overflow-hidden ${sidebarOpen ? 'w-56' : 'w-0'}`}>
-        <Sidebar
-          entries={entries}
-          selectedDate={selectedDate}
-          onSelectDate={handleSelectDate}
-          onNewEntry={handleTodayEntry}
-        />
+        {sidebarOpen && (
+          <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-hidden">
+              <Sidebar
+                entries={entries}
+                selectedDate={selectedDate}
+                onSelectDate={handleSelectDate}
+                onNewEntry={handleTodayEntry}
+              />
+            </div>
+            <button
+              onClick={() => setShowRecycleBin(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2 text-[12px] border-t border-[#3c3c3c] transition-colors shrink-0 ${
+                showRecycleBin ? 'bg-[#094771] text-white' : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e]'
+              }`}
+            >
+              <Trash2 size={14} /> 回收站
+            </button>
+          </div>
+        )}
       </div>
       <main className="flex-1 overflow-hidden">
         {view === 'list' && (
@@ -105,6 +123,14 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true }: {
           />
         )}
       </main>
+
+      {showRecycleBin && (
+        <RecycleBinPanel
+          module="blog"
+          onClose={() => setShowRecycleBin(false)}
+          onRestored={() => { loadEntries(); setSelectedId(null); setView('list') }}
+        />
+      )}
     </div>
   )
 }
@@ -114,25 +140,59 @@ function EntryDetail({ entryId, isToday, onEdit, onDelete, onBack }: {
   entryId: string; isToday: boolean; onEdit: () => void; onDelete: () => void; onBack: () => void
 }) {
   const [entry, setEntry] = useState<(Entry & { tags: Tag[] }) | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
+
   useEffect(() => { getEntryById(entryId).then(setEntry) }, [entryId])
+
+  useEffect(() => {
+    getSetting('skipDeleteConfirm_blog').then(v => {
+      if (v === true) setSkipDeleteConfirm(true)
+    })
+  }, [])
 
   if (!entry) return <div className="flex-1 flex items-center justify-center text-[#6a6a6a]">加载中...</div>
 
+  const handleDeleteClick = () => {
+    if (skipDeleteConfirm) {
+      onDelete()
+    } else {
+      setShowDeleteConfirm(true)
+    }
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-8 py-6">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#3c3c3c]">
-          <button onClick={onBack} className="text-sm text-[#969696] hover:text-[#cccccc]">← 返回列表</button>
-          <div className="flex gap-2">
-            {isToday && (
-              <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">编辑</button>
-            )}
-            <button onClick={onDelete} className="px-3 py-1.5 text-sm text-[#e81123] hover:bg-[#e8112320] rounded">删除</button>
+    <>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-8 py-6">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#3c3c3c]">
+            <button onClick={onBack} className="text-sm text-[#969696] hover:text-[#cccccc]">← 返回列表</button>
+            <div className="flex gap-2">
+              {isToday && (
+                <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">编辑</button>
+              )}
+              <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[#e81123] hover:bg-[#e8112320] rounded">删除</button>
+            </div>
           </div>
+          <h1 className="text-2xl font-bold text-[#e0e0e0] mb-2">{entry.date}</h1>
+          <div className="prose-content" dangerouslySetInnerHTML={{ __html: entry.contentHtml || '<p>暂无内容</p>' }} />
         </div>
-        <h1 className="text-2xl font-bold text-[#e0e0e0] mb-2">{entry.date}</h1>
-        <div className="prose-content" dangerouslySetInnerHTML={{ __html: entry.contentHtml || '<p>暂无内容</p>' }} />
       </div>
-    </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="确认删除"
+        message={`确定要删除博文「${entry.title || entry.date}」吗？删除后可在回收站恢复，30天后将自动清空。`}
+        onConfirm={(skipNext) => {
+          if (skipNext) {
+            setSetting('skipDeleteConfirm_blog', true)
+            setSkipDeleteConfirm(true)
+          }
+          setShowDeleteConfirm(false)
+          onDelete()
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+    </>
   )
 }

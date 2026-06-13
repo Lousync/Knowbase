@@ -194,8 +194,44 @@ export function registerEntryHandlers(): void {
     return rowToEntry(rows[0])
   })
 
-  // 删除博文
+  // 删除博文（软删除 → 回收站）
   ipcMain.handle('db:deleteEntry', (_event, id: string) => {
+    // 读取完整条目
+    const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
+    if (rows.length === 0) return
+
+    const entry = rows[0]
+
+    // 读取关联标签
+    const tags = queryAll<{ id: string; name: string; color: string }>(
+      `SELECT t.id, t.name, t.color FROM tags t
+       JOIN entry_tags et ON t.id = et.tag_id
+       WHERE et.entry_id = ?`, [id]
+    )
+
+    // 序列化完整数据
+    const data = JSON.stringify({
+      id: entry.id,
+      title: entry.title,
+      contentMd: entry.content_md,
+      contentHtml: entry.content_html || '',
+      date: entry.date,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at,
+      isPinned: entry.is_pinned === 1,
+      wordCount: entry.word_count,
+      tags
+    })
+
+    // 插入回收站
+    const binId = randomUUID()
+    run(
+      `INSERT INTO recycle_bin (id, original_id, module, title, data)
+       VALUES (?, ?, 'blog', ?, ?)`,
+      [binId, id, entry.title, data]
+    )
+
+    // 从原表删除（CASCADE 自动清理 entry_tags）
     run('DELETE FROM entries WHERE id = ?', [id])
   })
 

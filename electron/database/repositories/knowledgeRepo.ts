@@ -170,8 +170,44 @@ export function registerKnowledgeHandlers(): void {
     run('UPDATE knowledge_pages SET sort_order = ? WHERE id = ?', [page.sort_order, neighbor[0].id])
   })
 
-  // 删除页面
+  // 删除页面（软删除 → 回收站）
   ipcMain.handle('knowledge:deletePage', (_e, id: string) => {
+    // 读取完整页面
+    const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
+    if (rows.length === 0) return
+
+    const page = rows[0]
+
+    // 读取关联标签
+    const tags = queryAll<{ id: string; name: string; color: string }>(
+      `SELECT t.id, t.name, t.color FROM knowledge_tags t
+       JOIN knowledge_page_tags pt ON t.id = pt.tag_id
+       WHERE pt.page_id = ?`, [id]
+    )
+
+    // 序列化完整数据
+    const data = JSON.stringify({
+      id: page.id,
+      title: page.title,
+      contentMd: page.content_md,
+      contentHtml: page.content_html || '',
+      categoryId: page.category_id,
+      isStarred: !!page.is_starred,
+      sortOrder: page.sort_order,
+      createdAt: page.created_at,
+      updatedAt: page.updated_at,
+      tags
+    })
+
+    // 插入回收站
+    const binId = randomUUID()
+    run(
+      `INSERT INTO recycle_bin (id, original_id, module, title, data)
+       VALUES (?, ?, 'knowledge', ?, ?)`,
+      [binId, id, page.title, data]
+    )
+
+    // 从原表删除（CASCADE 自动清理 knowledge_links + knowledge_page_tags）
     run('DELETE FROM knowledge_pages WHERE id = ?', [id])
   })
 

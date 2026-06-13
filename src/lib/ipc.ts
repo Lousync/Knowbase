@@ -63,6 +63,13 @@ export const writeExportTextFile = (filePath: string, content: string) => a().wr
 export const copyDbFile = (destPath: string) => a().copyDbFile(destPath)
 export const writeMarkdownExport = (dirPath: string, files: { relPath: string; content: string }[]) => a().writeMarkdownExport(dirPath, files)
 
+// recycle bin
+export const getRecycleBinItems = () => a().getRecycleBinItems()
+export const restoreRecycleBinItem = (id: string) => a().restoreRecycleBinItem(id)
+export const permanentlyDeleteRecycleBinItem = (id: string) => a().permanentlyDeleteRecycleBinItem(id)
+export const emptyRecycleBin = () => a().emptyRecycleBin()
+export const purgeExpiredRecycleBinItems = () => a().purgeExpiredRecycleBinItems()
+
 // Utility: parse [[wiki links]] from markdown
 export function parseWikiLinks(md: string): string[] {
   const re = /\[\[([^\]]+)\]\]/g

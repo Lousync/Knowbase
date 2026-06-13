@@ -53,6 +53,13 @@ const api = {
   getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages'),
   moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction),
 
+  // recycle bin
+  getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),
+  restoreRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:restoreItem', id),
+  permanentlyDeleteRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:permanentlyDelete', id),
+  emptyRecycleBin: () => ipcRenderer.invoke('recycleBin:emptyAll'),
+  purgeExpiredRecycleBinItems: () => ipcRenderer.invoke('recycleBin:purgeExpired'),
+
   // export
   exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
   exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),

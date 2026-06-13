@@ -52,6 +52,16 @@ export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string |
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 
+// recycle bin
+export interface RecycleBinItem {
+  id: string
+  originalId: string
+  module: 'blog' | 'knowledge'
+  title: string
+  data: any
+  deletedAt: string
+}
+
 // export
 export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Tag[] }
 export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
@@ -108,6 +118,12 @@ export interface ElectronAPI {
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
+  // recycle bin
+  getRecycleBinItems: () => Promise<RecycleBinItem[]>
+  restoreRecycleBinItem: (id: string) => Promise<void>
+  permanentlyDeleteRecycleBinItem: (id: string) => Promise<void>
+  emptyRecycleBin: () => Promise<void>
+  purgeExpiredRecycleBinItems: () => Promise<void>
   exportAllBlogData: () => Promise<BlogExportData>
   exportAllScheduleData: () => Promise<ScheduleExportData>
   exportAllKnowledgeData: () => Promise<KnowledgeExportData>

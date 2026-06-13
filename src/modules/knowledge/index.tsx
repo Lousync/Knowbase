@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
@@ -8,6 +8,7 @@ import {
 } from '../../lib/ipc'
 import { CategoryTree } from './components/CategoryTree'
 import { PageEditor } from './components/PageEditor'
+import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
 
 export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
@@ -21,6 +22,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
   // 面板折叠状态（仅当全局 sidebarOpen 为 true 时有意义）
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showPageListPanel, setShowPageListPanel] = useState(true)
+  const [showRecycleBin, setShowRecycleBin] = useState(false)
 
   const refreshCategories = useCallback(async () => {
     try { setCategories(await getKnowledgeCategories()) } catch (e) { console.error(e) }
@@ -162,6 +164,14 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                 </div>
               </div>
             )}
+            <div className="border-t border-[#3c3c3c] flex-shrink-0">
+              <button
+                onClick={() => setShowRecycleBin(true)}
+                className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e] transition-colors"
+              >
+                <Trash2 size={21} /> 回收站
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -336,6 +346,14 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
           </div>
         )}
       </div>
+
+      {showRecycleBin && (
+        <RecycleBinPanel
+          module="knowledge"
+          onClose={() => setShowRecycleBin(false)}
+          onRestored={() => { refreshPages(); refreshStarred(); setSelectedPageId(null) }}
+        />
+      )}
     </div>
   )
 }
