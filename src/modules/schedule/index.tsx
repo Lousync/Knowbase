@@ -9,6 +9,7 @@ import {
 import { CalendarView, type ViewMode } from './views/CalendarView'
 import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
+import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 
@@ -249,7 +250,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
   return (
     <div className="flex h-full bg-[#1e1e1e]">
-      <div className={`shrink-0 transition-all duration-200 ease-out overflow-hidden ${sidebarOpen ? 'w-[280px]' : 'w-0'}`}>
+      <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen}>
         <CalendarView
           year={year} month={month} selectedDate={selectedDate}
           dotDates={dotDates} deadlineCounts={deadlineCounts}
@@ -259,7 +260,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           onToday={goToToday} onViewModeChange={handleViewModeChange}
           onQuadrantChart={openQuadrantChart}
         />
-      </div>
+      </ResizablePanel>
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#3c3c3c] bg-[#252526] shrink-0">

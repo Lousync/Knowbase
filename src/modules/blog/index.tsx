@@ -4,6 +4,7 @@ import { Entry, Tag } from '../../types'
 import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
 import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
 import { ConfirmDialog } from '../../components/shared'
+import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { Sidebar } from './components/Sidebar'
 import { EntryList } from './views/EntryList'
 import { MarkdownEditor } from './components/MarkdownEditor'
@@ -72,28 +73,26 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   return (
     <div className="flex h-full bg-[#1e1e1e]">
-      <div className={`shrink-0 transition-all duration-200 ease-out overflow-hidden ${sidebarOpen ? 'w-56' : 'w-0'}`}>
-        {sidebarOpen && (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-hidden">
-              <Sidebar
-                entries={entries}
-                selectedDate={selectedDate}
-                onSelectDate={handleSelectDate}
-                onNewEntry={handleTodayEntry}
-              />
-            </div>
-            <button
-              onClick={() => setShowRecycleBin(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2 text-[12px] border-t border-[#3c3c3c] transition-colors shrink-0 ${
-                showRecycleBin ? 'bg-[#094771] text-white' : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e]'
-              }`}
-            >
-              <Trash2 size={14} /> 回收站
-            </button>
+      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen}>
+        <div className="h-full flex flex-col">
+          <div className="flex-1 overflow-hidden">
+            <Sidebar
+              entries={entries}
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
+              onNewEntry={handleTodayEntry}
+            />
           </div>
-        )}
-      </div>
+          <button
+            onClick={() => setShowRecycleBin(v => !v)}
+            className={`flex items-center gap-2 px-4 py-2 text-[12px] border-t border-[#3c3c3c] transition-colors shrink-0 ${
+              showRecycleBin ? 'bg-[#094771] text-white' : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e]'
+            }`}
+          >
+            <Trash2 size={14} /> 回收站
+          </button>
+        </div>
+      </ResizablePanel>
       <main className="flex-1 overflow-hidden">
         {view === 'list' && (
           <EntryList
