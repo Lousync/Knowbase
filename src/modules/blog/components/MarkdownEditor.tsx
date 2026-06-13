@@ -66,8 +66,6 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const wordCount = contentMd.replace(/\s/g, '').length
-
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center text-[#6a6a6a] bg-[#1e1e1e]">加载中...</div>
   }
@@ -146,12 +144,6 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
             }}
           />
         )}
-      </div>
-
-      {/* status bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-t border-[#3c3c3c] bg-[#007acc] text-[11px] text-white shrink-0">
-        <span>{wordCount} 字</span>
-        <span>Ctrl+/ 预览 · Ctrl+S 保存</span>
       </div>
     </div>
   )

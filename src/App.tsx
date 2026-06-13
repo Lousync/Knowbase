@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { TabName } from './types'
-import { TitleBar, ActivityBar } from './components/shared'
+import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { getSetting, setSetting } from './lib/ipc'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
@@ -77,6 +77,7 @@ export default function App() {
           {activeTab === 'export' && <ExportModule />}
         </main>
       </div>
+      <StatusBar />
     </div>
   )
 }
