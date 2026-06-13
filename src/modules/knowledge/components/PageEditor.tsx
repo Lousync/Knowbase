@@ -3,6 +3,8 @@ import { marked } from 'marked'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, deleteKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar } from '../../../lib/ipc'
+import Editor, { type OnMount } from '@monaco-editor/react'
+import type * as Monaco from 'monaco-editor'
 
 interface Props {
   pageId: string
@@ -21,11 +23,16 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
   const [preview, setPreview] = useState(false)
   const [backlinks, setBacklinks] = useState<KnowledgePage[]>([])
   const [saving, setSaving] = useState(false)
-  const [showLinkSuggest, setShowLinkSuggest] = useState(false)
-  const [linkQuery, setLinkQuery] = useState('')
-  const [cursorPos, setCursorPos] = useState(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const contentRef = useRef(content)
+  const titleRef = useRef(title)
+  const pageRef = useRef(page)
+  const monacoRef = useRef<typeof Monaco | null>(null)
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+
+  useEffect(() => { contentRef.current = content }, [content])
+  useEffect(() => { titleRef.current = title }, [title])
+  useEffect(() => { pageRef.current = page }, [page])
 
   useEffect(() => {
     Promise.all([
@@ -37,14 +44,14 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
   }, [pageId])
 
   const doSave = useCallback(async (t: string, c: string) => {
-    if (!page) return
+    if (!pageRef.current) return
     try {
       const links = parseWikiLinks(c)
-      await updateKnowledgePage(page.id, { title: t, contentMd: c, contentHtml: marked.parse(c, { async: false }) as string })
-      await updateKnowledgeLinks(page.id, links)
+      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: marked.parse(c, { async: false }) as string })
+      await updateKnowledgeLinks(pageRef.current.id, links)
       setSaving(false)
     } catch (e) { console.error(e) }
-  }, [page])
+  }, [])
 
   useEffect(() => {
     if (!page) return
@@ -54,30 +61,51 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
     return () => clearTimeout(saveTimer.current)
   }, [title, content, page, doSave])
 
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value; const pos = e.target.selectionStart
-    setContent(val); setCursorPos(pos)
-    const before = val.slice(0, pos)
-    const lastOpen = before.lastIndexOf('[[')
-    const lastClose = before.lastIndexOf(']]')
-    if (lastOpen > lastClose) {
-      setLinkQuery(before.slice(lastOpen + 2))
-      setShowLinkSuggest(true)
-    } else { setShowLinkSuggest(false) }
-  }
+  // Monaco mount handler — register wiki-link completion provider
+  const handleEditorMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor
+    monacoRef.current = monaco
 
-  const insertLink = (pageTitle: string) => {
-    const before = content.slice(0, cursorPos)
-    const after = content.slice(cursorPos)
-    const lastOpen = before.lastIndexOf('[[')
-    setContent(before.slice(0, lastOpen + 2) + pageTitle + ']]' + after)
-    setShowLinkSuggest(false)
-    textareaRef.current?.focus()
-  }
+    monaco.languages.registerCompletionItemProvider('markdown', {
+      triggerCharacters: ['['],
+      provideCompletionItems(model, position) {
+        const textUntilPosition = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column
+        })
 
-  const matchingPages = linkQuery
-    ? allPages.filter(p => p.title.toLowerCase().includes(linkQuery.toLowerCase()) && p.id !== pageId).slice(0, 5)
-    : allPages.filter(p => p.id !== pageId).slice(0, 5)
+        const lastOpen = textUntilPosition.lastIndexOf('[[')
+        const lastClose = textUntilPosition.lastIndexOf(']]')
+        if (lastOpen <= lastClose) return { suggestions: [] }
+
+        const query = textUntilPosition.slice(lastOpen + 2).toLowerCase()
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: lastOpen + 3,
+          endColumn: position.column
+        }
+
+        const matches = allPages
+          .filter(p => p.title.toLowerCase().includes(query) && p.id !== pageId)
+          .slice(0, 8)
+
+        return {
+          suggestions: matches.map(p => ({
+            label: p.title,
+            kind: monaco.languages.CompletionItemKind.Reference,
+            insertText: p.title + ']]',
+            range,
+            detail: p.isStarred ? '⭐ 收藏' : undefined,
+          }))
+        }
+      }
+    })
+
+    editor.focus()
+  }
 
   const handleDelete = async () => {
     if (!page) return
@@ -142,38 +170,52 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
             <div className="prose-content" dangerouslySetInnerHTML={{ __html: page.contentHtml || (marked.parse(content, { async: false }) as string) }} />
           </div>
         ) : (
-          <div className="flex flex-col flex-1 relative">
+          <div className="flex flex-col flex-1 overflow-hidden">
             <input
-              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[#3c3c3c] placeholder:text-[#555]"
+              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[#3c3c3c] placeholder:text-[#555] shrink-0"
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="页面标题"
             />
-            <textarea
-              ref={textareaRef}
-              className="flex-1 w-full bg-transparent text-[13px] text-[#cccccc] px-6 py-3 outline-none resize-none font-mono leading-relaxed"
-              value={content}
-              onChange={handleContentChange}
-              onKeyDown={e => {
-                if (e.key === 'Tab' && showLinkSuggest && matchingPages.length > 0) { e.preventDefault(); insertLink(matchingPages[0].title) }
-                if (e.key === 'Escape' && showLinkSuggest) setShowLinkSuggest(false)
-              }}
-              placeholder="开始写 Markdown... 使用 [[页面名]] 创建链接"
-            />
-            {showLinkSuggest && matchingPages.length > 0 && (
-              <div className="absolute bottom-2 left-6 bg-[#2d2d2d] border border-[#007acc] rounded shadow-lg max-h-40 overflow-y-auto z-10">
-                {matchingPages.map(p => (
-                  <div key={p.id} onClick={() => insertLink(p.title)} className="px-3 py-1.5 text-[13px] text-[#cccccc] hover:bg-[#094771] cursor-pointer flex items-center gap-2">
-                    <FileText size={12} className="text-[#969696]" />
-                    <span>{p.title}</span>
-                    <span className="text-[10px] text-[#6a6a6a] ml-auto">Tab</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="flex-1">
+              <Editor
+                language="markdown"
+                value={content}
+                onChange={v => setContent(v || '')}
+                theme="vs-dark"
+                onMount={handleEditorMount}
+                loading={<div className="flex items-center justify-center h-full text-[#6a6a6a]">加载编辑器...</div>}
+                options={{
+                  fontSize: 13,
+                  fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
+                  lineNumbers: 'on',
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  smoothScrolling: true,
+                  cursorBlinking: 'smooth',
+                  cursorSmoothCaretAnimation: 'on',
+                  renderWhitespace: 'selection',
+                  renderLineHighlight: 'line',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  padding: { top: 8, bottom: 16 },
+                  overviewRulerLanes: 0,
+                  hideCursorInOverviewRuler: true,
+                  overviewRulerBorder: false,
+                  guides: { indentation: true },
+                  tabSize: 2,
+                  insertSpaces: true,
+                  bracketPairColorization: { enabled: true },
+                  matchBrackets: 'always',
+                  selectionHighlight: true,
+                  quickSuggestions: true,
+                  suggest: { showWords: false },
+                  placeholder: '开始写 Markdown... 使用 [[页面名]] 创建链接',
+                }}
+              />
+            </div>
           </div>
         )}
-
       </div>
 
       {/* Right: Backlinks */}

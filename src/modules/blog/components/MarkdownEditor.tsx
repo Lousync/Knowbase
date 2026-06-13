@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code } from 'lucide-react'
 import { marked } from 'marked'
+import Editor, { type OnMount } from '@monaco-editor/react'
 
 interface Props {
   entryId: string; showLineNumbers: boolean; onSave: () => void; onCancel: () => void
@@ -20,6 +21,12 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [loaded, setLoaded] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>()
+  const contentRef = useRef(contentMd)
+  const dateRef = useRef(date)
+
+  // Keep refs synced for the debounced save
+  useEffect(() => { contentRef.current = contentMd }, [contentMd])
+  useEffect(() => { dateRef.current = date }, [date])
 
   useEffect(() => {
     getEntryById(entryId).then(d => {
@@ -36,18 +43,20 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
     } catch (e) { console.error(e) } finally { setSaving(false) }
   }, [entryId])
 
-  const handleChange = (v: string) => {
-    setContentMd(v)
+  const handleChange = (v: string | undefined) => {
+    const val = v || ''
+    setContentMd(val)
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => doSave(v, date), 2000)
+    timer.current = setTimeout(() => doSave(val, dateRef.current), 2000)
   }
 
   const handleSaveAndClose = async () => {
     if (timer.current) clearTimeout(timer.current)
-    await doSave(contentMd, date)
+    await doSave(contentRef.current, dateRef.current)
     onSave()
   }
 
+  // Ctrl+/ toggle preview, Ctrl+S save
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === '/') { e.preventDefault(); setShowPreview(v => !v) }
@@ -55,18 +64,16 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [contentMd, date])
+  }, [])
 
   const wordCount = contentMd.replace(/\s/g, '').length
-  const lineCount = contentMd.split('\n').length
-  const lines = Array.from({ length: Math.max(lineCount, 30) }, (_, i) => i + 1)
 
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center text-[#6a6a6a] bg-[#1e1e1e]">加载中...</div>
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#1a1a1a]">
+    <div className="flex flex-col h-full bg-[#1e1e1e]">
       {/* toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
         <div className="flex items-center gap-3">
@@ -94,37 +101,57 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
       </div>
 
       {/* content */}
-      <div className="flex-1 overflow-auto bg-[#1a1a1a]">
+      <div className="flex-1 overflow-hidden bg-[#1e1e1e]">
         {showPreview ? (
-          <div className="max-w-3xl mx-auto px-10 py-6">
-            <div className="prose-content text-[15px]" dangerouslySetInnerHTML={{ __html: renderMarkdown(contentMd) }} />
+          <div className="h-full overflow-y-auto">
+            <div className="max-w-3xl mx-auto px-10 py-6">
+              <div className="prose-content text-[15px]" dangerouslySetInnerHTML={{ __html: renderMarkdown(contentMd) }} />
+            </div>
           </div>
         ) : (
-          <div className="flex min-h-full font-mono">
-            {showLineNumbers && (
-              <div className="select-none text-right pr-3 pt-6 border-r border-[#2d2d2d] bg-[#1a1a1a] shrink-0 w-12">
-                {lines.map(n => (
-                  <div key={n} className="text-[13px] leading-[1.75] text-[#858585]" style={{ height: '1.75em' }}>
-                    {n <= lineCount ? n : ''}
-                  </div>
-                ))}
-              </div>
-            )}
-            <textarea
-              value={contentMd}
-              onChange={e => handleChange(e.target.value)}
-              spellCheck={false}
-              placeholder="开始写作..."
-              className="flex-1 resize-none px-6 py-6 bg-transparent text-[#d4d4d4] text-[14px] leading-[1.75] border-none outline-none placeholder:text-[#3a3a3a] font-mono"
-            />
-          </div>
+          <Editor
+            language="markdown"
+            value={contentMd}
+            onChange={handleChange}
+            theme="vs-dark"
+            loading={<div className="flex items-center justify-center h-full text-[#6a6a6a]">加载编辑器...</div>}
+            options={{
+              fontSize: 14,
+              fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
+              lineNumbers: showLineNumbers ? 'on' : 'off',
+              minimap: { enabled: false },
+              wordWrap: 'on',
+              smoothScrolling: true,
+              cursorBlinking: 'smooth',
+              cursorSmoothCaretAnimation: 'on',
+              renderWhitespace: 'selection',
+              renderLineHighlight: 'line',
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              padding: { top: 16, bottom: 16 },
+              overviewRulerLanes: 0,
+              hideCursorInOverviewRuler: true,
+              overviewRulerBorder: false,
+              folding: true,
+              lineDecorationsWidth: 0,
+              lineNumbersMinChars: 3,
+              guides: { indentation: true },
+              tabSize: 2,
+              insertSpaces: true,
+              selectionHighlight: true,
+              occurrencesHighlight: 'off',
+              bracketPairColorization: { enabled: true },
+              matchBrackets: 'always',
+              placeholder: '开始写作...',
+            }}
+          />
         )}
       </div>
 
       {/* status bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-t border-[#3c3c3c] bg-[#252526] text-[11px] text-[#6a6a6a] shrink-0">
+      <div className="flex items-center justify-between px-4 py-1.5 border-t border-[#3c3c3c] bg-[#007acc] text-[11px] text-white shrink-0">
         <span>{wordCount} 字</span>
-        <span>Ctrl+/ 预览  Ctrl+S 保存</span>
+        <span>Ctrl+/ 预览 · Ctrl+S 保存</span>
       </div>
     </div>
   )

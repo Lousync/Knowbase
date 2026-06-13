@@ -107,25 +107,6 @@ input:focus, textarea:focus, select:focus {
   border: 1px solid #555; font-size: 0.85em; font-family: inherit;
 }
 
-/* ===== Markdown 源码语法高亮 ===== */
-.syn-h1 { color: #569cd6; font-size: 1.5em; font-weight: 700; }
-.syn-h2 { color: #569cd6; font-size: 1.3em; font-weight: 600; }
-.syn-h3 { color: #569cd6; font-size: 1.15em; font-weight: 600; }
-.syn-h4 { color: #569cd6; font-weight: 600; }
-.syn-h5 { color: #569cd6; font-weight: 600; }
-.syn-h6 { color: #569cd6; font-weight: 600; }
-.syn-bold { color: #dcdcaa; font-weight: 700; }
-.syn-bold-italic { color: #dcdcaa; font-weight: 700; font-style: italic; }
-.syn-italic { color: #dcdcaa; font-style: italic; }
-.syn-inline-code { color: #ce9178; }
-.syn-codeblock { color: #9cdcfe; }
-.syn-quote { color: #6a9955; }
-.syn-list-marker { color: #b5cea8; font-weight: 700; }
-.syn-link { color: #569cd6; }
-.syn-image { color: #4ec9b0; }
-.syn-hr { color: #569cd6; }
-
-.hl-code { color: #d4d4d4; }
 
 /* ===== 工具类 ===== */
 .drag-region { -webkit-app-region: drag; }
