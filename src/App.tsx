@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { TabName } from './types'
-import { TitleBar, ActivityBar, StatusBar } from './components/shared'
+import { TitleBar, ActivityBar } from './components/shared'
 import { getSetting, setSetting } from './lib/ipc'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
@@ -8,7 +8,7 @@ import { KnowledgeModule } from './modules/knowledge'
 import { ExportModule } from './modules/export'
 
 // Zoom by adjusting <html> font-size.  All rem-based content scales naturally;
-// chrome elements (TitleBar / ActivityBar / StatusBar) are mostly px-based so
+// chrome elements (TitleBar / ActivityBar) are mostly px-based so
 // they barely move.  CSS zoom / transform:scale() both break flex layout — avoid.
 const ZOOM_MIN  = 0.85
 const ZOOM_MAX  = 1.5
@@ -77,7 +77,6 @@ export default function App() {
           {activeTab === 'export' && <ExportModule />}
         </main>
       </div>
-      <StatusBar />
     </div>
   )
 }

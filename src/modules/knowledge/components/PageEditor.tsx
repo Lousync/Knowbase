@@ -154,24 +154,24 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
-          <div className="flex items-center gap-2">
-            <button onClick={onBack} className="text-sm text-[#969696] hover:text-[#cccccc] flex items-center gap-1">
-              <ArrowLeft size={15} /> 返回
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <button onClick={onBack} className="text-[13px] text-[#969696] hover:text-[#cccccc] flex items-center gap-1.5">
+              <ArrowLeft size={17} /> 返回
             </button>
             <button onClick={handleToggleStar} className={`${page.isStarred ? 'text-[#c5a332]' : 'text-[#6a6a6a]'} hover:text-[#c5a332]`}>
-              <Star size={15} fill={page.isStarred ? '#c5a332' : 'none'} />
+              <Star size={17} fill={page.isStarred ? '#c5a332' : 'none'} />
             </button>
-            <span className="text-[10px] text-[#6a6a6a]">{getCategoryPath(page.categoryId)}</span>
+            <span className="text-[11px] text-[#6a6a6a]">{getCategoryPath(page.categoryId)}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${saving ? 'bg-[#c5a332]' : 'bg-green-500'}`} />
-            <span className="text-[11px] text-[#969696]">{saving ? '未保存' : '已保存'}</span>
-            <button onClick={() => setPreview(v => !v)} className={`p-1 rounded text-xs ${preview ? 'bg-[#007acc] text-white' : 'text-[#969696] hover:text-[#cccccc]'}`} title="Ctrl+/">
-              {preview ? <Edit3 size={14} /> : <Eye size={14} />}
+          <div className="flex items-center gap-2.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[#c5a332]' : 'bg-green-500'}`} />
+            <span className="text-[12px] text-[#969696]">{saving ? '未保存' : '已保存'}</span>
+            <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[#007acc] text-white' : 'text-[#969696] hover:text-[#cccccc]'}`} title="Ctrl+/">
+              {preview ? <Edit3 size={16} /> : <Eye size={16} />}
             </button>
-            <button onClick={handleDelete} className="p-1 rounded text-[#969696] hover:text-[#e81123]" title="删除">
-              <Trash2 size={14} />
+            <button onClick={handleDelete} className="p-1.5 rounded text-[#969696] hover:text-[#e81123]" title="删除">
+              <Trash2 size={16} />
             </button>
           </div>
         </div>
