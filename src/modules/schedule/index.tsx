@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
+import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
@@ -141,6 +141,13 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
     await refreshAll()
   }
 
+  async function handleRestoreDone(id: string) {
+    await updateScheduleTodo(id, { status: 'pending' })
+    await refreshAll()
+  }
+
+  const [showDone, setShowDone] = useState(false)
+
   async function handleDelete(id: string) { await deleteScheduleTodo(id); await refreshAll() }
 
   // ---- 当日任务 ----
@@ -165,6 +172,13 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
   const pendingTodos = useMemo(() => allWithTags.filter(t => t.status === 'pending'), [allWithTags])
   const doneTodos = useMemo(() => allWithTags.filter(t => t.status === 'done'), [allWithTags])
+
+  // 已完成按日期分组
+  const doneByDate = useMemo(() => {
+    const groups: Record<string, typeof doneTodos> = {}
+    for (const t of doneTodos) (groups[t.date] ??= []).push(t)
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a))
+  }, [doneTodos])
 
   // Today's date string
   const todayDateStr = localToday()
@@ -414,6 +428,41 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
             </div>
           )}
         </div>
+
+        {/* ===== COMPLETED TASKS ===== */}
+        {doneTodos.length > 0 && (
+          <div className="border-t border-[#3c3c3c] shrink-0">
+            <button
+              onClick={() => setShowDone(v => !v)}
+              className="flex items-center justify-between w-full px-6 py-2.5 text-[12px] text-[#6a6a6a] hover:bg-[#2a2d2e] transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Check size={14} />
+                已完成 · {doneTodos.length} 项
+                <span className="text-[10px] text-[#555]">（7天后自动清空）</span>
+              </span>
+              <ChevronDown size={14} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+            </button>
+            {showDone && (
+              <div className="px-6 py-3 max-h-[260px] overflow-y-auto space-y-3">
+                {doneByDate.map(([date, items]) => (
+                  <div key={date}>
+                    <h4 className="text-[10px] font-medium text-[#555] mb-1.5">{date} · {items.length} 项</h4>
+                    <div className="space-y-1.5">
+                      {items.map(todo => (
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          onClick={() => openEdit(todo)}
+                          onToggleDone={() => handleToggleDone(todo)}
+                          onRestore={() => handleRestoreDone(todo.id)}
+                          onDelete={() => handleDelete(todo.id)} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <TodoEditModal open={modalOpen} initial={modalInitial} tags={tags} onSave={handleSave} onClose={() => { setModalOpen(false); setEditTarget(null) }} />

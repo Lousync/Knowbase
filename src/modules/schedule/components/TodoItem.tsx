@@ -1,4 +1,4 @@
-import { Check, Trash2 } from 'lucide-react'
+import { Check, Trash2, RotateCcw } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag } from '../../../types'
 
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要', 2: '⚡ 紧急', 3: '💤 消遣' }
@@ -14,6 +14,7 @@ interface Props {
   onClick: () => void
   onToggleDone: () => void
   onDelete: () => void
+  onRestore?: () => void
 }
 
 const SIZE_MAP: Record<string, { check: number; checkIcon: number; text: string; title: string; desc: string; sub: string; padding: string; gap: string }> = {
@@ -36,7 +37,7 @@ function remainingLabel(time: string): string {
   return `剩余${diff}天`
 }
 
-export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, onToggleDone, onDelete }: Props) {
+export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, onToggleDone, onDelete, onRestore }: Props) {
   const isDone = todo.status === 'done'
   const deadline = todo.taskType === 'deadline'
   const sz = SIZE_MAP[iconSize]
@@ -46,17 +47,18 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
       className={`
         flex items-center ${sz.gap} ${sz.padding} bg-[#2d2d2d] border border-[#3c3c3c] rounded-md
         cursor-pointer hover:border-[#007acc] transition-all group
-        ${isDone ? 'opacity-50' : ''}
+        ${isDone ? 'opacity-60 hover:opacity-90' : ''}
       `}
     >
-      {/* 完成按钮 */}
+      {/* 完成/恢复按钮 */}
       <button
-        onClick={e => { e.stopPropagation(); onToggleDone() }}
+        onClick={e => { e.stopPropagation(); isDone && onRestore ? onRestore() : onToggleDone() }}
         style={{ width: sz.check, height: sz.check }}
         className={`
           rounded border-2 flex items-center justify-center shrink-0 transition-colors
-          ${isDone ? 'bg-[#007acc] border-[#007acc]' : 'border-[#5a5a5a] hover:border-[#007acc]'}
+          ${isDone ? 'bg-[#007acc] border-[#007acc] hover:bg-[#1a8ad4]' : 'border-[#5a5a5a] hover:border-[#007acc]'}
         `}
+        title={isDone ? '恢复任务' : '完成任务'}
       >
         {isDone && <Check size={sz.checkIcon} strokeWidth={3} className="text-white" />}
       </button>
