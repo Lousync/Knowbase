@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 
 interface TodoForm {
   title: string; description: string; time: string
-  quadrant: number; taskType: 'deadline' | 'plan'; tagId: string
+  quadrant: number; taskType: 'deadline' | 'plan' | 'daily'; tagId: string
   endCriteria: string
 }
 
@@ -134,6 +134,9 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 
           <Field label="任务类型">
             <div className="flex gap-2">
+              <button onClick={() => setForm(f => ({ ...f, taskType: 'daily' }))}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[#c5a332] bg-[#c5a33220] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+              >⚡ 琐碎</button>
               <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
                 className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
               >📋 计划类</button>
@@ -193,15 +196,17 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
             </Field>
           )}
 
-          <Field label="四象限">
-            <div className="flex gap-2">
-              {QUADRANTS.map(q => (
-                <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
-                  className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
-                >{q.label}</button>
-              ))}
-            </div>
-          </Field>
+          {form.taskType !== 'daily' && (
+            <Field label="四象限">
+              <div className="flex gap-2">
+                {QUADRANTS.map(q => (
+                  <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
+                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+                  >{q.label}</button>
+                ))}
+              </div>
+            </Field>
+          )}
 
           <Field label="标签">
             {tags.length === 0 ? (

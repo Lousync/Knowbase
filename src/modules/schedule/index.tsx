@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Maximize2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
@@ -38,6 +38,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   const [quadrantOpen, setQuadrantOpen] = useState(false)
   const [tagManageOpen, setTagManageOpen] = useState(false)
   const [iconSize, setIconSize] = useState<'sm' | 'md' | 'lg'>('sm')
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false)
+  const sizeMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     getSetting('scheduleIconSize').then(v => {
@@ -45,11 +47,19 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
     })
   }, [])
 
-  const cycleIconSize = () => {
-    const next = iconSize === 'sm' ? 'md' : iconSize === 'md' ? 'lg' : 'sm'
-    setIconSize(next)
-    setSetting('scheduleIconSize', next)
+  const setSize = (s: 'sm' | 'md' | 'lg') => {
+    setIconSize(s)
+    setSetting('scheduleIconSize', s)
+    setSizeMenuOpen(false)
   }
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (sizeMenuRef.current && !sizeMenuRef.current.contains(e.target as Node)) setSizeMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
 
   const iconSizeLabel = iconSize === 'sm' ? '小' : iconSize === 'md' ? '中' : '大'
 
@@ -103,7 +113,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   // ---- CRUD ----
   function openEdit(todo: ScheduleTodo) { setEditTarget(todo); setModalOpen(true) }
 
-  async function handleSave(form: { title: string; description: string; time: string; quadrant: number; taskType: 'deadline' | 'plan'; tagId: string; endCriteria: string }) {
+  async function handleSave(form: { title: string; description: string; time: string; quadrant: number; taskType: 'deadline' | 'plan' | 'daily'; tagId: string; endCriteria: string }) {
     const dto: CreateScheduleTodoDTO = {
       title: form.title, description: form.description,
       date: editTarget ? editTarget.date : today,
@@ -133,6 +143,20 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
   async function handleDelete(id: string) { await deleteScheduleTodo(id); await refreshAll() }
 
+  // ---- 当日任务 ----
+  const [dailyInput, setDailyInput] = useState('')
+
+  async function handleAddDaily() {
+    if (!dailyInput.trim()) return
+    try {
+      await createScheduleTodo({ title: dailyInput.trim(), date: today, taskType: 'daily', quadrant: 3 })
+      setDailyInput('')
+      await refreshAll()
+    } catch (e) { console.error(e) }
+  }
+
+  async function handleMigrateDaily(id: string) { await updateScheduleTodo(id, { date: today }); await refreshAll() }
+
   // ---- derived data (ALL tasks, including done) ----
   const allWithTags = useMemo(() =>
     monthTodos.map(t => ({ ...t, tag: t.tagId ? tags.find(tg => tg.id === t.tagId) ?? null : null })),
@@ -144,6 +168,11 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
   // Today's date string
   const todayDateStr = localToday()
+
+  // 当日任务
+  const dailyTasks = useMemo(() => pendingTodos.filter(t => t.taskType === 'daily'), [pendingTodos])
+  const dailyToday = useMemo(() => dailyTasks.filter(t => t.date === todayDateStr), [dailyTasks, todayDateStr])
+  const dailyExpired = useMemo(() => dailyTasks.filter(t => t.date < todayDateStr), [dailyTasks, todayDateStr])
 
   // deadline mode: split pending deadline tasks into overdue vs upcoming
   const deadlineUpcoming = useMemo(() =>
@@ -182,6 +211,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
     pendingTodos.filter(t => t.date === selectedDate),
     [pendingTodos, selectedDate]
   )
+  const dateRegular = useMemo(() => dateTodos.filter(t => t.taskType !== 'daily'), [dateTodos])
+  const dateDaily = useMemo(() => dateTodos.filter(t => t.taskType === 'daily'), [dateTodos])
 
   // ---- helpers ----
   const modalInitial = editTarget
@@ -214,11 +245,23 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
           <h3 className="text-[15px] font-medium text-[#cccccc]">{viewTitle}</h3>
           <div className="flex items-center gap-2">
-            <button onClick={cycleIconSize}
-              className="px-2 py-1.5 text-[11px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors flex items-center gap-1"
-              title="卡片图标大小">
-              <Maximize2 size={13} /> {iconSizeLabel}
-            </button>
+            <div className="relative" ref={sizeMenuRef}>
+              <button onClick={() => setSizeMenuOpen(v => !v)}
+                className="px-2 py-1.5 text-[11px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors flex items-center gap-1"
+                title="卡片大小">
+                <Maximize2 size={13} /> {iconSizeLabel}
+              </button>
+              {sizeMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-24 bg-[#252526] border border-[#3c3c3c] rounded shadow-xl py-1 z-50" onClick={e => e.stopPropagation()}>
+                  {(['sm', 'md', 'lg'] as const).map(s => (
+                    <button key={s} onClick={() => setSize(s)}
+                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#2a2d2e] ${iconSize === s ? 'text-white bg-[#094771]' : 'text-[#969696]'}`}>
+                      {s === 'sm' ? '小' : s === 'md' ? '中' : '大'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => setTagManageOpen(true)}
               className="px-3 py-1.5 text-[12px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors">
               管理标签
@@ -230,15 +273,75 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           </div>
         </div>
 
+        {/* 当日任务快速添加条 */}
+        <div className="flex items-center gap-2 px-6 py-2 border-b border-[#3c3c3c] bg-[#1e1e1e] shrink-0">
+          <Zap size={15} className="text-[#c5a332] shrink-0" />
+          <input
+            value={dailyInput}
+            onChange={e => setDailyInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddDaily() }}
+            placeholder="快速添加当日零碎任务..."
+            className="flex-1 bg-transparent text-[12px] text-[#cccccc] outline-none placeholder:text-[#555]"
+          />
+          {dailyInput && (
+            <button onClick={handleAddDaily} className="px-2.5 py-1 text-[11px] bg-[#c5a332] text-[#1e1e1e] rounded font-medium">
+              添加
+            </button>
+          )}
+        </div>
+
         <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* ===== EXPIRED DAILY TASKS ===== */}
+          {dailyExpired.length > 0 && (selectedDate === today || viewMode !== 'date') && (
+            <div className="mb-4 p-3 bg-[#2a2a1e] border border-[#3c3c3c] rounded">
+              <p className="text-[11px] text-[#c5a332] mb-2">📌 {dailyExpired.length} 项过期当日任务</p>
+              <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                {dailyExpired.map(t => (
+                  <div key={t.id} className="flex items-center gap-2 text-[11px] text-[#969696]">
+                    <span className="flex-1 truncate line-through">{t.title}</span>
+                    <span className="text-[10px] text-[#555]">{t.date.slice(5)}</span>
+                    <button onClick={() => handleMigrateDaily(t.id)}
+                      className="px-1.5 py-0.5 text-[10px] text-[#007acc] hover:bg-[#007acc20] rounded flex items-center gap-0.5">
+                      <RotateCcw size={10} /> 迁移到今天
+                    </button>
+                    <button onClick={() => handleDelete(t.id)}
+                      className="px-1.5 py-0.5 text-[10px] text-[#6a6a6a] hover:text-[#e81123] hover:bg-[#e8112320] rounded flex items-center gap-0.5">
+                      <Trash2 size={10} /> 丢弃
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ===== DATE MODE ===== */}
           {viewMode === 'date' && (
-            dateTodos.length === 0 ? <EmptyHint /> : (
-              <div className="space-y-2">
-                {dateTodos.map(todo => (
-                  <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
-                    onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
-                ))}
+            (dateRegular.length === 0 && dateDaily.length === 0) ? <EmptyHint /> : (
+              <div className="space-y-4">
+                {dateDaily.length > 0 && (
+                  <div>
+                    <h4 className="text-[11px] font-medium text-[#c5a332] mb-2 flex items-center gap-1.5">
+                      <Zap size={13} /> {selectedDate === today ? '今日零碎任务' : '当日任务'} · {dateDaily.length}
+                    </h4>
+                    <div className="space-y-1.5">
+                      {dateDaily.map(todo => (
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {dateRegular.length > 0 && (
+                  <div>
+                    {dateDaily.length > 0 && <h4 className="text-[11px] font-medium text-[#569cd6] mb-2">📋 正式任务 · {dateRegular.length}</h4>}
+                    <div className="space-y-2">
+                      {dateRegular.map(todo => (
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           )}

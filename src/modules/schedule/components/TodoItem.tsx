@@ -16,10 +16,10 @@ interface Props {
   onDelete: () => void
 }
 
-const SIZE_MAP: Record<string, { check: number; checkIcon: number; text: string; title: string; desc: string; sub: string }> = {
-  sm: { check: 20, checkIcon: 12, text: 'text-[11px]', title: 'text-[14px]', desc: 'text-[12px]', sub: 'text-[10px]' },
-  md: { check: 26, checkIcon: 16, text: 'text-[13px]', title: 'text-[16px]', desc: 'text-[13px]', sub: 'text-[11px]' },
-  lg: { check: 32, checkIcon: 20, text: 'text-[15px]', title: 'text-[18px]', desc: 'text-[14px]', sub: 'text-[12px]' },
+const SIZE_MAP: Record<string, { check: number; checkIcon: number; text: string; title: string; desc: string; sub: string; padding: string; gap: string }> = {
+  sm: { check: 18, checkIcon: 11, text: 'text-[10px]', title: 'text-[12px]', desc: 'text-[11px]', sub: 'text-[10px]', padding: 'py-2', gap: 'gap-2' },
+  md: { check: 26, checkIcon: 16, text: 'text-[13px]', title: 'text-[16px]', desc: 'text-[13px]', sub: 'text-[11px]', padding: 'py-3', gap: 'gap-3' },
+  lg: { check: 36, checkIcon: 22, text: 'text-[16px]', title: 'text-[20px]', desc: 'text-[16px]', sub: 'text-[13px]', padding: 'py-4', gap: 'gap-4' },
 }
 
 function remainingLabel(time: string): string {
@@ -44,7 +44,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
   return (
     <div
       className={`
-        flex items-center gap-3 px-4 py-3 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md
+        flex items-center ${sz.gap} ${sz.padding} bg-[#2d2d2d] border border-[#3c3c3c] rounded-md
         cursor-pointer hover:border-[#007acc] transition-all group
         ${isDone ? 'opacity-50' : ''}
       `}

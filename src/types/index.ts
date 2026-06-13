@@ -16,7 +16,7 @@ export interface AppSettings { showLineNumbers?: boolean }
 export interface ScheduleTodo {
   id: string; title: string; description: string; date: string
   time: string | null; quadrant: number
-  taskType: 'deadline' | 'plan'; tagId: string | null
+  taskType: 'deadline' | 'plan' | 'daily'; tagId: string | null
   status: 'pending' | 'done'; sortOrder: number
   endCriteria: string
   createdAt: string; updatedAt: string
@@ -25,12 +25,12 @@ export interface ScheduleTodo {
 export interface ScheduleTag { id: string; name: string; color: string }
 export interface CreateScheduleTodoDTO {
   title: string; description?: string; date: string; time?: string
-  quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string
+  quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string
   endCriteria?: string
 }
 export interface UpdateScheduleTodoDTO {
   title?: string; description?: string; date?: string; time?: string | null
-  quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
+  quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string | null
   status?: string; endCriteria?: string
 }
 
