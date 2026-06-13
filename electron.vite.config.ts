@@ -28,6 +28,11 @@ export default defineConfig({
   },
   renderer: {
     root: '.',
+    server: {
+      host: '127.0.0.1',
+      port: 9182,
+      strictPort: false
+    },
     build: {
       outDir: 'out/renderer',
       rollupOptions: {

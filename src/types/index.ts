@@ -16,7 +16,7 @@ export interface AppSettings { showLineNumbers?: boolean }
 export interface ScheduleTodo {
   id: string; title: string; description: string; date: string
   time: string | null; quadrant: number
-  taskType: 'deadline' | 'plan'; tagId: string | null
+  taskType: 'deadline' | 'plan' | 'daily'; tagId: string | null
   status: 'pending' | 'done'; sortOrder: number
   endCriteria: string
   createdAt: string; updatedAt: string
@@ -25,12 +25,12 @@ export interface ScheduleTodo {
 export interface ScheduleTag { id: string; name: string; color: string }
 export interface CreateScheduleTodoDTO {
   title: string; description?: string; date: string; time?: string
-  quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string
+  quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string
   endCriteria?: string
 }
 export interface UpdateScheduleTodoDTO {
   title?: string; description?: string; date?: string; time?: string | null
-  quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
+  quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string | null
   status?: string; endCriteria?: string
 }
 
@@ -52,6 +52,24 @@ export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string |
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 
+// import
+export interface ImportFileResult {
+  path: string
+  baseName: string
+  content: string
+  error?: string
+}
+
+// recycle bin
+export interface RecycleBinItem {
+  id: string
+  originalId: string
+  module: 'blog' | 'knowledge'
+  title: string
+  data: any
+  deletedAt: string
+}
+
 // export
 export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Tag[] }
 export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
@@ -60,6 +78,10 @@ export interface AllExportData {
   exportVersion: string; exportedAt: string
   blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
 }
+
+export interface ExportFileResult { filePath: string; size: number }
+export interface ExportMarkdownProgress { current: number; total: number; currentFile: string; phase: string }
+export interface ExportMarkdownResult { fileCount: number; totalSize: number; files: { relPath: string; size: number }[] }
 
 export interface ElectronAPI {
   minimize: () => Promise<void>
@@ -108,15 +130,25 @@ export interface ElectronAPI {
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
+  // import
+  showImportOpenDialog: () => Promise<string[]>
+  readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>
+  // recycle bin
+  getRecycleBinItems: () => Promise<RecycleBinItem[]>
+  restoreRecycleBinItem: (id: string) => Promise<void>
+  permanentlyDeleteRecycleBinItem: (id: string) => Promise<void>
+  emptyRecycleBin: () => Promise<void>
+  purgeExpiredRecycleBinItems: () => Promise<void>
   exportAllBlogData: () => Promise<BlogExportData>
   exportAllScheduleData: () => Promise<ScheduleExportData>
   exportAllKnowledgeData: () => Promise<KnowledgeExportData>
   exportAllData: () => Promise<AllExportData>
   showExportSaveDialog: (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => Promise<{ filePath: string | null }>
   showExportOpenDirDialog: () => Promise<{ dirPath: string | null }>
-  writeExportTextFile: (filePath: string, content: string) => Promise<void>
-  copyDbFile: (destPath: string) => Promise<void>
-  writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[]) => Promise<void>
+  writeExportTextFile: (filePath: string, content: string, encoding?: string) => Promise<ExportFileResult>
+  copyDbFile: (destPath: string) => Promise<ExportFileResult>
+  writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[], encoding?: string) => Promise<ExportMarkdownResult>
+  onMarkdownExportProgress: (cb: (p: ExportMarkdownProgress) => void) => () => void
 }
 
 declare global { interface Window { api: ElectronAPI } }

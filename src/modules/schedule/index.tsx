@@ -1,26 +1,33 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags,
-  createScheduleTag, deleteScheduleTag
+  createScheduleTag, deleteScheduleTag, getSetting, setSetting
 } from '../../lib/ipc'
 import { CalendarView, type ViewMode } from './views/CalendarView'
 import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
+import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-red-400', 1: 'text-blue-400', 2: 'text-yellow-400', 3: 'text-gray-400' }
 
+const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; placeholder: string; meta: string; metaIcon: number; sectionTitle: string }> = {
+  sm: { icon: 14, text: 'text-[11px]', padY: 'py-1.5', placeholder: '零碎任务...', meta: 'text-[11px]', metaIcon: 10, sectionTitle: 'text-[12px]' },
+  md: { icon: 17, text: 'text-[13px]', padY: 'py-2', placeholder: '快速添加当日零碎任务...', meta: 'text-[12px]', metaIcon: 12, sectionTitle: 'text-[13px]' },
+  lg: { icon: 21, text: 'text-[15px]', padY: 'py-2.5', placeholder: '快速添加当日零碎任务...', meta: 'text-[13px]', metaIcon: 14, sectionTitle: 'text-[14px]' },
+}
+
 function localToday(): string {
   const n = new Date()
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }) {
+export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Record<string, number> }: { sidebarOpen?: boolean; sidebarWidths?: Record<string, number> }) {
   const now = new Date()
   const today = localToday()
   const [year, setYear] = useState(now.getFullYear())
@@ -37,6 +44,31 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   const [editTarget, setEditTarget] = useState<ScheduleTodo | null>(null)
   const [quadrantOpen, setQuadrantOpen] = useState(false)
   const [tagManageOpen, setTagManageOpen] = useState(false)
+  const [iconSize, setIconSize] = useState<'sm' | 'md' | 'lg'>('sm')
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false)
+  const sizeMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    getSetting('scheduleIconSize').then(v => {
+      if (v === 'sm' || v === 'md' || v === 'lg') setIconSize(v)
+    })
+  }, [])
+
+  const setSize = (s: 'sm' | 'md' | 'lg') => {
+    setIconSize(s)
+    setSetting('scheduleIconSize', s)
+    setSizeMenuOpen(false)
+  }
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (sizeMenuRef.current && !sizeMenuRef.current.contains(e.target as Node)) setSizeMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const iconSizeLabel = iconSize === 'sm' ? '小' : iconSize === 'md' ? '中' : '大'
 
   const ym = `${year}-${String(month).padStart(2, '0')}`
 
@@ -88,7 +120,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   // ---- CRUD ----
   function openEdit(todo: ScheduleTodo) { setEditTarget(todo); setModalOpen(true) }
 
-  async function handleSave(form: { title: string; description: string; time: string; quadrant: number; taskType: 'deadline' | 'plan'; tagId: string; endCriteria: string }) {
+  async function handleSave(form: { title: string; description: string; time: string; quadrant: number; taskType: 'deadline' | 'plan' | 'daily'; tagId: string; endCriteria: string }) {
     const dto: CreateScheduleTodoDTO = {
       title: form.title, description: form.description,
       date: editTarget ? editTarget.date : today,
@@ -116,7 +148,28 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
     await refreshAll()
   }
 
+  async function handleRestoreDone(id: string) {
+    await updateScheduleTodo(id, { status: 'pending' })
+    await refreshAll()
+  }
+
+  const [showDone, setShowDone] = useState(false)
+
   async function handleDelete(id: string) { await deleteScheduleTodo(id); await refreshAll() }
+
+  // ---- 当日任务 ----
+  const [dailyInput, setDailyInput] = useState('')
+
+  async function handleAddDaily() {
+    if (!dailyInput.trim()) return
+    try {
+      await createScheduleTodo({ title: dailyInput.trim(), date: today, taskType: 'daily', quadrant: 3 })
+      setDailyInput('')
+      await refreshAll()
+    } catch (e) { console.error(e) }
+  }
+
+  async function handleMigrateDaily(id: string) { await updateScheduleTodo(id, { date: today }); await refreshAll() }
 
   // ---- derived data (ALL tasks, including done) ----
   const allWithTags = useMemo(() =>
@@ -127,8 +180,20 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   const pendingTodos = useMemo(() => allWithTags.filter(t => t.status === 'pending'), [allWithTags])
   const doneTodos = useMemo(() => allWithTags.filter(t => t.status === 'done'), [allWithTags])
 
+  // 已完成按日期分组
+  const doneByDate = useMemo(() => {
+    const groups: Record<string, typeof doneTodos> = {}
+    for (const t of doneTodos) (groups[t.date] ??= []).push(t)
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a))
+  }, [doneTodos])
+
   // Today's date string
   const todayDateStr = localToday()
+
+  // 当日任务
+  const dailyTasks = useMemo(() => pendingTodos.filter(t => t.taskType === 'daily'), [pendingTodos])
+  const dailyToday = useMemo(() => dailyTasks.filter(t => t.date === todayDateStr), [dailyTasks, todayDateStr])
+  const dailyExpired = useMemo(() => dailyTasks.filter(t => t.date < todayDateStr), [dailyTasks, todayDateStr])
 
   // deadline mode: split pending deadline tasks into overdue vs upcoming
   const deadlineUpcoming = useMemo(() =>
@@ -167,6 +232,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
     pendingTodos.filter(t => t.date === selectedDate),
     [pendingTodos, selectedDate]
   )
+  const dateRegular = useMemo(() => dateTodos.filter(t => t.taskType !== 'daily'), [dateTodos])
+  const dateDaily = useMemo(() => dateTodos.filter(t => t.taskType === 'daily'), [dateTodos])
 
   // ---- helpers ----
   const modalInitial = editTarget
@@ -182,8 +249,8 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
     `${selectedDate === today ? `${selectedDate} 今天` : selectedDate}`
 
   return (
-    <div className="flex h-full bg-[#1e1e1e]">
-      <div className={`shrink-0 transition-all duration-200 ease-out overflow-hidden ${sidebarOpen ? 'w-[280px]' : 'w-0'}`}>
+    <div className="flex h-full bg-[var(--bg-primary)]">
+      <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule}>
         <CalendarView
           year={year} month={month} selectedDate={selectedDate}
           dotDates={dotDates} deadlineCounts={deadlineCounts}
@@ -193,32 +260,109 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
           onToday={goToToday} onViewModeChange={handleViewModeChange}
           onQuadrantChart={openQuadrantChart}
         />
-      </div>
+      </ResizablePanel>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
-          <h3 className="text-[15px] font-medium text-[#cccccc]">{viewTitle}</h3>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+          <h3 className={`${INPUT_SZ[iconSize].sectionTitle} font-medium text-[var(--text-primary)]`}>{viewTitle}</h3>
           <div className="flex items-center gap-2">
+            <div className="relative" ref={sizeMenuRef}>
+              <button onClick={() => setSizeMenuOpen(v => !v)}
+                className={`px-2 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[#4a4a4a] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1`}
+                title="卡片大小">
+                <Maximize2 size={INPUT_SZ[iconSize].metaIcon + 3} /> {iconSizeLabel}
+              </button>
+              {sizeMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-24 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-1 z-50" onClick={e => e.stopPropagation()}>
+                  {(['sm', 'md', 'lg'] as const).map(s => (
+                    <button key={s} onClick={() => setSize(s)}
+                      className={`w-full text-left px-3 py-1.5 ${INPUT_SZ[iconSize].meta} hover:bg-[var(--bg-hover)] ${iconSize === s ? 'text-white bg-[var(--bg-selected)]' : 'text-[var(--text-secondary)]'}`}>
+                      {s === 'sm' ? '小' : s === 'md' ? '中' : '大'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => setTagManageOpen(true)}
-              className="px-3 py-1.5 text-[12px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors">
+              className={`px-3 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[#4a4a4a] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors`}>
               管理标签
             </button>
             <button onClick={() => { setEditTarget(null); setModalOpen(true) }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[#007acc] text-white rounded hover:bg-[#1a8ad4] transition-colors">
-              <Plus size={15} /> 添加任务
+              className={`flex items-center gap-1.5 px-3 py-1.5 ${INPUT_SZ[iconSize].meta} bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors`}>
+              <Plus size={INPUT_SZ[iconSize].metaIcon + 5} /> 添加任务
             </button>
           </div>
         </div>
 
+        {/* 当日任务快速添加条 */}
+        <div className={`flex items-center gap-2 px-6 ${INPUT_SZ[iconSize].padY} border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0`}>
+          <Zap size={INPUT_SZ[iconSize].icon} className="text-[var(--warning)] shrink-0" />
+          <input
+            value={dailyInput}
+            onChange={e => setDailyInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddDaily() }}
+            placeholder={INPUT_SZ[iconSize].placeholder}
+            className={`flex-1 bg-transparent ${INPUT_SZ[iconSize].text} text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]`}
+          />
+          {dailyInput && (
+            <button onClick={handleAddDaily} className={`px-2.5 py-1 ${INPUT_SZ[iconSize].text} bg-[var(--warning)] text-[var(--bg-primary)] rounded font-medium`}>
+              添加
+            </button>
+          )}
+        </div>
+
         <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* ===== EXPIRED DAILY TASKS ===== */}
+          {dailyExpired.length > 0 && (selectedDate === today || viewMode !== 'date') && (
+            <div className="mb-4 p-3 bg-[#2a2a1e] border border-[var(--border-color)] rounded">
+              <p className={`${INPUT_SZ[iconSize].meta} text-[var(--warning)] mb-2`}>📌 {dailyExpired.length} 项过期当日任务</p>
+              <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                {dailyExpired.map(t => (
+                  <div key={t.id} className={`flex items-center gap-2 ${INPUT_SZ[iconSize].meta} text-[var(--text-secondary)]`}>
+                    <span className="flex-1 truncate line-through">{t.title}</span>
+                    <span className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)]`}>{t.date.slice(5)}</span>
+                    <button onClick={() => handleMigrateDaily(t.id)}
+                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[var(--accent)] hover:bg-[#007acc20] rounded flex items-center gap-0.5`}>
+                      <RotateCcw size={INPUT_SZ[iconSize].metaIcon} /> 迁移
+                    </button>
+                    <button onClick={() => handleDelete(t.id)}
+                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[#e8112320] rounded flex items-center gap-0.5`}>
+                      <Trash2 size={INPUT_SZ[iconSize].metaIcon} /> 丢弃
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ===== DATE MODE ===== */}
           {viewMode === 'date' && (
-            dateTodos.length === 0 ? <EmptyHint /> : (
-              <div className="space-y-2">
-                {dateTodos.map(todo => (
-                  <TodoItem key={todo.id} todo={todo} tag={todo.tag}
-                    onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
-                ))}
+            (dateRegular.length === 0 && dateDaily.length === 0) ? <EmptyHint /> : (
+              <div className="space-y-4">
+                {dateDaily.length > 0 && (
+                  <div>
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--warning)] mb-2 flex items-center gap-1.5`}>
+                      <Zap size={INPUT_SZ[iconSize].metaIcon + 3} /> {selectedDate === today ? '今日零碎任务' : '当日任务'} · {dateDaily.length}
+                    </h4>
+                    <div className="space-y-1.5">
+                      {dateDaily.map(todo => (
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {dateRegular.length > 0 && (
+                  <div>
+                    {dateDaily.length > 0 && <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#569cd6] mb-2`}>📋 正式任务 · {dateRegular.length}</h4>}
+                    <div className="space-y-2">
+                      {dateRegular.map(todo => (
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           )}
@@ -230,10 +374,10 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
             <div className="space-y-4">
               {deadlineOverdue.length > 0 && (
                 <div>
-                  <h4 className="text-[12px] font-medium text-red-400 mb-2">⚠ 超期未完成 ({deadlineOverdue.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-red-400 mb-2`}>⚠ 超期未完成 ({deadlineOverdue.length})</h4>
                   <div className="space-y-2">
                     {deadlineOverdue.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                     ))}
                   </div>
@@ -243,10 +387,10 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
               {/* 即将截止 */}
               {deadlineUpcoming.length > 0 && (
                 <div>
-                  <h4 className="text-[12px] font-medium text-[#569cd6] mb-2">⏰ 即将截止 ({deadlineUpcoming.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#569cd6] mb-2`}>⏰ 即将截止 ({deadlineUpcoming.length})</h4>
                   <div className="space-y-2">
                     {deadlineUpcoming.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                     ))}
                   </div>
@@ -256,10 +400,10 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
               {/* 已完成 */}
               {deadlineDone.length > 0 && (
                 <div>
-                  <h4 className="text-[12px] font-medium text-[#6a6a6a] mb-2">✅ 已完成 ({deadlineDone.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--text-muted)] mb-2`}>✅ 已完成 ({deadlineDone.length})</h4>
                   <div className="space-y-2">
                     {deadlineDone.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                     ))}
                   </div>
@@ -276,11 +420,11 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                 const items = quadrantGrouped[q]
                 return (
                   <div key={q}>
-                    <h4 className={`text-[12px] font-medium ${QUADRANT_COLORS[q]} mb-2`}>{QUADRANT_LABELS[q]} ({items.length})</h4>
-                    {items.length === 0 ? <p className="text-[11px] text-[#555] italic ml-1">暂无</p> : (
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium ${QUADRANT_COLORS[q]} mb-2`}>{QUADRANT_LABELS[q]} ({items.length})</h4>
+                    {items.length === 0 ? <p className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)] italic ml-1`}>暂无</p> : (
                       <div className="space-y-2">
                         {items.map(todo => (
-                          <TodoItem key={todo.id} todo={todo} tag={todo.tag}
+                          <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
                             onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                         ))}
                       </div>
@@ -291,6 +435,41 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
             </div>
           )}
         </div>
+
+        {/* ===== COMPLETED TASKS ===== */}
+        {doneTodos.length > 0 && (
+          <div className="border-t border-[var(--border-color)] shrink-0">
+            <button
+              onClick={() => setShowDone(v => !v)}
+              className={`flex items-center justify-between w-full px-6 py-2.5 ${INPUT_SZ[iconSize].meta} text-[var(--text-muted)] hover:bg-[var(--bg-hover)] transition-colors`}
+            >
+              <span className="flex items-center gap-2">
+                <Check size={INPUT_SZ[iconSize].metaIcon + 4} />
+                已完成 · {doneTodos.length} 项
+                <span className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)]`}>（7天后自动清空）</span>
+              </span>
+              <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+            </button>
+            {showDone && (
+              <div className="px-6 py-3 max-h-[260px] overflow-y-auto space-y-3">
+                {doneByDate.map(([date, items]) => (
+                  <div key={date}>
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--text-disabled)] mb-1.5`}>{date} · {items.length} 项</h4>
+                    <div className="space-y-1.5">
+                      {items.map(todo => (
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          onClick={() => openEdit(todo)}
+                          onToggleDone={() => handleToggleDone(todo)}
+                          onRestore={() => handleRestoreDone(todo.id)}
+                          onDelete={() => handleDelete(todo.id)} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <TodoEditModal open={modalOpen} initial={modalInitial} tags={tags} onSave={handleSave} onClose={() => { setModalOpen(false); setEditTarget(null) }} />
@@ -302,7 +481,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
 
 function EmptyHint({ text = '暂无任务' }: { text?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-[#6a6a6a]">
+    <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
       <div className="text-4xl mb-3">📅</div>
       <p className="text-[13px]">{text}</p>
       <p className="text-[11px] mt-1">点击"添加任务"创建第一个待办</p>

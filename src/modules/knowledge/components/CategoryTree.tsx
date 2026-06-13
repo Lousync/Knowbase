@@ -61,25 +61,25 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
       return (
         <div key={cat.id}>
           <div
-            className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer group text-[14px] hover:bg-[#2a2d2e] ${
-              isSelected ? 'bg-[#094771] text-white' : 'text-[#cccccc]'
+            className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer group text-[14px] hover:bg-[var(--bg-hover)] ${
+              isSelected ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)]'
             }`}
             style={{ paddingLeft: `${depth * 20 + 12}px` }}
             onClick={() => { onSelect(cat.id); toggleExpand(cat.id) }}
           >
-            <span className="shrink-0 w-4 flex items-center justify-center text-[#969696]">
+            <span className="shrink-0 w-4 flex items-center justify-center text-[var(--text-secondary)]">
               {children.length > 0 ? (
-                isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />
+                isExpanded ? <ChevronDown size={24} /> : <ChevronRight size={24} />
               ) : (
                 <span className="w-[16px]" />
               )}
             </span>
-            <span className="shrink-0 text-[#c5a332]">
-              {isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />}
+            <span className="shrink-0 text-[var(--warning)]">
+              {isExpanded ? <FolderOpen size={24} /> : <Folder size={24} />}
             </span>
             {editingId === cat.id ? (
               <input
-                className="flex-1 bg-[#3c3c3c] border border-[#007acc] rounded px-1.5 text-[14px] outline-none"
+                className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 text-[14px] outline-none"
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
                 onBlur={() => handleRename(cat.id)}
@@ -92,25 +92,25 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
             )}
             <div className="hidden group-hover:flex items-center gap-1 ml-1 shrink-0">
               <button
-                className="p-0.5 hover:text-[#cccccc] text-[#969696]"
+                className="p-0.5 hover:text-[var(--text-primary)] text-[var(--text-secondary)]"
                 onClick={e => { e.stopPropagation(); setNewCatParent(cat.id); setNewName('') }}
                 title="添加子分类"
               >
-                <Plus size={14} />
+                <Plus size={21} />
               </button>
               <button
-                className="p-0.5 hover:text-[#cccccc] text-[#969696]"
+                className="p-0.5 hover:text-[var(--text-primary)] text-[var(--text-secondary)]"
                 onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }}
                 title="重命名"
               >
-                <Pencil size={14} />
+                <Pencil size={21} />
               </button>
               <button
-                className="p-0.5 hover:text-[#e81123] text-[#969696]"
+                className="p-0.5 hover:text-[var(--danger)] text-[var(--text-secondary)]"
                 onClick={e => { e.stopPropagation(); onDelete(cat.id) }}
                 title="删除"
               >
-                <Trash2 size={14} />
+                <Trash2 size={21} />
               </button>
             </div>
           </div>
@@ -120,7 +120,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
           {newCatParent === cat.id && (
             <div className="flex items-center gap-1 py-1 pl-2" style={{ paddingLeft: `${(depth + 1) * 20 + 12}px` }}>
               <input
-                className="flex-1 bg-[#3c3c3c] border border-[#007acc] rounded px-1.5 text-[14px] outline-none text-[#cccccc]"
+                className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 text-[14px] outline-none text-[var(--text-primary)]"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onBlur={() => handleCreate()}
@@ -140,28 +140,28 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
   return (
     <div className="flex flex-col h-full">
       {/* 全部页面 按钮 + 新建主题 按钮 */}
-      <div className="px-2 py-1.5 border-b border-[#3c3c3c] space-y-1">
+      <div className="px-2 py-1.5 border-b border-[var(--border-color)] space-y-1">
         <button
           onClick={handleCollapseAll}
-          className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-[14px] text-left hover:bg-[#2a2d2e] ${
-            selectedId === null ? 'bg-[#094771] text-white hover:bg-[#0b5a8f]' : 'text-[#cccccc]'
+          className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-[14px] text-left hover:bg-[var(--bg-hover)] ${
+            selectedId === null ? 'bg-[var(--bg-selected)] text-white hover:bg-[#0b5a8f]' : 'text-[var(--text-primary)]'
           }`}
         >
-          <Folder size={16} className="shrink-0" />
+          <Folder size={24} className="shrink-0" />
           <span>全部页面</span>
         </button>
         {!showRootInput ? (
           <button
             onClick={() => setShowRootInput(true)}
-            className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-[13px] text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e] text-left"
+            className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] text-left"
           >
-            <Plus size={14} className="shrink-0" />
+            <Plus size={21} className="shrink-0" />
             <span>新建主题</span>
           </button>
         ) : (
           <div className="flex items-center gap-1 px-2">
             <input
-              className="flex-1 bg-[#3c3c3c] border border-[#007acc] rounded px-1.5 py-1 text-[14px] outline-none text-[#cccccc]"
+              className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[14px] outline-none text-[var(--text-primary)]"
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onBlur={() => handleCreate()}

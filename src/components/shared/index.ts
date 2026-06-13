@@ -1,5 +1,6 @@
 export { TitleBar } from './TitleBar'
 export { ActivityBar } from './ActivityBar'
-export { StatusBar } from './StatusBar'
 export { SearchBar } from './SearchBar'
 export { TagBadge } from './TagBadge'
+export { ConfirmDialog } from './ConfirmDialog'
+export { StatusBar } from './StatusBar'

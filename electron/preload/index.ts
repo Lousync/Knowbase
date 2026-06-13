@@ -53,6 +53,17 @@ const api = {
   getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages'),
   moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction),
 
+  // import
+  showImportOpenDialog: () => ipcRenderer.invoke('import:showOpenDialog'),
+  readImportFiles: (paths: string[]) => ipcRenderer.invoke('import:readFiles', paths),
+
+  // recycle bin
+  getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),
+  restoreRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:restoreItem', id),
+  permanentlyDeleteRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:permanentlyDelete', id),
+  emptyRecycleBin: () => ipcRenderer.invoke('recycleBin:emptyAll'),
+  purgeExpiredRecycleBinItems: () => ipcRenderer.invoke('recycleBin:purgeExpired'),
+
   // export
   exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
   exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
@@ -60,9 +71,14 @@ const api = {
   exportAllData: () => ipcRenderer.invoke('export:getAllData'),
   showExportSaveDialog: (opts: unknown) => ipcRenderer.invoke('export:showSaveDialog', opts),
   showExportOpenDirDialog: () => ipcRenderer.invoke('export:showOpenDirDialog'),
-  writeExportTextFile: (filePath: string, content: string) => ipcRenderer.invoke('export:writeTextFile', filePath, content),
+  writeExportTextFile: (filePath: string, content: string, encoding?: string) => ipcRenderer.invoke('export:writeTextFile', filePath, content, encoding),
   copyDbFile: (destPath: string) => ipcRenderer.invoke('export:copyDbFile', destPath),
-  writeMarkdownExport: (dirPath: string, files: unknown) => ipcRenderer.invoke('export:writeMarkdownExport', dirPath, files)
+  writeMarkdownExport: (dirPath: string, files: unknown, encoding?: string) => ipcRenderer.invoke('export:writeMarkdownExport', dirPath, files, encoding),
+  onMarkdownExportProgress: (cb: (p: unknown) => void) => {
+    const handler = (_e: unknown, p: unknown) => cb(p)
+    ipcRenderer.on('export:markdownProgress', handler)
+    return () => ipcRenderer.removeListener('export:markdownProgress', handler)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

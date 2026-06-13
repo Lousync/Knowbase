@@ -10,9 +10,18 @@ interface Props {
   todo: ScheduleTodo
   tag?: ScheduleTag | null
   showRemaining?: boolean
+  iconSize?: 'sm' | 'md' | 'lg'
   onClick: () => void
   onToggleDone: () => void
   onDelete: () => void
+  onRestore?: () => void
+}
+
+// 三档比例：check 约为 title 的 1.6x，间距同步缩放
+const SZ: Record<string, { check: number; checkIcon: number; title: string; meta: string; desc: string; tagBar: string; trash: number; padX: string; padY: string; gap: string; mTop: string }> = {
+  sm: { check: 18, checkIcon: 11, title: 'text-[13px]', meta: 'text-[11px]', desc: 'text-[11px]', tagBar: 'h-4', trash: 14, padX: 'px-3', padY: 'py-2', gap: 'gap-2', mTop: '' },
+  md: { check: 24, checkIcon: 15, title: 'text-[15px]', meta: 'text-[12px]', desc: 'text-[12px]', tagBar: 'h-5', trash: 17, padX: 'px-4', padY: 'py-3', gap: 'gap-3', mTop: 'mt-0.5' },
+  lg: { check: 30, checkIcon: 19, title: 'text-[18px]', meta: 'text-[13px]', desc: 'text-[14px]', tagBar: 'h-6', trash: 20, padX: 'px-5', padY: 'py-3.5', gap: 'gap-4', mTop: 'mt-1' },
 }
 
 function remainingLabel(time: string): string {
@@ -29,77 +38,76 @@ function remainingLabel(time: string): string {
   return `剩余${diff}天`
 }
 
-export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDelete }: Props) {
+export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, onToggleDone, onDelete, onRestore }: Props) {
   const isDone = todo.status === 'done'
   const deadline = todo.taskType === 'deadline'
+  const s = SZ[iconSize]
 
   return (
     <div
       className={`
-        flex items-center gap-3 px-4 py-3 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md
-        cursor-pointer hover:border-[#007acc] transition-all group
-        ${isDone ? 'opacity-50' : ''}
+        flex items-center ${s.gap} ${s.padX} ${s.padY} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md
+        cursor-pointer hover:border-[var(--accent)] transition-all group
+        ${isDone ? 'opacity-60 hover:opacity-90' : ''}
       `}
     >
-      {/* 完成按钮 */}
+      {/* 完成/恢复按钮 */}
       <button
-        onClick={e => { e.stopPropagation(); onToggleDone() }}
+        onClick={e => { e.stopPropagation(); isDone && onRestore ? onRestore() : onToggleDone() }}
+        style={{ width: s.check, height: s.check }}
         className={`
-          w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors
-          ${isDone ? 'bg-[#007acc] border-[#007acc]' : 'border-[#5a5a5a] hover:border-[#007acc]'}
+          rounded border-2 flex items-center justify-center shrink-0 transition-colors
+          ${isDone ? 'bg-[var(--accent)] border-[var(--accent)] hover:bg-[var(--accent-hover)]' : 'border-[#5a5a5a] hover:border-[var(--accent)]'}
         `}
+        title={isDone ? '恢复任务' : '完成任务'}
       >
-        {isDone && <Check size={12} strokeWidth={3} className="text-white" />}
+        {isDone && <Check size={s.checkIcon} strokeWidth={3} className="text-white" />}
       </button>
 
       {/* 主内容 */}
       <div className="flex-1 min-w-0" onClick={onClick}>
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex items-center gap-1.5">
           {/* 标签颜色条 */}
           {tag && (
-            <span
-              className="w-1 h-4 rounded shrink-0"
-              style={{ backgroundColor: tag.color }}
-            />
+            <span className={`${s.tagBar} w-1 rounded shrink-0`} style={{ backgroundColor: tag.color }} />
           )}
-          {/* 象限标记 */}
-          <span className={`text-[11px] ${QUADRANT_COLORS[todo.quadrant] ?? 'text-gray-400'}`}>
+          {/* 象限 / 标签 */}
+          <span className={`${s.meta} ${QUADRANT_COLORS[todo.quadrant] ?? 'text-gray-400'}`}>
             {QUADRANT_LABELS[todo.quadrant] ?? ''}
           </span>
-          {/* 标签名 */}
-          {tag && <span className="text-[11px] text-[#6a6a6a]">{tag.name}</span>}
+          {tag && <span className={`${s.meta} text-[var(--text-muted)]`}>{tag.name}</span>}
         </div>
-        <p className={`text-[14px] leading-snug ${isDone ? 'line-through text-[#6a6a6a]' : 'text-[#d4d4d4]'}`}>
+        <p className={`${s.title} ${s.mTop} leading-snug font-medium ${isDone ? 'line-through text-[var(--text-muted)]' : 'text-[#d4d4d4]'}`}>
           {todo.title}
         </p>
         {todo.description && (
-          <p className="text-[12px] text-[#6a6a6a] mt-0.5 truncate">{todo.description}</p>
+          <p className={`${s.desc} text-[var(--text-muted)] mt-0.5 truncate`}>{todo.description}</p>
         )}
       </div>
 
-      {/* 右下角：截止 / 计划结束标准 */}
-      {deadline && todo.time ? (
-        <span className={`text-[11px] shrink-0 self-end ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
-          {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
-        </span>
-      ) : !deadline && todo.endCriteria ? (
-        <span className="text-[11px] text-[#6a6a6a] shrink-0 self-end max-w-[120px] truncate" title={todo.endCriteria}>
-          🎯 {todo.endCriteria}
-        </span>
-      ) : null}
-
-      {/* date label for non-date-grouped views */}
-      {showRemaining && (
-        <span className="text-[10px] text-[#6a6a6a] shrink-0 self-end ml-1">{todo.date}</span>
-      )}
+      {/* 截止时间 / 结束标准 */}
+      <div className="shrink-0 flex flex-col items-end gap-0.5 self-stretch justify-between">
+        {deadline && todo.time ? (
+          <span className={`${s.meta} ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
+            {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
+          </span>
+        ) : !deadline && todo.endCriteria ? (
+          <span className={`${s.meta} text-[var(--text-muted)] max-w-[100px] truncate`} title={todo.endCriteria}>
+            🎯 {todo.endCriteria}
+          </span>
+        ) : <span />}
+        {showRemaining && (
+          <span className={`${s.meta} text-[var(--text-muted)]`}>{todo.date}</span>
+        )}
+      </div>
 
       {/* 删除 */}
       <button
         onClick={e => { e.stopPropagation(); onDelete() }}
-        className="shrink-0 p-1 text-[#6a6a6a] hover:text-[#e81123] opacity-0 group-hover:opacity-100 transition-all"
+        className="shrink-0 p-1 text-[var(--text-muted)] hover:text-[var(--danger)] opacity-0 group-hover:opacity-100 transition-all"
         title="删除"
       >
-        <Trash2 size={14} />
+        <Trash2 size={s.trash} />
       </button>
     </div>
   )

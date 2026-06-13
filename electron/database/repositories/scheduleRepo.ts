@@ -17,7 +17,7 @@ function rowToTodo(row: TodoRow) {
   return {
     id: row.id, title: row.title, description: row.description || '',
     date: row.date, time: row.time || null,
-    quadrant: row.quadrant, taskType: row.task_type as 'deadline' | 'plan',
+    quadrant: row.quadrant, taskType: row.task_type as 'deadline' | 'plan' | 'daily',
     tagId: row.tag_id, status: row.status as 'pending' | 'done',
     sortOrder: row.sort_order, endCriteria: row.end_criteria || '',
     createdAt: row.created_at, updatedAt: row.updated_at
@@ -60,8 +60,9 @@ export function registerScheduleHandlers(): void {
     return rows.map(r => r.date)
   })
 
-  // 获取某月全部待办（象限图用）
+  // 获取某月全部待办（象限图用）— 自动清理 7 天前已完成任务
   ipcMain.handle('schedule:getMonthTodos', (_e, yearMonth: string) => {
+    run("DELETE FROM schedule_todos WHERE status = 'done' AND updated_at < datetime('now', '-7 days')")
     const rows = queryAll<TodoRow>(
       "SELECT * FROM schedule_todos WHERE date LIKE ? ORDER BY date, sort_order, created_at",
       [`${yearMonth}%`]

@@ -8,12 +8,19 @@ import { KnowledgeModule } from './modules/knowledge'
 import { ExportModule } from './modules/export'
 
 // Zoom by adjusting <html> font-size.  All rem-based content scales naturally;
-// chrome elements (TitleBar / ActivityBar / StatusBar) are mostly px-based so
+// chrome elements (TitleBar / ActivityBar) are mostly px-based so
 // they barely move.  CSS zoom / transform:scale() both break flex layout — avoid.
 const ZOOM_MIN  = 0.85
 const ZOOM_MAX  = 1.5
 const ZOOM_STEP = 0.05
 const ZOOM_BASE = 1.0
+
+const FONTS: Record<string, string> = {
+  system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
+  yahei: "'Microsoft YaHei', '微软雅黑', sans-serif",
+  noto: "'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
+  mono: "'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace",
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>('blog')
@@ -21,14 +28,39 @@ export default function App() {
   const [showLineNumbers, setShowLineNumbers] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [zoom, setZoom] = useState(ZOOM_BASE)
+  // Pre-load all sidebar widths to prevent mount-time layout shift
+  const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    Promise.all([getSetting('showLineNumbers'), getSetting('zoom')])
-      .then(([ln, z]) => {
+    Promise.all([
+      getSetting('showLineNumbers'),
+      getSetting('zoom'),
+      getSetting('theme'),
+      getSetting('editorFont'),
+      getSetting('sidebarWidth_blog'),
+      getSetting('sidebarWidth_schedule'),
+      getSetting('sidebarWidth_knowledgeCat'),
+      getSetting('sidebarWidth_knowledgePages'),
+    ])
+      .then(([ln, z, theme, font, wBlog, wSched, wCat, wPages]) => {
         if (ln != null) setShowLineNumbers(ln as boolean)
         if (z != null && typeof z === 'number') {
           setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)))
         }
+        // Theme
+        if (theme === 'light') {
+          document.documentElement.classList.add('light')
+        }
+        // Font
+        if (typeof font === 'string' && FONTS[font]) {
+          document.documentElement.style.setProperty('--font-sans', FONTS[font])
+        }
+        const widths: Record<string, number> = {}
+        if (typeof wBlog === 'number') widths.sidebarWidth_blog = wBlog
+        if (typeof wSched === 'number') widths.sidebarWidth_schedule = wSched
+        if (typeof wCat === 'number') widths.sidebarWidth_knowledgeCat = wCat
+        if (typeof wPages === 'number') widths.sidebarWidth_knowledgePages = wPages
+        setSidebarWidths(widths)
       })
       .finally(() => setSettingsLoaded(true))
   }, [])
@@ -66,14 +98,14 @@ export default function App() {
   if (!settingsLoaded) return null
 
   return (
-    <div className="flex flex-col h-screen bg-[#1e1e1e] overflow-hidden">
-      <TitleBar showLineNumbers={showLineNumbers} onToggleLineNumbers={toggleLineNumbers} zoomReset={zoomReset} />
+    <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden">
+      <TitleBar />
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar active={activeTab} onChange={handleTabChange} />
-        <main className="flex-1 overflow-hidden bg-[#1e1e1e]">
-          {activeTab === 'blog' && <BlogModule showLineNumbers={showLineNumbers} sidebarOpen={sidebarOpen} />}
-          {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} />}
-          {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} />}
+        <main className="flex-1 overflow-hidden bg-[var(--bg-primary)]">
+          {activeTab === 'blog' && <BlogModule showLineNumbers={showLineNumbers} sidebarOpen={sidebarOpen} zoom={zoom} sidebarWidths={sidebarWidths} />}
+          {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} />}
+          {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={zoom} sidebarWidths={sidebarWidths} />}
           {activeTab === 'export' && <ExportModule />}
         </main>
       </div>

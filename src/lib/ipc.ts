@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult } from '../types'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
 
 export const minimize = () => a().minimize()
@@ -59,9 +59,22 @@ export const exportAllData = () => a().exportAllData()
 
 export const showExportSaveDialog = (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => a().showExportSaveDialog(opts)
 export const showExportOpenDirDialog = () => a().showExportOpenDirDialog()
-export const writeExportTextFile = (filePath: string, content: string) => a().writeExportTextFile(filePath, content)
-export const copyDbFile = (destPath: string) => a().copyDbFile(destPath)
-export const writeMarkdownExport = (dirPath: string, files: { relPath: string; content: string }[]) => a().writeMarkdownExport(dirPath, files)
+export const writeExportTextFile = (filePath: string, content: string, encoding?: string): Promise<ExportFileResult> => a().writeExportTextFile(filePath, content, encoding)
+export const copyDbFile = (destPath: string): Promise<ExportFileResult> => a().copyDbFile(destPath)
+export const writeMarkdownExport = (dirPath: string, files: { relPath: string; content: string }[], encoding?: string): Promise<ExportMarkdownResult> => a().writeMarkdownExport(dirPath, files, encoding)
+export const onMarkdownExportProgress = (cb: (p: ExportMarkdownProgress) => void): (() => void) =>
+  a().onMarkdownExportProgress(cb)
+
+// import
+export const showImportOpenDialog = () => a().showImportOpenDialog()
+export const readImportFiles = (paths: string[]) => a().readImportFiles(paths)
+
+// recycle bin
+export const getRecycleBinItems = () => a().getRecycleBinItems()
+export const restoreRecycleBinItem = (id: string) => a().restoreRecycleBinItem(id)
+export const permanentlyDeleteRecycleBinItem = (id: string) => a().permanentlyDeleteRecycleBinItem(id)
+export const emptyRecycleBin = () => a().emptyRecycleBin()
+export const purgeExpiredRecycleBinItems = () => a().purgeExpiredRecycleBinItems()
 
 // Utility: parse [[wiki links]] from markdown
 export function parseWikiLinks(md: string): string[] {

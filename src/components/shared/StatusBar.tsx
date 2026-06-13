@@ -2,14 +2,12 @@ interface StatusBarProps {
   date?: string
   fileType?: string
   encoding?: string
-  saveStatus?: string
 }
 
 export function StatusBar({
   date = '',
   fileType = 'Markdown',
-  encoding = 'UTF-8',
-  saveStatus = '已保存'
+  encoding = 'UTF-8'
 }: StatusBarProps) {
   const today = date || new Date().toISOString().split('T')[0]
 
@@ -21,7 +19,6 @@ export function StatusBar({
       <div className="flex items-center gap-0">
         <StatusItem>{fileType}</StatusItem>
         <StatusItem>{encoding}</StatusItem>
-        <StatusItem>💾 {saveStatus}</StatusItem>
       </div>
     </div>
   )
