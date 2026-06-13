@@ -333,8 +333,8 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
         )}
       </div>
 
-      {/* Editor-edge expand strip — only shown when page list is collapsed but category panel is still open */}
-      {panelsVisible && !showPageListPanel && showCategoryPanel && (
+      {/* Editor-edge expand strip — shown when page list is collapsed, regardless of category panel */}
+      {panelsVisible && !showPageListPanel && (
         <div className="shrink-0 w-9 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center py-2 gap-3">
           {!showCategoryPanel && (
             <button
