@@ -52,6 +52,14 @@ export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string |
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 
+// import
+export interface ImportFileResult {
+  path: string
+  baseName: string
+  content: string
+  error?: string
+}
+
 // recycle bin
 export interface RecycleBinItem {
   id: string
@@ -118,6 +126,9 @@ export interface ElectronAPI {
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
+  // import
+  showImportOpenDialog: () => Promise<string[]>
+  readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>
   // recycle bin
   getRecycleBinItems: () => Promise<RecycleBinItem[]>
   restoreRecycleBinItem: (id: string) => Promise<void>

@@ -63,6 +63,10 @@ export const writeExportTextFile = (filePath: string, content: string) => a().wr
 export const copyDbFile = (destPath: string) => a().copyDbFile(destPath)
 export const writeMarkdownExport = (dirPath: string, files: { relPath: string; content: string }[]) => a().writeMarkdownExport(dirPath, files)
 
+// import
+export const showImportOpenDialog = () => a().showImportOpenDialog()
+export const readImportFiles = (paths: string[]) => a().readImportFiles(paths)
+
 // recycle bin
 export const getRecycleBinItems = () => a().getRecycleBinItems()
 export const restoreRecycleBinItem = (id: string) => a().restoreRecycleBinItem(id)

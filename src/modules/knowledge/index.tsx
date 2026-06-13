@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react'
+import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Trash2, Upload } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, createKnowledgePage, deleteKnowledgePage,
-  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages, moveKnowledgePage
+  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages, moveKnowledgePage,
+  showImportOpenDialog, readImportFiles
 } from '../../lib/ipc'
 import { CategoryTree } from './components/CategoryTree'
 import { PageEditor } from './components/PageEditor'
 import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
+import { ImportZone } from '../shared/components/ImportZone'
 
 export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
@@ -76,6 +78,32 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
     } catch (e) { console.error(e) }
   }
 
+  // 对话框导入文件
+  const handleDialogImport = async () => {
+    try {
+      const paths: string[] = await showImportOpenDialog()
+      if (!paths || paths.length === 0) return
+      const results = await readImportFiles(paths)
+      for (const r of results) {
+        if (r.error) continue
+        const h1 = r.content.match(/^#\s+(.+)/m)
+        const title = h1 ? h1[1].trim() : (r.baseName || '导入页面')
+        await createKnowledgePage({ title, contentMd: r.content, categoryId: selectedCatId })
+      }
+      refreshPages()
+    } catch (e) { console.error(e) }
+  }
+
+  // 拖拽导入文件
+  const handleDropImport = async (files: Array<{ title: string; content: string }>) => {
+    try {
+      for (const f of files) {
+        await createKnowledgePage({ title: f.title, contentMd: f.content, categoryId: selectedCatId })
+      }
+      refreshPages()
+    } catch (e) { console.error(e) }
+  }
+
   const handleSelectPage = (id: string) => setSelectedPageId(id)
 
   const handleDeletePage = async (id: string) => {
@@ -114,8 +142,9 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
   const panelsVisible = sidebarOpen
 
   return (
-    <div className="flex h-full bg-[#1e1e1e]">
-      {/* Left: Category Tree — slides to w-0 when collapsed, no residual strip */}
+    <ImportZone onImport={handleDropImport} className="h-full">
+      <div className="flex h-full bg-[#1e1e1e]">
+        {/* Left: Category Tree — slides to w-0 when collapsed, no residual strip */}
       <div
         className={[
           'shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col',
@@ -227,10 +256,13 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
               </div>
             </div>
 
-            {/* New page button */}
-            <div className="px-2 py-1.5 border-b border-[#3c3c3c]">
+            {/* New page + Import buttons */}
+            <div className="px-2 py-1.5 border-b border-[#3c3c3c] space-y-1">
               <button onClick={handleCreatePage} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
                 <Plus size={21} /> 新建页面
+              </button>
+              <button onClick={handleDialogImport} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs border border-[#3c3c3c] text-[#969696] rounded hover:text-[#cccccc] hover:border-[#555] transition-colors">
+                <Upload size={18} /> 导入文件
               </button>
             </div>
 
@@ -355,5 +387,6 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
         />
       )}
     </div>
+    </ImportZone>
   )
 }

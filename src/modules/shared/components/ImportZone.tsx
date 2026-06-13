@@ -1,0 +1,121 @@
+import { useState, useCallback } from 'react'
+import { FileText } from 'lucide-react'
+
+interface ImportFile {
+  title: string
+  content: string
+}
+
+interface Props {
+  onImport: (files: ImportFile[]) => Promise<void>
+  children: React.ReactNode
+  className?: string
+}
+
+const ALLOWED_EXT = ['.md', '.txt']
+
+function fileNameTitle(name: string): string {
+  for (const ext of ALLOWED_EXT) {
+    if (name.toLowerCase().endsWith(ext)) {
+      return name.slice(0, -ext.length)
+    }
+  }
+  return name
+}
+
+function extractTitle(fileName: string, content: string): string {
+  const h1 = content.match(/^#\s+(.+)/m)
+  if (h1) return h1[1].trim()
+  const base = fileNameTitle(fileName.replace(/^.*[\\/]/, ''))
+  return base || '导入页面'
+}
+
+export function ImportZone({ onImport, children, className }: Props) {
+  const [dragging, setDragging] = useState(false)
+  const [counter, setCounter] = useState(0)
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCounter(c => {
+      const next = c + 1
+      if (next === 1) setDragging(true)
+      return next
+    })
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCounter(c => {
+      const next = c - 1
+      if (next <= 0) setDragging(false)
+      return Math.max(0, next)
+    })
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragging(false)
+    setCounter(0)
+
+    const fileList = e.dataTransfer.files
+    if (!fileList || fileList.length === 0) return
+
+    const validFiles: File[] = []
+    for (let i = 0; i < fileList.length; i++) {
+      const f = fileList[i]
+      const name = f.name.toLowerCase()
+      if (ALLOWED_EXT.some(ext => name.endsWith(ext))) {
+        validFiles.push(f)
+      }
+    }
+    if (validFiles.length === 0) return
+
+    const readers: Promise<ImportFile>[] = validFiles.map(f => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const content = reader.result as string
+          resolve({
+            title: extractTitle(f.name, content),
+            content
+          })
+        }
+        reader.onerror = () => reject(reader.error)
+        reader.readAsText(f)
+      })
+    })
+
+    Promise.all(readers).then(files => onImport(files)).catch(console.error)
+  }, [onImport])
+
+  return (
+    <div
+      className={`relative ${className || ''}`}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {children}
+
+      {/* 拖拽遮罩 */}
+      {dragging && (
+        <div className="absolute inset-0 z-40 bg-[#007acc20] border-2 border-dashed border-[#007acc] rounded flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-[#007acc]">
+            <FileText size={48} strokeWidth={1.5} />
+            <span className="text-[15px] font-medium">释放文件以导入</span>
+            <span className="text-[12px] opacity-70">支持 .md / .txt</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

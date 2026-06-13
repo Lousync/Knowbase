@@ -53,6 +53,10 @@ const api = {
   getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages'),
   moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction),
 
+  // import
+  showImportOpenDialog: () => ipcRenderer.invoke('import:showOpenDialog'),
+  readImportFiles: (paths: string[]) => ipcRenderer.invoke('import:readFiles', paths),
+
   // recycle bin
   getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),
   restoreRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:restoreItem', id),
