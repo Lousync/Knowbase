@@ -26,6 +26,14 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
   const [showPageListPanel, setShowPageListPanel] = useState(true)
   const [showRecycleBin, setShowRecycleBin] = useState(false)
 
+  // 全局侧栏重新展开时，重置面板折叠状态
+  useEffect(() => {
+    if (sidebarOpen) {
+      setShowCategoryPanel(true)
+      setShowPageListPanel(true)
+    }
+  }, [sidebarOpen])
+
   const refreshCategories = useCallback(async () => {
     try { setCategories(await getKnowledgeCategories()) } catch (e) { console.error(e) }
   }, [])
@@ -333,8 +341,8 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
         )}
       </div>
 
-      {/* Editor-edge expand strip — shown when page list is collapsed, regardless of category panel */}
-      {panelsVisible && !showPageListPanel && (
+      {/* Editor-edge expand strip — hidden when both panels are collapsed (use ActivityBar to re-expand) */}
+      {panelsVisible && !showPageListPanel && showCategoryPanel && (
         <div className="shrink-0 w-9 bg-[#252526] border-r border-[#3c3c3c] flex flex-col items-center py-2 gap-3">
           {!showCategoryPanel && (
             <button
