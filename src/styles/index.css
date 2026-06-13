@@ -29,6 +29,8 @@ html, body, #root {
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* ===== 自定义滚动条（VS Code 风格）===== */
@@ -54,10 +56,20 @@ input, textarea, select {
   background: var(--input-bg);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
+  user-select: text;
+  -webkit-user-drag: auto;
 }
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* 允许文本选中的区域 */
+.monaco-editor,
+.monaco-editor *,
+.prose-content {
+  user-select: text;
+  -webkit-user-drag: auto;
 }
 
 /* ===== Markdown 预览样式（VS Code 风格）===== */

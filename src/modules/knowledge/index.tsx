@@ -130,7 +130,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                 className="p-1 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc] transition-colors"
                 title="折叠分类面板"
               >
-                <PanelLeftClose size={16} />
+                <PanelLeftClose size={24} />
               </button>
             </div>
             <CategoryTree
@@ -144,7 +144,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
             {showStarred && (
               <div className="border-t border-[#3c3c3c] flex-shrink-0">
                 <div className="px-3 py-1.5 text-[11px] font-semibold text-[#c5a332] uppercase flex items-center gap-1">
-                  <Star size={11} fill="#c5a332" /> 收藏
+                  <Star size={17} fill="#c5a332" /> 收藏
                 </div>
                 <div className="max-h-[200px] overflow-y-auto">
                   {starredPages.map(p => (
@@ -155,7 +155,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                         selectedPageId === p.id ? 'bg-[#094771] text-white' : 'text-[#cccccc]'
                       }`}
                     >
-                      <Star size={11} className="text-[#c5a332] shrink-0" fill="#c5a332" />
+                      <Star size={17} className="text-[#c5a332] shrink-0" fill="#c5a332" />
                       <span className="truncate">{p.title || '无标题'}</span>
                     </div>
                   ))}
@@ -184,10 +184,10 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                     className="p-0.5 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc] transition-colors"
                     title="展开分类面板"
                   >
-                    <PanelLeftOpen size={16} />
+                    <PanelLeftOpen size={24} />
                   </button>
                 )}
-                <FileText size={13} className="text-[#969696] shrink-0" />
+                <FileText size={20} className="text-[#969696] shrink-0" />
                 <span className="text-[11px] text-[#969696] font-medium truncate uppercase">页面</span>
               </div>
               <button
@@ -195,21 +195,21 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                 className="p-1 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc] transition-colors"
                 title="折叠页面面板"
               >
-                <PanelRightClose size={16} />
+                <PanelRightClose size={24} />
               </button>
             </div>
 
             {/* Search + page count */}
             <div className="p-2 border-b border-[#3c3c3c] space-y-2">
               <div className="flex items-center gap-1.5 bg-[#3c3c3c] rounded px-2 py-1">
-                <Search size={13} className="text-[#6a6a6a] shrink-0" />
+                <Search size={20} className="text-[#6a6a6a] shrink-0" />
                 <input
                   className="flex-1 bg-transparent text-[12px] text-[#cccccc] outline-none placeholder:text-[#6a6a6a]"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="搜索标题或内容..."
                 />
-                {searchQuery && <button onClick={() => setSearchQuery('')} className="text-[#6a6a6a]"><X size={12} /></button>}
+                {searchQuery && <button onClick={() => setSearchQuery('')} className="text-[#6a6a6a]"><X size={18} /></button>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] text-[#cccccc] font-medium truncate">{getCategoryPath(selectedCatId)}</span>
@@ -220,14 +220,14 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
             {/* New page button */}
             <div className="px-2 py-1.5 border-b border-[#3c3c3c]">
               <button onClick={handleCreatePage} className="flex items-center justify-center gap-1 w-full py-1.5 text-xs bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
-                <Plus size={14} /> 新建页面
+                <Plus size={21} /> 新建页面
               </button>
             </div>
 
             {/* Hint */}
             {hasSubCategories && !searchQuery && (
               <div className="flex items-start gap-1.5 px-3 py-1.5 text-[11px] text-[#c5a332] bg-[#2a2a1e] border-b border-[#3c3c3c]">
-                <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                <AlertCircle size={18} className="shrink-0 mt-0.5" />
                 <span>此分类下还有子分类，页面直接属于本分类</span>
               </div>
             )}
@@ -254,7 +254,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                       }`}
                     >
                       <div className="flex items-center gap-1.5">
-                        {p.isStarred && <Star size={9} className="text-[#c5a332] fill-[#c5a332] shrink-0" />}
+                        {p.isStarred && <Star size={14} className="text-[#c5a332] fill-[#c5a332] shrink-0" />}
                         <span className="text-[13px] text-[#cccccc] truncate flex-1">{p.title || '无标题'}</span>
                         {p.backlinks && p.backlinks.length > 0 && (
                           <span className="text-[10px] text-[#007acc] shrink-0">{p.backlinks.length}</span>
@@ -267,7 +267,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                               className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
                               title="上移"
                             >
-                              <ChevronUp size={13} />
+                              <ChevronUp size={20} />
                             </button>
                             <button
                               onClick={e => { e.stopPropagation(); handleMovePage(p.id, 'down') }}
@@ -275,7 +275,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
                               className="p-0.5 text-[#6a6a6a] hover:text-[#cccccc] disabled:opacity-30 disabled:cursor-default"
                               title="下移"
                             >
-                              <ChevronDown size={13} />
+                              <ChevronDown size={20} />
                             </button>
                           </div>
                         )}
@@ -300,7 +300,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
               className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc] transition-colors"
               title="展开分类面板"
             >
-              <PanelLeftOpen size={16} />
+              <PanelLeftOpen size={24} />
             </button>
           )}
           <button
@@ -308,7 +308,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
             className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#969696] hover:text-[#cccccc] transition-colors"
             title="展开页面列表面板"
           >
-            <PanelRightOpen size={16} />
+            <PanelRightOpen size={24} />
           </button>
         </div>
       )}

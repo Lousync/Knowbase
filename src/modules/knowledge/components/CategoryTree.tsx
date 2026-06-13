@@ -69,13 +69,13 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
           >
             <span className="shrink-0 w-4 flex items-center justify-center text-[#969696]">
               {children.length > 0 ? (
-                isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />
+                isExpanded ? <ChevronDown size={24} /> : <ChevronRight size={24} />
               ) : (
                 <span className="w-[16px]" />
               )}
             </span>
             <span className="shrink-0 text-[#c5a332]">
-              {isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />}
+              {isExpanded ? <FolderOpen size={24} /> : <Folder size={24} />}
             </span>
             {editingId === cat.id ? (
               <input
@@ -96,21 +96,21 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
                 onClick={e => { e.stopPropagation(); setNewCatParent(cat.id); setNewName('') }}
                 title="添加子分类"
               >
-                <Plus size={14} />
+                <Plus size={21} />
               </button>
               <button
                 className="p-0.5 hover:text-[#cccccc] text-[#969696]"
                 onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }}
                 title="重命名"
               >
-                <Pencil size={14} />
+                <Pencil size={21} />
               </button>
               <button
                 className="p-0.5 hover:text-[#e81123] text-[#969696]"
                 onClick={e => { e.stopPropagation(); onDelete(cat.id) }}
                 title="删除"
               >
-                <Trash2 size={14} />
+                <Trash2 size={21} />
               </button>
             </div>
           </div>
@@ -147,7 +147,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
             selectedId === null ? 'bg-[#094771] text-white hover:bg-[#0b5a8f]' : 'text-[#cccccc]'
           }`}
         >
-          <Folder size={16} className="shrink-0" />
+          <Folder size={24} className="shrink-0" />
           <span>全部页面</span>
         </button>
         {!showRootInput ? (
@@ -155,7 +155,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
             onClick={() => setShowRootInput(true)}
             className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-[13px] text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e] text-left"
           >
-            <Plus size={14} className="shrink-0" />
+            <Plus size={21} className="shrink-0" />
             <span>新建主题</span>
           </button>
         ) : (
