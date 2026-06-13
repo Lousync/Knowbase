@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Maximize2 } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags,
-  createScheduleTag, deleteScheduleTag
+  createScheduleTag, deleteScheduleTag, getSetting, setSetting
 } from '../../lib/ipc'
 import { CalendarView, type ViewMode } from './views/CalendarView'
 import { TodoItem } from './components/TodoItem'
@@ -37,6 +37,21 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
   const [editTarget, setEditTarget] = useState<ScheduleTodo | null>(null)
   const [quadrantOpen, setQuadrantOpen] = useState(false)
   const [tagManageOpen, setTagManageOpen] = useState(false)
+  const [iconSize, setIconSize] = useState<'sm' | 'md' | 'lg'>('sm')
+
+  useEffect(() => {
+    getSetting('scheduleIconSize').then(v => {
+      if (v === 'sm' || v === 'md' || v === 'lg') setIconSize(v)
+    })
+  }, [])
+
+  const cycleIconSize = () => {
+    const next = iconSize === 'sm' ? 'md' : iconSize === 'md' ? 'lg' : 'sm'
+    setIconSize(next)
+    setSetting('scheduleIconSize', next)
+  }
+
+  const iconSizeLabel = iconSize === 'sm' ? '小' : iconSize === 'md' ? '中' : '大'
 
   const ym = `${year}-${String(month).padStart(2, '0')}`
 
@@ -199,6 +214,11 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
           <h3 className="text-[15px] font-medium text-[#cccccc]">{viewTitle}</h3>
           <div className="flex items-center gap-2">
+            <button onClick={cycleIconSize}
+              className="px-2 py-1.5 text-[11px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors flex items-center gap-1"
+              title="卡片图标大小">
+              <Maximize2 size={13} /> {iconSizeLabel}
+            </button>
             <button onClick={() => setTagManageOpen(true)}
               className="px-3 py-1.5 text-[12px] border border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors">
               管理标签
@@ -216,7 +236,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
             dateTodos.length === 0 ? <EmptyHint /> : (
               <div className="space-y-2">
                 {dateTodos.map(todo => (
-                  <TodoItem key={todo.id} todo={todo} tag={todo.tag}
+                  <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
                     onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                 ))}
               </div>
@@ -233,7 +253,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                   <h4 className="text-[12px] font-medium text-red-400 mb-2">⚠ 超期未完成 ({deadlineOverdue.length})</h4>
                   <div className="space-y-2">
                     {deadlineOverdue.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                     ))}
                   </div>
@@ -246,7 +266,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                   <h4 className="text-[12px] font-medium text-[#569cd6] mb-2">⏰ 即将截止 ({deadlineUpcoming.length})</h4>
                   <div className="space-y-2">
                     {deadlineUpcoming.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                     ))}
                   </div>
@@ -259,7 +279,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                   <h4 className="text-[12px] font-medium text-[#6a6a6a] mb-2">✅ 已完成 ({deadlineDone.length})</h4>
                   <div className="space-y-2">
                     {deadlineDone.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                     ))}
                   </div>
@@ -280,7 +300,7 @@ export function ScheduleModule({ sidebarOpen = true }: { sidebarOpen?: boolean }
                     {items.length === 0 ? <p className="text-[11px] text-[#555] italic ml-1">暂无</p> : (
                       <div className="space-y-2">
                         {items.map(todo => (
-                          <TodoItem key={todo.id} todo={todo} tag={todo.tag}
+                          <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
                             onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
                         ))}
                       </div>

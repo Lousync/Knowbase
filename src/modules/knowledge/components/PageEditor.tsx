@@ -11,13 +11,14 @@ interface Props {
   pageId: string
   categories: KnowledgeCategory[]
   allPages: KnowledgePage[]
+  zoom?: number
   onBack: () => void
   onDeleted: () => void
   onNavigate: (id: string) => void
   onUpdate: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, onNavigate, onUpdate }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate }: Props) {
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -199,7 +200,7 @@ export function PageEditor({ pageId, categories, allPages, onBack, onDeleted, on
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[#6a6a6a]">加载编辑器...</div>}
                 options={{
-                  fontSize: 13,
+                  fontSize: Math.round(13 * zoom),
                   fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
                   lineNumbers: 'on',
                   minimap: { enabled: false },

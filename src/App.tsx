@@ -71,9 +71,9 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar active={activeTab} onChange={handleTabChange} showLineNumbers={showLineNumbers} onToggleLineNumbers={toggleLineNumbers} zoomReset={zoomReset} />
         <main className="flex-1 overflow-hidden bg-[#1e1e1e]">
-          {activeTab === 'blog' && <BlogModule showLineNumbers={showLineNumbers} sidebarOpen={sidebarOpen} />}
+          {activeTab === 'blog' && <BlogModule showLineNumbers={showLineNumbers} sidebarOpen={sidebarOpen} zoom={zoom} />}
           {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} />}
-          {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} />}
+          {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={zoom} />}
           {activeTab === 'export' && <ExportModule />}
         </main>
       </div>

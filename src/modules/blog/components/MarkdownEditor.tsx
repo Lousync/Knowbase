@@ -5,7 +5,7 @@ import { marked } from 'marked'
 import Editor, { type OnMount } from '@monaco-editor/react'
 
 interface Props {
-  entryId: string; showLineNumbers: boolean; onSave: () => void; onCancel: () => void
+  entryId: string; showLineNumbers: boolean; zoom?: number; onSave: () => void; onCancel: () => void
 }
 
 function renderMarkdown(md: string): string {
@@ -13,7 +13,7 @@ function renderMarkdown(md: string): string {
   return marked.parse(md, { async: false }) as string
 }
 
-export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: Props) {
+export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel }: Props) {
   const [contentMd, setContentMd] = useState('')
   const [date, setDate] = useState('')
   const [showPreview, setShowPreview] = useState(false)
@@ -114,7 +114,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, onSave, onCancel }: P
             theme="vs-dark"
             loading={<div className="flex items-center justify-center h-full text-[#6a6a6a]">加载编辑器...</div>}
             options={{
-              fontSize: 14,
+              fontSize: Math.round(14 * zoom),
               fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
               lineNumbers: showLineNumbers ? 'on' : 'off',
               minimap: { enabled: false },

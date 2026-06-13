@@ -12,7 +12,7 @@ import { PageEditor } from './components/PageEditor'
 import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
 import { ImportZone } from '../shared/components/ImportZone'
 
-export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean }) {
+export function KnowledgeModule({ sidebarOpen = true, zoom = 1 }: { sidebarOpen?: boolean; zoom?: number }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
   const [pages, setPages] = useState<KnowledgePage[]>([])
   const [starredPages, setStarredPages] = useState<KnowledgePage[]>([])
@@ -370,6 +370,7 @@ export function KnowledgeModule({ sidebarOpen = true }: { sidebarOpen?: boolean 
             pageId={selectedPageId}
             categories={categories}
             allPages={pages}
+            zoom={zoom}
             onBack={handleBackToList}
             onDeleted={() => handleDeletePage(selectedPageId)}
             onNavigate={handleSelectPage}

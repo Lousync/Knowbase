@@ -10,8 +10,8 @@ import { MarkdownEditor } from './components/MarkdownEditor'
 
 type BlogView = 'list' | 'editor' | 'detail'
 
-export function BlogModule({ showLineNumbers = false, sidebarOpen = true }: {
-  showLineNumbers?: boolean; sidebarOpen?: boolean
+export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom = 1 }: {
+  showLineNumbers?: boolean; sidebarOpen?: boolean; zoom?: number
 }) {
   const [view, setView] = useState<BlogView>('list')
   const [entries, setEntries] = useState<Entry[]>([])
@@ -107,6 +107,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true }: {
           <MarkdownEditor
             entryId={selectedId}
             showLineNumbers={showLineNumbers}
+            zoom={zoom}
             onSave={() => { setView('list'); setSelectedId(null); loadEntries() }}
             onCancel={() => { setView('list'); setSelectedId(null) }}
           />

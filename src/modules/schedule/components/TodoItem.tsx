@@ -10,9 +10,16 @@ interface Props {
   todo: ScheduleTodo
   tag?: ScheduleTag | null
   showRemaining?: boolean
+  iconSize?: 'sm' | 'md' | 'lg'
   onClick: () => void
   onToggleDone: () => void
   onDelete: () => void
+}
+
+const SIZE_MAP: Record<string, { check: number; checkIcon: number; text: string; title: string; desc: string; sub: string }> = {
+  sm: { check: 20, checkIcon: 12, text: 'text-[11px]', title: 'text-[14px]', desc: 'text-[12px]', sub: 'text-[10px]' },
+  md: { check: 26, checkIcon: 16, text: 'text-[13px]', title: 'text-[16px]', desc: 'text-[13px]', sub: 'text-[11px]' },
+  lg: { check: 32, checkIcon: 20, text: 'text-[15px]', title: 'text-[18px]', desc: 'text-[14px]', sub: 'text-[12px]' },
 }
 
 function remainingLabel(time: string): string {
@@ -29,9 +36,10 @@ function remainingLabel(time: string): string {
   return `剩余${diff}天`
 }
 
-export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDelete }: Props) {
+export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, onToggleDone, onDelete }: Props) {
   const isDone = todo.status === 'done'
   const deadline = todo.taskType === 'deadline'
+  const sz = SIZE_MAP[iconSize]
 
   return (
     <div
@@ -44,12 +52,13 @@ export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDe
       {/* 完成按钮 */}
       <button
         onClick={e => { e.stopPropagation(); onToggleDone() }}
+        style={{ width: sz.check, height: sz.check }}
         className={`
-          w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors
+          rounded border-2 flex items-center justify-center shrink-0 transition-colors
           ${isDone ? 'bg-[#007acc] border-[#007acc]' : 'border-[#5a5a5a] hover:border-[#007acc]'}
         `}
       >
-        {isDone && <Check size={12} strokeWidth={3} className="text-white" />}
+        {isDone && <Check size={sz.checkIcon} strokeWidth={3} className="text-white" />}
       </button>
 
       {/* 主内容 */}
@@ -58,39 +67,39 @@ export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDe
           {/* 标签颜色条 */}
           {tag && (
             <span
-              className="w-1 h-4 rounded shrink-0"
-              style={{ backgroundColor: tag.color }}
+              style={{ width: 4, height: sz.check, backgroundColor: tag.color }}
+              className="rounded shrink-0"
             />
           )}
           {/* 象限标记 */}
-          <span className={`text-[11px] ${QUADRANT_COLORS[todo.quadrant] ?? 'text-gray-400'}`}>
+          <span className={`${sz.text} ${QUADRANT_COLORS[todo.quadrant] ?? 'text-gray-400'}`}>
             {QUADRANT_LABELS[todo.quadrant] ?? ''}
           </span>
           {/* 标签名 */}
-          {tag && <span className="text-[11px] text-[#6a6a6a]">{tag.name}</span>}
+          {tag && <span className={`${sz.text} text-[#6a6a6a]`}>{tag.name}</span>}
         </div>
-        <p className={`text-[14px] leading-snug ${isDone ? 'line-through text-[#6a6a6a]' : 'text-[#d4d4d4]'}`}>
+        <p className={`${sz.title} leading-snug ${isDone ? 'line-through text-[#6a6a6a]' : 'text-[#d4d4d4]'}`}>
           {todo.title}
         </p>
         {todo.description && (
-          <p className="text-[12px] text-[#6a6a6a] mt-0.5 truncate">{todo.description}</p>
+          <p className={`${sz.desc} text-[#6a6a6a] mt-0.5 truncate`}>{todo.description}</p>
         )}
       </div>
 
       {/* 右下角：截止 / 计划结束标准 */}
       {deadline && todo.time ? (
-        <span className={`text-[11px] shrink-0 self-end ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
+        <span className={`${sz.text} shrink-0 self-end ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
           {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
         </span>
       ) : !deadline && todo.endCriteria ? (
-        <span className="text-[11px] text-[#6a6a6a] shrink-0 self-end max-w-[120px] truncate" title={todo.endCriteria}>
+        <span className={`${sz.text} text-[#6a6a6a] shrink-0 self-end max-w-[120px] truncate`} title={todo.endCriteria}>
           🎯 {todo.endCriteria}
         </span>
       ) : null}
 
       {/* date label for non-date-grouped views */}
       {showRemaining && (
-        <span className="text-[10px] text-[#6a6a6a] shrink-0 self-end ml-1">{todo.date}</span>
+        <span className={`${sz.sub} text-[#6a6a6a] shrink-0 self-end ml-1`}>{todo.date}</span>
       )}
 
       {/* 删除 */}
@@ -99,7 +108,7 @@ export function TodoItem({ todo, tag, showRemaining, onClick, onToggleDone, onDe
         className="shrink-0 p-1 text-[#6a6a6a] hover:text-[#e81123] opacity-0 group-hover:opacity-100 transition-all"
         title="删除"
       >
-        <Trash2 size={14} />
+        <Trash2 size={sz.checkIcon + 2} />
       </button>
     </div>
   )
