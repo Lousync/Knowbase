@@ -57,7 +57,7 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
   }
 
   return (
-    <aside className="w-56 bg-[#252526] border-r border-[#3c3c3c] flex flex-col h-full shrink-0">
+    <aside className="w-full bg-[#252526] flex flex-col h-full shrink-0">
       <div className="px-4 py-4 border-b border-[#3c3c3c]">
         <h1 className="text-sm font-semibold text-[#cccccc] select-none">📝 博客</h1>
       </div>

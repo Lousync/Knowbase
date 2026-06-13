@@ -74,7 +74,7 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
   const timeLabel = selectedDate ? relativeTime(selectedDate) : ''
 
   return (
-    <div className="w-[280px] shrink-0 bg-[#252526] border-r border-[#3c3c3c] flex flex-col select-none">
+    <div className="w-full shrink-0 bg-[#252526] flex flex-col select-none">
       {/* header */}
       <div className="px-4 py-3 border-b border-[#3c3c3c] space-y-2">
         <div className="flex items-center justify-between">
