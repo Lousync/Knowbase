@@ -138,7 +138,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
   if (!page) return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="border-2 border-[#3c3c3c] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
+      <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
     </div>
   )
 
@@ -155,23 +155,23 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
           <div className="flex items-center gap-2.5">
-            <button onClick={onBack} className="text-[13px] text-[#969696] hover:text-[#cccccc] flex items-center gap-1.5">
+            <button onClick={onBack} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
               <ArrowLeft size={17} /> 返回
             </button>
-            <button onClick={handleToggleStar} className={`${page.isStarred ? 'text-[#c5a332]' : 'text-[#6a6a6a]'} hover:text-[#c5a332]`}>
+            <button onClick={handleToggleStar} className={`${page.isStarred ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'} hover:text-[var(--warning)]`}>
               <Star size={17} fill={page.isStarred ? '#c5a332' : 'none'} />
             </button>
-            <span className="text-[11px] text-[#6a6a6a]">{getCategoryPath(page.categoryId)}</span>
+            <span className="text-[11px] text-[var(--text-muted)]">{getCategoryPath(page.categoryId)}</span>
           </div>
           <div className="flex items-center gap-2.5">
-            <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[#c5a332]' : 'bg-green-500'}`} />
-            <span className="text-[12px] text-[#969696]">{saving ? '未保存' : '已保存'}</span>
-            <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[#007acc] text-white' : 'text-[#969696] hover:text-[#cccccc]'}`} title="Ctrl+/">
+            <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
+            <span className="text-[12px] text-[var(--text-secondary)]">{saving ? '未保存' : '已保存'}</span>
+            <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
               {preview ? <Edit3 size={16} /> : <Eye size={16} />}
             </button>
-            <button onClick={handleDelete} className="p-1.5 rounded text-[#969696] hover:text-[#e81123]" title="删除">
+            <button onClick={handleDelete} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)]" title="删除">
               <Trash2 size={16} />
             </button>
           </div>
@@ -186,7 +186,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
             <input
-              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[#3c3c3c] placeholder:text-[#555] shrink-0"
+              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="页面标题"
@@ -198,7 +198,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 onChange={v => setContent(v || '')}
                 theme="vs-dark"
                 onMount={handleEditorMount}
-                loading={<div className="flex items-center justify-center h-full text-[#6a6a6a]">加载编辑器...</div>}
+                loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
                 options={{
                   fontSize: Math.round(13 * zoom),
                   fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
@@ -252,14 +252,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* Right: Backlinks */}
       {backlinks.length > 0 && (
-        <div className="w-48 shrink-0 bg-[#252526] border-l border-[#3c3c3c] flex flex-col">
-          <div className="px-3 py-2 border-b border-[#3c3c3c]">
-            <span className="text-[11px] font-semibold text-[#969696] uppercase">反向链接 · {backlinks.length}</span>
+        <div className="w-48 shrink-0 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col">
+          <div className="px-3 py-2 border-b border-[var(--border-color)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">反向链接 · {backlinks.length}</span>
           </div>
           <div className="flex-1 overflow-y-auto">
             {backlinks.map(bl => (
-              <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[#2a2d2e] border-b border-[#2d2d2d]">
-                <span className="text-[12px] text-[#cccccc] truncate block">{bl.title || '无标题'}</span>
+              <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[#2d2d2d]">
+                <span className="text-[12px] text-[var(--text-primary)] truncate block">{bl.title || '无标题'}</span>
               </div>
             ))}
           </div>

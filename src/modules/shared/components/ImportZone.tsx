@@ -108,8 +108,8 @@ export function ImportZone({ onImport, children, className }: Props) {
 
       {/* 拖拽遮罩 */}
       {dragging && (
-        <div className="absolute inset-0 z-40 bg-[#007acc20] border-2 border-dashed border-[#007acc] rounded flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-2 text-[#007acc]">
+        <div className="absolute inset-0 z-40 bg-[#007acc20] border-2 border-dashed border-[var(--accent)] rounded flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-[var(--accent)]">
             <FileText size={48} strokeWidth={1.5} />
             <span className="text-[15px] font-medium">释放文件以导入</span>
             <span className="text-[12px] opacity-70">支持 .md / .txt</span>

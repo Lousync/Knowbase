@@ -1,22 +1,67 @@
 @import 'tailwindcss';
 
-/* ===== VS Code 深色主题根变量 ===== */
+/* ===== 设计令牌（CSS 自定义属性） =====
+   组件中使用 var() 引用这些变量，如 bg-[var(--bg-primary)]
+   切换 html.light class 即可切换整套配色 */
+
 :root {
+  /* 背景 */
   --bg-primary: #1e1e1e;
   --bg-secondary: #252526;
   --bg-tertiary: #2d2d2d;
-  --border-color: #3c3c3c;
-  --text-primary: #cccccc;
-  --text-secondary: #969696;
-  --text-muted: #6a6a6a;
-  --accent: #007acc;
-  --accent-hover: #1a8ad4;
-  --danger: #e81123;
+  --bg-hover: #2a2d2e;
+  --bg-selected: #094771;
   --sidebar-bg: #252526;
   --input-bg: #3c3c3c;
   --card-bg: #2d2d2d;
+
+  /* 文字 */
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --text-muted: #6a6a6a;
+  --text-disabled: #555555;
+
+  /* 强调 */
+  --accent: #007acc;
+  --accent-hover: #1a8ad4;
+  --danger: #e81123;
+  --success: #4ec9b0;
+  --warning: #c5a332;
+
+  /* 边框 / 分割 */
+  --border-color: #3c3c3c;
+
+  /* 字体 */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
 
+/* ===== 浅色主题覆写 ===== */
+html.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f3f3;
+  --bg-tertiary: #ececec;
+  --bg-hover: #e8e8e8;
+  --bg-selected: #d0e4f7;
+  --sidebar-bg: #f3f3f3;
+  --input-bg: #ffffff;
+  --card-bg: #f9f9f9;
+
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+  --text-disabled: #aaaaaa;
+
+  --accent: #0078d4;
+  --accent-hover: #106ebe;
+  --danger: #d01020;
+  --success: #107c10;
+  --warning: #8a6d15;
+
+  --border-color: #e0e0e0;
+}
+
+/* ===== 全局基础 ===== */
 html, body, #root {
   height: 100%;
   margin: 0;
@@ -27,7 +72,7 @@ html, body, #root {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   -webkit-user-drag: none;
@@ -37,19 +82,16 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(128, 128, 128, 0.3);
   border-radius: 5px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.2); }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(128, 128, 128, 0.5); }
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* ===== 选中文本 ===== */
-::selection { background-color: rgba(0, 122, 204, 0.4); }
-
-/* ===== 拖拽区域辅助 ===== */
-
+::selection { background-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 /* ===== 输入框基础样式 ===== */
 input, textarea, select {
@@ -67,64 +109,62 @@ input:focus, textarea:focus, select:focus {
 /* 允许文本选中的区域 */
 .monaco-editor,
 .monaco-editor *,
-.prose-content {
+.prose-content,
+.prose-content * {
   user-select: text;
   -webkit-user-drag: auto;
 }
 
-/* ===== Markdown 预览样式（VS Code 风格）===== */
-.prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: #e0e0e0; padding-bottom: 0.35rem; border-bottom: 1px solid #3c3c3c; }
-.prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: #d4d4d4; padding-bottom: 0.25rem; border-bottom: 1px solid #2d2d2d; }
-.prose-content h3 { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.3rem; color: #d4d4d4; }
+/* ===== Markdown 预览样式 ===== */
+.prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: var(--text-primary); padding-bottom: 0.35rem; border-bottom: 1px solid var(--border-color); }
+.prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--text-primary); padding-bottom: 0.25rem; border-bottom: 1px solid var(--bg-tertiary); }
+.prose-content h3 { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.3rem; color: var(--text-primary); }
 .prose-content p { margin: 0.4rem 0; line-height: 1.75; }
-.prose-content strong { color: #e8e8e8; font-weight: 700; }
-.prose-content em { color: #d4d4d4; font-style: italic; }
+.prose-content strong { color: var(--text-primary); font-weight: 700; }
+.prose-content em { color: var(--text-secondary); font-style: italic; }
 .prose-content ul, .prose-content ol { padding-left: 1.5rem; margin: 0.4rem 0; }
 .prose-content li { margin: 0.2rem 0; }
 .prose-content blockquote {
-  border-left: 3px solid #007acc;
+  border-left: 3px solid var(--accent);
   padding-left: 1rem; margin: 0.6rem 0;
-  color: #969696;
+  color: var(--text-secondary);
 }
 .prose-content code {
-  background: rgba(255,255,255,0.08);
+  background: rgba(128,128,128,0.12);
   padding: 0.125rem 0.375rem; border-radius: 3px;
-  font-size: 0.875em; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.875em; font-family: var(--font-mono);
 }
 .prose-content pre {
-  background: #1e1e1e; border: 1px solid #3c3c3c;
+  background: var(--bg-primary); border: 1px solid var(--border-color);
   padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.6rem 0;
 }
 .prose-content pre code { background: none; padding: 0; }
 .prose-content img { max-width: 100%; border-radius: 6px; margin: 0.5rem 0; }
-.prose-content hr { border: none; border-top: 1px solid #3c3c3c; margin: 1.2rem 0; }
-.prose-content a { color: #007acc; text-decoration: none; }
+.prose-content hr { border: none; border-top: 1px solid var(--border-color); margin: 1.2rem 0; }
+.prose-content a { color: var(--accent); text-decoration: none; }
 .prose-content a:hover { text-decoration: underline; }
 .prose-content table { border-collapse: collapse; width: 100%; margin: 0.6rem 0; }
 .prose-content th, .prose-content td {
-  border: 1px solid #3c3c3c; padding: 0.4rem 0.6rem; text-align: left;
+  border: 1px solid var(--border-color); padding: 0.4rem 0.6rem; text-align: left;
 }
-.prose-content th { background: #2d2d2d; font-weight: 600; }
+.prose-content th { background: var(--bg-tertiary); font-weight: 600; }
 
-/* ===== marked GFM 新增元素 ===== */
-.prose-content del { color: #6a6a6a; text-decoration: line-through; }
+.prose-content del { color: var(--text-muted); text-decoration: line-through; }
 .prose-content input[type="checkbox"] {
-  margin-right: 0.4rem; accent-color: #007acc; pointer-events: none;
+  margin-right: 0.4rem; accent-color: var(--accent); pointer-events: none;
 }
 .prose-content ol ol, .prose-content ul ul, .prose-content ol ul, .prose-content ul ol { margin: 0; }
-.prose-content details { margin: 0.6rem 0; padding: 0.5rem 1rem; border: 1px solid #3c3c3c; border-radius: 4px; }
-.prose-content summary { cursor: pointer; color: #cccccc; font-weight: 500; }
+.prose-content details { margin: 0.6rem 0; padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; }
+.prose-content summary { cursor: pointer; color: var(--text-primary); font-weight: 500; }
 .prose-content kbd {
-  background: #3c3c3c; color: #cccccc; padding: 0.1rem 0.4rem; border-radius: 3px;
-  border: 1px solid #555; font-size: 0.85em; font-family: inherit;
+  background: var(--input-bg); color: var(--text-primary); padding: 0.1rem 0.4rem; border-radius: 3px;
+  border: 1px solid var(--text-disabled); font-size: 0.85em; font-family: inherit;
 }
-
 
 /* ===== 工具类 ===== */
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
 
-/* 隐藏 number input 的上下箭头 */
 .no-spinner::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .no-spinner { -moz-appearance: textfield; }

@@ -67,39 +67,39 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   }, [])
 
   if (!loaded) {
-    return <div className="flex-1 flex items-center justify-center text-[#6a6a6a] bg-[#1e1e1e]">加载中...</div>
+    return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-primary)]">加载中...</div>
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e]">
+    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#3c3c3c] bg-[#252526] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onCancel} className="flex items-center gap-1.5 text-[13px] text-[#969696] hover:text-[#cccccc]">
+          <button onClick={onCancel} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             <ArrowLeft size={15} /> 返回
           </button>
-          <div className="w-px h-4 bg-[#3c3c3c]" />
-          <span className="text-[13px] text-[#cccccc] font-medium">{date}</span>
+          <div className="w-px h-4 bg-[var(--input-bg)]" />
+          <span className="text-[13px] text-[var(--text-primary)] font-medium">{date}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#6a6a6a] min-w-[60px] text-right">
+          <span className="text-[11px] text-[var(--text-muted)] min-w-[60px] text-right">
             {saving ? '保存中...' : lastSaved ? '已保存 ' + fmtTime(lastSaved) : ''}
           </span>
           <button onClick={() => setShowPreview(!showPreview)}
-            className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[#37373d] text-[#cccccc]' : 'text-[#969696] hover:bg-[#2a2d2e]')}
+            className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[#37373d] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]')}
             title="Ctrl+/">
             {showPreview ? <Code size={13} /> : <Eye size={13} />}
             {showPreview ? '源码' : '预览'}
           </button>
           <button onClick={handleSaveAndClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">
             完成
           </button>
         </div>
       </div>
 
       {/* content */}
-      <div className="flex-1 overflow-hidden bg-[#1e1e1e]">
+      <div className="flex-1 overflow-hidden bg-[var(--bg-primary)]">
         {showPreview ? (
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">
@@ -112,7 +112,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             value={contentMd}
             onChange={handleChange}
             theme="vs-dark"
-            loading={<div className="flex items-center justify-center h-full text-[#6a6a6a]">加载编辑器...</div>}
+            loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
               fontSize: Math.round(14 * zoom),
               fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",

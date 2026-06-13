@@ -11,9 +11,9 @@ export function TitleBar() {
 
   return (
     <div
-      className="flex items-center justify-between h-9 bg-[#2d2d2d] border-b border-[#3c3c3c] select-none shrink-0 drag-region"
+      className="flex items-center justify-between h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
-      <div className="flex items-center gap-2 px-3 text-sm text-[#cccccc]">
+      <div className="flex items-center gap-2 px-3 text-sm text-[var(--text-primary)]">
         <span className="text-base">📝</span>
         <span className="font-medium text-[13px]">KnowledgeRecorder</span>
       </div>
@@ -39,7 +39,7 @@ function WinBtn({ children, onClick, title, isClose }: {
 }) {
   return (
     <button onClick={onClick} title={title}
-      className={`flex items-center justify-center w-11 h-full transition-colors duration-100 ${isClose ? 'text-[#cccccc] hover:bg-[#e81123] hover:text-white' : 'text-[#cccccc] hover:bg-[#3e3e3e]'}`}>
+      className={`flex items-center justify-center w-11 h-full transition-colors duration-100 ${isClose ? 'text-[var(--text-primary)] hover:bg-[var(--danger)] hover:text-white' : 'text-[var(--text-primary)] hover:bg-[#3e3e3e]'}`}>
       {children}
     </button>
   )

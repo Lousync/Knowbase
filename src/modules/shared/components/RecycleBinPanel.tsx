@@ -58,28 +58,28 @@ export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-[#252526] border border-[#3c3c3c] rounded-lg w-[500px] max-h-[520px] shadow-2xl flex flex-col"
+        className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[500px] max-h-[520px] shadow-2xl flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#3c3c3c] shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)] shrink-0">
           <div className="flex items-center gap-2">
-            <Trash2 size={16} className="text-[#969696]" />
-            <h3 className="text-[14px] font-medium text-[#cccccc]">{MODULE_LABEL[module]}</h3>
-            <span className="text-[11px] text-[#6a6a6a]">· {items.length} 项</span>
+            <Trash2 size={16} className="text-[var(--text-secondary)]" />
+            <h3 className="text-[14px] font-medium text-[var(--text-primary)]">{MODULE_LABEL[module]}</h3>
+            <span className="text-[11px] text-[var(--text-muted)]">· {items.length} 项</span>
           </div>
           <div className="flex items-center gap-1">
             {items.length > 0 && (
               <button
                 onClick={handleEmptyAll}
-                className="px-2 py-1 text-[11px] text-[#e81123] hover:bg-[#e8112320] rounded transition-colors"
+                className="px-2 py-1 text-[11px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
               >
                 全部清空
               </button>
             )}
             <button
               onClick={onClose}
-              className="p-1 text-[#6a6a6a] hover:text-[#cccccc] transition-colors"
+              className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
             >
               <X size={16} />
             </button>
@@ -90,42 +90,42 @@ export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="border-2 border-[#3c3c3c] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
+              <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
             </div>
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-[#6a6a6a]">
+            <div className="flex flex-col items-center justify-center py-16 text-[var(--text-muted)]">
               <Trash2 size={36} className="mb-3 opacity-30" />
               <p className="text-[13px]">回收站为空</p>
-              <p className="text-[11px] mt-1 text-[#555]">删除的内容将在 30 天后自动清空</p>
+              <p className="text-[11px] mt-1 text-[var(--text-disabled)]">删除的内容将在 30 天后自动清空</p>
             </div>
           ) : (
             <div>
-              <div className="px-5 py-2 border-b border-[#3c3c3c] flex items-start gap-1.5 text-[11px] text-[#c5a332] bg-[#2a2a1e]">
+              <div className="px-5 py-2 border-b border-[var(--border-color)] flex items-start gap-1.5 text-[11px] text-[var(--warning)] bg-[#2a2a1e]">
                 <AlertCircle size={12} className="shrink-0 mt-0.5" />
                 <span>删除的内容将在 30 天后自动清空</span>
               </div>
               {items.map(item => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between px-5 py-3 border-b border-[#2d2d2d] hover:bg-[#2a2d2e] transition-colors"
+                  className="flex items-center justify-between px-5 py-3 border-b border-[#2d2d2d] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] text-[#cccccc] truncate">{item.title || '无标题'}</p>
-                    <p className="text-[10px] text-[#6a6a6a] mt-0.5">
+                    <p className="text-[13px] text-[var(--text-primary)] truncate">{item.title || '无标题'}</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
                       删除于 {item.deletedAt?.slice(0, 10)}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 ml-3">
                     <button
                       onClick={() => handleRestore(item.id)}
-                      className="p-1.5 rounded text-[#007acc] hover:bg-[#007acc20] transition-colors"
+                      className="p-1.5 rounded text-[var(--accent)] hover:bg-[#007acc20] transition-colors"
                       title="恢复"
                     >
                       <RotateCcw size={15} />
                     </button>
                     <button
                       onClick={() => handlePermanentDelete(item.id)}
-                      className="p-1.5 rounded text-[#969696] hover:text-[#e81123] hover:bg-[#e8112320] transition-colors"
+                      className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)] hover:bg-[#e8112320] transition-colors"
                       title="永久删除"
                     >
                       <Trash2 size={15} />

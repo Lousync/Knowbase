@@ -1,6 +1,6 @@
 {
   "name": "knowledge-recorder",
-  "version": "1.0.0-beta",
+  "version": "1.1.0",
   "description": "本地 Windows 桌面博客/日程记录软件",
   "main": "./out/main/index.js",
   "scripts": {
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "iconv-lite": "^0.7.2",
     "lucide-react": "^1.0.0",
     "marked": "^18.0.5",
     "monaco-editor": "^0.55.1",

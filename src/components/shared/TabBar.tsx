@@ -15,7 +15,7 @@ interface TabBarProps {
 
 export function TabBar({ activeTab, onChange }: TabBarProps) {
   return (
-    <div className="flex items-center h-9 bg-[#252526] border-b border-[#3c3c3c] select-none shrink-0">
+    <div className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] select-none shrink-0">
       {tabs.map(tab => (
         <button
           key={tab.id}
@@ -24,8 +24,8 @@ export function TabBar({ activeTab, onChange }: TabBarProps) {
             flex items-center gap-1.5 h-full px-4 text-[13px]
             border-b-2 transition-colors duration-100
             ${activeTab === tab.id
-              ? 'text-[#ffffff] border-[#007acc] bg-[#1e1e1e]'
-              : 'text-[#969696] border-transparent hover:text-[#cccccc] hover:bg-[#2d2d2d]'
+              ? 'text-[#ffffff] border-[var(--accent)] bg-[var(--bg-primary)]'
+              : 'text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
             }
           `}
         >

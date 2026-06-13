@@ -111,34 +111,34 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-[#252526] border border-[#3c3c3c] rounded-lg w-[500px] shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#3c3c3c]">
-          <h3 className="text-[14px] font-medium text-[#cccccc]">{initial.title ? '编辑任务' : '新建任务'}</h3>
-          <button onClick={onClose} className="p-1 text-[#6a6a6a] hover:text-[#cccccc]"><X size={16} /></button>
+      <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[500px] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
+          <h3 className="text-[14px] font-medium text-[var(--text-primary)]">{initial.title ? '编辑任务' : '新建任务'}</h3>
+          <button onClick={onClose} className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={16} /></button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           <Field label="标题">
             <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               placeholder="任务标题"
-              className="w-full px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none"
+              className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none"
             />
           </Field>
 
           <Field label="描述">
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               placeholder="可选描述" rows={2}
-              className="w-full px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none resize-none"
+              className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none resize-none"
             />
           </Field>
 
           <Field label="任务类型">
             <div className="flex gap-2">
               <button onClick={() => setForm(f => ({ ...f, taskType: 'daily' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[#c5a332] bg-[#c5a33220] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[#c5a332] bg-[#c5a33220] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
               >⚡ 琐碎</button>
               <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[#007acc20] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
               >📋 计划类</button>
               <button onClick={() => {
                 const n = new Date()
@@ -147,7 +147,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
                 setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) })
                 setForm(f => ({ ...f, taskType: 'deadline', time: t }))
               }}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[var(--accent)] bg-[#007acc20] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
               >⏰ 截止类</button>
             </div>
           </Field>
@@ -155,30 +155,30 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
           {/* 截止时间 */}
           {form.taskType === 'deadline' && (
             <Field label="截止时间">
-              <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3c3c3c] space-y-3">
+              <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 border border-[var(--border-color)] space-y-3">
                 {/* 日期 */}
                 <div className="flex items-center gap-1.5">
                   <input type="text" inputMode="numeric" value={dStr.year}
                     onChange={e => onDeadlinePartChange('year', e.target.value)}
-                    className="w-[72px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
-                  <span className="text-[#6a6a6a] text-[13px] shrink-0">年</span>
+                    className="w-[72px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                  <span className="text-[var(--text-muted)] text-[13px] shrink-0">年</span>
                   <input type="text" inputMode="numeric" value={dStr.month}
                     onChange={e => onDeadlinePartChange('month', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
-                  <span className="text-[#6a6a6a] text-[13px] shrink-0">月</span>
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                  <span className="text-[var(--text-muted)] text-[13px] shrink-0">月</span>
                   <input type="text" inputMode="numeric" value={dStr.day}
                     onChange={e => onDeadlinePartChange('day', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
-                  <span className="text-[#6a6a6a] text-[13px] shrink-0">日</span>
-                  <span className="text-[#555] text-[14px] shrink-0 ml-2 mr-1">·</span>
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                  <span className="text-[var(--text-muted)] text-[13px] shrink-0">日</span>
+                  <span className="text-[var(--text-disabled)] text-[14px] shrink-0 ml-2 mr-1">·</span>
                   <input type="text" inputMode="numeric" value={dStr.hour}
                     onChange={e => onDeadlinePartChange('hour', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
-                  <span className="text-[#6a6a6a] text-[13px] shrink-0">时</span>
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                  <span className="text-[var(--text-muted)] text-[13px] shrink-0">时</span>
                   <input type="text" inputMode="numeric" value={dStr.minute}
                     onChange={e => onDeadlinePartChange('minute', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[#3c3c3c] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[#007acc] outline-none" />
-                  <span className="text-[#6a6a6a] text-[13px] shrink-0">分</span>
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                  <span className="text-[var(--text-muted)] text-[13px] shrink-0">分</span>
                 </div>
               </div>
               {timeWarning && (
@@ -191,7 +191,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
             <Field label="结束标准">
               <textarea value={form.endCriteria} onChange={e => setForm(f => ({ ...f, endCriteria: e.target.value }))}
                 placeholder="如：完成3个项目、读完5本书..." rows={2}
-                className="w-full px-3 py-2 bg-[#3c3c3c] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[#007acc] outline-none resize-none"
+                className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none resize-none"
               />
             </Field>
           )}
@@ -201,7 +201,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
               <div className="flex gap-2">
                 {QUADRANTS.map(q => (
                   <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
-                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[#007acc] bg-[#007acc20] text-[#d4d4d4]' : 'border-[#3c3c3c] text-[#969696] hover:border-[#555]'}`}
+                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[var(--accent)] bg-[#007acc20] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
                   >{q.label}</button>
                 ))}
               </div>
@@ -210,7 +210,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 
           <Field label="标签">
             {tags.length === 0 ? (
-              <p className="text-[12px] text-[#555] italic">暂无标签，使用右侧按钮创建</p>
+              <p className="text-[12px] text-[var(--text-disabled)] italic">暂无标签，使用右侧按钮创建</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {tags.map(t => (
@@ -224,10 +224,10 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
           </Field>
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-[#3c3c3c]">
-          <button onClick={onClose} className="px-4 py-1.5 text-[13px] text-[#969696] hover:text-[#cccccc]">取消</button>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border-color)]">
+          <button onClick={onClose} className="px-4 py-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">取消</button>
           <button onClick={handleSave} disabled={!canSave}
-            className="px-4 py-1.5 text-[13px] bg-[#007acc] text-white rounded hover:bg-[#1a8ad4] disabled:opacity-40"
+            className="px-4 py-1.5 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] disabled:opacity-40"
           >保存</button>
         </div>
       </div>
@@ -238,7 +238,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[11px] text-[#6a6a6a] mb-1 uppercase tracking-wider">{label}</label>
+      <label className="block text-[11px] text-[var(--text-muted)] mb-1 uppercase tracking-wider">{label}</label>
       {children}
     </div>
   )

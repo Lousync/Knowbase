@@ -11,8 +11,8 @@ import { MarkdownEditor } from './components/MarkdownEditor'
 
 type BlogView = 'list' | 'editor' | 'detail'
 
-export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom = 1 }: {
-  showLineNumbers?: boolean; sidebarOpen?: boolean; zoom?: number
+export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number> }: {
+  showLineNumbers?: boolean; sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>
 }) {
   const [view, setView] = useState<BlogView>('list')
   const [entries, setEntries] = useState<Entry[]>([])
@@ -72,8 +72,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   }
 
   return (
-    <div className="flex h-full bg-[#1e1e1e]">
-      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen}>
+    <div className="flex h-full bg-[var(--bg-primary)]">
+      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_blog}>
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">
             <Sidebar
@@ -85,8 +85,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           </div>
           <button
             onClick={() => setShowRecycleBin(v => !v)}
-            className={`flex items-center gap-2 px-4 py-2 text-[12px] border-t border-[#3c3c3c] transition-colors shrink-0 ${
-              showRecycleBin ? 'bg-[#094771] text-white' : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2d2e]'
+            className={`flex items-center gap-2 px-4 py-2 text-[12px] border-t border-[var(--border-color)] transition-colors shrink-0 ${
+              showRecycleBin ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
             <Trash2 size={14} /> 回收站
@@ -151,7 +151,7 @@ function EntryDetail({ entryId, isToday, onEdit, onDelete, onBack }: {
     })
   }, [])
 
-  if (!entry) return <div className="flex-1 flex items-center justify-center text-[#6a6a6a]">加载中...</div>
+  if (!entry) return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">加载中...</div>
 
   const handleDeleteClick = () => {
     if (skipDeleteConfirm) {
@@ -165,13 +165,13 @@ function EntryDetail({ entryId, isToday, onEdit, onDelete, onBack }: {
     <>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-8 py-6">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#3c3c3c]">
-            <button onClick={onBack} className="text-sm text-[#969696] hover:text-[#cccccc]">← 返回列表</button>
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-color)]">
+            <button onClick={onBack} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">← 返回列表</button>
             <div className="flex gap-2">
               {isToday && (
-                <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[#007acc] text-white rounded hover:bg-[#1a8ad4]">编辑</button>
+                <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
               )}
-              <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[#e81123] hover:bg-[#e8112320] rounded">删除</button>
+              <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[#e8112320] rounded">删除</button>
             </div>
           </div>
           <h1 className="text-2xl font-bold text-[#e0e0e0] mb-2">{entry.date}</h1>

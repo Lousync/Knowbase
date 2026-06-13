@@ -74,29 +74,29 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
   const timeLabel = selectedDate ? relativeTime(selectedDate) : ''
 
   return (
-    <div className="w-full shrink-0 bg-[#252526] flex flex-col select-none">
+    <div className="w-full shrink-0 bg-[var(--bg-secondary)] flex flex-col select-none">
       {/* header */}
-      <div className="px-4 py-3 border-b border-[#3c3c3c] space-y-2">
+      <div className="px-4 py-3 border-b border-[var(--border-color)] space-y-2">
         <div className="flex items-center justify-between">
-          <button onClick={onPrevMonth} className="p-1 hover:bg-[#3c3c3c] rounded text-[#969696] hover:text-[#cccccc]">
+          <button onClick={onPrevMonth} className="p-1 hover:bg-[var(--input-bg)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             <ChevronLeft size={16} />
           </button>
-          <span className="text-[14px] font-medium text-[#cccccc]">{year}年 {MONTHS[month - 1]}</span>
-          <button onClick={onNextMonth} className="p-1 hover:bg-[#3c3c3c] rounded text-[#969696] hover:text-[#cccccc]">
+          <span className="text-[14px] font-medium text-[var(--text-primary)]">{year}年 {MONTHS[month - 1]}</span>
+          <button onClick={onNextMonth} className="p-1 hover:bg-[var(--input-bg)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             <ChevronRight size={16} />
           </button>
         </div>
 
         <button
           onClick={onToday}
-          className="w-full text-[12px] py-1 bg-[#3c3c3c] text-[#cccccc] rounded hover:bg-[#4a4a4a] transition-colors"
+          className="w-full text-[12px] py-1 bg-[var(--input-bg)] text-[var(--text-primary)] rounded hover:bg-[#4a4a4a] transition-colors"
         >
           今天
         </button>
 
         {/* relative time hint */}
         {timeLabel && (
-          <div className="text-center text-[11px] text-[#6a6a6a]">{timeLabel}</div>
+          <div className="text-center text-[11px] text-[var(--text-muted)]">{timeLabel}</div>
         )}
 
         {/* view mode buttons */}
@@ -108,8 +108,8 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
               title={m.label}
               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] transition-colors ${
                 viewMode === m.id
-                  ? 'bg-[#007acc] text-white'
-                  : 'bg-[#2d2d2d] text-[#858585] hover:text-[#cccccc] hover:bg-[#3c3c3c]'
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'bg-[var(--bg-tertiary)] text-[#858585] hover:text-[var(--text-primary)] hover:bg-[var(--input-bg)]'
               }`}
             >
               {m.icon}
@@ -120,7 +120,7 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
         {/* quadrant chart button */}
         <button
           onClick={onQuadrantChart}
-          className="w-full flex items-center justify-center gap-1.5 text-[12px] py-1.5 border border-dashed border-[#4a4a4a] text-[#969696] rounded hover:border-[#007acc] hover:text-[#cccccc] transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 text-[12px] py-1.5 border border-dashed border-[#4a4a4a] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors"
         >
           <LayoutGrid size={13} />
           查看象限图
@@ -130,7 +130,7 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
       {/* weekday headers */}
       <div className="grid grid-cols-7 px-1 py-1.5">
         {WEEKDAYS.map(d => (
-          <div key={d} className="text-center text-[11px] text-[#6a6a6a] leading-6">{d}</div>
+          <div key={d} className="text-center text-[11px] text-[var(--text-muted)] leading-6">{d}</div>
         ))}
       </div>
 
@@ -151,12 +151,12 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
               onClick={() => onSelectDate(ds)}
               className={`
                 aspect-square flex flex-col items-center justify-center rounded text-[13px] relative transition-colors
-                ${isSelected ? 'bg-[#007acc] text-white' : isToday ? 'text-[#007acc] font-bold' : 'text-[#cccccc] hover:bg-[#3c3c3c]'}
+                ${isSelected ? 'bg-[var(--accent)] text-white' : isToday ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-primary)] hover:bg-[var(--input-bg)]'}
               `}
             >
               {day}
               {hasData && !isSelected && (
-                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#007acc]" />
+                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[var(--accent)]" />
               )}
               {deadlineNum > 0 && (
                 <span className={`absolute bottom-0.5 right-0.5 text-[9px] font-bold leading-none ${isSelected ? 'text-white' : 'text-[#d16969]'}`}>

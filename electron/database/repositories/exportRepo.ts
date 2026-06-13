@@ -1,7 +1,14 @@
 import { ipcMain, dialog, BrowserWindow, app } from 'electron'
 import { getDatabase, getDbPath } from '../connection'
-import { writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs'
+import { writeFileSync, mkdirSync, copyFileSync, existsSync, statSync } from 'fs'
 import { join, basename } from 'path'
+import * as iconv from 'iconv-lite'
+
+function encodeText(content: string, encoding: string): Buffer {
+  if (encoding === 'utf-8' || encoding === 'utf8') return Buffer.from(content, 'utf-8')
+  try { return iconv.encode(content, encoding) as Buffer }
+  catch { return Buffer.from(content, 'utf-8') }
+}
 
 // ---- row types ----
 interface EntryRow { id: string; title: string; content_md: string; content_html: string | null; date: string; created_at: string; updated_at: string; is_pinned: number; word_count: number }
@@ -169,21 +176,44 @@ export function registerExportHandlers(): void {
   })
 
   // ===== File I/O =====
-  ipcMain.handle('export:writeTextFile', (_e, filePath: string, content: string) => {
-    writeFileSync(filePath, content, 'utf-8')
+  ipcMain.handle('export:writeTextFile', (_e, filePath: string, content: string, encoding: string = 'utf-8') => {
+    const buf = encodeText(content, encoding)
+    writeFileSync(filePath, buf)
+    const size = statSync(filePath).size
+    return { filePath, size }
   })
 
   ipcMain.handle('export:copyDbFile', (_e, destPath: string) => {
     copyFileSync(getDbPath(), destPath)
+    const size = statSync(destPath).size
+    return { filePath: destPath, size }
   })
 
   // ===== Markdown batch export: writes multiple files into a directory =====
-  ipcMain.handle('export:writeMarkdownExport', (_e, dirPath: string, files: { relPath: string; content: string }[]) => {
-    for (const f of files) {
+  ipcMain.handle('export:writeMarkdownExport', (event, dirPath: string, files: { relPath: string; content: string }[], encoding: string = 'utf-8') => {
+    const results: { relPath: string; size: number }[] = []
+    let totalSize = 0
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
       const fullPath = join(dirPath, f.relPath)
-      const dir = join(fullPath, '..')
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      writeFileSync(fullPath, f.content, 'utf-8')
+      const targetDir = join(fullPath, '..')
+      if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+      const buf = encodeText(f.content, encoding)
+      writeFileSync(fullPath, buf)
+
+      const size = statSync(fullPath).size
+      results.push({ relPath: f.relPath, size })
+      totalSize += size
+
+      event.sender.send('export:markdownProgress', {
+        current: i + 1,
+        total: files.length,
+        currentFile: f.relPath,
+        phase: '写入文件'
+      })
     }
+
+    return { fileCount: files.length, totalSize, files: results }
   })
 }

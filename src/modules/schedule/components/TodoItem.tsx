@@ -46,8 +46,8 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
   return (
     <div
       className={`
-        flex items-center ${s.gap} ${s.padX} ${s.padY} bg-[#2d2d2d] border border-[#3c3c3c] rounded-md
-        cursor-pointer hover:border-[#007acc] transition-all group
+        flex items-center ${s.gap} ${s.padX} ${s.padY} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md
+        cursor-pointer hover:border-[var(--accent)] transition-all group
         ${isDone ? 'opacity-60 hover:opacity-90' : ''}
       `}
     >
@@ -57,7 +57,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
         style={{ width: s.check, height: s.check }}
         className={`
           rounded border-2 flex items-center justify-center shrink-0 transition-colors
-          ${isDone ? 'bg-[#007acc] border-[#007acc] hover:bg-[#1a8ad4]' : 'border-[#5a5a5a] hover:border-[#007acc]'}
+          ${isDone ? 'bg-[var(--accent)] border-[var(--accent)] hover:bg-[var(--accent-hover)]' : 'border-[#5a5a5a] hover:border-[var(--accent)]'}
         `}
         title={isDone ? '恢复任务' : '完成任务'}
       >
@@ -75,13 +75,13 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
           <span className={`${s.meta} ${QUADRANT_COLORS[todo.quadrant] ?? 'text-gray-400'}`}>
             {QUADRANT_LABELS[todo.quadrant] ?? ''}
           </span>
-          {tag && <span className={`${s.meta} text-[#6a6a6a]`}>{tag.name}</span>}
+          {tag && <span className={`${s.meta} text-[var(--text-muted)]`}>{tag.name}</span>}
         </div>
-        <p className={`${s.title} ${s.mTop} leading-snug font-medium ${isDone ? 'line-through text-[#6a6a6a]' : 'text-[#d4d4d4]'}`}>
+        <p className={`${s.title} ${s.mTop} leading-snug font-medium ${isDone ? 'line-through text-[var(--text-muted)]' : 'text-[#d4d4d4]'}`}>
           {todo.title}
         </p>
         {todo.description && (
-          <p className={`${s.desc} text-[#6a6a6a] mt-0.5 truncate`}>{todo.description}</p>
+          <p className={`${s.desc} text-[var(--text-muted)] mt-0.5 truncate`}>{todo.description}</p>
         )}
       </div>
 
@@ -92,19 +92,19 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
             {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
           </span>
         ) : !deadline && todo.endCriteria ? (
-          <span className={`${s.meta} text-[#6a6a6a] max-w-[100px] truncate`} title={todo.endCriteria}>
+          <span className={`${s.meta} text-[var(--text-muted)] max-w-[100px] truncate`} title={todo.endCriteria}>
             🎯 {todo.endCriteria}
           </span>
         ) : <span />}
         {showRemaining && (
-          <span className={`${s.meta} text-[#6a6a6a]`}>{todo.date}</span>
+          <span className={`${s.meta} text-[var(--text-muted)]`}>{todo.date}</span>
         )}
       </div>
 
       {/* 删除 */}
       <button
         onClick={e => { e.stopPropagation(); onDelete() }}
-        className="shrink-0 p-1 text-[#6a6a6a] hover:text-[#e81123] opacity-0 group-hover:opacity-100 transition-all"
+        className="shrink-0 p-1 text-[var(--text-muted)] hover:text-[var(--danger)] opacity-0 group-hover:opacity-100 transition-all"
         title="删除"
       >
         <Trash2 size={s.trash} />

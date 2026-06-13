@@ -9,18 +9,22 @@ interface Props {
   visible: boolean
   className?: string
   children: React.ReactNode
+  /** Pre-loaded persisted width — when provided, skips async getSetting */
+  initialWidth?: number
 }
 
-export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children }: Props) {
-  const [width, setWidth] = useState(defaultWidth)
+export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth }: Props) {
+  const [width, setWidth] = useState(initialWidth ?? defaultWidth)
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
-  const widthRef = useRef(defaultWidth)
+  const widthRef = useRef(initialWidth ?? defaultWidth)
   const startXRef = useRef(0)
   const startWRef = useRef(0)
+  const loadedRef = useRef(initialWidth != null)  // skip async load if pre-loaded
 
-  // 加载持久化宽度
+  // 加载持久化宽度（仅在未预加载时）
   useEffect(() => {
+    if (loadedRef.current) return
     getSetting(storageKey).then(v => {
       if (typeof v === 'number') {
         const clamped = Math.max(minWidth, Math.min(maxWidth, v))
@@ -79,7 +83,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
   return (
     <div
       ref={panelRef}
-      className={`shrink-0 relative flex flex-col bg-[#252526] overflow-hidden ${className}`}
+      className={`shrink-0 relative flex flex-col bg-[var(--bg-secondary)] overflow-hidden ${className}`}
       style={{
         width: displayWidth,
         borderRightWidth: showBorder ? 1 : 0,
@@ -93,7 +97,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       {visible && (
         <div
           className={`absolute top-0 right-0 w-1.5 h-full z-30 transition-colors ${
-            dragging ? 'bg-[#007acc] cursor-col-resize' : 'cursor-col-resize hover:bg-[#007acc30]'
+            dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize hover:bg-[#007acc30]'
           }`}
           style={{ marginRight: -3 }}
           onMouseDown={onHandleMouseDown}

@@ -79,6 +79,10 @@ export interface AllExportData {
   blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
 }
 
+export interface ExportFileResult { filePath: string; size: number }
+export interface ExportMarkdownProgress { current: number; total: number; currentFile: string; phase: string }
+export interface ExportMarkdownResult { fileCount: number; totalSize: number; files: { relPath: string; size: number }[] }
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<void>
@@ -141,9 +145,10 @@ export interface ElectronAPI {
   exportAllData: () => Promise<AllExportData>
   showExportSaveDialog: (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => Promise<{ filePath: string | null }>
   showExportOpenDirDialog: () => Promise<{ dirPath: string | null }>
-  writeExportTextFile: (filePath: string, content: string) => Promise<void>
-  copyDbFile: (destPath: string) => Promise<void>
-  writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[]) => Promise<void>
+  writeExportTextFile: (filePath: string, content: string, encoding?: string) => Promise<ExportFileResult>
+  copyDbFile: (destPath: string) => Promise<ExportFileResult>
+  writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[], encoding?: string) => Promise<ExportMarkdownResult>
+  onMarkdownExportProgress: (cb: (p: ExportMarkdownProgress) => void) => () => void
 }
 
 declare global { interface Window { api: ElectronAPI } }
