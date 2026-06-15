@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, deleteKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting } from '../../../lib/ipc'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting } from '../../../lib/ipc'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
@@ -121,7 +121,6 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const handleDelete = async () => {
     if (!page) return
     if (skipDeleteConfirm) {
-      await deleteKnowledgePage(page.id)
       onDeleted()
     } else {
       setShowDeleteConfirm(true)
@@ -246,7 +245,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               setSkipDeleteConfirm(true)
             }
             setShowDeleteConfirm(false)
-            deleteKnowledgePage(page!.id).then(() => onDeleted())
+            onDeleted()
           }}
           onCancel={() => setShowDeleteConfirm(false)}
         />

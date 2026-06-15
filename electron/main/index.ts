@@ -66,6 +66,13 @@ function registerWindowHandlers(): void {
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
+  // 窗口置顶（锁定）
+  ipcMain.handle('window:setAlwaysOnTop', (_e, onTop: boolean) => {
+    mainWindow?.setAlwaysOnTop(onTop)
+    return mainWindow?.isAlwaysOnTop() ?? false
+  })
+  ipcMain.handle('window:isAlwaysOnTop', () => mainWindow?.isAlwaysOnTop() ?? false)
+
   mainWindow?.on('maximize', () => mainWindow?.webContents.send('window:maximizeChange', true))
   mainWindow?.on('unmaximize', () => mainWindow?.webContents.send('window:maximizeChange', false))
 

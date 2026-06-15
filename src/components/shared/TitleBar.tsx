@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react'
-import { Minus, Square, X, Copy } from 'lucide-react'
+import { Minus, Square, X, Copy, Pin } from 'lucide-react'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
+  const [isPinned, setIsPinned] = useState(false)
 
   useEffect(() => {
     window.api?.isMaximized()?.then(setIsMaximized)
+    window.api?.isAlwaysOnTop()?.then(setIsPinned)
     window.api?.onMaximizeChange?.((v: boolean) => setIsMaximized(v))
   }, [])
+
+  function togglePin() {
+    const next = !isPinned
+    setIsPinned(next)
+    window.api?.setAlwaysOnTop(next)
+  }
 
   return (
     <div
@@ -21,6 +29,9 @@ export function TitleBar() {
       <div className="flex items-center h-full">
         {/* 窗口控制按钮 */}
         <div className="flex h-full no-drag">
+          <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'}>
+            <Pin size={14} strokeWidth={1.5} fill={isPinned ? 'var(--text-primary)' : 'transparent'} />
+          </WinBtn>
           <WinBtn onClick={() => window.api?.minimize()} title="最小化"><Minus size={16} strokeWidth={1.5} /></WinBtn>
           <WinBtn onClick={() => window.api?.maximize()} title={isMaximized ? '还原' : '最大化'}>
             {isMaximized ? <Copy size={14} strokeWidth={1.5} /> : <Square size={14} strokeWidth={1.5} />}

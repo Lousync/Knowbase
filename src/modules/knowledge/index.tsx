@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FileText, Plus, Search, X, Star, ChevronUp, ChevronDown, AlertCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Trash2, Download } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
@@ -9,6 +9,7 @@ import {
 } from '../../lib/ipc'
 import { CategoryTree } from './components/CategoryTree'
 import { PageEditor } from './components/PageEditor'
+import { PageTabBar } from './components/PageTabBar'
 import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -18,7 +19,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [pages, setPages] = useState<KnowledgePage[]>([])
   const [starredPages, setStarredPages] = useState<KnowledgePage[]>([])
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null)
-  const [selectedPageId, setSelectedPageId] = useState<string | null>(null)
+  const [activePageId, setActivePageId] = useState<string | null>(null)
+  const [openPageIds, setOpenPageIds] = useState<string[]>([])
+  const [openPageTitles, setOpenPageTitles] = useState<Record<string, string>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -26,6 +29,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showPageListPanel, setShowPageListPanel] = useState(true)
   const [showRecycleBin, setShowRecycleBin] = useState(false)
+
+  // Refs 避免 handler 闭包陈旧
+  const openPageIdsRef = useRef(openPageIds)
+  const activePageIdRef = useRef(activePageId)
+  useEffect(() => { openPageIdsRef.current = openPageIds }, [openPageIds])
+  useEffect(() => { activePageIdRef.current = activePageId }, [activePageId])
 
   // 全局侧栏重新展开时，重置面板折叠状态
   useEffect(() => {
@@ -82,7 +91,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleCreatePage = async () => {
     try {
       const p = await createKnowledgePage({ categoryId: selectedCatId })
-      setSelectedPageId(p.id)
+      handleOpenPage(p.id)
       refreshPages()
     } catch (e) { console.error(e) }
   }
@@ -113,23 +122,59 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }
 
-  const handleSelectPage = (id: string) => setSelectedPageId(id)
+  const handleOpenPage = useCallback((pageId: string) => {
+    const existing = pages.find(p => p.id === pageId) || starredPages.find(p => p.id === pageId)
+    if (existing) {
+      setOpenPageTitles(prev => ({ ...prev, [pageId]: existing.title }))
+    }
+    setOpenPageIds(prev => prev.includes(pageId) ? prev : [...prev, pageId])
+    setActivePageId(pageId)
+  }, [pages, starredPages])
 
-  const handleDeletePage = async (id: string) => {
+  const handleCloseTab = useCallback((pageId: string) => {
+    const currentIds = openPageIdsRef.current
+    const idx = currentIds.indexOf(pageId)
+    if (idx === -1) return
+
+    const nextIds = currentIds.filter(id => id !== pageId)
+    setOpenPageIds(nextIds)
+    setOpenPageTitles(prev => {
+      const next = { ...prev }
+      delete next[pageId]
+      return next
+    })
+
+    if (activePageIdRef.current === pageId) {
+      if (nextIds.length === 0) {
+        setActivePageId(null)
+      } else {
+        const newIdx = Math.min(idx, nextIds.length - 1)
+        setActivePageId(nextIds[newIdx])
+      }
+    }
+  }, [])
+
+  const handlePageDeleted = useCallback(async (id: string) => {
     await deleteKnowledgePage(id)
-    setSelectedPageId(null)
+    handleCloseTab(id)
     refreshPages(); refreshStarred()
-  }
+  }, [handleCloseTab, refreshPages, refreshStarred])
+
+  const handleReorderTabs = useCallback((newOrder: string[]) => {
+    setOpenPageIds(newOrder)
+  }, [])
 
   const handleMovePage = async (id: string, direction: 'up' | 'down') => {
     await moveKnowledgePage(id, direction)
     refreshPages()
   }
 
-  const handleBackToList = () => {
-    setSelectedPageId(null)
+  const handleBackToList = useCallback(() => {
+    if (activePageIdRef.current) {
+      handleCloseTab(activePageIdRef.current)
+    }
     refreshPages(); refreshStarred()
-  }
+  }, [handleCloseTab, refreshPages, refreshStarred])
 
   const handleRefresh = () => {
     refreshPages(); refreshStarred()
@@ -137,8 +182,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // 实时更新侧边栏页面列表中的标题（无需等待保存）
   const handleTitleChange = useCallback((title: string) => {
-    setPages(prev => prev.map(p => p.id === selectedPageId ? { ...p, title } : p))
-  }, [selectedPageId])
+    if (!activePageIdRef.current) return
+    const pageId = activePageIdRef.current
+    setPages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p))
+    setOpenPageTitles(prev => ({ ...prev, [pageId]: title }))
+  }, [])
 
   const getCategoryPath = (catId: string | null): string => {
     if (!catId) return '全部页面'
@@ -181,7 +229,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             <CategoryTree
               categories={categories}
               selectedId={selectedCatId}
-              onSelect={(id) => { setSelectedCatId(id); setSelectedPageId(null); setSearchQuery('') }}
+              onSelect={(id) => { setSelectedCatId(id); setSearchQuery('') }}
               onCreate={handleCreateCategory}
               onRename={handleRenameCategory}
               onDelete={handleDeleteCategory}
@@ -195,9 +243,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                   {starredPages.map(p => (
                     <div
                       key={p.id}
-                      onClick={() => handleSelectPage(p.id)}
+                      onClick={() => handleOpenPage(p.id)}
                       className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[14px] hover:bg-[var(--bg-hover)] ${
-                        selectedPageId === p.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)]'
+                        activePageId === p.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)]'
                       }`}
                     >
                       <Star size={17} className="text-[var(--warning)] shrink-0" fill="#c5a332" />
@@ -289,9 +337,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                 .map((p, idx) => (
                   <div
                     key={p.id}
-                    onClick={() => handleSelectPage(p.id)}
+                    onClick={() => handleOpenPage(p.id)}
                     className={`px-3 py-2 cursor-pointer border-b border-[#2d2d2d] hover:bg-[var(--bg-hover)] group ${
-                      selectedPageId === p.id ? 'bg-[var(--bg-selected)]' : ''
+                      activePageId === p.id ? 'bg-[var(--bg-selected)]' : ''
                     }`}
                   >
                     <div className="flex items-center gap-1.5">
@@ -332,16 +380,24 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       </ResizablePanel>
 
       {/* Right: Editor */}
-      <div className="flex-1 flex overflow-hidden">
-        {selectedPageId ? (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageTabBar
+          openPageIds={openPageIds}
+          activePageId={activePageId}
+          openPageTitles={openPageTitles}
+          onSelectTab={handleOpenPage}
+          onCloseTab={handleCloseTab}
+          onReorder={handleReorderTabs}
+        />
+        {activePageId ? (
           <PageEditor
-            pageId={selectedPageId}
+            pageId={activePageId}
             categories={categories}
             allPages={pages}
             zoom={zoom}
             onBack={handleBackToList}
-            onDeleted={() => handleDeletePage(selectedPageId)}
-            onNavigate={handleSelectPage}
+            onDeleted={() => handlePageDeleted(activePageId)}
+            onNavigate={handleOpenPage}
             onUpdate={handleRefresh}
             onTitleChange={handleTitleChange}
           />
@@ -361,7 +417,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         <RecycleBinPanel
           module="knowledge"
           onClose={() => setShowRecycleBin(false)}
-          onRestored={() => { refreshPages(); refreshStarred(); setSelectedPageId(null) }}
+          onRestored={() => { refreshPages(); refreshStarred() }}
         />
       )}
     </div>

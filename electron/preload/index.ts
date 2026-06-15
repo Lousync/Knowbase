@@ -8,6 +8,8 @@ const api = {
   onMaximizeChange: (cb: (v: boolean) => void) => {
     ipcRenderer.on('window:maximizeChange', (_e, v) => cb(v))
   },
+  setAlwaysOnTop: (onTop: boolean) => ipcRenderer.invoke('window:setAlwaysOnTop', onTop),
+  isAlwaysOnTop: () => ipcRenderer.invoke('window:isAlwaysOnTop'),
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),
   getEntries: (filter: unknown) => ipcRenderer.invoke('db:getEntries', filter),

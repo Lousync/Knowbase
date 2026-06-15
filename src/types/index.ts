@@ -89,6 +89,8 @@ export interface ElectronAPI {
   close: () => Promise<void>
   isMaximized: () => Promise<boolean>
   onMaximizeChange: (cb: (v: boolean) => void) => void
+  setAlwaysOnTop: (onTop: boolean) => Promise<boolean>
+  isAlwaysOnTop: () => Promise<boolean>
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<void>
   getEntries: (f: EntryFilter) => Promise<Entry[]>
