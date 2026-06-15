@@ -18,20 +18,21 @@ export interface ScheduleTodo {
   time: string | null; quadrant: number
   taskType: 'deadline' | 'plan' | 'daily'; tagId: string | null
   status: 'pending' | 'done'; sortOrder: number
-  endCriteria: string
+  endCriteria: string; parentId: string | null
   createdAt: string; updatedAt: string
   tag?: ScheduleTag | null
+  subtasks?: ScheduleTodo[]
 }
 export interface ScheduleTag { id: string; name: string; color: string }
 export interface CreateScheduleTodoDTO {
   title: string; description?: string; date: string; time?: string
   quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string
-  endCriteria?: string
+  endCriteria?: string; parentId?: string
 }
 export interface UpdateScheduleTodoDTO {
   title?: string; description?: string; date?: string; time?: string | null
   quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string | null
-  status?: string; endCriteria?: string
+  status?: string; endCriteria?: string; parentId?: string | null
 }
 
 // knowledge
@@ -107,6 +108,7 @@ export interface ElectronAPI {
   getScheduleDates: (yearMonth: string) => Promise<string[]>
   getScheduleMonthTodos: (yearMonth: string) => Promise<ScheduleTodo[]>
   getScheduleDeadlineCounts: (yearMonth: string) => Promise<Record<string, number>>
+  getScheduleSubtasks: (parentId: string) => Promise<ScheduleTodo[]>
   createScheduleTodo: (d: CreateScheduleTodoDTO) => Promise<ScheduleTodo>
   updateScheduleTodo: (id: string, d: UpdateScheduleTodoDTO) => Promise<ScheduleTodo>
   deleteScheduleTodo: (id: string) => Promise<void>

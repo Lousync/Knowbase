@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { ScheduleTag } from '../../../types'
-import { X } from 'lucide-react'
+import type { ScheduleTag, ScheduleTodo } from '../../../types'
+import { X, Plus, Trash2, Check } from 'lucide-react'
 
 interface TodoForm {
   title: string; description: string; time: string
@@ -14,6 +14,10 @@ interface Props {
   tags: ScheduleTag[]
   onSave: (data: TodoForm) => void
   onClose: () => void
+  subtasks?: ScheduleTodo[]
+  onToggleSubtask?: (id: string) => void
+  onDeleteSubtask?: (id: string) => void
+  onCreateSubtask?: (data: { title: string; date: string; taskType: 'daily' }) => void
 }
 
 const QUADRANTS = [
@@ -23,9 +27,24 @@ const QUADRANTS = [
   { value: 3, label: '💤 不重要不紧急' },
 ]
 
-export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
+export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, onToggleSubtask, onDeleteSubtask, onCreateSubtask }: Props) {
   const [form, setForm] = useState<TodoForm>(initial)
   const [timeWarning, setTimeWarning] = useState('')
+
+  // Sub-task inline form
+  const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [subtaskOpen, setSubtaskOpen] = useState(false)
+
+  function handleAddSubtask() {
+    if (!subtaskTitle.trim() || !onCreateSubtask) return
+    onCreateSubtask({
+      title: subtaskTitle.trim(),
+      date: new Date().toISOString().slice(0, 10),
+      taskType: 'daily',
+    })
+    setSubtaskTitle('')
+    setSubtaskOpen(false)
+  }
 
   // Raw string state for each deadline part (independent of form.time parsing)
   const dp0 = parseDeadline(form.time)
@@ -193,6 +212,68 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose }: Props) {
                 placeholder="如：完成3个项目、读完5本书..." rows={2}
                 className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none resize-none"
               />
+            </Field>
+          )}
+
+          {/* Sub-tasks (plan tasks only, when editing existing task) */}
+          {form.taskType === 'plan' && initial.title && (
+            <Field label={`子任务${subtasks ? ` (${subtasks.length})` : ''}`}>
+              <div className="bg-[var(--bg-tertiary)] rounded-lg p-3 border border-[var(--border-color)] space-y-1.5 max-h-[200px] overflow-y-auto">
+                {subtasks && subtasks.length > 0 ? (
+                  subtasks.map(st => {
+                    const isDone = st.status === 'done'
+                    return (
+                      <div key={st.id} className={`flex items-center gap-2 px-2 py-1.5 rounded text-[12px] group ${isDone ? 'opacity-50' : ''}`}>
+                        <button
+                          onClick={() => onToggleSubtask?.(st.id)}
+                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isDone ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-[#5a5a5a] hover:border-[var(--accent)]'}`}
+                          title="切换完成状态"
+                        >
+                          {isDone && <Check size={10} strokeWidth={3} className="text-white" />}
+                        </button>
+                        <span className={`flex-1 truncate ${isDone ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>{st.title}</span>
+                        <button
+                          onClick={() => onDeleteSubtask?.(st.id)}
+                          className="p-0.5 text-[var(--text-muted)] hover:text-[var(--danger)] opacity-0 group-hover:opacity-100 transition-all"
+                          title="删除子任务"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-[11px] text-[var(--text-disabled)] italic text-center py-1">暂无子任务</p>
+                )}
+
+                {/* Add subtask inline — simple title-only, like daily tasks */}
+                {subtaskOpen ? (
+                  <div className="flex items-center gap-1.5 pt-1.5 border-t border-[var(--border-color)]">
+                    <input
+                      autoFocus
+                      value={subtaskTitle}
+                      onChange={e => setSubtaskTitle(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); if (e.key === 'Escape') { setSubtaskOpen(false); setSubtaskTitle('') } }}
+                      placeholder="子任务标题..."
+                      className="flex-1 px-2 py-1.5 bg-[var(--input-bg)] border border-[#555] rounded text-[12px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none"
+                    />
+                    <button onClick={handleAddSubtask} disabled={!subtaskTitle.trim()}
+                      className="px-3 py-1.5 text-[11px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
+                    >确认</button>
+                    <button onClick={() => { setSubtaskOpen(false); setSubtaskTitle('') }}
+                      className="px-2 py-1.5 text-[11px] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] transition-colors"
+                    >取消</button>
+                  </div>
+                ) : (
+                  onCreateSubtask && (
+                    <button onClick={() => setSubtaskOpen(true)}
+                      className="flex items-center gap-1 w-full py-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors justify-center"
+                    >
+                      <Plus size={12} />添加子任务
+                    </button>
+                  )
+                )}
+              </div>
             </Field>
           )}
 

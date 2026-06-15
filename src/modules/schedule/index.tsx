@@ -3,7 +3,7 @@ import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check } from 'luc
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
-  createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags,
+  createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags, getScheduleSubtasks,
   createScheduleTag, deleteScheduleTag, getSetting, setSetting
 } from '../../lib/ipc'
 import { CalendarView, type ViewMode } from './views/CalendarView'
@@ -39,6 +39,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
   const [viewMode, setViewMode] = useState<ViewMode>('date')
   const [monthTodos, setMonthTodos] = useState<ScheduleTodo[]>([])
+  const [subtasksMap, setSubtasksMap] = useState<Record<string, ScheduleTodo[]>>({})
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ScheduleTodo | null>(null)
@@ -83,7 +84,21 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   }
 
   async function refreshMonthTodos() {
-    try { setMonthTodos(await getScheduleMonthTodos(ym)) } catch (e) { console.error(e) }
+    try {
+      const todos = await getScheduleMonthTodos(ym)
+      setMonthTodos(todos)
+      // Load subtasks for all plan-type tasks
+      const planTasks = todos.filter(t => t.taskType === 'plan')
+      if (planTasks.length > 0) {
+        const map: Record<string, ScheduleTodo[]> = {}
+        await Promise.all(planTasks.map(async t => {
+          map[t.id] = await getScheduleSubtasks(t.id)
+        }))
+        setSubtasksMap(map)
+      } else {
+        setSubtasksMap({})
+      }
+    } catch (e) { console.error(e) }
   }
 
   async function refreshAll() { await Promise.all([refreshDotDates(), refreshMonthTodos()]) }
@@ -169,12 +184,33 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     } catch (e) { console.error(e) }
   }
 
+  async function handleToggleSubtaskAny(id: string) {
+    // Find subtask in subtasksMap
+    for (const subs of Object.values(subtasksMap)) {
+      const st = subs.find(s => s.id === id)
+      if (st) {
+        await updateScheduleTodo(id, { status: st.status === 'done' ? 'pending' : 'done' })
+        await refreshAll()
+        return
+      }
+    }
+  }
+
+  async function handleDeleteSubtaskAny(id: string) {
+    await deleteScheduleTodo(id)
+    await refreshAll()
+  }
+
   async function handleMigrateDaily(id: string) { await updateScheduleTodo(id, { date: today }); await refreshAll() }
 
   // ---- derived data (ALL tasks, including done) ----
   const allWithTags = useMemo(() =>
-    monthTodos.map(t => ({ ...t, tag: t.tagId ? tags.find(tg => tg.id === t.tagId) ?? null : null })),
-    [monthTodos, tags]
+    monthTodos.map(t => ({
+      ...t,
+      tag: t.tagId ? tags.find(tg => tg.id === t.tagId) ?? null : null,
+      subtasks: subtasksMap[t.id] || undefined,
+    })),
+    [monthTodos, tags, subtasksMap]
   )
 
   const pendingTodos = useMemo(() => allWithTags.filter(t => t.status === 'pending'), [allWithTags])
@@ -235,6 +271,8 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   const dateRegular = useMemo(() => dateTodos.filter(t => t.taskType !== 'daily'), [dateTodos])
   const dateDaily = useMemo(() => dateTodos.filter(t => t.taskType === 'daily'), [dateTodos])
 
+  const editSubtasks = editTarget ? (subtasksMap[editTarget.id] || []) : []
+
   // ---- helpers ----
   const modalInitial = editTarget
     ? { title: editTarget.title, description: editTarget.description,
@@ -242,6 +280,29 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         taskType: editTarget.taskType, tagId: editTarget.tagId || '',
         endCriteria: editTarget.endCriteria || '' }
     : { title: '', description: '', time: '', quadrant: 1, taskType: 'plan' as const, tagId: '', endCriteria: '' }
+
+  // ---- subtask handlers ----
+  async function handleToggleSubtask(id: string) {
+    const st = editSubtasks.find(s => s.id === id)
+    if (!st) return
+    await updateScheduleTodo(id, { status: st.status === 'done' ? 'pending' : 'done' })
+    await refreshAll()
+  }
+
+  async function handleDeleteSubtask(id: string) {
+    await deleteScheduleTodo(id)
+    await refreshAll()
+  }
+
+  async function handleCreateSubtask(data: { title: string; date: string; taskType: 'daily' }) {
+    if (!editTarget) return
+    const dto: CreateScheduleTodoDTO = {
+      title: data.title, date: data.date, taskType: 'daily',
+      parentId: editTarget.id,
+    }
+    await createScheduleTodo(dto)
+    await refreshAll()
+  }
 
   const viewTitle =
     viewMode === 'deadline' ? '截至时间线' :
@@ -347,7 +408,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                     <div className="space-y-1.5">
                       {dateDaily.map(todo => (
                         <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
-                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                       ))}
                     </div>
                   </div>
@@ -358,7 +419,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                     <div className="space-y-2">
                       {dateRegular.map(todo => (
                         <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
-                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                          onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                       ))}
                     </div>
                   </div>
@@ -378,7 +439,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                   <div className="space-y-2">
                     {deadlineOverdue.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
-                        onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                        onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                     ))}
                   </div>
                 </div>
@@ -391,7 +452,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                   <div className="space-y-2">
                     {deadlineUpcoming.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
-                        onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                        onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                     ))}
                   </div>
                 </div>
@@ -404,7 +465,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                   <div className="space-y-2">
                     {deadlineDone.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
-                        onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                        onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                     ))}
                   </div>
                 </div>
@@ -425,7 +486,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                       <div className="space-y-2">
                         {items.map(todo => (
                           <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
-                            onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} />
+                            onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                         ))}
                       </div>
                     )}
@@ -461,7 +522,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                           onClick={() => openEdit(todo)}
                           onToggleDone={() => handleToggleDone(todo)}
                           onRestore={() => handleRestoreDone(todo.id)}
-                          onDelete={() => handleDelete(todo.id)} />
+                          onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                       ))}
                     </div>
                   </div>
@@ -472,7 +533,14 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         )}
       </div>
 
-      <TodoEditModal open={modalOpen} initial={modalInitial} tags={tags} onSave={handleSave} onClose={() => { setModalOpen(false); setEditTarget(null) }} />
+      <TodoEditModal
+        open={modalOpen} initial={modalInitial} tags={tags} onSave={handleSave}
+        onClose={() => { setModalOpen(false); setEditTarget(null) }}
+        subtasks={editSubtasks}
+        onToggleSubtask={handleToggleSubtask}
+        onDeleteSubtask={handleDeleteSubtask}
+        onCreateSubtask={handleCreateSubtask}
+      />
       <QuadrantChart open={quadrantOpen} todos={pendingTodos} tags={tags} onClose={() => setQuadrantOpen(false)} />
       <TagManageModal open={tagManageOpen} tags={tags} onClose={() => setTagManageOpen(false)} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} />
     </div>

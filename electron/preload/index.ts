@@ -28,6 +28,7 @@ const api = {
   getScheduleDates: (yearMonth: string) => ipcRenderer.invoke('schedule:getDatesWithTodos', yearMonth),
   getScheduleMonthTodos: (yearMonth: string) => ipcRenderer.invoke('schedule:getMonthTodos', yearMonth),
   getScheduleDeadlineCounts: (yearMonth: string) => ipcRenderer.invoke('schedule:getDeadlineCounts', yearMonth),
+  getScheduleSubtasks: (parentId: string) => ipcRenderer.invoke('schedule:getSubtasks', parentId),
   createScheduleTodo: (data: unknown) => ipcRenderer.invoke('schedule:createTodo', data),
   updateScheduleTodo: (id: string, data: unknown) => ipcRenderer.invoke('schedule:updateTodo', id, data),
   deleteScheduleTodo: (id: string) => ipcRenderer.invoke('schedule:deleteTodo', id),

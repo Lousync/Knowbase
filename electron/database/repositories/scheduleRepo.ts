@@ -7,7 +7,7 @@ interface TodoRow {
   id: string; title: string; description: string | null; date: string
   time: string | null; quadrant: number; task_type: string
   tag_id: string | null; status: string; sort_order: number
-  end_criteria: string | null
+  end_criteria: string | null; parent_id: string | null
   created_at: string; updated_at: string
 }
 
@@ -20,6 +20,7 @@ function rowToTodo(row: TodoRow) {
     quadrant: row.quadrant, taskType: row.task_type as 'deadline' | 'plan' | 'daily',
     tagId: row.tag_id, status: row.status as 'pending' | 'done',
     sortOrder: row.sort_order, endCriteria: row.end_criteria || '',
+    parentId: row.parent_id || null,
     createdAt: row.created_at, updatedAt: row.updated_at
   }
 }
@@ -42,30 +43,39 @@ function run(sql: string, params: unknown[] = []): void {
 
 // ---- IPC handlers ----
 export function registerScheduleHandlers(): void {
-  // 按日期获取待办
+  // 按日期获取待办（排除子任务）
   ipcMain.handle('schedule:getTodos', (_e, date: string) => {
     const rows = queryAll<TodoRow>(
-      'SELECT * FROM schedule_todos WHERE date = ? ORDER BY sort_order, created_at',
+      'SELECT * FROM schedule_todos WHERE date = ? AND parent_id IS NULL ORDER BY sort_order, created_at',
       [date]
     )
     return rows.map(rowToTodo)
   })
 
-  // 获取某月有数据的日期列表（日历打点用）
+  // 获取某月有数据的日期列表（日历打点用）— 排除子任务
   ipcMain.handle('schedule:getDatesWithTodos', (_e, yearMonth: string) => {
     const rows = queryAll<{ date: string }>(
-      "SELECT DISTINCT date FROM schedule_todos WHERE date LIKE ?",
+      "SELECT DISTINCT date FROM schedule_todos WHERE date LIKE ? AND parent_id IS NULL",
       [`${yearMonth}%`]
     )
     return rows.map(r => r.date)
   })
 
-  // 获取某月全部待办（象限图用）— 自动清理 7 天前已完成任务
+  // 获取某月全部待办（象限图用）— 自动清理 7 天前已完成任务 — 排除子任务
   ipcMain.handle('schedule:getMonthTodos', (_e, yearMonth: string) => {
     run("DELETE FROM schedule_todos WHERE status = 'done' AND updated_at < datetime('now', '-7 days')")
     const rows = queryAll<TodoRow>(
-      "SELECT * FROM schedule_todos WHERE date LIKE ? ORDER BY date, sort_order, created_at",
+      "SELECT * FROM schedule_todos WHERE date LIKE ? AND parent_id IS NULL ORDER BY date, sort_order, created_at",
       [`${yearMonth}%`]
+    )
+    return rows.map(rowToTodo)
+  })
+
+  // 获取某个父任务的子任务
+  ipcMain.handle('schedule:getSubtasks', (_e, parentId: string) => {
+    const rows = queryAll<TodoRow>(
+      'SELECT * FROM schedule_todos WHERE parent_id = ? ORDER BY sort_order, created_at',
+      [parentId]
     )
     return rows.map(rowToTodo)
   })
@@ -91,16 +101,16 @@ export function registerScheduleHandlers(): void {
   ipcMain.handle('schedule:createTodo', (_e, data: {
     title: string; description?: string; date: string; time?: string
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string
-    endCriteria?: string
+    endCriteria?: string; parentId?: string
   }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
     run(
-      `INSERT INTO schedule_todos (id,title,description,date,time,quadrant,task_type,tag_id,end_criteria,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO schedule_todos (id,title,description,date,time,quadrant,task_type,tag_id,end_criteria,parent_id,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [id, data.title, data.description || '', data.date, data.time || null,
         data.quadrant ?? 1, data.taskType || 'plan', data.tagId || null,
-        data.endCriteria || '', now, now]
+        data.endCriteria || '', data.parentId || null, now, now]
     )
     const rows = queryAll<TodoRow>('SELECT * FROM schedule_todos WHERE id = ?', [id])
     return rowToTodo(rows[0])
@@ -110,7 +120,7 @@ export function registerScheduleHandlers(): void {
   ipcMain.handle('schedule:updateTodo', (_e, id: string, data: {
     title?: string; description?: string; date?: string; time?: string | null
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
-    status?: string; endCriteria?: string
+    status?: string; endCriteria?: string; parentId?: string | null
   }) => {
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
@@ -126,8 +136,9 @@ export function registerScheduleHandlers(): void {
     return rowToTodo(rows[0])
   })
 
-  // 删除待办
+  // 删除待办（级联删除子任务）
   ipcMain.handle('schedule:deleteTodo', (_e, id: string) => {
+    run('DELETE FROM schedule_todos WHERE parent_id = ?', [id])
     run('DELETE FROM schedule_todos WHERE id = ?', [id])
   })
 
