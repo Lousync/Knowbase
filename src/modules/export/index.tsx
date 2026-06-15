@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Download, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2 } from 'lucide-react'
+import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2 } from 'lucide-react'
 import {
   exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData,
   showExportSaveDialog, showExportOpenDirDialog, writeExportTextFile, copyDbFile,
@@ -131,7 +131,6 @@ async function runMarkdownExport(
         title: e.title,
         date: e.date,
         tags: e.tags?.map((t: { name: string }) => t.name) || [],
-        wordCount: e.wordCount,
         pinned: e.isPinned || undefined
       })
       files.push({ relPath, content: frontmatter + e.contentMd })
@@ -594,7 +593,7 @@ export function ExportModule() {
             onClick={handleExport}
             className="flex items-center gap-2 px-8 py-3 bg-[var(--accent)] text-white text-[14px] font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {status === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+            {status === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
             {status === 'loading' ? '导出中...' : '执行导出'}
           </button>
 

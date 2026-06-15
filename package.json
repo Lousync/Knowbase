@@ -1,6 +1,6 @@
 {
   "name": "knowledge-recorder",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "本地 Windows 桌面博客/日程记录软件",
   "main": "./out/main/index.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "@monaco-editor/react": "^4.7.0",
     "iconv-lite": "^0.7.2",
     "lucide-react": "^1.0.0",
-    "marked": "^18.0.5",
+    "markdown-it": "^14.2.0",
     "monaco-editor": "^0.55.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/markdown-it": "^14.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

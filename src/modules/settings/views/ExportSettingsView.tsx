@@ -21,6 +21,7 @@ export function ExportSettingsView() {
   const handleEncodingChange = (id: string) => {
     setEncoding(id)
     setSetting('exportEncoding', id)
+    window.dispatchEvent(new CustomEvent('settings-encoding-changed', { detail: id }))
   }
 
   if (!loaded) return null

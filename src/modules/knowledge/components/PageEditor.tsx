@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { marked } from 'marked'
+import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, deleteKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting } from '../../../lib/ipc'
@@ -16,9 +16,10 @@ interface Props {
   onDeleted: () => void
   onNavigate: (id: string) => void
   onUpdate: () => void
+  onTitleChange?: (title: string) => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange }: Props) {
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -41,7 +42,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
-        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd) }
+        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); onTitleChange?.(p.title) }
       }),
       getKnowledgeBacklinks(pageId).then(setBacklinks)
     ])
@@ -57,7 +58,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!pageRef.current) return
     try {
       const links = parseWikiLinks(c)
-      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: marked.parse(c, { async: false }) as string })
+      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: renderMarkdown(c) })
       await updateKnowledgeLinks(pageRef.current.id, links)
       setSaving(false)
     } catch (e) { console.error(e) }
@@ -181,14 +182,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         {preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <h1 className="text-xl font-bold text-[#e0e0e0] mb-3">{title}</h1>
-            <div className="prose-content" dangerouslySetInnerHTML={{ __html: page.contentHtml || (marked.parse(content, { async: false }) as string) }} />
+            <div className="prose-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
             <input
               className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
-              onChange={e => setTitle(e.target.value)}
+              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
               placeholder="页面标题"
             />
             <div className="flex-1">
@@ -221,6 +222,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                   insertSpaces: true,
                   bracketPairColorization: { enabled: true },
                   matchBrackets: 'always',
+                  unicodeHighlight: { nonBasicASCII: false, ambiguousCharacters: false, invisibleCharacters: false },
                   selectionHighlight: true,
                   quickSuggestions: true,
                   suggest: { showWords: false },

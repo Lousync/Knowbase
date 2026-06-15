@@ -135,6 +135,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshPages(); refreshStarred()
   }
 
+  // 实时更新侧边栏页面列表中的标题（无需等待保存）
+  const handleTitleChange = useCallback((title: string) => {
+    setPages(prev => prev.map(p => p.id === selectedPageId ? { ...p, title } : p))
+  }, [selectedPageId])
+
   const getCategoryPath = (catId: string | null): string => {
     if (!catId) return '全部页面'
     const parts: string[] = []
@@ -157,13 +162,20 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={256} minWidth={180} maxWidth={450} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat}>
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--border-color)]">
-              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide whitespace-nowrap">知识主题</span>
               <button
                 onClick={() => setShowCategoryPanel(false)}
                 className="p-1 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                 title="折叠分类面板"
               >
                 <PanelLeftClose size={24} />
+              </button>
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide whitespace-nowrap">知识主题</span>
+              <button
+                onClick={() => setShowPageListPanel(v => !v)}
+                className="p-1 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                title={showPageListPanel ? "折叠页面面板" : "展开页面面板"}
+              >
+                {showPageListPanel ? <PanelRightClose size={24} /> : <PanelRightOpen size={24} />}
               </button>
             </div>
             <CategoryTree
@@ -223,13 +235,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               <FileText size={20} className="text-[var(--text-secondary)] shrink-0" />
               <span className="text-[11px] text-[var(--text-secondary)] font-medium truncate uppercase">页面</span>
             </div>
-            <button
-              onClick={() => setShowPageListPanel(false)}
-              className="p-1 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-              title="折叠页面面板"
-            >
-              <PanelRightClose size={24} />
-            </button>
           </div>
 
           {/* Search + page count */}
@@ -326,28 +331,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         </div>
       </ResizablePanel>
 
-      {/* Editor-edge expand strip — hidden when both panels are collapsed (use ActivityBar to re-expand) */}
-      {panelsVisible && !showPageListPanel && showCategoryPanel && (
-        <div className="shrink-0 w-9 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col items-center py-2 gap-3">
-          {!showCategoryPanel && (
-            <button
-              onClick={() => setShowCategoryPanel(true)}
-              className="p-1.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-              title="展开分类面板"
-            >
-              <PanelLeftOpen size={24} />
-            </button>
-          )}
-          <button
-            onClick={() => setShowPageListPanel(true)}
-            className="p-1.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-            title="展开页面列表面板"
-          >
-            <PanelRightOpen size={24} />
-          </button>
-        </div>
-      )}
-
       {/* Right: Editor */}
       <div className="flex-1 flex overflow-hidden">
         {selectedPageId ? (
@@ -360,6 +343,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onDeleted={() => handleDeletePage(selectedPageId)}
             onNavigate={handleSelectPage}
             onUpdate={handleRefresh}
+            onTitleChange={handleTitleChange}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">

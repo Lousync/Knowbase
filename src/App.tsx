@@ -28,6 +28,7 @@ export default function App() {
   const [showLineNumbers, setShowLineNumbers] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [zoom, setZoom] = useState(ZOOM_BASE)
+  const [encoding, setEncoding] = useState('UTF-8')
   // Pre-load all sidebar widths to prevent mount-time layout shift
   const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
 
@@ -37,12 +38,13 @@ export default function App() {
       getSetting('zoom'),
       getSetting('theme'),
       getSetting('editorFont'),
+      getSetting('exportEncoding'),
       getSetting('sidebarWidth_blog'),
       getSetting('sidebarWidth_schedule'),
       getSetting('sidebarWidth_knowledgeCat'),
       getSetting('sidebarWidth_knowledgePages'),
     ])
-      .then(([ln, z, theme, font, wBlog, wSched, wCat, wPages]) => {
+      .then(([ln, z, theme, font, enc, wBlog, wSched, wCat, wPages]) => {
         if (ln != null) setShowLineNumbers(ln as boolean)
         if (z != null && typeof z === 'number') {
           setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)))
@@ -55,6 +57,8 @@ export default function App() {
         if (typeof font === 'string' && FONTS[font]) {
           document.documentElement.style.setProperty('--font-sans', FONTS[font])
         }
+        // Encoding
+        if (typeof enc === 'string') setEncoding(enc.toUpperCase())
         const widths: Record<string, number> = {}
         if (typeof wBlog === 'number') widths.sidebarWidth_blog = wBlog
         if (typeof wSched === 'number') widths.sidebarWidth_schedule = wSched
@@ -63,6 +67,16 @@ export default function App() {
         setSidebarWidths(widths)
       })
       .finally(() => setSettingsLoaded(true))
+  }, [])
+
+  // Listen for encoding changes from settings
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const v = (e as CustomEvent).detail
+      if (typeof v === 'string') setEncoding(v.toUpperCase())
+    }
+    window.addEventListener('settings-encoding-changed', handler)
+    return () => window.removeEventListener('settings-encoding-changed', handler)
   }, [])
 
   // Keep <html> font-size in sync — the one true zoom for rem-based layouts
@@ -109,7 +123,7 @@ export default function App() {
           {activeTab === 'export' && <ExportModule />}
         </main>
       </div>
-      <StatusBar />
+      <StatusBar encoding={encoding} />
     </div>
   )
 }

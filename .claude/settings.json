@@ -7,7 +7,8 @@
       "Bash(reg query *)",
       "Bash(grep -rl \"ELECTRON_RUN_AS_NODE\" /etc/ /c/Users/ 2>/dev/null | head -5 *)",
       "Read(//etc/**)",
-      "Read(//c/Users/徐志岩/**)"
+      "Read(//c/Users/徐志岩/**)",
+      "Bash(/mingw64/bin/find /d/develp/Nodejs -name \"npm*\" -type f)"
     ],
     "deny": [
       "Bash(rm -rf *)"

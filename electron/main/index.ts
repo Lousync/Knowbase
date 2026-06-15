@@ -9,6 +9,12 @@ import { registerExportHandlers } from '../database/repositories/exportRepo'
 import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
 
+// 单实例锁 — 防止多窗口数据不同步（sql.js 内存数据库无跨进程共享能力）
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -98,8 +104,17 @@ app.whenReady().then(async () => {
   createWindow()
 
   app.on('activate', () => {
+    // macOS: 点击 dock 图标时重建窗口
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// 用户尝试打开第二个实例 → 激活已有窗口
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
 })
 
 app.on('window-all-closed', () => {

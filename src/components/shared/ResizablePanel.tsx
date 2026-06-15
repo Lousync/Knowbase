@@ -11,9 +11,11 @@ interface Props {
   children: React.ReactNode
   /** Pre-loaded persisted width — when provided, skips async getSetting */
   initialWidth?: number
+  /** Show drag handle on right edge. Default true. */
+  showHandle?: boolean
 }
 
-export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth }: Props) {
+export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true }: Props) {
   const [width, setWidth] = useState(initialWidth ?? defaultWidth)
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -94,7 +96,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       {visible && children}
 
       {/* 拖拽手柄 — 右边缘内侧 6px，独立于 border 不重叠 */}
-      {visible && (
+      {visible && showHandle && (
         <div
           className={`absolute top-0 right-0 w-1.5 h-full z-30 transition-colors ${
             dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize hover:bg-[#007acc30]'

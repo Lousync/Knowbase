@@ -22,7 +22,6 @@ export function EntryCard({ entry, onClick }: EntryCardProps) {
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)] text-white">今天</span>
         )}
       </div>
-      <span className="text-[11px] text-[var(--text-muted)] shrink-0">{entry.wordCount} 字</span>
     </article>
   )
 }

@@ -123,14 +123,11 @@ export function registerEntryHandlers(): void {
   }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
-    const wordCount = data.contentMd
-      ? data.contentMd.replace(/\s/g, '').length
-      : 0
 
     run(
       `INSERT INTO entries (id, title, content_md, content_html, date, created_at, updated_at, word_count)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '', data.contentMd || '', data.contentHtml || '', data.date, now, now, wordCount]
+      [id, data.title || '', data.contentMd || '', data.contentHtml || '', data.date, now, now, 0]
     )
 
     if (data.tags && data.tags.length > 0) {
@@ -163,8 +160,6 @@ export function registerEntryHandlers(): void {
     if (data.contentMd !== undefined) {
       sets.push('content_md = ?')
       params.push(data.contentMd)
-      sets.push('word_count = ?')
-      params.push(data.contentMd.replace(/\s/g, '').length)
     }
     if (data.contentHtml !== undefined) {
       sets.push('content_html = ?')

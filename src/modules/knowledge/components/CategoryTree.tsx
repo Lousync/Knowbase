@@ -29,7 +29,13 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
   }
 
   const handleCreate = () => {
-    if (!newName.trim()) return
+    if (!newName.trim()) {
+      // 没输入内容 → 清除输入框状态
+      setNewName('')
+      setNewCatParent(null)
+      setShowRootInput(false)
+      return
+    }
     onCreate(newName.trim(), newCatParent)
     setNewName('')
     setNewCatParent(null)
@@ -42,7 +48,11 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
   }
 
   const handleRename = (id: string) => {
-    if (!editName.trim()) return
+    if (!editName.trim()) {
+      // 没输入有效内容 → 取消重命名
+      setEditingId(null)
+      return
+    }
     onRename(id, editName.trim())
     setEditingId(null)
   }
@@ -174,7 +184,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
       </div>
 
       {/* 树 */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-1">
         {renderTree(rootCategories, 0)}
       </div>
     </div>

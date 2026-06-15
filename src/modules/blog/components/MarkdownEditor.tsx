@@ -1,16 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code } from 'lucide-react'
-import { marked } from 'marked'
+import { renderMarkdown } from '../../../lib/renderMarkdown'
 import Editor, { type OnMount } from '@monaco-editor/react'
 
 interface Props {
   entryId: string; showLineNumbers: boolean; zoom?: number; onSave: () => void; onCancel: () => void
-}
-
-function renderMarkdown(md: string): string {
-  if (!md) return '<p></p>'
-  return marked.parse(md, { async: false }) as string
 }
 
 export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel }: Props) {
@@ -140,6 +135,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
               occurrencesHighlight: 'off',
               bracketPairColorization: { enabled: true },
               matchBrackets: 'always',
+              unicodeHighlight: { nonBasicASCII: false, ambiguousCharacters: false, invisibleCharacters: false },
               placeholder: '开始写作...',
             }}
           />

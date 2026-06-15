@@ -101,7 +101,7 @@ export function SettingsDropdown() {
         <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1.5">导出编码</div>
         <div className="space-y-0.5">
           {ENCODINGS.map(e => (
-            <button key={e.id} onClick={() => { setEncoding(e.id); setSetting('exportEncoding', e.id) }}
+            <button key={e.id} onClick={() => { setEncoding(e.id); setSetting('exportEncoding', e.id); window.dispatchEvent(new CustomEvent('settings-encoding-changed', { detail: e.id })) }}
               className={`w-full text-left px-2 py-1 rounded text-[11px] transition-colors ${
                 encoding === e.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
               }`}
