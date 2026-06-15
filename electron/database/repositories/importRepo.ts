@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { readFileSync } from 'fs'
-import { basename } from 'path'
-import { getDatabase, saveToDisk } from '../connection'
+import { readFileSync, copyFileSync } from 'fs'
+import { basename, extname } from 'path'
+import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath } from '../connection'
 
 function fileNameBase(filePath: string): string {
   return basename(filePath).replace(/\.(md|txt|json)$/i, '')
@@ -41,13 +41,15 @@ export function registerImportHandlers(): void {
     })
   })
 
-  // ===== JSON data import =====
+  // ===== Data import (JSON + db auto-detect) =====
   ipcMain.handle('import:showDataDialog', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!win) return []
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
-      filters: [{ name: 'JSON 数据包 (.json)', extensions: ['json'] }],
+      filters: [
+        { name: '支持的数据文件 (.json, .db)', extensions: ['json', 'db'] },
+      ],
       title: '导入 KnowledgeRecorder 数据包'
     })
     return result.canceled ? [] : result.filePaths
@@ -56,6 +58,20 @@ export function registerImportHandlers(): void {
   ipcMain.handle('import:readFile', async (_e, filePath: string) => {
     try { return readFileSync(filePath, 'utf-8') }
     catch { return null }
+  })
+
+  // ===== All-or-nothing db file replacement =====
+  ipcMain.handle('import:importDb', async (_e, srcPath: string) => {
+    try {
+      closeDatabase()
+      copyFileSync(srcPath, getDbPath())
+      await initDatabase()
+      return { success: true, message: '数据库已替换，应用数据已全部更新' }
+    } catch (e: any) {
+      // Try to reopen original database on failure
+      try { await initDatabase() } catch { /* db was already closed */ }
+      return { success: false, message: `数据库导入失败: ${e.message}` }
+    }
   })
 
   ipcMain.handle('import:executeImport', async (_e, data: any) => {
