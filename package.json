@@ -1,6 +1,6 @@
 {
   "name": "knowledge-recorder",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "本地 Windows 桌面博客/日程记录软件",
   "main": "./out/main/index.js",
   "scripts": {
