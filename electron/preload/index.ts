@@ -58,6 +58,9 @@ const api = {
   // import
   showImportOpenDialog: () => ipcRenderer.invoke('import:showOpenDialog'),
   readImportFiles: (paths: string[]) => ipcRenderer.invoke('import:readFiles', paths),
+  showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
+  readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
+  executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),
 
   // recycle bin
   getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),

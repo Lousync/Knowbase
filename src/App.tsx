@@ -6,6 +6,7 @@ import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
 import { ExportModule } from './modules/export'
+import { ImportModal } from './modules/shared/components/ImportModal'
 
 // Zoom by adjusting <html> font-size.  All rem-based content scales naturally;
 // chrome elements (TitleBar / ActivityBar) are mostly px-based so
@@ -31,6 +32,7 @@ export default function App() {
   const [encoding, setEncoding] = useState('UTF-8')
   // Pre-load all sidebar widths to prevent mount-time layout shift
   const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -79,6 +81,13 @@ export default function App() {
     return () => window.removeEventListener('settings-encoding-changed', handler)
   }, [])
 
+  // Listen for import modal open
+  useEffect(() => {
+    const handler = () => setImportModalOpen(true)
+    window.addEventListener('open-import-modal', handler)
+    return () => window.removeEventListener('open-import-modal', handler)
+  }, [])
+
   // Keep <html> font-size in sync — the one true zoom for rem-based layouts
   useEffect(() => {
     document.documentElement.style.fontSize = `${zoom * 16}px`
@@ -124,6 +133,7 @@ export default function App() {
         </main>
       </div>
       <StatusBar encoding={encoding} />
+      {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} />}
     </div>
   )
 }
