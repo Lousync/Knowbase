@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Settings } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Upload, Download, Settings } from 'lucide-react'
 import { SettingsDropdown } from '../../modules/settings/components/SettingsDropdown'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
@@ -57,8 +57,19 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         )
       })}
 
-      {/* 底部设置按钮 */}
-      <div className="mt-auto relative" ref={menuRef}>
+      {/* 导入按钮（未来用户模块占位） */}
+      <div className="mt-auto">
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('open-import-modal'))}
+          className="w-14 h-14 flex items-center justify-center text-[#858585] hover:text-[var(--text-primary)] transition-colors"
+          title="导入数据"
+        >
+          <Download size={28} strokeWidth={1.5} />
+        </button>
+      </div>
+
+      {/* 设置按钮 */}
+      <div className="relative" ref={menuRef}>
         <button
           onClick={() => setSettingsOpen(v => !v)}
           className="w-14 h-14 flex items-center justify-center text-[#858585] hover:text-[var(--text-primary)] transition-colors"
