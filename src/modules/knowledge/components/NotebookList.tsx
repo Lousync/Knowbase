@@ -170,10 +170,12 @@ export function NotebookList({
               )}
               <span className="flex-1 truncate text-[13px]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('folder'); setNewName('') }}
-                  className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="新建子目录">
-                  <Plus size={13} />
-                </button>
+                {!isNotebook && (
+                  <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('folder'); setNewName('') }}
+                    className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="新建子目录">
+                    <Plus size={13} />
+                  </button>
+                )}
                 <button onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }}
                   className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="重命名">
                   <Pencil size={13} />
