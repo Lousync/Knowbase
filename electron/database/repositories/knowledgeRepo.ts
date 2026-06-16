@@ -83,12 +83,21 @@ export function registerKnowledgeHandlers(): void {
     return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
   })
 
-  // 删除分类 — 软删除（子分类挂到父级，页面 category_id 置空，完整快照存入回收站）
+  // 删除分类 — 软删除（完整快照存入回收站，子树页面全删）
   ipcMain.handle('knowledge:deleteCategory', (_e, id: string) => {
-    // 1) 收集被删除分类及其子树数据
     const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
     if (!cat) return
 
+    // ---- 1) 递归收集所有子孙分类 ID（必须在 reparent 之前） ----
+    const descendantIds: string[] = []
+    const collectIds = (parentId: string) => {
+      const kids = queryAll<{ id: string }>('SELECT id FROM knowledge_categories WHERE parent_id = ?', [parentId])
+      for (const k of kids) { descendantIds.push(k.id); collectIds(k.id) }
+    }
+    collectIds(id)
+    const allCatIds = [id, ...descendantIds]
+
+    // ---- 2) 收集快照数据 ----
     const collectChildren = (parentId: string): any[] => {
       const children = queryAll<CategoryRow>(
         'SELECT * FROM knowledge_categories WHERE parent_id = ?', [parentId]
@@ -130,7 +139,7 @@ export function registerKnowledgeHandlers(): void {
       pages: directPages,
     })
 
-    // 2) 存入回收站
+    // ---- 3) 存入回收站 ----
     const binId = randomUUID()
     run(
       `INSERT INTO recycle_bin (id, original_id, module, title, data)
@@ -138,19 +147,8 @@ export function registerKnowledgeHandlers(): void {
       [binId, id, cat.name, snapshot]
     )
 
-    // 3) 删除分类及其子树中的所有页面（已快照存入回收站）
-    run('UPDATE knowledge_categories SET parent_id = (SELECT parent_id FROM knowledge_categories WHERE id = ?) WHERE parent_id = ?', [id, id])
-    // 递归收集所有子孙分类 ID
-    const descendantIds: string[] = []
-    const collectIds = (parentId: string) => {
-      const kids = queryAll<{ id: string }>('SELECT id FROM knowledge_categories WHERE parent_id = ?', [parentId])
-      for (const k of kids) { descendantIds.push(k.id); collectIds(k.id) }
-    }
-    collectIds(id)
-    // 删除直接页面 + 所有子孙分类下的页面（软删除到快照，从主表移除）
-    const allCatIds = [id, ...descendantIds]
+    // ---- 4) 删除所有页面 ----
     for (const cid of allCatIds) {
-      // 把页面标签关联清掉（CASCADE），然后删除页面
       const pageIds = queryAll<{ id: string }>('SELECT id FROM knowledge_pages WHERE category_id = ?', [cid])
       for (const p of pageIds) {
         run('DELETE FROM knowledge_page_tags WHERE page_id = ?', [p.id])
@@ -158,10 +156,13 @@ export function registerKnowledgeHandlers(): void {
       }
       run('DELETE FROM knowledge_pages WHERE category_id = ?', [cid])
     }
-    // 删除所有子孙分类（从最深的开始删，避免 FK 问题）
-    // 反序删除：depth-first reversed
+
+    // ---- 5) 删除分类（子分类先上移后删除，从最深到最浅） ----
+    run('UPDATE knowledge_categories SET parent_id = (SELECT parent_id FROM knowledge_categories WHERE id = ?) WHERE parent_id = ?', [id, id])
     descendantIds.reverse()
     for (const did of descendantIds) {
+      // Reparent children of this descendant to its parent before deleting
+      run('UPDATE knowledge_categories SET parent_id = (SELECT parent_id FROM knowledge_categories WHERE id = ?) WHERE parent_id = ?', [did, did])
       run('DELETE FROM knowledge_categories WHERE id = ?', [did])
     }
     run('DELETE FROM knowledge_categories WHERE id = ?', [id])

@@ -95,6 +95,7 @@ export interface ElectronAPI {
   isAlwaysOnTop: () => Promise<boolean>
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<void>
+  openDirDialog: () => Promise<string | null>
   getEntries: (f: EntryFilter) => Promise<Entry[]>
   getEntryById: (id: string) => Promise<(Entry & { tags: Tag[] }) | null>
   createEntry: (d: CreateEntryDTO) => Promise<Entry>
@@ -146,8 +147,9 @@ export interface ElectronAPI {
   getRecycleBinItems: () => Promise<RecycleBinItem[]>
   restoreRecycleBinItem: (id: string) => Promise<void>
   restoreRecycleBinPartial: (id: string, path: string) => Promise<void>
-  permanentlyDeleteRecycleBinPartial: (id: string, path: string) => Promise<void>
-  permanentlyDeleteRecycleBinItem: (id: string) => Promise<void>
+  trashRecycleBinItem: (id: string) => Promise<void>
+  trashAllRecycleBin: () => Promise<void>
+  trashRecycleBinPartial: (id: string, path: string) => Promise<void>
   emptyRecycleBin: () => Promise<void>
   purgeExpiredRecycleBinItems: () => Promise<void>
   exportAllBlogData: () => Promise<BlogExportData>

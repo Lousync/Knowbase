@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Trash2, RotateCcw, X, AlertCircle, FileText, BookOpen, Folder, ChevronRight, ChevronDown } from 'lucide-react'
 import type { RecycleBinItem } from '../../types'
-import { getRecycleBinItems, restoreRecycleBinItem, restoreRecycleBinPartial, permanentlyDeleteRecycleBinItem, permanentlyDeleteRecycleBinPartial, emptyRecycleBin } from '../../lib/ipc'
+import { getRecycleBinItems, restoreRecycleBinItem, restoreRecycleBinPartial, trashRecycleBinItem, trashRecycleBinPartial, emptyRecycleBin } from '../../lib/ipc'
 
 const MODULE_INFO: Record<string, { label: string; icon: React.ReactNode; badgeClass: string }> = {
   blog:          { label: '博客',     icon: <FileText size={12} />,  badgeClass: 'bg-[var(--accent)]/20 text-[var(--accent)]' },
@@ -55,14 +55,14 @@ export function RecycleBinModule() {
 
   const handlePermanentDelete = async (id: string) => {
     try {
-      await permanentlyDeleteRecycleBinItem(id)
+      await trashRecycleBinItem(id)
       await loadItems()
     } catch (e) { console.error(e) }
   }
 
   const handlePermDeletePartial = async (binId: string, path: string) => {
     try {
-      await permanentlyDeleteRecycleBinPartial(binId, path)
+      await trashRecycleBinPartial(binId, path)
       await loadItems()
     } catch (e) { console.error(e) }
   }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Sun, Moon, RotateCcw } from 'lucide-react'
-import { getSetting, setSetting } from '../../../lib/ipc'
+import { Sun, Moon, RotateCcw, Folder } from 'lucide-react'
+import { getSetting, setSetting, openDirDialog } from '../../../lib/ipc'
 
 const THEMES = [
   { id: 'dark', label: '深色', icon: <Moon size={16} /> },
@@ -28,21 +28,26 @@ export function SettingsDropdown() {
   const [showLineNumbers, setShowLineNumbers] = useState(false)
   const [skipDeleteBlog, setSkipDeleteBlog] = useState(false)
   const [skipDeleteKnowledge, setSkipDeleteKnowledge] = useState(false)
+  const [skipDeleteKnowledgeCat, setSkipDeleteKnowledgeCat] = useState(false)
+  const [trashExportDir, setTrashExportDir] = useState('')
   const [zoom, setZoom] = useState(1.0)
 
   useEffect(() => {
     Promise.all([
       getSetting('theme'), getSetting('editorFont'), getSetting('exportEncoding'),
       getSetting('showLineNumbers'), getSetting('skipDeleteConfirm_blog'),
-      getSetting('skipDeleteConfirm_knowledge'), getSetting('zoom'),
-    ]).then(([th, fn, enc, ln, skB, skK, z]) => {
+      getSetting('skipDeleteConfirm_knowledge'), getSetting('skipDeleteConfirm_knowledgeCategory'),
+      getSetting('zoom'), getSetting('trashExportDir'),
+    ]).then(([th, fn, enc, ln, skB, skK, skKC, z, td]) => {
       if (typeof th === 'string') setTheme(th)
       if (typeof fn === 'string') setFont(fn)
       if (typeof enc === 'string') setEncoding(enc)
       if (typeof ln === 'boolean') setShowLineNumbers(ln)
       if (typeof skB === 'boolean') setSkipDeleteBlog(skB)
       if (typeof skK === 'boolean') setSkipDeleteKnowledge(skK)
+      if (typeof skKC === 'boolean') setSkipDeleteKnowledgeCat(skKC)
       if (typeof z === 'number') setZoom(z)
+      if (typeof td === 'string') setTrashExportDir(td)
       setLoaded(true)
     })
   }, [])
@@ -138,11 +143,34 @@ export function SettingsDropdown() {
             className="accent-[var(--accent)]" />
         </label>
         <label className="flex items-center justify-between cursor-pointer">
-          <span className="text-[11px] text-[var(--text-primary)]">跳过知识库删除确认</span>
+          <span className="text-[11px] text-[var(--text-primary)]">跳过知识库页面删除确认</span>
           <input type="checkbox" checked={skipDeleteKnowledge}
             onChange={() => { const n = !skipDeleteKnowledge; setSkipDeleteKnowledge(n); setSetting('skipDeleteConfirm_knowledge', n) }}
             className="accent-[var(--accent)]" />
         </label>
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="text-[11px] text-[var(--text-primary)]">跳过目录/笔记本删除确认</span>
+          <input type="checkbox" checked={skipDeleteKnowledgeCat}
+            onChange={() => { const n = !skipDeleteKnowledgeCat; setSkipDeleteKnowledgeCat(n); setSetting('skipDeleteConfirm_knowledgeCategory', n) }}
+            className="accent-[var(--accent)]" />
+        </label>
+
+        {/* Trash export dir */}
+        <div className="pt-1.5 border-t border-[var(--border-color)]">
+          <div className="text-[10px] text-[var(--text-secondary)] mb-1">回收站文件导出目录</div>
+          <p className="text-[9px] text-[var(--text-disabled)] truncate mb-1">
+            {trashExportDir || '默认（Documents\\KnowledgeRecorder\\回收站）'}
+          </p>
+          <button
+            onClick={async () => {
+              const dir = await openDirDialog()
+              if (dir) { setTrashExportDir(dir); setSetting('trashExportDir', dir) }
+            }}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <Folder size={12} />选择目录
+          </button>
+        </div>
       </div>
     </div>
   )

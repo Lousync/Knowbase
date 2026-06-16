@@ -403,7 +403,7 @@ export function NotebookList({
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除"
-        message={`确定要删除「${deleteTarget?.name ?? ''}」吗？其下所有子目录和页面将被移到零散文件中。`}
+        message={`确定要删除「${deleteTarget?.name ?? ''}」吗？其下所有子目录和页面将一并移入回收站。`}
         confirmLabel="删除"
         onConfirm={(skipNext) => {
           if (skipNext) { setSkipDeleteConfirm(true); setSetting('skipDeleteConfirm_knowledgeCategory', true) }

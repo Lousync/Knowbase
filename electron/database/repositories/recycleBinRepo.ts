@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { trashItem, trashAll } from '../../lib/trashFiles'
 
 interface RecycleBinRow {
   id: string
@@ -331,13 +331,77 @@ export function registerRecycleBinHandlers(): void {
     }
   })
 
-  // ---- 永久删除单条 ----
+  // ---- 移入系统回收站（单条） ----
+  ipcMain.handle('recycleBin:trashToOS', async (_e, id: string) => {
+    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin WHERE id = ?', [id])
+    if (rows.length === 0) return
+    const item = rows[0]
+    const record = { module: item.module, title: item.title, data: JSON.parse(item.data) }
+    await trashItem(id, record)
+    run('DELETE FROM recycle_bin WHERE id = ?', [id])
+  })
+
+  // ---- 移入系统回收站（全部） ----
+  ipcMain.handle('recycleBin:trashAllToOS', async () => {
+    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin ORDER BY deleted_at DESC')
+    if (rows.length === 0) return
+    const items = rows.map(r => ({ binId: r.id, module: r.module, title: r.title, data: JSON.parse(r.data) }))
+    await trashAll(items)
+    run('DELETE FROM recycle_bin')
+  })
+
+  // ---- 从快照中局部移入系统回收站 ----
+  ipcMain.handle('recycleBin:trashPartialToOS', async (_e, binId: string, path: string) => {
+    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin WHERE id = ?', [binId])
+    if (rows.length === 0) return
+    const item = rows[0]
+    if (item.module !== 'knowledge_category') return
+    const record = JSON.parse(item.data)
+
+    // Extract the target data
+    let node: any = record
+    const segs = path.split('.')
+    for (let i = 0; i < segs.length; i++) {
+      if (/^\d+$/.test(segs[i + 1])) {
+        node = node[segs[i]][parseInt(segs[++i], 10)]
+      } else {
+        node = node[segs[i]]
+      }
+    }
+
+    // Write the partial item to temp + trash
+    if (path === 'category') {
+      await trashItem(binId, { module: 'knowledge', title: node.name, data: { title: node.name, contentMd: '' } })
+    } else if (path.includes('pages.')) {
+      await trashItem(binId, { module: 'knowledge', title: node.title, data: node })
+    } else {
+      // child category
+      await trashItem(binId, { module: 'knowledge_category', title: node?.category?.name || '子目录', data: node })
+    }
+
+    // Remove from snapshot
+    spliceFromSnapshot(record, path)
+
+    const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || !!record.category
+    if (!hasContent) {
+      run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+    } else {
+      run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+    }
+  })
+
+  // ---- 永久删除单条（直接删库，不移入系统回收站） ----
   ipcMain.handle('recycleBin:permanentlyDelete', (_e, id: string) => {
     run('DELETE FROM recycle_bin WHERE id = ?', [id])
   })
 
-  // ---- 清空回收站 ----
-  ipcMain.handle('recycleBin:emptyAll', () => {
+  // ---- 清空回收站（移入系统回收站） ----
+  ipcMain.handle('recycleBin:emptyAll', async () => {
+    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin ORDER BY deleted_at DESC')
+    if (rows.length > 0) {
+      const items = rows.map(r => ({ binId: r.id, module: r.module, title: r.title, data: JSON.parse(r.data) }))
+      await trashAll(items)
+    }
     run('DELETE FROM recycle_bin')
   })
 

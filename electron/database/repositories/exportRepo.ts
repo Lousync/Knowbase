@@ -65,9 +65,9 @@ export function registerExportHandlers(): void {
     }
   })
 
-  // ===== Schedule: all todos with tags =====
+  // ===== Schedule: all non-done todos with tags =====
   ipcMain.handle('export:getAllScheduleData', () => {
-    const todos = queryAll<TodoRow>('SELECT * FROM schedule_todos ORDER BY date DESC, sort_order, created_at')
+    const todos = queryAll<TodoRow>("SELECT * FROM schedule_todos WHERE status != 'done' AND status != 'cancelled' ORDER BY date DESC, sort_order, created_at")
     const tags = queryAll<ScheduleTagRow>('SELECT * FROM schedule_tags ORDER BY name')
     const tagMap = new Map(tags.map(t => [t.id, t]))
 
@@ -117,7 +117,7 @@ export function registerExportHandlers(): void {
     }
 
     // Schedule
-    const todos = queryAll<TodoRow>('SELECT * FROM schedule_todos ORDER BY date DESC, sort_order, created_at')
+    const todos = queryAll<TodoRow>("SELECT * FROM schedule_todos WHERE status != 'done' AND status != 'cancelled' ORDER BY date DESC, sort_order, created_at")
     const scheduleTags = queryAll<ScheduleTagRow>('SELECT * FROM schedule_tags ORDER BY name')
     const sTagMap = new Map(scheduleTags.map(t => [t.id, t]))
 

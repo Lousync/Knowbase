@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import { initDatabase, getDbPath, closeDatabase } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
@@ -93,6 +93,16 @@ function registerWindowHandlers(): void {
   })
   ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
     const s = loadSettings(); s[key] = value; saveSettings(s)
+  })
+
+  // 选择目录对话框
+  ipcMain.handle('dialog:openDir', async () => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择回收站文件导出目录',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    return result.canceled ? null : result.filePaths[0]
   })
 }
 
