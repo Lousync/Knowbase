@@ -77,6 +77,8 @@ export const importDb = (srcPath: string) => a().importDb(srcPath)
 // recycle bin
 export const getRecycleBinItems = () => a().getRecycleBinItems()
 export const restoreRecycleBinItem = (id: string) => a().restoreRecycleBinItem(id)
+export const restoreRecycleBinPartial = (id: string, path: string) => a().restoreRecycleBinPartial(id, path)
+export const permanentlyDeleteRecycleBinPartial = (id: string, path: string) => a().permanentlyDeleteRecycleBinPartial(id, path)
 export const permanentlyDeleteRecycleBinItem = (id: string) => a().permanentlyDeleteRecycleBinItem(id)
 export const emptyRecycleBin = () => a().emptyRecycleBin()
 export const purgeExpiredRecycleBinItems = () => a().purgeExpiredRecycleBinItems()

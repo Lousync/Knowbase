@@ -17,8 +17,8 @@ interface Props {
   onOpenPage: (id: string) => void
   onCreateLoosePage: () => void
   onImport: () => void
-  onOpenRecycleBin: () => void
   onDropOnNotebook: (pageId: string, notebookId: string) => void
+  onDropOnCategory: (pageId: string, categoryId: string) => void
   onDropOnLooseArea: (pageId: string) => void
   onMoveCategory: (categoryId: string, newParentId: string | null) => void
 }
@@ -27,8 +27,8 @@ export function NotebookList({
   categories, loosePages, starredPages,
   selectedNotebookId, activePageId,
   onSelectNotebook, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
-  onOpenPage, onCreateLoosePage, onImport, onOpenRecycleBin,
-  onDropOnNotebook, onDropOnLooseArea, onMoveCategory,
+  onOpenPage, onCreateLoosePage, onImport,
+  onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
 }: Props) {
   const rootCats = categories.filter(c => !c.parentId)
   const [newName, setNewName] = useState('')
@@ -286,16 +286,8 @@ export function NotebookList({
           } else if (d.type === 'page') {
             const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
             if (el) {
-              const tid = el.getAttribute('data-cat-id')!
-              const cat = categories.find(c => c.id === tid)
-              // Pages can only go into notebooks, not plain folders
-              if (cat?.categoryType === 'notebook') {
-                e.dataTransfer.dropEffect = 'move'
-                setDragTargetId(tid)
-              } else {
-                e.dataTransfer.dropEffect = 'none'
-                setDragTargetId(null)
-              }
+              e.dataTransfer.dropEffect = 'move'
+              setDragTargetId(el.getAttribute('data-cat-id')!)
             } else {
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__loose')
@@ -330,6 +322,8 @@ export function NotebookList({
               const cat = categories.find(c => c.id === tid)
               if (cat?.categoryType === 'notebook') {
                 onDropOnNotebook(d.id, tid)
+              } else {
+                onDropOnCategory(d.id, tid)
               }
             } else {
               onDropOnLooseArea(d.id)
@@ -404,14 +398,6 @@ export function NotebookList({
           )}
         </div>
       )}
-
-      {/* ===== Recycle Bin ===== */}
-      <div className="border-t border-[var(--border-color)] px-2 py-0.5">
-        <button onClick={onOpenRecycleBin}
-          className="w-full flex items-center gap-1.5 px-1 py-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
-          <Trash2 size={15} />回收站
-        </button>
-      </div>
 
       {/* Delete confirmation */}
       <ConfirmDialog

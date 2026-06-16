@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Download, Settings } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings } from 'lucide-react'
 import { SettingsDropdown } from '../../modules/settings/components/SettingsDropdown'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
@@ -8,6 +8,7 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'schedule', label: '日程', icon: <Calendar size={28} strokeWidth={1.5} /> },
   { id: 'knowledge', label: '知识库', icon: <BookOpen size={28} strokeWidth={1.5} /> },
   { id: 'export', label: '导出', icon: <Upload size={28} strokeWidth={1.5} /> },
+  { id: 'recycle', label: '回收站', icon: <Trash2 size={28} strokeWidth={1.5} /> },
 ]
 
 interface Props {

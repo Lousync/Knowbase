@@ -9,7 +9,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[] }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[] }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle'
 export interface AppSettings { showLineNumbers?: boolean }
 
 // schedule
@@ -66,7 +66,7 @@ export interface ImportFileResult {
 export interface RecycleBinItem {
   id: string
   originalId: string
-  module: 'blog' | 'knowledge'
+  module: 'blog' | 'knowledge' | 'knowledge_category'
   title: string
   data: any
   deletedAt: string
@@ -145,6 +145,8 @@ export interface ElectronAPI {
   // recycle bin
   getRecycleBinItems: () => Promise<RecycleBinItem[]>
   restoreRecycleBinItem: (id: string) => Promise<void>
+  restoreRecycleBinPartial: (id: string, path: string) => Promise<void>
+  permanentlyDeleteRecycleBinPartial: (id: string, path: string) => Promise<void>
   permanentlyDeleteRecycleBinItem: (id: string) => Promise<void>
   emptyRecycleBin: () => Promise<void>
   purgeExpiredRecycleBinItems: () => Promise<void>

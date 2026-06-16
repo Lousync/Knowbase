@@ -67,6 +67,8 @@ const api = {
   // recycle bin
   getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),
   restoreRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:restoreItem', id),
+  restoreRecycleBinPartial: (id: string, path: string) => ipcRenderer.invoke('recycleBin:restorePartial', id, path),
+  permanentlyDeleteRecycleBinPartial: (id: string, path: string) => ipcRenderer.invoke('recycleBin:permanentlyDeletePartial', id, path),
   permanentlyDeleteRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:permanentlyDelete', id),
   emptyRecycleBin: () => ipcRenderer.invoke('recycleBin:emptyAll'),
   purgeExpiredRecycleBinItems: () => ipcRenderer.invoke('recycleBin:purgeExpired'),

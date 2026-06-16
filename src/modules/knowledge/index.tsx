@@ -12,7 +12,6 @@ import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar } from './components/PageTabBar'
-import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 
@@ -31,7 +30,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showChapterPanel, setShowChapterPanel] = useState(true)
-  const [showRecycleBin, setShowRecycleBin] = useState(false)
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
@@ -245,6 +243,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshLoosePages(); refreshChapterPages()
   }
 
+  const handleDropOnCategory = async (pageId: string, categoryId: string) => {
+    await updateKnowledgePage(pageId, { categoryId })
+    refreshLoosePages(); refreshChapterPages()
+  }
+
   const handleDropOnChapter = async (pageId: string, chapterId: string) => {
     await updateKnowledgePage(pageId, { categoryId: chapterId })
     refreshLoosePages(); refreshChapterPages()
@@ -292,8 +295,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onOpenPage={handleOpenPage}
             onCreateLoosePage={handleCreateLoosePage}
             onImport={handleDialogImport}
-            onOpenRecycleBin={() => setShowRecycleBin(true)}
             onDropOnNotebook={handleDropOnNotebook}
+            onDropOnCategory={handleDropOnCategory}
             onDropOnLooseArea={handleDropOnLooseArea}
             onMoveCategory={handleMoveCategory}
           />
@@ -354,14 +357,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             </div>
           )}
         </div>
-
-        {showRecycleBin && (
-          <RecycleBinPanel
-            module="knowledge"
-            onClose={() => setShowRecycleBin(false)}
-            onRestored={() => { refreshLoosePages(); refreshChapterPages(); refreshStarred() }}
-          />
-        )}
       </div>
     </ImportZone>
   )

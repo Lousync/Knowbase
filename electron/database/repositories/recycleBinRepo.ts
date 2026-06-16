@@ -102,10 +102,233 @@ export function registerRecycleBinHandlers(): void {
         }
       }
       // 注意: knowledge_links 不恢复 — 保存页面时会自动重建
+    } else if (item.module === 'knowledge_category') {
+      const cat = record.category
+      // Verify parent still exists; if not, re-parent to root
+      const parentOk = cat.parentId
+        ? queryAll<{ id: string }>('SELECT id FROM knowledge_categories WHERE id = ?', [cat.parentId]).length > 0
+        : true
+
+      run(
+        `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+         VALUES (?, ?, ?, ?, ?)`,
+        [cat.id, cat.name, parentOk ? cat.parentId : null, cat.sortOrder || 0, cat.categoryType || 'folder']
+      )
+
+      // Recursively restore children
+      const restoreChildren = (children: any[], parentId: string) => {
+        for (const ch of (children || [])) {
+          const c = ch.category
+          run(
+            `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+             VALUES (?, ?, ?, ?, ?)`,
+            [c.id, c.name, parentId, c.sortOrder || 0, c.categoryType || 'folder']
+          )
+          // Restore pages under this child
+          for (const p of (ch.pages || [])) {
+            run(
+              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [p.id, p.title, p.contentMd, p.contentHtml || '', c.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.createdAt, p.updatedAt]
+            )
+            for (const tag of (p.tags || [])) {
+              try {
+                run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id])
+              } catch { /* tag may have been deleted */ }
+            }
+          }
+          restoreChildren(ch.children, c.id)
+        }
+      }
+      restoreChildren(record.children || [], cat.id)
+
+      // Restore direct pages
+      for (const p of (record.pages || [])) {
+        run(
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [p.id, p.title, p.contentMd, p.contentHtml || '', cat.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.createdAt, p.updatedAt]
+        )
+        for (const tag of (p.tags || [])) {
+          try {
+            run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id])
+          } catch { /* tag may have been deleted */ }
+        }
+      }
     }
 
     // 从回收站移除
     run('DELETE FROM recycle_bin WHERE id = ?', [id])
+  })
+
+  // ---- 部分恢复（从知识目录快照中恢复单个页面/子目录） ----
+  ipcMain.handle('recycleBin:restorePartial', (_e, binId: string, path: string) => {
+    const rows = queryAll<RecycleBinRow>(
+      'SELECT * FROM recycle_bin WHERE id = ?', [binId]
+    )
+    if (rows.length === 0) return
+    const item = rows[0]
+    if (item.module !== 'knowledge_category') return
+    const record = JSON.parse(item.data)
+
+    // Parse path like "pages.2" or "children.0.pages.1" or "children.1"
+    const segments = path.split('.')
+    let container: any = record
+    let parentContainer: any = null
+    let key: string = ''
+    let index: number = -1
+    for (let i = 0; i < segments.length; i++) {
+      parentContainer = container
+      key = segments[i]
+      index = -1
+      if (/^\d+$/.test(segments[i + 1] || '')) {
+        key = segments[i]
+        index = parseInt(segments[++i], 10)
+        container = container[key]?.[index]
+      } else if (i === segments.length - 1) {
+        // last segment
+      } else {
+        container = container[segments[i]]
+      }
+    }
+
+    // container now is the parent of the target
+    if (path === 'category') {
+      // Restore only the top-level category itself (no children/pages)
+      const c = record.category
+      run(
+        `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+         VALUES (?, ?, ?, ?, ?)`,
+        [c.id, c.name, null, c.sortOrder || 0, c.categoryType || 'folder']
+      )
+      // Remove category from snapshot; if nothing left, delete bin entry
+      delete record.category
+      const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || record.category
+      if (!hasContent) {
+        run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+      } else {
+        run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+      }
+      return
+    }
+
+    if (segments[0] === 'pages') {
+      // Restore a direct page from record.pages[i]
+      const pageIdx = parseInt(segments[1], 10)
+      const page = record.pages[pageIdx]
+      if (page) {
+        run(
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.createdAt, page.updatedAt]
+        )
+        for (const tag of (page.tags || [])) {
+          try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* */ }
+        }
+        record.pages.splice(pageIdx, 1)
+      }
+    } else if (segments[0] === 'children') {
+      const childIdx = parseInt(segments[1], 10)
+      const child = record.children[childIdx]
+      if (!child) return
+
+      if (segments.length === 2) {
+        // Restore entire child category as root
+        const c = child.category
+        run(
+          `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+           VALUES (?, ?, ?, ?, ?)`,
+          [c.id, c.name, null, c.sortOrder || 0, c.categoryType || 'folder']
+        )
+        const restorePages = (pages: any[], catId: string) => {
+          for (const p of pages) {
+            run(
+              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [p.id, p.title, p.contentMd, p.contentHtml || '', catId, p.isStarred ? 1 : 0, p.sortOrder || 0, p.createdAt, p.updatedAt]
+            )
+            for (const tag of (p.tags || [])) {
+              try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id]) } catch { /* */ }
+            }
+          }
+        }
+        const restoreChildren = (children: any[], parentId: string) => {
+          for (const ch of children) {
+            const cc = ch.category
+            run(
+              `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+               VALUES (?, ?, ?, ?, ?)`,
+              [cc.id, cc.name, parentId, cc.sortOrder || 0, cc.categoryType || 'folder']
+            )
+            restorePages(ch.pages || [], cc.id)
+            restoreChildren(ch.children || [], cc.id)
+          }
+        }
+        restorePages(child.pages || [], c.id)
+        restoreChildren(child.children || [], c.id)
+        record.children.splice(childIdx, 1)
+      } else if (segments[2] === 'pages') {
+        // Restore a page within a child: children.X.pages.Y
+        const pageIdx = parseInt(segments[3], 10)
+        const page = child.pages[pageIdx]
+        if (page) {
+          run(
+            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.createdAt, page.updatedAt]
+          )
+          for (const tag of (page.tags || [])) {
+            try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* */ }
+          }
+          child.pages.splice(pageIdx, 1)
+        }
+      }
+    }
+
+    // Check if snapshot is now empty (no pages, no children)
+    const hasContent = (record.pages?.length > 0) || (record.children?.length > 0)
+    if (!hasContent) {
+      run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+    } else {
+      run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+    }
+  })
+
+  // ---- 从快照中永久删除单条（不恢复，直接丢弃） ----
+  function spliceFromSnapshot(record: any, path: string): boolean {
+    const segs = path.split('.')
+    let container: any = record
+    for (let i = 0; i < segs.length - 2; i++) {
+      if (/^\d+$/.test(segs[i + 1])) {
+        container = container[segs[i]][parseInt(segs[++i], 10)]
+      } else {
+        container = container[segs[i]]
+      }
+    }
+    const arrKey = segs[segs.length - 2]
+    const idx = parseInt(segs[segs.length - 1], 10)
+    return container[arrKey] ? (container[arrKey].splice(idx, 1), true) : false
+  }
+
+  ipcMain.handle('recycleBin:permanentlyDeletePartial', (_e, binId: string, path: string) => {
+    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin WHERE id = ?', [binId])
+    if (rows.length === 0) return
+    const item = rows[0]
+    if (item.module !== 'knowledge_category') return
+    const record = JSON.parse(item.data)
+
+    if (path === 'category') {
+      delete record.category
+    } else {
+      spliceFromSnapshot(record, path)
+    }
+
+    const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || !!record.category
+    if (!hasContent) {
+      run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+    } else {
+      run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+    }
   })
 
   // ---- 永久删除单条 ----

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Entry, Tag } from '../../types'
-import { RecycleBinPanel } from '../shared/components/RecycleBinPanel'
 import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
 import { ConfirmDialog } from '../../components/shared'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -20,7 +19,6 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showRecycleBin, setShowRecycleBin] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -90,14 +88,6 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               onNewEntry={handleTodayEntry}
             />
           </div>
-          <button
-            onClick={() => setShowRecycleBin(v => !v)}
-            className={`flex items-center gap-2 px-4 py-2 text-[12px] border-t border-[var(--border-color)] transition-colors shrink-0 ${
-              showRecycleBin ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-            }`}
-          >
-            <Trash2 size={14} /> 回收站
-          </button>
         </div>
       </ResizablePanel>
       <main className="flex-1 overflow-hidden">
@@ -130,14 +120,6 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           />
         )}
       </main>
-
-      {showRecycleBin && (
-        <RecycleBinPanel
-          module="blog"
-          onClose={() => setShowRecycleBin(false)}
-          onRestored={() => { loadEntries(); setSelectedId(null); setView('list') }}
-        />
-      )}
     </div>
   )
 }

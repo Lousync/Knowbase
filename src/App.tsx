@@ -6,6 +6,7 @@ import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
 import { ExportModule } from './modules/export'
+import { RecycleBinModule } from './modules/recycle'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 // Zoom by adjusting <html> font-size.  All rem-based content scales naturally;
@@ -159,6 +160,7 @@ export default function App() {
           {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} />}
           {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={zoom} sidebarWidths={sidebarWidths} />}
           {activeTab === 'export' && <ExportModule />}
+          {activeTab === 'recycle' && <RecycleBinModule />}
         </main>
       </div>
       <StatusBar encoding={encoding} />
