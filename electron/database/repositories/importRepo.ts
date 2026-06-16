@@ -127,8 +127,9 @@ export function registerImportHandlers(): void {
         }
         for (const cat of data.knowledge.categories || []) {
           if (exists('knowledge_categories', cat.id)) { skipped++; continue }
-          db.run('INSERT INTO knowledge_categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)',
-            [cat.id, cat.name, cat.parentId, cat.sortOrder])
+          const ct = cat.categoryType === 'notebook' ? 'notebook' : 'folder'
+          db.run('INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+            [cat.id, cat.name, cat.parentId, cat.sortOrder, ct])
           imported++
         }
         for (const page of data.knowledge.pages || []) {

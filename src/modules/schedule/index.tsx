@@ -110,6 +110,17 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   useEffect(() => { refreshAll() }, [ym])
   useEffect(() => { loadTags() }, [loadTags])
 
+  // 监听数据导入事件 — 导入完成后刷新日程数据
+  const refreshAllRef = useRef(refreshAll)
+  const loadTagsRef = useRef(loadTags)
+  useEffect(() => { refreshAllRef.current = refreshAll }, [refreshAll])
+  useEffect(() => { loadTagsRef.current = loadTags }, [loadTags])
+  useEffect(() => {
+    const handler = () => { refreshAllRef.current(); loadTagsRef.current() }
+    window.addEventListener('data-imported', handler)
+    return () => window.removeEventListener('data-imported', handler)
+  }, [])
+
   // ---- calendar navigation ----
   function goToPrevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1)

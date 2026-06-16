@@ -36,6 +36,13 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   useEffect(() => { loadEntries() }, [loadEntries])
 
+  // 监听数据导入事件 — 导入完成后刷新博文列表
+  useEffect(() => {
+    const handler = () => { loadEntries() }
+    window.addEventListener('data-imported', handler)
+    return () => window.removeEventListener('data-imported', handler)
+  }, [loadEntries])
+
   // 今日文章编写 → 检查今天是否已有文章
   const handleTodayEntry = async () => {
     const todayEntry = entries.find(e => e.date === today)

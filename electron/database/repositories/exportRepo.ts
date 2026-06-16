@@ -15,7 +15,7 @@ interface EntryRow { id: string; title: string; content_md: string; content_html
 interface TagRow { id: string; name: string; color: string }
 interface TodoRow { id: string; title: string; description: string | null; date: string; time: string | null; quadrant: number; task_type: string; tag_id: string | null; status: string; sort_order: number; end_criteria: string | null; created_at: string; updated_at: string }
 interface ScheduleTagRow { id: string; name: string; color: string }
-interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number }
+interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; created_at: string; updated_at: string }
 
 // ---- helpers ----
@@ -95,7 +95,7 @@ export function registerExportHandlers(): void {
     }
 
     return {
-      categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order })),
+      categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' })),
       pages: pages.map(p => ({ ...mapPage(p), tags: [] as TagRow[], backlinks: backlinkMap.get(p.id) || [] })),
       tags
     }
@@ -147,7 +147,7 @@ export function registerExportHandlers(): void {
         tags: scheduleTags
       },
       knowledge: {
-        categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order })),
+        categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' })),
         pages: pages.map(p => ({ ...mapPage(p), tags: [] as TagRow[], backlinks: backlinkMap.get(p.id) || [] })),
         tags: knowledgeTags
       }

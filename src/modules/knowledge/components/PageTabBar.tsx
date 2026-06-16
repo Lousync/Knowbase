@@ -13,6 +13,7 @@ interface PageTabBarProps {
 export function PageTabBar({ openPageIds, activePageId, openPageTitles, onSelectTab, onCloseTab, onReorder }: PageTabBarProps) {
   const [dragSide, setDragSide] = useState<'left' | 'right'>('right')
   const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
 
   const handleDragStart = useCallback((e: React.DragEvent, pageId: string) => {
     e.dataTransfer.effectAllowed = 'move'
@@ -23,26 +24,44 @@ export function PageTabBar({ openPageIds, activePageId, openPageTitles, onSelect
     })
   }, [])
 
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
-    (e.currentTarget as HTMLElement).style.opacity = '1'
+  const handleDragEnd = useCallback(() => {
     setDraggedId(null)
+    setDragOverTabId(null)
   }, [])
 
-  const handleDragOver = useCallback((e: React.DragEvent, pageId: string) => {
-    e.preventDefault()
+  const handleContainerDragOver = useCallback((e: React.DragEvent) => {
     e.dataTransfer.dropEffect = 'move'
-    if (pageId === draggedId) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    setDragSide(e.clientX < rect.left + rect.width / 2 ? 'left' : 'right')
-  }, [draggedId])
-
-  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
-    e.preventDefault()
-    setDraggedId(null)
 
     const sourceId = e.dataTransfer.getData('text/plain')
-    if (!sourceId || sourceId === targetId) return
+    if (!sourceId) return
+
+    const tabEl = (e.target as HTMLElement).closest('[data-tab-id]') as HTMLElement | null
+    if (tabEl) {
+      const tabId = tabEl.getAttribute('data-tab-id')
+      if (tabId === sourceId) {
+        setDragOverTabId(null)
+        return
+      }
+      const rect = tabEl.getBoundingClientRect()
+      setDragSide(e.clientX < rect.left + rect.width / 2 ? 'left' : 'right')
+      setDragOverTabId(tabId)
+    } else {
+      setDragOverTabId(null)
+    }
+  }, [])
+
+  const handleContainerDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDraggedId(null)
+    setDragOverTabId(null)
+
+    const sourceId = e.dataTransfer.getData('text/plain')
+    if (!sourceId) return
+
+    const tabEl = (e.target as HTMLElement).closest('[data-tab-id]') as HTMLElement | null
+    if (!tabEl) return
+    const targetId = tabEl.getAttribute('data-tab-id')!
+    if (sourceId === targetId) return
 
     const ids = [...openPageIds]
     const srcIdx = ids.indexOf(sourceId)
@@ -55,35 +74,37 @@ export function PageTabBar({ openPageIds, activePageId, openPageTitles, onSelect
     onReorder(ids)
   }, [openPageIds, dragSide, onReorder])
 
-  const handleContainerDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }, [])
-
   if (openPageIds.length === 0) return null
 
   return (
     <div
+      data-drop-container
       className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] select-none shrink-0 overflow-x-auto"
       onDragOver={handleContainerDragOver}
+      onDrop={handleContainerDrop}
     >
       {openPageIds.map(pageId => {
         const title = openPageTitles[pageId] || ''
         const isActive = pageId === activePageId
         const isDragged = pageId === draggedId
+        const isDragOver = pageId === dragOverTabId
 
         return (
           <div
             key={pageId}
+            data-tab-id={pageId}
             className={`relative group ${isDragged ? 'opacity-40' : ''}`}
+            style={
+              isDragOver
+                ? { boxShadow: dragSide === 'left' ? 'inset 2px 0 0 var(--accent)' : 'inset -2px 0 0 var(--accent)' }
+                : undefined
+            }
           >
             <div
               draggable
               onClick={() => onSelectTab(pageId)}
               onDragStart={e => handleDragStart(e, pageId)}
               onDragEnd={handleDragEnd}
-              onDragOver={e => handleDragOver(e, pageId)}
-              onDrop={e => handleDrop(e, pageId)}
               className={`
                 flex items-center gap-1.5 h-9 px-3 text-[13px] cursor-pointer whitespace-nowrap
                 border-r border-[var(--border-color)] transition-colors duration-75

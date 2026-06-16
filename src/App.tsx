@@ -94,6 +94,35 @@ export default function App() {
     return () => { document.documentElement.style.fontSize = '' }
   }, [zoom])
 
+  // Blue-outline workaround: Chromium draws a compositor-level dashed outline
+  // around whichever element calls preventDefault() during dragover.  CSS and
+  // inline styles cannot suppress it.  The fix: call preventDefault() exactly
+  // once — on document.body in the CAPTURE phase — so the outline appears
+  // around the body (viewport edges, invisible).  Individual containers only
+  // set dropEffect; they must NOT call preventDefault() on dragover.
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault()
+    }
+    const onDragStart = () => {
+      document.body.classList.add('dragging')
+    }
+    const onDragEnd = () => {
+      document.body.classList.remove('dragging')
+    }
+    document.addEventListener('dragover', onDragOver, true) // capture phase
+    document.addEventListener('dragstart', onDragStart)
+    document.addEventListener('dragend', onDragEnd)
+    document.addEventListener('drop', onDragEnd)
+    return () => {
+      document.body.classList.remove('dragging')
+      document.removeEventListener('dragover', onDragOver, true)
+      document.removeEventListener('dragstart', onDragStart)
+      document.removeEventListener('dragend', onDragEnd)
+      document.removeEventListener('drop', onDragEnd)
+    }
+  }, [])
+
   const toggleLineNumbers = useCallback(() => {
     const next = !showLineNumbers; setShowLineNumbers(next); setSetting('showLineNumbers', next)
   }, [showLineNumbers])

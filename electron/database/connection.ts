@@ -228,6 +228,11 @@ function runMigrations(): void {
     db.run("CREATE INDEX IF NOT EXISTS idx_stodos_parent ON schedule_todos(parent_id)")
     db.run("INSERT INTO _migrations (name) VALUES ('009_subtasks')")
   }
+
+  if (!applied.has('010_knowledge_category_type')) {
+    try { db.run("ALTER TABLE knowledge_categories ADD COLUMN category_type TEXT DEFAULT 'folder'") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('010_knowledge_category_type')")
+  }
 }
 
 /**

@@ -34,6 +34,9 @@
   /* 字体 */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+
+  /* 拖拽高亮（VS Code list.dropBackground） */
+  --drop-bg: rgba(0, 122, 204, 0.28);
 }
 
 /* ===== 浅色主题覆写 ===== */
@@ -59,6 +62,9 @@ html.light {
   --warning: #8a6d15;
 
   --border-color: #e0e0e0;
+
+  /* 拖拽高亮（浅色 VS Code list.dropBackground） */
+  --drop-bg: #D6EBFF;
 }
 
 /* ===== 全局基础 ===== */
@@ -92,6 +98,12 @@ body {
 
 /* ===== 选中文本 ===== */
 ::selection { background-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* ===== 拖拽时禁用文本选中（VS Code 行为） ===== */
+body.dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 /* ===== 输入框基础样式 ===== */
 input, textarea, select {

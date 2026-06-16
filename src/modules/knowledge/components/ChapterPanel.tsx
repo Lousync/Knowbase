@@ -32,11 +32,9 @@ export function ChapterPanel({
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
-  const [dragOverPageId, setDragOverPageId] = useState<string | null>(null)
-  const [dragSide, setDragSide] = useState<'above' | 'below'>('below')
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
+  const [dragTargetId, setDragTargetId] = useState<string | null>(null)
 
   useEffect(() => {
     getSetting('skipDeleteConfirm_chapter').then(v => { if (v === true) setSkipDeleteConfirm(true) })
@@ -68,10 +66,35 @@ export function ChapterPanel({
       </div>
 
       {/* Chapters */}
-      <div className="px-2 py-1 border-b border-[var(--border-color)]">
+      <div
+        data-drop-container
+        className="px-2 py-1 border-b border-[var(--border-color)]"
+        onDragOver={e => {
+          e.dataTransfer.dropEffect = 'move'
+          const el = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
+          setDragTargetId(el ? el.getAttribute('data-chapter-id')! : null)
+        }}
+        onDragLeave={e => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setDragTargetId(null)
+          }
+        }}
+        onDrop={e => {
+          e.preventDefault()
+          setDragTargetId(null)
+          const raw = e.dataTransfer.getData('text/plain')
+          let pageId = raw
+          try { const p = JSON.parse(raw); if (p.type === 'page') pageId = p.id } catch {}
+          if (!pageId) return
+          const chTarget = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
+          if (chTarget) {
+            onDropOnChapter(pageId, chTarget.getAttribute('data-chapter-id')!)
+          }
+        }}
+      >
         <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-1 mb-1">章节</div>
         {chapters.map(ch => (
-          <div key={ch.id}>
+          <div key={ch.id} data-chapter-id={ch.id}>
             {editingId === ch.id ? (
               <input
                 className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[13px] outline-none text-[var(--text-primary)]"
@@ -84,16 +107,11 @@ export function ChapterPanel({
             ) : (
               <div
                 onClick={() => onSelectChapter(ch.id)}
-                onDragOver={e => { e.preventDefault(); setDragOverId(ch.id) }}
-                onDragLeave={() => setDragOverId(null)}
-                onDrop={e => {
-                  e.preventDefault(); setDragOverId(null)
-                  const pageId = e.dataTransfer.getData('text/plain')
-                  if (pageId) onDropOnChapter(pageId, ch.id)
-                }}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
-                  selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                } ${dragOverId === ch.id ? 'ring-1 ring-[var(--accent)]' : ''}`}
+                  selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-white'
+                  : dragTargetId === ch.id ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                }`}
               >
                 <Folder size={16} className={`shrink-0 ${selectedChapterId === ch.id ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}`} />
                 <span className="flex-1 truncate">{ch.name}</span>
@@ -138,26 +156,17 @@ export function ChapterPanel({
         {pages.length === 0 ? (
           <p className="px-1 py-4 text-[11px] text-[var(--text-disabled)] italic text-center">暂未选中章节</p>
         ) : (
-          pages.map(p => {
-            const isDragOver = dragOverPageId === p.id
-            return (
+          pages.map(p => (
               <div key={p.id}
                 draggable
-                onDragStart={e => { e.dataTransfer.setData('text/plain', p.id) }}
-                onDragOver={e => {
-                  e.preventDefault()
-                  setDragOverPageId(p.id)
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  setDragSide(e.clientY < rect.top + rect.height / 2 ? 'above' : 'below')
+                onDragStart={e => {
+                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                  requestAnimationFrame(() => {
+                    (e.currentTarget as HTMLElement).style.opacity = '0.4'
+                  })
                 }}
-                onDragLeave={() => setDragOverPageId(null)}
-                onDrop={e => {
-                  e.preventDefault(); setDragOverPageId(null)
-                  const movedId = e.dataTransfer.getData('text/plain')
-                  if (movedId && movedId !== p.id) {
-                    // Move inside same chapter → reorder via sort_order
-                    // For cross-chapter, handled by drop on chapter header
-                  }
+                onDragEnd={e => {
+                  (e.currentTarget as HTMLElement).style.opacity = '1'
                 }}
               >
                 <div
@@ -175,8 +184,7 @@ export function ChapterPanel({
                 </div>
               </div>
             )
-          })
-        )}
+          ))}
         {selectedChapterId && (
           <div className="flex gap-1 mt-1">
             <button onClick={onCreatePage}

@@ -38,6 +38,7 @@ export interface UpdateScheduleTodoDTO {
 // knowledge
 export interface KnowledgeCategory {
   id: string; name: string; parentId: string | null; sortOrder: number
+  categoryType: 'notebook' | 'folder'
   children?: KnowledgeCategory[]
 }
 export interface KnowledgePage {
@@ -48,8 +49,8 @@ export interface KnowledgePage {
   backlinks?: KnowledgePage[]
 }
 export interface KnowledgeTag { id: string; name: string; color: string }
-export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null }
-export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number }
+export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }
+export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
 

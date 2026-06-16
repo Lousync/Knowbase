@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 
 // ---- row types (snake_case matching SQLite columns) ----
-interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number }
+interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; created_at: string; updated_at: string }
 
 function mapPage(r: PageRow) {
@@ -44,40 +44,43 @@ export function registerKnowledgeHandlers(): void {
       id: r.id,
       name: r.name,
       parentId: r.parent_id,
-      sortOrder: r.sort_order
+      sortOrder: r.sort_order,
+      categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder'
     }))
   })
 
   // 创建分类
-  ipcMain.handle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null }) => {
+  ipcMain.handle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }) => {
     const id = randomUUID()
+    const ct = data.categoryType === 'notebook' ? 'notebook' : 'folder'
     const maxOrder = queryAll<{ m: number }>(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
       [data.parentId || null]
     )
     run(
-      'INSERT INTO knowledge_categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)',
-      [id, data.name, data.parentId || null, maxOrder[0]?.m ?? 0]
+      'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+      [id, data.name, data.parentId || null, maxOrder[0]?.m ?? 0, ct]
     )
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
     const r = rows[0]
-    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order }
+    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
   })
 
   // 更新分类（重命名/移动）
-  ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number }) => {
+  ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }) => {
     const sets: string[] = []
     const params: unknown[] = []
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
     if (data.parentId !== undefined) { sets.push('parent_id = ?'); params.push(data.parentId) }
     if (data.sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(data.sortOrder) }
+    if (data.categoryType !== undefined) { sets.push('category_type = ?'); params.push(data.categoryType) }
     if (sets.length > 0) {
       params.push(id)
       run(`UPDATE knowledge_categories SET ${sets.join(', ')} WHERE id = ?`, params)
     }
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
     const r = rows[0]
-    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order }
+    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
   })
 
   // 删除分类（子分类挂到父级，页面 category_id 置空）

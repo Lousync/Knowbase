@@ -39,7 +39,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   useEffect(() => { activePageIdRef.current = activePageId }, [activePageId])
 
   useEffect(() => {
-    if (sidebarOpen) { setShowCategoryPanel(true); setShowChapterPanel(!!selectedNotebookId) }
+    if (sidebarOpen) {
+      setShowCategoryPanel(true)
+      // Only restore chapter panel for notebooks, not folders
+      const cat = selectedNotebookId ? categories.find(c => c.id === selectedNotebookId) : null
+      setShowChapterPanel(cat?.categoryType === 'notebook')
+    }
   }, [sidebarOpen])
 
   // --- derived ---
@@ -80,11 +85,18 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       .finally(() => setLoading(false))
   }, [])
 
+  // 监听数据导入事件 — 导入完成后刷新所有数据
+  useEffect(() => {
+    const handler = () => { refreshCategories(); refreshLoosePages(); refreshStarred() }
+    window.addEventListener('data-imported', handler)
+    return () => window.removeEventListener('data-imported', handler)
+  }, [refreshCategories, refreshLoosePages, refreshStarred])
+
   useEffect(() => { refreshChapterPages() }, [refreshChapterPages])
 
   // --- notebook CRUD ---
-  const handleCreateNotebook = async (name: string) => {
-    await createKnowledgeCategory({ name, parentId: null })
+  const handleCreateNotebook = async (name: string, categoryType: 'folder' | 'notebook', parentId: string | null) => {
+    await createKnowledgeCategory({ name, parentId, categoryType })
     refreshCategories()
   }
   const handleRenameNotebook = async (id: string, name: string) => {
@@ -100,7 +112,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   // --- chapter CRUD ---
   const handleCreateChapter = async (name: string) => {
     if (!selectedNotebookId) return
-    await createKnowledgeCategory({ name, parentId: selectedNotebookId })
+    await createKnowledgeCategory({ name, parentId: selectedNotebookId, categoryType: 'folder' })
     refreshCategories()
   }
   const handleRenameChapter = async (id: string, name: string) => {
@@ -218,7 +230,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       targetChapterId = notebookChapters[0].id
     } else {
       // Auto-create a default chapter
-      const ch = await createKnowledgeCategory({ name: '默认章节', parentId: notebookId })
+      const ch = await createKnowledgeCategory({ name: '默认章节', parentId: notebookId, categoryType: 'folder' })
       await refreshCategories()
       targetChapterId = (await getKnowledgeCategories()).find(c => c.name === '默认章节' && c.parentId === notebookId)?.id || null
     }
@@ -238,6 +250,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshLoosePages(); refreshChapterPages()
   }
 
+  // --- category move (drag & drop) ---
+  const handleMoveCategory = async (categoryId: string, newParentId: string | null) => {
+    await updateKnowledgeCategory(categoryId, { parentId: newParentId })
+    refreshCategories()
+  }
+
   // --- notebook / chapter selection ---
   const handleSelectNotebook = (id: string | null) => {
     if (id === selectedNotebookId) {
@@ -248,7 +266,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } else {
       setSelectedNotebookId(id)
       setSelectedChapterId(null)
-      setShowChapterPanel(true)
+      // Only notebooks have chapters; folders just show their children in the tree
+      const cat = categories.find(c => c.id === id)
+      setShowChapterPanel(cat?.categoryType === 'notebook')
     }
   }
 
@@ -275,6 +295,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onOpenRecycleBin={() => setShowRecycleBin(true)}
             onDropOnNotebook={handleDropOnNotebook}
             onDropOnLooseArea={handleDropOnLooseArea}
+            onMoveCategory={handleMoveCategory}
           />
         </ResizablePanel>
 
@@ -285,10 +306,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               notebookName={selectedNotebook.name}
               chapters={chapters}
               selectedChapterId={selectedChapterId}
-              onSelectChapter={(id) => {
-                setSelectedChapterId(id === selectedChapterId ? null : id)
-                if (id !== selectedChapterId) setSelectedChapterId(id)
-              }}
+              onSelectChapter={(id) => setSelectedChapterId(id === selectedChapterId ? null : id)}
               onCreateChapter={handleCreateChapter}
               onRenameChapter={handleRenameChapter}
               onDeleteChapter={handleDeleteChapter}
