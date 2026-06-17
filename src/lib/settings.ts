@@ -37,6 +37,16 @@ export const ICON_SIZE_OPTIONS = [
   { id: 'l', label: '大' },
 ] as const
 
+export const FONT_SIZE_OPTIONS = [
+  { id: 12, label: '12px' },
+  { id: 13, label: '13px' },
+  { id: 14, label: '14px' },
+  { id: 15, label: '15px' },
+  { id: 16, label: '16px' },
+  { id: 18, label: '18px' },
+  { id: 20, label: '20px' },
+] as const
+
 // ===== 设置定义 =====
 
 export const SETTINGS = {
@@ -46,6 +56,7 @@ export const SETTINGS = {
 
   // ---- 编辑器 ----
   showLineNumbers:   { default: true,         desc: '编辑器显示行号' },
+  editorFontSize:    { default: 13,           desc: '编辑器字号' },
   zoom:              { default: 1.0,          desc: '界面缩放比例' },
 
   // ---- 导出 ----

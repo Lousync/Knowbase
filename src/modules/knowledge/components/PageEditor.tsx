@@ -3,7 +3,7 @@ import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
-import { SETTINGS_DEFAULTS } from '../../../lib/settings'
+import { useSettings } from '../../../lib/SettingsContext'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
@@ -23,6 +23,7 @@ interface Props {
 }
 
 export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange }: Props) {
+  const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -83,7 +84,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!page) return
     setSaving(true)
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => doSave(title, content), SETTINGS_DEFAULTS.autoSaveDebounceMs)
+    saveTimer.current = setTimeout(() => doSave(title, content), s.autoSaveDebounceMs)
     return () => clearTimeout(saveTimer.current)
   }, [title, content, page, doSave])
 
@@ -268,7 +269,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
                 options={{
-                  fontSize: Math.round(13 * zoom),
+                  fontSize: Math.round(s.editorFontSize * zoom),
                   fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
                   lineNumbers: 'on',
                   minimap: { enabled: false },

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code } from 'lucide-react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
-import { SETTINGS_DEFAULTS } from '../../../lib/settings'
+import { useSettings } from '../../../lib/SettingsContext'
 import Editor, { type OnMount } from '@monaco-editor/react'
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 }
 
 export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel }: Props) {
+  const { s } = useSettings()
   const [contentMd, setContentMd] = useState('')
   const [date, setDate] = useState('')
   const [showPreview, setShowPreview] = useState(false)
@@ -43,7 +44,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     const val = v || ''
     setContentMd(val)
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => doSave(val, dateRef.current), SETTINGS_DEFAULTS.autoSaveDebounceMs)
+    timer.current = setTimeout(() => doSave(val, dateRef.current), s.autoSaveDebounceMs)
   }
 
   const handleSaveAndClose = async () => {
@@ -110,7 +111,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             theme="vs-dark"
             loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
-              fontSize: Math.round(14 * zoom),
+              fontSize: Math.round(s.editorFontSize * zoom),
               fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
               lineNumbers: showLineNumbers ? 'on' : 'off',
               minimap: { enabled: false },
