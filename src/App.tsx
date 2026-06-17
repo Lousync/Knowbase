@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
+import { Toast } from './components/shared/Toast'
 import { FONT_CSS_MAP } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
@@ -51,6 +52,13 @@ export default function App() {
     const handler = () => setImportModalOpen(true)
     window.addEventListener('open-import-modal', handler)
     return () => window.removeEventListener('open-import-modal', handler)
+  }, [])
+
+  // Listen for settings:open — navigate to settings tab
+  useEffect(() => {
+    const handler = () => { setActiveTab('settings'); setSidebarOpen(true) }
+    window.addEventListener('settings:open', handler)
+    return () => window.removeEventListener('settings:open', handler)
   }, [])
 
   // Keep <html> font-size in sync when zoom changes externally
@@ -130,6 +138,7 @@ export default function App() {
         </main>
       </div>
       <StatusBar encoding={encoding} />
+      <Toast />
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} />}
     </div>
   )

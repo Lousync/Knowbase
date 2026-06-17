@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Entry } from '../../../types'
 import { Edit3, ChevronRight, ChevronDown, FileText, Search } from 'lucide-react'
+import { showToast } from '../../../lib/toast'
 
 interface SidebarProps {
   entries: Entry[]
@@ -19,11 +20,12 @@ const MONTH_NAMES: Record<string, string> = {
   '09': '九月', '10': '十月', '11': '十一月', '12': '十二月'
 }
 
+const EARLIEST_DATE = '2005-12-21'
+
 function buildTree(entries: Entry[], today: string, thisYear: string, thisMonth: string): YearMap {
   const tree: YearMap = {}
   const seen = new Set<string>()
 
-  // Existing entries
   for (const e of entries) {
     if (seen.has(e.date)) continue
     seen.add(e.date)
@@ -43,11 +45,128 @@ function buildTree(entries: Entry[], today: string, thisYear: string, thisMonth:
     tree[thisYear][thisMonth].push({ date, hasContent: false })
   }
 
-  // Sort months and days
   for (const y of Object.values(tree)) {
     for (const m of Object.values(y)) m.sort((a, b) => b.date.localeCompare(a.date))
   }
   return tree
+}
+
+/** Parse search input — supports xxxx/xx/xx, xxxx-xx-xx, xxxx年xx月xx日, or partial */
+function parseSearchDate(raw: string): { year?: string; month?: string; day?: string } | null {
+  const s = raw.trim()
+  if (!s) return null
+
+  // Full date: 2025/06/17 or 2025-06-17
+  const full = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/)
+  if (full) return { year: full[1], month: full[2].padStart(2, '0'), day: full[3].padStart(2, '0') }
+
+  // Year-Month: 2025/06 or 2025-06
+  const ym = s.match(/^(\d{4})[\/\-](\d{1,2})$/)
+  if (ym) return { year: ym[1], month: ym[2].padStart(2, '0') }
+
+  // Year only: 2025
+  const y = s.match(/^(\d{4})$/)
+  if (y) return { year: y[1] }
+
+  // Month-Day: 06/17 or 6/17
+  const md = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/)
+  if (md) return { month: md[1].padStart(2, '0'), day: md[2].padStart(2, '0') }
+
+  // Just digits — substring match
+  if (/^\d+$/.test(s)) return {}
+
+  return {}
+}
+
+/** Given a partial search result and the tree, expand what's needed and build display items */
+function computeSearchResults(
+  tree: YearMap,
+  parsed: ReturnType<typeof parseSearchDate>,
+  existingYears: string[],
+  searchRaw: string,
+) {
+  if (!parsed) return null
+
+  const { year, month, day } = parsed
+
+  // If we have a full date, show that specific day
+  if (year && month && day) {
+    const date = `${year}-${month}-${day}`
+    return {
+      years: [year],
+      months: { [year]: [month] },
+      days: { [`${year}-${month}`]: [{ date, hasContent: !!(tree[year]?.[month]?.find(d => d.date === date)) }] },
+      hasContent: { [date]: !!(tree[year]?.[month]?.find(d => d.date === date)) },
+    }
+  }
+
+  // Year-Month: show all days in that month (or generate empty month if not in tree)
+  if (year && month) {
+    const mk = `${year}-${month}`
+    const days = tree[year]?.[month]
+      ? [...tree[year][month]]
+      : generateMonthDays(year, month)
+    return {
+      years: [year],
+      months: { [year]: [month] },
+      days: { [mk]: days },
+    }
+  }
+
+  // Year only: show all months in that year
+  if (year) {
+    const months = tree[year]
+      ? Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
+      : generateAllMonths()
+    const days: Record<string, DayNode[]> = {}
+    for (const m of months) {
+      const mk = `${year}-${m}`
+      days[mk] = tree[year]?.[m] ?? generateMonthDays(year, m)
+    }
+    return { years: [year], months: { [year]: months }, days }
+  }
+
+  // Just a substring — filter all dates in tree
+  if (parsed && Object.keys(parsed).length === 0) {
+    const matchedYears = new Set<string>()
+    const monthsByYear: Record<string, string[]> = {}
+    const daysByMonth: Record<string, DayNode[]> = {}
+
+    for (const y of existingYears) {
+      const ms = Object.keys(tree[y] || {})
+      for (const m of ms) {
+        const filtered = (tree[y]?.[m] || []).filter(d => d.date.includes(searchRaw))
+        if (filtered.length > 0) {
+          matchedYears.add(y)
+          if (!monthsByYear[y]) monthsByYear[y] = []
+          monthsByYear[y].push(m)
+          daysByMonth[`${y}-${m}`] = filtered
+        }
+      }
+    }
+    if (matchedYears.size === 0) return null
+    return {
+      years: [...matchedYears].sort((a, b) => b.localeCompare(a)),
+      months: monthsByYear,
+      days: daysByMonth,
+    }
+  }
+
+  return null
+}
+
+function generateMonthDays(year: string, month: string): DayNode[] {
+  const dim = new Date(parseInt(year), parseInt(month), 0).getDate()
+  const days: DayNode[] = []
+  for (let d = 1; d <= dim; d++) {
+    days.push({ date: `${year}-${month}-${String(d).padStart(2, '0')}`, hasContent: false })
+  }
+  days.sort((a, b) => b.date.localeCompare(a.date))
+  return days
+}
+
+function generateAllMonths(): string[] {
+  return ['12', '11', '10', '09', '08', '07', '06', '05', '04', '03', '02', '01']
 }
 
 export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
@@ -57,9 +176,19 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
   const hasToday = entries.some(e => e.date === today)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const activeSearch = searchQuery.trim().length > 0
 
   const tree = useMemo(() => buildTree(entries, today, thisYear, thisMonth), [entries, today])
-  const years = Object.keys(tree).sort((a, b) => b.localeCompare(a))
+
+  const existingYears = Object.keys(tree).sort((a, b) => b.localeCompare(a))
+
+  const parsed = useMemo(() => parseSearchDate(searchQuery.trim()), [searchQuery])
+  const searchResults = useMemo(
+    () => activeSearch ? computeSearchResults(tree, parsed, existingYears, searchQuery.trim()) : null,
+    [activeSearch, tree, parsed, existingYears, searchQuery],
+  )
+
+  const effectiveYears = searchResults ? searchResults.years : existingYears
 
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const s = new Set<string>()
@@ -72,7 +201,17 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
     setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }
 
-  const activeSearch = searchQuery.trim().length > 0
+  const handleSelectDateSafe = (date: string) => {
+    if (date < EARLIEST_DATE) {
+      showToast({
+        type: 'warning',
+        message: `暂不支持 ${date} 之前的日期。最早可补写日期为 ${EARLIEST_DATE}。`,
+        detail: 'shortcuts',
+      })
+      return
+    }
+    onSelectDate(date === selectedDate ? null : date)
+  }
 
   return (
     <aside className="w-full bg-[var(--bg-secondary)] flex flex-col h-full shrink-0 overflow-x-hidden">
@@ -112,19 +251,26 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="搜索日期..."
+              placeholder="搜索日期 (xxxx/xx/xx)"
               className="w-full pl-7 pr-2 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
             />
           </div>
         </div>
 
-        {years.length === 0 && (
+        {effectiveYears.length === 0 && !activeSearch && (
           <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">暂无文章</p>
         )}
+        {activeSearch && searchResults === null && effectiveYears.length === 0 && (
+          <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">未找到匹配的日期</p>
+        )}
 
-        {years.map(year => {
+        {effectiveYears.map(year => {
           const yearOpen = expanded.has(year) || activeSearch
-          const months = Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
+          const months =
+            searchResults?.months[year]
+            ?? Object.keys(tree[year] || {}).sort((a, b) => b.localeCompare(a))
+
+          if (!months || months.length === 0) return null
 
           return (
             <div key={year}>
@@ -134,19 +280,15 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
                   ? <ChevronDown size={18} className="text-[#888] shrink-0" />
                   : <ChevronRight size={18} className="text-[#888] shrink-0" />}
                 <span className="font-semibold">{year} 年</span>
+                <span className="text-[10px] text-[var(--text-disabled)] ml-1">
+                  {searchResults ? '搜索' : ''}
+                </span>
               </button>
 
               {yearOpen && months.map(month => {
                 const mk = `${year}-${month}`
                 const mOpen = expanded.has(mk) || activeSearch
-                const days = tree[year][month]
-
-                // Filter by search
-                const filteredDays = activeSearch
-                  ? days.filter(d => d.date.includes(searchQuery.trim()))
-                  : days
-
-                if (activeSearch && filteredDays.length === 0) return null
+                const days = searchResults?.days[mk] ?? tree[year]?.[month] ?? []
 
                 return (
                   <div key={mk} className="ml-3">
@@ -156,12 +298,14 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
                         ? <ChevronDown size={18} className="text-[#888] shrink-0" />
                         : <ChevronRight size={18} className="text-[#888] shrink-0" />}
                       <span>{MONTH_NAMES[month] || `${month}月`}</span>
-                      <span className="text-[10px] text-[var(--text-muted)] ml-1">{days.filter(d => d.hasContent).length}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] ml-1">
+                        {days.filter(d => d.hasContent).length || ''}
+                      </span>
                     </button>
 
-                    {mOpen && filteredDays.map(day => (
+                    {mOpen && days.map(day => (
                       <button key={day.date}
-                        onClick={() => onSelectDate(day.date === selectedDate ? null : day.date)}
+                        onClick={() => handleSelectDateSafe(day.date)}
                         className={`w-full flex items-center gap-2 ml-5 px-2 py-1 text-[13px] rounded transition-colors ${
                           selectedDate === day.date
                             ? 'bg-[#37373d] text-white'

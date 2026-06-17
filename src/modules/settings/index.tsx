@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Palette, Type, FileDown, Wrench, Info, Search, Keyboard } from 'lucide-react'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
@@ -23,9 +23,25 @@ const SECTIONS: SectionDef[] = [
   { id: 'shortcuts',  label: '快捷键', icon: <Keyboard size={16} />, keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', 'ctrl', 'tab', '删除', '保存', '预览', '重命名', '侧栏', '切换'] },
 ]
 
+// Module-level target for cross-component navigation (toast "查看详情" etc.)
+let pendingSection: SettingsSection | null = null
+
+export function navigateToSettingsSection(section: SettingsSection) {
+  pendingSection = section
+  window.dispatchEvent(new CustomEvent('settings:open'))
+}
+
 export function SettingsModule() {
   const [section, setSection] = useState<SettingsSection>('appearance')
   const [query, setQuery] = useState('')
+
+  // Consume pending section on mount
+  useEffect(() => {
+    if (pendingSection) {
+      setSection(pendingSection)
+      pendingSection = null
+    }
+  }, [])
 
   const visibleSections = useMemo(() => {
     if (!query.trim()) return null
