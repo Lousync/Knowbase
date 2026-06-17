@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+
 interface StatusBarProps {
   date?: string
   fileType?: string
@@ -6,10 +8,26 @@ interface StatusBarProps {
 
 export function StatusBar({
   date = '',
-  fileType = 'Markdown',
+  fileType: initialFileType = 'Markdown',
   encoding = 'UTF-8'
 }: StatusBarProps) {
   const today = date || new Date().toISOString().split('T')[0]
+  const [currentFileType, setCurrentFileType] = useState(initialFileType)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (typeof detail === 'string') setCurrentFileType(detail)
+    }
+    window.addEventListener('status-filetype', handler)
+    // Reset when switching tabs
+    const resetHandler = () => setCurrentFileType('Markdown')
+    window.addEventListener('tab-switched', resetHandler)
+    return () => {
+      window.removeEventListener('status-filetype', handler)
+      window.removeEventListener('tab-switched', resetHandler)
+    }
+  }, [])
 
   return (
     <div className="flex items-center justify-between h-6 bg-[#0e639c] text-white text-[12px] select-none shrink-0 px-1">
@@ -17,7 +35,7 @@ export function StatusBar({
         <StatusItem>📅 {today}</StatusItem>
       </div>
       <div className="flex items-center gap-0">
-        <StatusItem>{fileType}</StatusItem>
+        <StatusItem>{currentFileType}</StatusItem>
         <StatusItem>{encoding}</StatusItem>
       </div>
     </div>

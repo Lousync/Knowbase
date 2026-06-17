@@ -85,12 +85,12 @@ export function registerRecycleBinHandlers(): void {
     } else if (item.module === 'knowledge') {
       // 恢复知识页面
       run(
-        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           record.id, record.title, record.contentMd, record.contentHtml || '',
           record.categoryId || null, record.isStarred ? 1 : 0,
-          record.sortOrder || 0, record.createdAt, record.updatedAt
+          record.sortOrder || 0, record.fileType || '', record.createdAt, record.updatedAt
         ]
       )
       // 恢复标签关联
@@ -127,9 +127,9 @@ export function registerRecycleBinHandlers(): void {
           // Restore pages under this child
           for (const p of (ch.pages || [])) {
             run(
-              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [p.id, p.title, p.contentMd, p.contentHtml || '', c.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.createdAt, p.updatedAt]
+              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [p.id, p.title, p.contentMd, p.contentHtml || '', c.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
             )
             for (const tag of (p.tags || [])) {
               try {
@@ -145,9 +145,9 @@ export function registerRecycleBinHandlers(): void {
       // Restore direct pages
       for (const p of (record.pages || [])) {
         run(
-          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [p.id, p.title, p.contentMd, p.contentHtml || '', cat.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.createdAt, p.updatedAt]
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [p.id, p.title, p.contentMd, p.contentHtml || '', cat.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
         )
         for (const tag of (p.tags || [])) {
           try {
@@ -218,9 +218,9 @@ export function registerRecycleBinHandlers(): void {
       const page = record.pages[pageIdx]
       if (page) {
         run(
-          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.createdAt, page.updatedAt]
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.fileType || '', page.createdAt, page.updatedAt]
         )
         for (const tag of (page.tags || [])) {
           try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* */ }
@@ -243,9 +243,9 @@ export function registerRecycleBinHandlers(): void {
         const restorePages = (pages: any[], catId: string) => {
           for (const p of pages) {
             run(
-              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [p.id, p.title, p.contentMd, p.contentHtml || '', catId, p.isStarred ? 1 : 0, p.sortOrder || 0, p.createdAt, p.updatedAt]
+              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [p.id, p.title, p.contentMd, p.contentHtml || '', catId, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
             )
             for (const tag of (p.tags || [])) {
               try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id]) } catch { /* */ }
@@ -273,9 +273,9 @@ export function registerRecycleBinHandlers(): void {
         const page = child.pages[pageIdx]
         if (page) {
           run(
-            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.createdAt, page.updatedAt]
+            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.fileType || '', page.createdAt, page.updatedAt]
           )
           for (const tag of (page.tags || [])) {
             try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* */ }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
-import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText } from 'lucide-react'
+import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting } from '../../../lib/ipc'
+import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
@@ -23,6 +24,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [fileType, setFileTypeState] = useState('')
+  const [showLangMenu, setShowLangMenu] = useState(false)
   const [preview, setPreview] = useState(false)
   const [backlinks, setBacklinks] = useState<KnowledgePage[]>([])
   const [saving, setSaving] = useState(false)
@@ -32,17 +35,19 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const contentRef = useRef(content)
   const titleRef = useRef(title)
   const pageRef = useRef(page)
+  const fileTypeRef = useRef(fileType)
   const monacoRef = useRef<typeof Monaco | null>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
 
   useEffect(() => { contentRef.current = content }, [content])
   useEffect(() => { titleRef.current = title }, [title])
   useEffect(() => { pageRef.current = page }, [page])
+  useEffect(() => { fileTypeRef.current = fileType }, [fileType])
 
   useEffect(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
-        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); onTitleChange?.(p.title) }
+        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
       }),
       getKnowledgeBacklinks(pageId).then(setBacklinks)
     ])
@@ -58,7 +63,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!pageRef.current) return
     try {
       const links = parseWikiLinks(c)
-      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: renderMarkdown(c) })
+      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: renderMarkdown(c), fileType: fileTypeRef.current })
       await updateKnowledgeLinks(pageRef.current.id, links)
       setSaving(false)
     } catch (e) { console.error(e) }
@@ -166,6 +171,30 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <span className="text-[11px] text-[var(--text-muted)]">{getCategoryPath(page.categoryId)}</span>
           </div>
           <div className="flex items-center gap-2.5">
+            {/* Language switcher */}
+            <div className="relative">
+              <button onClick={() => setShowLangMenu(v => !v)}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors"
+                title="切换语言">
+                {FILE_LANG_OPTIONS.find(o => o.ext === fileType)?.label || 'Markdown'}
+                <ChevronDown size={11} />
+              </button>
+              {showLangMenu && (
+                <div className="absolute top-full right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl z-50 w-36 max-h-60 overflow-y-auto"
+                  onMouseLeave={() => setShowLangMenu(false)}>
+                  {FILE_LANG_OPTIONS.map(opt => (
+                    <button key={opt.ext}
+                      onClick={() => {
+                        setFileTypeState(opt.ext)
+                        setShowLangMenu(false)
+                        window.dispatchEvent(new CustomEvent('status-filetype', { detail: opt.label }))
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-[11px] ${fileType === opt.ext ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
             <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
             <span className="text-[12px] text-[var(--text-secondary)]">{saving ? '未保存' : '已保存'}</span>
             <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
@@ -193,7 +222,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             />
             <div className="flex-1">
               <Editor
-                language="markdown"
+                language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
                 onChange={v => setContent(v || '')}
                 theme="vs-dark"
@@ -225,7 +254,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                   selectionHighlight: true,
                   quickSuggestions: true,
                   suggest: { showWords: false },
-                  placeholder: '开始写 Markdown... 使用 [[页面名]] 创建链接',
+                  placeholder: getFileTypeInfo(fileType).placeholder,
                 }}
               />
             </div>

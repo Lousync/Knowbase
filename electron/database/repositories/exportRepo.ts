@@ -16,7 +16,7 @@ interface TagRow { id: string; name: string; color: string }
 interface TodoRow { id: string; title: string; description: string | null; date: string; time: string | null; quadrant: number; task_type: string; tag_id: string | null; status: string; sort_order: number; end_criteria: string | null; created_at: string; updated_at: string }
 interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
-interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; created_at: string; updated_at: string }
+interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -39,7 +39,7 @@ function mapTodo(r: TodoRow) {
 }
 
 function mapPage(r: PageRow) {
-  return { id: r.id, title: r.title, contentMd: r.content_md, contentHtml: r.content_html || '', categoryId: r.category_id, isStarred: !!r.is_starred, sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
+  return { id: r.id, title: r.title, contentMd: r.content_md, contentHtml: r.content_html || '', categoryId: r.category_id, isStarred: !!r.is_starred, sortOrder: r.sort_order, fileType: (r as any).file_type || r.file_type || '', createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {

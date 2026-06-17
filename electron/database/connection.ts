@@ -233,6 +233,11 @@ function runMigrations(): void {
     try { db.run("ALTER TABLE knowledge_categories ADD COLUMN category_type TEXT DEFAULT 'folder'") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('010_knowledge_category_type')")
   }
+
+  if (!applied.has('011_knowledge_file_type')) {
+    try { db.run("ALTER TABLE knowledge_pages ADD COLUMN file_type TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('011_knowledge_file_type')")
+  }
 }
 
 /**

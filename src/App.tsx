@@ -134,7 +134,7 @@ export default function App() {
 
   const handleTabChange = (tab: TabName) => {
     if (tab === activeTab) setSidebarOpen(v => !v)
-    else { setActiveTab(tab); setSidebarOpen(true) }
+    else { setActiveTab(tab); setSidebarOpen(true); window.dispatchEvent(new CustomEvent('tab-switched')) }
   }
 
   // Ctrl+= / Ctrl+-  zoom

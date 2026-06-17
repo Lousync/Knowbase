@@ -4,7 +4,7 @@ import { getDatabase, saveToDisk } from '../connection'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
-interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; created_at: string; updated_at: string }
+interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 
 function mapPage(r: PageRow) {
   return {
@@ -13,6 +13,7 @@ function mapPage(r: PageRow) {
     categoryId: r.category_id,
     isStarred: !!r.is_starred,
     sortOrder: r.sort_order,
+    fileType: (r as any).file_type || r.file_type || '',
     createdAt: r.created_at, updatedAt: r.updated_at
   }
 }
@@ -199,7 +200,7 @@ export function registerKnowledgeHandlers(): void {
   })
 
   // 创建页面
-  ipcMain.handle('knowledge:createPage', (_e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null }) => {
+  ipcMain.handle('knowledge:createPage', (_e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
     const maxOrder = queryAll<{ m: number }>(
@@ -207,16 +208,16 @@ export function registerKnowledgeHandlers(): void {
       [data.categoryId || null]
     )
     run(
-      `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, now, now]
+      `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, data.fileType || '', now, now]
     )
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     return mapPage(rows[0])
   })
 
   // 更新页面
-  ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null }) => {
+  ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
     for (const [k, v] of Object.entries(data)) {

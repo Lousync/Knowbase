@@ -3,6 +3,7 @@ import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, Plus
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
+import { getFileTypeInfo } from '../../../lib/fileTypes'
 
 interface Props {
   categories: KnowledgeCategory[]
@@ -358,6 +359,7 @@ export function NotebookList({
                 <span className="w-3.5 shrink-0" />
                 <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
                 <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
               </div>
             ))}
@@ -392,6 +394,7 @@ export function NotebookList({
                   className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] ${activePageId === p.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
                   <span className="truncate flex-1">{p.title || '无标题'}</span>
+                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 </div>
               ))}
             </div>

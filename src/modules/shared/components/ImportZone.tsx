@@ -4,6 +4,7 @@ import { FileText } from 'lucide-react'
 interface ImportFile {
   title: string
   content: string
+  fileType: string
 }
 
 interface Props {
@@ -12,7 +13,11 @@ interface Props {
   className?: string
 }
 
-const ALLOWED_EXT = ['.md', '.txt']
+const ALLOWED_EXT = ['.md', '.txt', '.json', '.cpp', '.c', '.h', '.hpp', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.java', '.rs', '.go', '.sh', '.bat', '.xml', '.yaml', '.yml', '.sql']
+
+function extToFileType(ext: string): string {
+  return ext.replace('.', '').toLowerCase()
+}
 
 function fileNameTitle(name: string): string {
   for (const ext of ALLOWED_EXT) {
@@ -83,9 +88,12 @@ export function ImportZone({ onImport, children, className }: Props) {
         const reader = new FileReader()
         reader.onload = () => {
           const content = reader.result as string
+          const dotIdx = f.name.lastIndexOf('.')
+          const ext = dotIdx >= 0 ? f.name.slice(dotIdx).toLowerCase() : ''
           resolve({
             title: extractTitle(f.name, content),
-            content
+            content,
+            fileType: extToFileType(ext)
           })
         }
         reader.onerror = () => reject(reader.error)
@@ -112,7 +120,7 @@ export function ImportZone({ onImport, children, className }: Props) {
           <div className="flex flex-col items-center gap-2 text-[var(--accent)]">
             <FileText size={48} strokeWidth={1.5} />
             <span className="text-[15px] font-medium">释放文件以导入</span>
-            <span className="text-[12px] opacity-70">支持 .md / .txt</span>
+            <span className="text-[12px] opacity-70">支持 .md .txt .cpp .py .js .html .css 等文本文件</span>
           </div>
         </div>
       )}

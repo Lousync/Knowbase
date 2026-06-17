@@ -11,7 +11,7 @@ import {
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
 import { PageEditor } from './components/PageEditor'
-import { PageTabBar } from './components/PageTabBar'
+import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 
@@ -24,7 +24,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null)
   const [activePageId, setActivePageId] = useState<string | null>(null)
   const [openPageIds, setOpenPageIds] = useState<string[]>([])
-  const [openPageTitles, setOpenPageTitles] = useState<Record<string, string>>({})
+  const [openPageInfos, setOpenPageInfos] = useState<Record<string, PageInfo>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -148,20 +148,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         if (r.error) continue
         const h1 = r.content.match(/^#\s+(.+)/m)
         const title = h1 ? h1[1].trim() : (r.baseName || '导入页面')
-        // Import to current context: chapter or loose
         const catId = selectedChapterId || null
-        await createKnowledgePage({ title, contentMd: r.content, categoryId: catId })
+        await createKnowledgePage({ title, contentMd: r.content, categoryId: catId, fileType: r.fileType || '' })
       }
       if (selectedChapterId) refreshChapterPages()
       else refreshLoosePages()
     } catch (e) { console.error(e) }
   }
 
-  const handleDropImport = async (files: Array<{ title: string; content: string }>) => {
+  const handleDropImport = async (files: Array<{ title: string; content: string; fileType: string }>) => {
     try {
       const catId = selectedChapterId || null
       for (const f of files) {
-        await createKnowledgePage({ title: f.title, contentMd: f.content, categoryId: catId })
+        await createKnowledgePage({ title: f.title, contentMd: f.content, categoryId: catId, fileType: f.fileType || '' })
       }
       if (selectedChapterId) refreshChapterPages()
       else refreshLoosePages()
@@ -172,7 +171,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleOpenPage = useCallback((pageId: string) => {
     const existing = [...loosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
     if (existing) {
-      setOpenPageTitles(prev => ({ ...prev, [pageId]: existing.title }))
+      setOpenPageInfos(prev => ({ ...prev, [pageId]: { title: existing.title, fileType: existing.fileType || '' } }))
     }
     setOpenPageIds(prev => prev.includes(pageId) ? prev : [...prev, pageId])
     setActivePageId(pageId)
@@ -184,7 +183,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     if (idx === -1) return
     const nextIds = currentIds.filter(id => id !== pageId)
     setOpenPageIds(nextIds)
-    setOpenPageTitles(prev => { const next = { ...prev }; delete next[pageId]; return next })
+    setOpenPageInfos(prev => { const next = { ...prev }; delete next[pageId]; return next })
     if (activePageIdRef.current === pageId) {
       if (nextIds.length === 0) setActivePageId(null)
       else { const newIdx = Math.min(idx, nextIds.length - 1); setActivePageId(nextIds[newIdx]) }
@@ -211,7 +210,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     const pageId = activePageIdRef.current
     setLoosePages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p))
     setChapterPages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p))
-    setOpenPageTitles(prev => ({ ...prev, [pageId]: title }))
+    setOpenPageInfos(prev => {
+      const existing = prev[pageId]
+      return { ...prev, [pageId]: { title, fileType: existing?.fileType || '' } }
+    })
   }, [])
 
   const handleToggleStar = async (pageId: string) => {
@@ -331,7 +333,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           <PageTabBar
             openPageIds={openPageIds}
             activePageId={activePageId}
-            openPageTitles={openPageTitles}
+            openPageInfos={openPageInfos}
             onSelectTab={handleOpenPage}
             onCloseTab={handleCloseTab}
             onReorder={handleReorderTabs}

@@ -3,8 +3,27 @@ import { readFileSync, copyFileSync } from 'fs'
 import { basename, extname } from 'path'
 import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath } from '../connection'
 
+const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
+
 function fileNameBase(filePath: string): string {
-  return basename(filePath).replace(/\.(md|txt|json)$/i, '')
+  const ext = extname(filePath).slice(1).toLowerCase()
+  return basename(filePath).replace(new RegExp(`\\.${ext}$`, 'i'), '')
+}
+
+function extToFileType(ext: string): string {
+  const extLower = ext.toLowerCase()
+  const mapping: Record<string, string> = {
+    'md': 'md', 'txt': 'txt', 'json': 'json',
+    'cpp': 'cpp', 'c': 'c', 'h': 'c', 'hpp': 'cpp',
+    'py': 'py', 'js': 'js', 'jsx': 'jsx', 'ts': 'ts', 'tsx': 'tsx',
+    'html': 'html', 'css': 'css',
+    'java': 'java', 'rs': 'rs', 'go': 'go',
+    'sh': 'sh', 'bat': 'bat', 'xml': 'xml',
+    'yaml': 'yaml', 'yml': 'yaml', 'sql': 'sql',
+    'r': 'r', 'rb': 'rb', 'php': 'php', 'swift': 'swift', 'kt': 'kt',
+    'lua': 'lua', 'ini': 'ini', 'cfg': 'ini', 'toml': 'toml',
+  }
+  return mapping[extLower] || extLower
 }
 
 // ==== Helpers ====
@@ -18,13 +37,13 @@ function exists(table: string, id: string): boolean {
 }
 
 export function registerImportHandlers(): void {
-  // ===== .md/.txt existing =====
+  // ===== 导入文件对话框 =====
   ipcMain.handle('import:showOpenDialog', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!win) return []
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: '支持的文件 (.md, .txt)', extensions: ['md', 'txt'] }],
+      filters: [{ name: '文本/代码文件', extensions: TEXT_EXTS }],
       title: '导入文件到知识库'
     })
     return result.canceled ? [] : result.filePaths
@@ -34,9 +53,10 @@ export function registerImportHandlers(): void {
     return paths.map(p => {
       try {
         const content = readFileSync(p, 'utf-8')
-        return { path: p, baseName: fileNameBase(p), content }
+        const ext = extname(p).slice(1).toLowerCase()
+        return { path: p, baseName: fileNameBase(p), content, fileType: extToFileType(ext) }
       } catch (e) {
-        return { path: p, baseName: fileNameBase(p), content: '', error: String(e) }
+        return { path: p, baseName: fileNameBase(p), content: '', fileType: '', error: String(e) }
       }
     })
   })

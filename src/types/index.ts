@@ -44,6 +44,7 @@ export interface KnowledgeCategory {
 export interface KnowledgePage {
   id: string; title: string; contentMd: string; contentHtml: string
   categoryId: string | null; isStarred: boolean; sortOrder: number
+  fileType: string
   createdAt: string; updatedAt: string
   tags?: KnowledgeTag[]
   backlinks?: KnowledgePage[]
@@ -51,14 +52,15 @@ export interface KnowledgePage {
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }
 export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }
-export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
-export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; tags?: string[] }
+export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }
+export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }
 
 // import
 export interface ImportFileResult {
   path: string
   baseName: string
   content: string
+  fileType: string
   error?: string
 }
 

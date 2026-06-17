@@ -156,8 +156,9 @@ async function runMarkdownExport(
 
     for (const p of selected) {
       const cat = categories.find(c => c.id === p.categoryId)
+      const ext = (p as any).fileType || 'md'
       const fname = sanitizeFilename(p.title || 'untitled')
-      const relPath = `knowledge/pages/${fname}.md`
+      const relPath = `knowledge/pages/${fname}.${ext}`
 
       const frontmatter = toYaml({
         title: p.title,
@@ -181,8 +182,9 @@ async function runMarkdownExport(
           s += `${'  '.repeat(depth)}- 📁 **${c.name}**\n`
           const catPages = selected.filter(p => p.categoryId === c.id)
           for (const p of catPages) {
+            const ext2 = (p as any).fileType || 'md'
             const fname = sanitizeFilename(p.title || 'untitled')
-            s += `${'  '.repeat(depth + 1)}- [${p.title || '无标题'}](pages/${fname}.md)${p.isStarred ? ' ⭐' : ''}\n`
+            s += `${'  '.repeat(depth + 1)}- [${p.title || '无标题'}](pages/${fname}.${ext2})${p.isStarred ? ' ⭐' : ''}\n`
           }
           s += renderCatTree(c.id, depth + 1)
         }
@@ -199,8 +201,9 @@ async function runMarkdownExport(
       if (uncategorized.length > 0) {
         knowledgeIndex += `\n## 未分类\n\n`
         for (const p of uncategorized) {
+          const ext3 = (p as any).fileType || 'md'
           const fname = sanitizeFilename(p.title || 'untitled')
-          knowledgeIndex += `- [${p.title || '无标题'}](pages/${fname}.md)${p.isStarred ? ' ⭐' : ''}\n`
+          knowledgeIndex += `- [${p.title || '无标题'}](pages/${fname}.${ext3})${p.isStarred ? ' ⭐' : ''}\n`
         }
       }
 
