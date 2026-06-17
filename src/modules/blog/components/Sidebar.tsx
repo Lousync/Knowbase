@@ -206,6 +206,14 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
       })
       return
     }
+    if (date > today) {
+      showToast({
+        type: 'warning',
+        message: '不能创建未来日期的日志。',
+        detail: 'shortcuts',
+      })
+      return
+    }
     onSelectDate(date === selectedDate ? null : date)
   }
 
