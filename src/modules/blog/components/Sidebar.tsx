@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Entry } from '../../../types'
 import { Edit3, ChevronRight, ChevronDown, FileText, Search } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
@@ -51,7 +51,7 @@ function buildTree(entries: Entry[], today: string, thisYear: string, thisMonth:
   return tree
 }
 
-/** Parse search input — supports xxxx/xx/xx, xxxx-xx-xx, xxxx年xx月xx日, or partial */
+/** Parse search input — supports xxxx/xx/xx, xxxx-xx-xx, or partial */
 function parseSearchDate(raw: string): { year?: string; month?: string; day?: string } | null {
   const s = raw.trim()
   if (!s) return null
@@ -96,30 +96,22 @@ function computeSearchResults(
       years: [year],
       months: { [year]: [month] },
       days: { [`${year}-${month}`]: [{ date, hasContent: !!(tree[year]?.[month]?.find(d => d.date === date)) }] },
-      hasContent: { [date]: !!(tree[year]?.[month]?.find(d => d.date === date)) },
     }
   }
 
-  // Year-Month: only if the year exists in tree (don't show empty months)
+  // Year-Month: only if the year exists in tree
   if (year && month) {
     if (!tree[year]?.[month]) return null
     const mk = `${year}-${month}`
-    const days = [...tree[year][month]]
-    return {
-      years: [year],
-      months: { [year]: [month] },
-      days: { [mk]: days },
-    }
+    return { years: [year], months: { [year]: [month] }, days: { [mk]: [...tree[year][month]] } }
   }
 
-  // Year only: only if the year exists in tree (don't show empty years)
+  // Year only: only if the year exists in tree
   if (year) {
     if (!tree[year]) return null
     const months = Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
     const days: Record<string, DayNode[]> = {}
-    for (const m of months) {
-      days[`${year}-${m}`] = tree[year][m]
-    }
+    for (const m of months) days[`${year}-${m}`] = tree[year][m]
     return { years: [year], months: { [year]: months }, days }
   }
 
@@ -183,6 +175,20 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
   const toggle = (key: string) => {
     setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }
+
+  // When search activates or changes, auto-expand matching years/months
+  useEffect(() => {
+    if (!activeSearch || !searchResults) return
+    setExpanded(prev => {
+      const n = new Set(prev)
+      for (const y of searchResults.years) {
+        n.add(y)
+        const ms = searchResults.months[y] || []
+        for (const m of ms) n.add(`${y}-${m}`)
+      }
+      return n
+    })
+  }, [activeSearch, searchResults])
 
   const handleSelectDateSafe = (date: string) => {
     if (date < EARLIEST_DATE) {
@@ -248,7 +254,7 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
         )}
 
         {effectiveYears.map(year => {
-          const yearOpen = expanded.has(year) || activeSearch
+          const yearOpen = expanded.has(year)
           const months =
             searchResults?.months[year]
             ?? Object.keys(tree[year] || {}).sort((a, b) => b.localeCompare(a))
@@ -270,7 +276,7 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
 
               {yearOpen && months.map(month => {
                 const mk = `${year}-${month}`
-                const mOpen = expanded.has(mk) || activeSearch
+                const mOpen = expanded.has(mk)
                 const days = searchResults?.days[mk] ?? tree[year]?.[month] ?? []
 
                 return (
