@@ -258,6 +258,45 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key !== 'Enter') return
+                const q = searchQuery.trim()
+                if (!q) return
+                const p = parseSearchDate(q)
+                let target: string | null = null
+                if (p) {
+                  if (p.year && p.month && p.day) {
+                    target = `${p.year}-${p.month}-${p.day}`
+                  } else if (p.year && p.month) {
+                    // Year-Month → latest day in that month
+                    const days = tree[p.year]?.[p.month]
+                    if (days && days.length > 0) {
+                      target = days[0].date  // already sorted desc
+                    }
+                  } else if (p.year) {
+                    // Year only → latest day in that year
+                    const months = Object.keys(tree[p.year] || {}).sort((a, b) => b.localeCompare(a))
+                    for (const m of months) {
+                      const days = tree[p.year][m]
+                      if (days.length > 0) { target = days[0].date; break }
+                    }
+                  }
+                }
+                // Substring fallback — find first date containing the query
+                if (!target) {
+                  for (const y of existingYears) {
+                    for (const m of Object.keys(tree[y] || {})) {
+                      const found = (tree[y]?.[m] || []).find(d => d.date.includes(q))
+                      if (found) { target = found.date; break }
+                    }
+                    if (target) break
+                  }
+                }
+                if (target) {
+                  setSearchQuery('')
+                  handleSelectDateSafe(target)
+                }
+              }}
               placeholder="搜索日期 (xxxx/xx/xx)"
               className="w-full pl-7 pr-2 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
             />
