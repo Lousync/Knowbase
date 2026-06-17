@@ -1,22 +1,8 @@
-import { useState, useEffect } from 'react'
-import { setSetting, getAllSettings } from '../../../lib/ipc'
+import { useSettings } from '../../../lib/SettingsContext'
 import { ENCODING_OPTIONS } from '../../../lib/settings'
-import type { AppSettings } from '../../../lib/settings'
 
 export function ExportSettingsView() {
-  const [s, setS] = useState<AppSettings | null>(null)
-
-  useEffect(() => {
-    getAllSettings().then(setS)
-  }, [])
-
-  const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    if (!s) return
-    setS({ ...s, [key]: value })
-    setSetting(key, value)
-  }
-
-  if (!s) return null
+  const { s, update } = useSettings()
 
   return (
     <div>

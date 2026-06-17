@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings } from 'lucide-react'
-import { SettingsDropdown } from '../../modules/settings/components/SettingsDropdown'
+import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check } from 'lucide-react'
+import { useSettings } from '../../lib/SettingsContext'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={28} strokeWidth={1.5} /> },
@@ -11,6 +11,11 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'recycle', label: '回收站', icon: <Trash2 size={28} strokeWidth={1.5} /> },
 ]
 
+const THEME_CHOICES = [
+  { id: 'dark',  label: '深色主题' },
+  { id: 'light', label: '浅色主题' },
+]
+
 interface Props {
   active: TabName
   onChange: (tab: TabName) => void
@@ -18,16 +23,25 @@ interface Props {
 }
 
 export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [themeExpanded, setThemeExpanded] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const { s, update } = useSettings()
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setSettingsOpen(false)
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
     }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
+
+  const handleChooseTheme = (id: string) => {
+    update('theme', id)
+    document.documentElement.classList.toggle('light', id === 'light')
+  }
 
   return (
     <div className="w-14 bg-[#333] border-r border-[var(--border-color)] flex flex-col items-center py-2 gap-1 shrink-0 select-none">
@@ -58,7 +72,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         )
       })}
 
-      {/* 导入按钮（未来用户模块占位） */}
+      {/* 导入按钮 */}
       <div className="mt-auto">
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('open-import-modal'))}
@@ -69,19 +83,59 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         </button>
       </div>
 
-      {/* 设置按钮 */}
+      {/* 设置按钮 + 弹出菜单 */}
       <div className="relative" ref={menuRef}>
         <button
-          onClick={() => setSettingsOpen(v => !v)}
-          className="w-14 h-14 flex items-center justify-center text-[#858585] hover:text-[var(--text-primary)] transition-colors"
-          title="设置"
+          onClick={() => { setMenuOpen(v => !v); setThemeExpanded(false) }}
+          className={`w-14 h-14 flex items-center justify-center relative transition-colors ${
+            active === 'settings' ? 'text-white' : menuOpen ? 'text-white' : 'text-[#858585] hover:text-[var(--text-primary)]'
+          }`}
+          title="设置与主题"
         >
           <Settings size={28} strokeWidth={1.5} />
         </button>
 
-        {settingsOpen && (
-          <div className="absolute left-full bottom-0 ml-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl z-50">
-            <SettingsDropdown />
+        {menuOpen && (
+          <div className="absolute left-full bottom-0 ml-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 w-44 py-1">
+            {/* 主题 — expandable */}
+            <button
+              onClick={() => setThemeExpanded(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Palette size={15} className="text-[var(--text-muted)]" />
+                主题
+              </span>
+              {themeExpanded ? <ChevronDown size={13} className="text-[var(--text-muted)]" /> : <ChevronRight size={13} className="text-[var(--text-muted)]" />}
+            </button>
+
+            {themeExpanded && (
+              <div className="border-t border-[var(--bg-tertiary)]">
+                {THEME_CHOICES.map(tc => (
+                  <button
+                    key={tc.id}
+                    onClick={() => handleChooseTheme(tc.id)}
+                    className="w-full flex items-center gap-2 px-5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    <span className="w-4 flex items-center justify-center shrink-0">
+                      {s.theme === tc.id && <Check size={12} className="text-[var(--accent)]" />}
+                    </span>
+                    {tc.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+
+            {/* 设置 — navigate */}
+            <button
+              onClick={() => { onChange('settings'); setMenuOpen(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Settings size={15} className="text-[var(--text-muted)]" />
+              设置
+            </button>
           </div>
         )}
       </div>

@@ -9,7 +9,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[] }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[] }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings'
 export type { AppSettings, SettingsKey, SettingsValue } from '../lib/settings'
 
 // schedule
