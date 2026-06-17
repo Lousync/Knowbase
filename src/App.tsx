@@ -12,6 +12,7 @@ import { ExportModule } from './modules/export'
 import { RecycleBinModule } from './modules/recycle'
 import { SettingsModule } from './modules/settings'
 import { HelpModule } from './modules/help'
+import { UserModule } from './modules/user'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 export default function App() {
@@ -144,6 +145,7 @@ export default function App() {
           {activeTab === 'recycle' && <RecycleBinModule />}
           {activeTab === 'settings' && <SettingsModule />}
           {activeTab === 'help' && <HelpModule />}
+          {activeTab === 'user' && <UserModule />}
         </main>
       </div>
       <StatusBar encoding={encoding} />

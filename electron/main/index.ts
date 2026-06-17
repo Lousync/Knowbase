@@ -9,6 +9,7 @@ import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRep
 import { registerExportHandlers } from '../database/repositories/exportRepo'
 import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
+import { registerUserHandlers } from '../database/repositories/userRepo'
 
 // ===== Settings memory cache =====
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -140,6 +141,7 @@ app.whenReady().then(async () => {
   registerExportHandlers()
   registerRecycleBinHandlers()
   registerImportHandlers()
+  registerUserHandlers()
   createWindow()
 
   app.on('activate', () => {

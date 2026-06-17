@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -114,6 +114,22 @@ export const trashAllRecycleBin = () => a().trashAllRecycleBin()
 export const trashRecycleBinPartial = (id: string, path: string) => a().trashRecycleBinPartial(id, path)
 export const emptyRecycleBin = () => a().emptyRecycleBin()
 export const purgeExpiredRecycleBinItems = () => a().purgeExpiredRecycleBinItems()
+
+// ===== User =====
+export const getUserProfile = (): Promise<UserProfile | null> => a().getUserProfile()
+export const setUserUsername = (username: string) => a().setUserUsername(username)
+export const setUserPassword = (password: string) => a().setUserPassword(password)
+export const verifyUserPassword = (password: string): Promise<boolean> => a().verifyUserPassword(password)
+export const verifyImportPassword = (password: string, storedHash: string): Promise<boolean> => a().verifyImportPassword(password, storedHash)
+export const hasUserPassword = (): Promise<boolean> => a().hasUserPassword()
+export const changeUserPassword = (oldPassword: string, newPassword: string) => a().changeUserPassword(oldPassword, newPassword)
+export const clearUserPassword = (password: string) => a().clearUserPassword(password)
+export const pickAvatarFile = (): Promise<string | null> => a().pickAvatarFile()
+export const saveAvatar = (sourcePath: string) => a().saveAvatar(sourcePath)
+export const getAvatarBase64 = (): Promise<string | null> => a().getAvatarBase64()
+export const getUserStats = (): Promise<UserStats> => a().getUserStats()
+export const getUserExportData = (): Promise<UserExportData | null> => a().getUserExportData()
+export const restoreUserFromImport = (data: UserImportData) => a().restoreUserFromImport(data)
 
 // Utility: parse [[wiki links]] from markdown
 export function parseWikiLinks(md: string): string[] {

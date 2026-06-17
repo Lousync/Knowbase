@@ -10,7 +10,39 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help' | 'user'
+
+// user
+export interface UserProfile {
+  username: string
+  avatarPath: string
+  hasPassword: boolean
+  createdAt: string
+  updatedAt: string
+}
+export interface UserStats {
+  blogCount: number
+  knowledgePages: number
+  scheduleTodos: number
+  blogTags: number
+  knowledgeTags: number
+  scheduleTags: number
+  consecutiveDays: number
+  totalWords: number
+  totalCategories: number
+}
+export interface UserExportData {
+  username: string
+  avatarPath: string
+  avatarBase64: string | null
+  passwordHash: string
+}
+export interface UserImportData {
+  username?: string
+  avatarPath?: string
+  avatarBase64?: string | null
+  passwordHash?: string
+}
 export type { AppSettings, SettingsKey, SettingsValue } from '../lib/settings'
 
 // schedule
@@ -81,6 +113,7 @@ export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag 
 export interface KnowledgeExportData { categories: KnowledgeCategory[]; pages: (KnowledgePage & { tags: KnowledgeTag[]; backlinks: string[] })[]; tags: KnowledgeTag[] }
 export interface AllExportData {
   exportVersion: string; exportedAt: string
+  user?: UserExportData & { settings: Record<string, unknown>; stats: UserStats }
   blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
 }
 
@@ -160,6 +193,21 @@ export interface ElectronAPI {
   trashRecycleBinPartial: (id: string, path: string) => Promise<void>
   emptyRecycleBin: () => Promise<void>
   purgeExpiredRecycleBinItems: () => Promise<void>
+  // user
+  getUserProfile: () => Promise<UserProfile | null>
+  setUserUsername: (username: string) => Promise<{ success: boolean }>
+  setUserPassword: (password: string) => Promise<{ success: boolean }>
+  verifyUserPassword: (password: string) => Promise<boolean>
+  verifyImportPassword: (password: string, storedHash: string) => Promise<boolean>
+  hasUserPassword: () => Promise<boolean>
+  changeUserPassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>
+  clearUserPassword: (password: string) => Promise<{ success: boolean; error?: string }>
+  pickAvatarFile: () => Promise<string | null>
+  saveAvatar: (sourcePath: string) => Promise<{ success: boolean; path: string }>
+  getAvatarBase64: () => Promise<string | null>
+  getUserStats: () => Promise<UserStats>
+  getUserExportData: () => Promise<UserExportData | null>
+  restoreUserFromImport: (data: UserImportData) => Promise<{ success: boolean }>
   exportAllBlogData: () => Promise<BlogExportData>
   exportAllScheduleData: () => Promise<ScheduleExportData>
   exportAllKnowledgeData: () => Promise<KnowledgeExportData>

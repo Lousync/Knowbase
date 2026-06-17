@@ -242,6 +242,21 @@ function runMigrations(): void {
     try { db.run("ALTER TABLE entries ADD COLUMN states TEXT DEFAULT ''") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('012_blog_states')")
   }
+
+  if (!applied.has('013_user_profile')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS user_profile (
+        id              TEXT PRIMARY KEY DEFAULT 'default',
+        username        TEXT NOT NULL DEFAULT '',
+        avatar_path     TEXT DEFAULT '',
+        password_hash   TEXT DEFAULT '',
+        created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `)
+    db.run("INSERT OR IGNORE INTO user_profile (id, username) VALUES ('default', '')")
+    db.run("INSERT INTO _migrations (name) VALUES ('013_user_profile')")
+  }
 }
 
 /**

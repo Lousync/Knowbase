@@ -3,7 +3,8 @@ import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArc
 import {
   exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData,
   showExportSaveDialog, showExportOpenDirDialog, writeExportTextFile, copyDbFile,
-  writeMarkdownExport, onMarkdownExportProgress, getSetting
+  writeMarkdownExport, onMarkdownExportProgress, getSetting,
+  getUserExportData, getUserStats, getAllSettings
 } from '../../lib/ipc'
 import type { BlogExportData, ScheduleExportData, KnowledgeExportData, ExportMarkdownProgress } from '../../types'
 import { SETTINGS_DEFAULTS } from '../../lib/settings'
@@ -109,15 +110,23 @@ async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8')
   })
   if (!filePath) return { cancelled: true }
 
-  let data: unknown
+  let data: any
   if (isAll) {
     data = await exportAllData()
+    // Attach user data + settings to full export
+    const [userData, stats, settings] = await Promise.all([
+      getUserExportData(),
+      getUserStats(),
+      getAllSettings()
+    ])
+    data.exportVersion = '1.1'
+    data.user = { ...userData, settings, stats }
   } else {
     const parts: Record<string, unknown> = {}
     if (moduleIds.has('blog')) parts.blog = await exportAllBlogData()
     if (moduleIds.has('schedule')) parts.schedule = await exportAllScheduleData()
     if (moduleIds.has('knowledge')) parts.knowledge = await exportAllKnowledgeData()
-    data = { exportVersion: '1.0', exportedAt: new Date().toISOString(), ...parts }
+    data = { exportVersion: '1.1', exportedAt: new Date().toISOString(), ...parts }
   }
 
   const writeResult = await writeExportTextFile(filePath, JSON.stringify(data, null, 2), encoding)

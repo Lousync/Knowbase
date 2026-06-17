@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
@@ -72,14 +72,19 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         )
       })}
 
-      {/* 导入按钮 */}
+      {/* 用户按钮 */}
       <div className="mt-auto">
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent('open-import-modal'))}
-          className="w-14 h-14 flex items-center justify-center text-[#858585] hover:text-[var(--text-primary)] transition-colors"
-          title="导入数据"
+          onClick={() => onChange('user')}
+          className={`w-14 h-14 flex items-center justify-center relative transition-colors ${
+            active === 'user' ? 'text-white' : 'text-[#858585] hover:text-[var(--text-primary)]'
+          }`}
+          title="用户"
         >
-          <Download size={28} strokeWidth={1.5} />
+          {active === 'user' && (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-white rounded-r" />
+          )}
+          <User size={28} strokeWidth={1.5} />
         </button>
       </div>
 
@@ -144,6 +149,17 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
             >
               <HelpCircle size={15} className="text-[var(--text-muted)]" />
               帮助
+            </button>
+
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+
+            {/* 导入 — open modal */}
+            <button
+              onClick={() => { setMenuOpen(false); window.dispatchEvent(new CustomEvent('open-import-modal')) }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Download size={15} className="text-[var(--text-muted)]" />
+              导入数据
             </button>
           </div>
         )}

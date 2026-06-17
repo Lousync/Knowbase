@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
-import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react'
-import { showImportDataDialog, readImportFile, executeImport, importDb } from '../../../lib/ipc'
+import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User } from 'lucide-react'
+import { showImportDataDialog, readImportFile, executeImport, importDb, verifyImportPassword, restoreUserFromImport } from '../../../lib/ipc'
 
 // ===== version compat =====
 const CURRENT_VERSION = '1.2'
 const COMPAT_MAP: Record<string, string[]> = {
   '2.0': ['1.0', '1.1', '1.2', '1.3'],
   '1.2': ['1.0', '1.1'],
-  '1.1': ['1.0'],
+  '1.1': ['1.0', '1.1'],
 }
 
 function canImport(current: string, dataVersion: string): boolean {
@@ -33,7 +33,7 @@ function fileExtension(fp: string): string {
 }
 
 // ===== component =====
-type Phase = 'idle' | 'checking' | 'preview_json' | 'preview_db' | 'importing' | 'done' | 'error'
+type Phase = 'idle' | 'checking' | 'verify_password' | 'preview_json' | 'preview_db' | 'importing' | 'done' | 'error'
 type FileType = 'json' | 'db'
 
 interface Props { onClose: () => void }
@@ -46,9 +46,12 @@ export function ImportModal({ onClose }: Props) {
   const [fileType, setFileType] = useState<FileType>('json')
   // JSON flow
   const [importedData, setImportedData] = useState<any>(null)
-  const [summary, setSummary] = useState<{ blog: number; schedule: number; knowledge: number; version: string; total: number } | null>(null)
+  const [summary, setSummary] = useState<{ blog: number; schedule: number; knowledge: number; version: string; total: number; hasUser: boolean; username?: string } | null>(null)
+  // Password verification
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState('')
 
-  const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null) }
+  const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null); setPasswordInput(''); setPasswordError('') }
 
   // Escape key closes modal
   useEffect(() => {
@@ -98,10 +101,32 @@ export function ImportModal({ onClose }: Props) {
     const blogN = (data.blog?.entries?.length || 0) + (data.blog?.tags?.length || 0)
     const schedN = (data.schedule?.todos?.length || 0) + (data.schedule?.tags?.length || 0)
     const knowN = (data.knowledge?.categories?.length || 0) + (data.knowledge?.pages?.length || 0) + (data.knowledge?.tags?.length || 0)
+    const hasUser = !!(data.user?.username || data.user?.passwordHash)
+    const username = data.user?.username
 
     setImportedData(data)
-    setSummary({ blog: blogN, schedule: schedN, knowledge: knowN, version: v, total: blogN + schedN + knowN })
-    setPhase('preview_json')
+    setSummary({ blog: blogN, schedule: schedN, knowledge: knowN, version: v, total: blogN + schedN + knowN, hasUser, username })
+
+    // Check if password verification needed
+    if (data.user?.passwordHash) {
+      setPhase('verify_password')
+    } else {
+      setPhase('preview_json')
+    }
+  }
+
+  const handleVerifyPassword = async () => {
+    if (!passwordInput) { setPasswordError('请输入密码'); return }
+    const storedHash = importedData?.user?.passwordHash
+    if (!storedHash) { setPhase('preview_json'); return }
+    const ok = await verifyImportPassword(passwordInput, storedHash)
+    if (ok) {
+      setPasswordInput('')
+      setPasswordError('')
+      setPhase('preview_json')
+    } else {
+      setPasswordError('密码错误')
+    }
   }
 
   const handleConfirmJson = async () => {
@@ -110,6 +135,15 @@ export function ImportModal({ onClose }: Props) {
     setResultMsg('正在导入...')
     const r = await executeImport(importedData)
     if (r.success) {
+      // Restore user data if present
+      if (importedData.user) {
+        await restoreUserFromImport({
+          username: importedData.user.username,
+          avatarPath: importedData.user.avatarPath,
+          avatarBase64: importedData.user.avatarBase64,
+          passwordHash: importedData.user.passwordHash,
+        })
+      }
       setResultMsg(r.message)
       setPhase('done')
       window.dispatchEvent(new CustomEvent('data-imported'))
@@ -183,6 +217,35 @@ export function ImportModal({ onClose }: Props) {
             </div>
           )}
 
+          {/* Verify password */}
+          {phase === 'verify_password' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-[var(--warning)]">
+                <Lock size={18} />
+                <span className="font-medium">此数据包已加密，需要密码验证</span>
+              </div>
+              {importedData?.user?.username && (
+                <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+                  <User size={14} />
+                  <span>用户：{importedData.user.username}</span>
+                </div>
+              )}
+              <input
+                type="password" autoFocus
+                placeholder="请输入数据包密码"
+                value={passwordInput}
+                onChange={e => { setPasswordInput(e.target.value); setPasswordError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') handleVerifyPassword() }}
+                className={`w-full px-3 py-2.5 bg-[var(--input-bg)] border rounded text-[var(--text-primary)] outline-none ${passwordError ? 'border-[var(--danger)]' : 'border-[var(--border-color)] focus:border-[var(--accent)]'}`}
+              />
+              {passwordError && <p className="text-[12px] text-[var(--danger)]">{passwordError}</p>}
+              <div className="flex gap-2">
+                <button onClick={handleVerifyPassword} className="flex-1 py-2 text-[13px] bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors">验证</button>
+                <button onClick={() => { setPhase('idle'); reset() }} className="px-4 py-2 text-[13px] border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-hover)] transition-colors">取消</button>
+              </div>
+            </div>
+          )}
+
           {/* Preview — JSON */}
           {phase === 'preview_json' && summary && (
             <div className="space-y-4">
@@ -191,9 +254,11 @@ export function ImportModal({ onClose }: Props) {
                 <span className="font-medium">JSON 数据包 · 版本兼容 (v{summary.version})</span>
               </div>
               <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 space-y-2 text-[12px]">
+                {summary.hasUser && summary.username && <div>👤 用户：<span className="text-[var(--text-primary)] font-medium">{summary.username}</span></div>}
                 {summary.blog > 0 && <div>📝 博客：<span className="text-[var(--text-primary)] font-medium">{summary.blog}</span> 条</div>}
                 {summary.schedule > 0 && <div>📅 日程：<span className="text-[var(--text-primary)] font-medium">{summary.schedule}</span> 条</div>}
                 {summary.knowledge > 0 && <div>📚 知识库：<span className="text-[var(--text-primary)] font-medium">{summary.knowledge}</span> 条</div>}
+                {importedData?.user?.passwordHash && <div>🔒 密码保护：已设置</div>}
                 <div className="text-[10px] text-[var(--text-muted)] pt-1">共 {summary.total} 条 · 合并到当前数据 · 相同 ID 自动跳过</div>
               </div>
               <div className="flex gap-2">

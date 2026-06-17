@@ -80,6 +80,22 @@ const api = {
   emptyRecycleBin: () => ipcRenderer.invoke('recycleBin:emptyAll'),
   purgeExpiredRecycleBinItems: () => ipcRenderer.invoke('recycleBin:purgeExpired'),
 
+  // user
+  getUserProfile: () => ipcRenderer.invoke('user:getProfile'),
+  setUserUsername: (username: string) => ipcRenderer.invoke('user:setUsername', username),
+  setUserPassword: (password: string) => ipcRenderer.invoke('user:setPassword', password),
+  verifyUserPassword: (password: string) => ipcRenderer.invoke('user:verifyPassword', password),
+  verifyImportPassword: (password: string, storedHash: string) => ipcRenderer.invoke('user:verifyImportPassword', password, storedHash),
+  hasUserPassword: () => ipcRenderer.invoke('user:hasPassword'),
+  changeUserPassword: (oldPassword: string, newPassword: string) => ipcRenderer.invoke('user:changePassword', oldPassword, newPassword),
+  clearUserPassword: (password: string) => ipcRenderer.invoke('user:clearPassword', password),
+  pickAvatarFile: () => ipcRenderer.invoke('user:pickAvatar'),
+  saveAvatar: (sourcePath: string) => ipcRenderer.invoke('user:saveAvatar', sourcePath),
+  getAvatarBase64: () => ipcRenderer.invoke('user:getAvatarBase64'),
+  getUserStats: () => ipcRenderer.invoke('user:getStats'),
+  getUserExportData: () => ipcRenderer.invoke('user:getExportData'),
+  restoreUserFromImport: (data: unknown) => ipcRenderer.invoke('user:restoreFromImport', data),
+
   // export
   exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
   exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
