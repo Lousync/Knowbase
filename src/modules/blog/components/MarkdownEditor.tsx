@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getEntryById, updateEntry, getTags, createTag } from '../../../lib/ipc'
-import { ArrowLeft, Eye, Code, Plus, X } from 'lucide-react'
+import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting } from '../../../lib/ipc'
+import { ArrowLeft, Eye, Code, Plus, X, Trash2 } from 'lucide-react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { useSettings } from '../../../lib/SettingsContext'
+import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type { Tag } from '../../../types'
 
@@ -26,6 +27,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const contentRef = useRef(contentMd)
   const dateRef = useRef(date)
@@ -57,6 +60,19 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       getTags().then(setAllTags)
     ])
   }, [entryId])
+
+  // Load skip-delete setting
+  useEffect(() => {
+    getSetting('skipDeleteConfirm_blog').then(v => { if (v === true) setSkipDeleteConfirm(true) })
+  }, [])
+
+  const handleDeleteEntry = () => {
+    if (skipDeleteConfirm) {
+      deleteEntry(entryId).then(onSave).catch(console.error)
+    } else {
+      setShowDeleteConfirm(true)
+    }
+  }
 
   const doSave = useCallback(async (c: string, d: string) => {
     setSaving(true)
@@ -176,6 +192,11 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">
             完成
           </button>
+          <button onClick={handleDeleteEntry}
+            className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)] hover:bg-[#e8112320] transition-colors"
+            title="删除">
+            <Trash2 size={16} />
+          </button>
         </div>
       </div>
 
@@ -266,6 +287,23 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           />
         )}
       </div>
+
+      {/* Delete confirm dialog */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="确认删除"
+        message="确定要删除这篇博文吗？删除后可在回收站恢复，30天后将自动清空。"
+        confirmLabel="删除"
+        onConfirm={(skipNext) => {
+          if (skipNext) {
+            setSetting('skipDeleteConfirm_blog', true)
+            setSkipDeleteConfirm(true)
+          }
+          setShowDeleteConfirm(false)
+          deleteEntry(entryId).then(onSave).catch(console.error)
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   )
 }

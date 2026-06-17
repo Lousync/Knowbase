@@ -17,7 +17,15 @@ export function Toast() {
   useEffect(() => {
     const onShow = (e: Event) => {
       const msg = (e as CustomEvent<ToastMessage>).detail
-      setToasts(prev => [...prev, { ...msg, progress: 0 }])
+      setToasts(prev => {
+        // Same type+message: replace the existing toast, resetting its progress
+        const existing = prev.find(t => t.type === msg.type && t.message === msg.message)
+        if (existing) {
+          return prev.map(t => t.id === existing.id ? { ...msg, progress: 0 } : t)
+        }
+        // Unique: add to stack
+        return [...prev, { ...msg, progress: 0 }]
+      })
     }
     const onDismiss = (e: Event) => {
       const id = (e as CustomEvent<string>).detail
