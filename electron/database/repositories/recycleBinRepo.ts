@@ -1,6 +1,18 @@
 import { ipcMain } from 'electron'
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
+import { app } from 'electron'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
+
+function getSettingsRetentionDays(): number {
+  try {
+    const path = join(app.getPath('userData'), 'settings.json')
+    if (!existsSync(path)) return 30
+    const s = JSON.parse(readFileSync(path, 'utf-8'))
+    return typeof s.recycleBinRetentionDays === 'number' ? s.recycleBinRetentionDays : 30
+  } catch { return 30 }
+}
 
 interface RecycleBinRow {
   id: string
@@ -36,8 +48,9 @@ function run(sql: string, params: unknown[] = []): void {
 export function registerRecycleBinHandlers(): void {
   // ---- 获取回收站列表（自动清除过期项） ----
   ipcMain.handle('recycleBin:getItems', () => {
-    // 先清除 30 天前的数据
-    run("DELETE FROM recycle_bin WHERE deleted_at < datetime('now', '-30 days')")
+    // 清除过期数据
+    const retentionDays = getSettingsRetentionDays()
+    run(`DELETE FROM recycle_bin WHERE deleted_at < datetime('now', '-${retentionDays} days')`)
 
     const rows = queryAll<RecycleBinRow>(
       'SELECT * FROM recycle_bin ORDER BY deleted_at DESC'
@@ -407,6 +420,7 @@ export function registerRecycleBinHandlers(): void {
 
   // ---- 清除过期项（独立调用） ----
   ipcMain.handle('recycleBin:purgeExpired', () => {
-    run("DELETE FROM recycle_bin WHERE deleted_at < datetime('now', '-30 days')")
+    const retentionDays = getSettingsRetentionDays()
+    run(`DELETE FROM recycle_bin WHERE deleted_at < datetime('now', '-${retentionDays} days')`)
   })
 }

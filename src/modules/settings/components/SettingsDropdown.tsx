@@ -1,65 +1,30 @@
 import { useState, useEffect } from 'react'
 import { Sun, Moon, RotateCcw, Folder } from 'lucide-react'
-import { getSetting, setSetting, openDirDialog } from '../../../lib/ipc'
+import { setSetting, getAllSettings, openDirDialog } from '../../../lib/ipc'
+import { THEME_OPTIONS, FONT_OPTIONS, FONT_CSS_MAP, ENCODING_OPTIONS } from '../../../lib/settings'
+import type { AppSettings } from '../../../lib/settings'
 
-const THEMES = [
-  { id: 'dark', label: '深色', icon: <Moon size={16} /> },
-  { id: 'light', label: '浅色', icon: <Sun size={16} /> },
-]
-
-const FONTS = [
-  { id: 'system', label: '系统默认', sample: 'System UI' },
-  { id: 'yahei', label: '微软雅黑', sample: 'Microsoft YaHei' },
-  { id: 'noto', label: '思源黑体', sample: 'Noto Sans SC' },
-  { id: 'mono', label: '等宽字体', sample: 'Cascadia Code' },
-]
-
-const ENCODINGS = [
-  { id: 'utf-8', label: 'UTF-8', desc: '国际通用' },
-  { id: 'gbk', label: 'GBK', desc: 'Windows 默认' },
-  { id: 'gb2312', label: 'GB2312', desc: '简体中文' },
-]
+const THEME_ICONS: Record<string, React.ReactNode> = {
+  dark:  <Moon size={16} />,
+  light: <Sun size={16} />,
+}
 
 export function SettingsDropdown() {
   const [loaded, setLoaded] = useState(false)
-  const [theme, setTheme] = useState('dark')
-  const [font, setFont] = useState('system')
-  const [encoding, setEncoding] = useState('utf-8')
-  const [showLineNumbers, setShowLineNumbers] = useState(false)
-  const [skipDeleteBlog, setSkipDeleteBlog] = useState(false)
-  const [skipDeleteKnowledge, setSkipDeleteKnowledge] = useState(false)
-  const [skipDeleteKnowledgeCat, setSkipDeleteKnowledgeCat] = useState(false)
-  const [trashExportDir, setTrashExportDir] = useState('')
-  const [zoom, setZoom] = useState(1.0)
+  const [s, setS] = useState<AppSettings | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      getSetting('theme'), getSetting('editorFont'), getSetting('exportEncoding'),
-      getSetting('showLineNumbers'), getSetting('skipDeleteConfirm_blog'),
-      getSetting('skipDeleteConfirm_knowledge'), getSetting('skipDeleteConfirm_knowledgeCategory'),
-      getSetting('zoom'), getSetting('trashExportDir'),
-    ]).then(([th, fn, enc, ln, skB, skK, skKC, z, td]) => {
-      if (typeof th === 'string') setTheme(th)
-      if (typeof fn === 'string') setFont(fn)
-      if (typeof enc === 'string') setEncoding(enc)
-      if (typeof ln === 'boolean') setShowLineNumbers(ln)
-      if (typeof skB === 'boolean') setSkipDeleteBlog(skB)
-      if (typeof skK === 'boolean') setSkipDeleteKnowledge(skK)
-      if (typeof skKC === 'boolean') setSkipDeleteKnowledgeCat(skKC)
-      if (typeof z === 'number') setZoom(z)
-      if (typeof td === 'string') setTrashExportDir(td)
-      setLoaded(true)
-    })
+    getAllSettings().then(s => { setS(s); setLoaded(true) })
   }, [])
 
-  const fontValues: Record<string, string> = {
-    system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
-    yahei: "'Microsoft YaHei', '微软雅黑', sans-serif",
-    noto: "'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
-    mono: "'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace",
+  const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    if (!s) return
+    setS({ ...s, [key]: value })
+    setSetting(key, value)
   }
 
   if (!loaded) return <div className="w-72 p-4 text-[12px] text-[var(--text-muted)]">加载中...</div>
+  if (!s) return <div className="w-72 p-4 text-[12px] text-[var(--text-muted)]">加载失败</div>
 
   return (
     <div className="w-72 max-h-[500px] overflow-y-auto py-2">
@@ -69,15 +34,15 @@ export function SettingsDropdown() {
       <div className="px-3 py-2">
         <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1.5">主题</div>
         <div className="flex gap-1.5">
-          {THEMES.map(t => (
+          {THEME_OPTIONS.map(t => (
             <button key={t.id} onClick={() => {
-              setTheme(t.id); setSetting('theme', t.id)
+              update('theme', t.id)
               document.documentElement.classList.toggle('light', t.id === 'light')
             }}
               className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] border transition-colors ${
-                theme === t.id ? 'border-[var(--accent)] bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                s.theme === t.id ? 'border-[var(--accent)] bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
               }`}
-            >{t.icon}{t.label}</button>
+            >{THEME_ICONS[t.id]}{t.label}</button>
           ))}
         </div>
       </div>
@@ -86,13 +51,13 @@ export function SettingsDropdown() {
       <div className="px-3 py-2">
         <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1.5">字体</div>
         <div className="space-y-0.5">
-          {FONTS.map(f => (
+          {FONT_OPTIONS.map(f => (
             <button key={f.id} onClick={() => {
-              setFont(f.id); setSetting('editorFont', f.id)
-              document.documentElement.style.setProperty('--font-sans', fontValues[f.id])
+              update('editorFont', f.id)
+              document.documentElement.style.setProperty('--font-sans', FONT_CSS_MAP[f.id])
             }}
               className={`w-full text-left px-2 py-1 rounded text-[11px] transition-colors ${
-                font === f.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                s.editorFont === f.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
               }`}
             >
               {f.label} <span className="text-[var(--text-muted)] ml-1">({f.sample})</span>
@@ -105,10 +70,13 @@ export function SettingsDropdown() {
       <div className="px-3 py-2">
         <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1.5">导出编码</div>
         <div className="space-y-0.5">
-          {ENCODINGS.map(e => (
-            <button key={e.id} onClick={() => { setEncoding(e.id); setSetting('exportEncoding', e.id); window.dispatchEvent(new CustomEvent('settings-encoding-changed', { detail: e.id })) }}
+          {ENCODING_OPTIONS.map(e => (
+            <button key={e.id} onClick={() => {
+              update('exportEncoding', e.id)
+              window.dispatchEvent(new CustomEvent('settings-encoding-changed', { detail: e.id }))
+            }}
               className={`w-full text-left px-2 py-1 rounded text-[11px] transition-colors ${
-                encoding === e.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                s.exportEncoding === e.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
               }`}
             >
               {e.label} <span className="text-[var(--text-muted)] ml-1">({e.desc})</span>
@@ -121,15 +89,15 @@ export function SettingsDropdown() {
         {/* Line numbers */}
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">显示行号</span>
-          <input type="checkbox" checked={showLineNumbers}
-            onChange={() => { const n = !showLineNumbers; setShowLineNumbers(n); setSetting('showLineNumbers', n) }}
+          <input type="checkbox" checked={s.showLineNumbers}
+            onChange={() => update('showLineNumbers', !s.showLineNumbers)}
             className="accent-[var(--accent)]" />
         </label>
 
         {/* Zoom */}
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-[var(--text-primary)]">缩放 {Math.round(zoom * 100)}%</span>
-          <button onClick={() => { setZoom(1.0); setSetting('zoom', 1.0); document.documentElement.style.fontSize = '16px' }}
+          <span className="text-[11px] text-[var(--text-primary)]">缩放 {Math.round(s.zoom * 100)}%</span>
+          <button onClick={() => { update('zoom', 1.0); document.documentElement.style.fontSize = '16px' }}
             className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors">
             <RotateCcw size={10} />重置
           </button>
@@ -138,20 +106,20 @@ export function SettingsDropdown() {
         {/* Skip delete confirm */}
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">跳过博客删除确认</span>
-          <input type="checkbox" checked={skipDeleteBlog}
-            onChange={() => { const n = !skipDeleteBlog; setSkipDeleteBlog(n); setSetting('skipDeleteConfirm_blog', n) }}
+          <input type="checkbox" checked={s.skipDeleteConfirm_blog}
+            onChange={() => update('skipDeleteConfirm_blog', !s.skipDeleteConfirm_blog)}
             className="accent-[var(--accent)]" />
         </label>
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">跳过知识库页面删除确认</span>
-          <input type="checkbox" checked={skipDeleteKnowledge}
-            onChange={() => { const n = !skipDeleteKnowledge; setSkipDeleteKnowledge(n); setSetting('skipDeleteConfirm_knowledge', n) }}
+          <input type="checkbox" checked={s.skipDeleteConfirm_knowledge}
+            onChange={() => update('skipDeleteConfirm_knowledge', !s.skipDeleteConfirm_knowledge)}
             className="accent-[var(--accent)]" />
         </label>
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">跳过目录/笔记本删除确认</span>
-          <input type="checkbox" checked={skipDeleteKnowledgeCat}
-            onChange={() => { const n = !skipDeleteKnowledgeCat; setSkipDeleteKnowledgeCat(n); setSetting('skipDeleteConfirm_knowledgeCategory', n) }}
+          <input type="checkbox" checked={s.skipDeleteConfirm_knowledgeCategory}
+            onChange={() => update('skipDeleteConfirm_knowledgeCategory', !s.skipDeleteConfirm_knowledgeCategory)}
             className="accent-[var(--accent)]" />
         </label>
 
@@ -159,12 +127,12 @@ export function SettingsDropdown() {
         <div className="pt-1.5 border-t border-[var(--border-color)]">
           <div className="text-[10px] text-[var(--text-secondary)] mb-1">回收站文件导出目录</div>
           <p className="text-[9px] text-[var(--text-disabled)] truncate mb-1">
-            {trashExportDir || '默认（Documents\\KnowledgeRecorder\\回收站）'}
+            {s.trashExportDir || '默认（Documents\\KnowledgeRecorder\\回收站）'}
           </p>
           <button
             onClick={async () => {
               const dir = await openDirDialog()
-              if (dir) { setTrashExportDir(dir); setSetting('trashExportDir', dir) }
+              if (dir) update('trashExportDir', dir)
             }}
             className="flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
           >

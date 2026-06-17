@@ -11,6 +11,7 @@ const api = {
   setAlwaysOnTop: (onTop: boolean) => ipcRenderer.invoke('window:setAlwaysOnTop', onTop),
   isAlwaysOnTop: () => ipcRenderer.invoke('window:isAlwaysOnTop'),
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
+  getAllSettings: () => ipcRenderer.invoke('settings:getAll'),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),
   openDirDialog: () => ipcRenderer.invoke('dialog:openDir'),
   getEntries: (filter: unknown) => ipcRenderer.invoke('db:getEntries', filter),

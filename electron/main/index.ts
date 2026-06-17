@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { initDatabase, getDbPath, closeDatabase, getAttachmentsDir } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
@@ -8,6 +9,22 @@ import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRep
 import { registerExportHandlers } from '../database/repositories/exportRepo'
 import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
+
+// ===== Settings memory cache =====
+const settingsPath = join(app.getPath('userData'), 'settings.json')
+let settingsCache: Record<string, unknown> = {}
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+function loadSettingsFromDisk(): Record<string, unknown> {
+  try { return existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} }
+  catch { return {} }
+}
+
+function flushSettingsToDisk(): void {
+  saveTimer = null
+  try { writeFileSync(settingsPath, JSON.stringify(settingsCache, null, 2)) }
+  catch (err) { console.error('Failed to persist settings:', err) }
+}
 
 // 单实例锁 — 防止多窗口数据不同步（sql.js 内存数据库无跨进程共享能力）
 const gotLock = app.requestSingleInstanceLock()
@@ -79,20 +96,18 @@ function registerWindowHandlers(): void {
   // 缩放 — 仅缩放内容区（不缩放 chrome）
 
 
-  // 设置持久化（存 JSON 文件）
-  const { readFileSync, writeFileSync, existsSync } = require('fs')
-  const settingsPath = join(app.getPath('userData'), 'settings.json')
-  function loadSettings(): Record<string, unknown> {
-    try { return existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} }
-    catch { return {} }
-  }
-  function saveSettings(s: Record<string, unknown>) { writeFileSync(settingsPath, JSON.stringify(s, null, 2)) }
-
+  // 设置持久化（内存缓存 + 防抖写盘）
   ipcMain.handle('settings:get', (_e, key: string) => {
-    const s = loadSettings(); return s[key] ?? null
+    return settingsCache[key] ?? null
+  })
+  ipcMain.handle('settings:getAll', () => {
+    return { ...settingsCache }
   })
   ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
-    const s = loadSettings(); s[key] = value; saveSettings(s)
+    settingsCache[key] = value
+    // Debounce write to disk — coalesce rapid setSetting calls into one write
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(flushSettingsToDisk, 500)
   })
 
   // 选择目录对话框
@@ -108,6 +123,9 @@ function registerWindowHandlers(): void {
 
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
+  // Initialize settings cache once at startup
+  settingsCache = loadSettingsFromDisk()
+
   ipcMain.handle('db:getPath', () => getDbPath())
   ipcMain.handle('app:getAttachmentsPath', () => getAttachmentsDir())
   ipcMain.handle('app:openExternal', async (_e, filePath: string) => {
@@ -142,7 +160,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => closeDatabase())
+app.on('before-quit', () => {
+  // Flush pending settings writes
+  if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
+  closeDatabase()
+})
 
 // 安全：禁止 webview
 app.on('web-contents-created', (_e, contents) => {

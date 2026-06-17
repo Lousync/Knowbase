@@ -3,6 +3,7 @@ import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
+import { SETTINGS_DEFAULTS } from '../../../lib/settings'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
@@ -82,7 +83,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!page) return
     setSaving(true)
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => doSave(title, content), 2000)
+    saveTimer.current = setTimeout(() => doSave(title, content), SETTINGS_DEFAULTS.autoSaveDebounceMs)
     return () => clearTimeout(saveTimer.current)
   }, [title, content, page, doSave])
 

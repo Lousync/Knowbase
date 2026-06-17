@@ -10,7 +10,7 @@ export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtm
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[] }
 export interface Tag { id: string; name: string; color: string }
 export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle'
-export interface AppSettings { showLineNumbers?: boolean }
+export type { AppSettings, SettingsKey, SettingsValue } from '../lib/settings'
 
 // schedule
 export interface ScheduleTodo {
@@ -96,6 +96,7 @@ export interface ElectronAPI {
   setAlwaysOnTop: (onTop: boolean) => Promise<boolean>
   isAlwaysOnTop: () => Promise<boolean>
   getSetting: (key: string) => Promise<unknown>
+  getAllSettings: () => Promise<Record<string, unknown>>
   setSetting: (key: string, value: unknown) => Promise<void>
   openDirDialog: () => Promise<string | null>
   getEntries: (f: EntryFilter) => Promise<Entry[]>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
-import { getSetting, setSetting } from './lib/ipc'
+import { getSetting, getAllSettings, setSetting } from './lib/ipc'
+import { FONT_CSS_MAP } from './lib/settings'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -9,67 +10,37 @@ import { ExportModule } from './modules/export'
 import { RecycleBinModule } from './modules/recycle'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
-// Zoom by adjusting <html> font-size.  All rem-based content scales naturally;
-// chrome elements (TitleBar / ActivityBar) are mostly px-based so
-// they barely move.  CSS zoom / transform:scale() both break flex layout — avoid.
-const ZOOM_MIN  = 0.85
-const ZOOM_MAX  = 1.5
-const ZOOM_STEP = 0.05
-const ZOOM_BASE = 1.0
-
-const FONTS: Record<string, string> = {
-  system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
-  yahei: "'Microsoft YaHei', '微软雅黑', sans-serif",
-  noto: "'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
-  mono: "'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace",
-}
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>('blog')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showLineNumbers, setShowLineNumbers] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
-  const [zoom, setZoom] = useState(ZOOM_BASE)
+  const [zoom, setZoom] = useState(1.0)
   const [encoding, setEncoding] = useState('UTF-8')
+  // 从 settings 加载的约束（用于 zoomIn/zoomOut 闭包）
+  const [zoomMin, setZoomMin] = useState(0.85)
+  const [zoomMax, setZoomMax] = useState(1.5)
+  const [zoomStep, setZoomStep] = useState(0.05)
   // Pre-load all sidebar widths to prevent mount-time layout shift
   const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
   const [importModalOpen, setImportModalOpen] = useState(false)
 
   useEffect(() => {
-    Promise.all([
-      getSetting('showLineNumbers'),
-      getSetting('zoom'),
-      getSetting('theme'),
-      getSetting('editorFont'),
-      getSetting('exportEncoding'),
-      getSetting('sidebarWidth_blog'),
-      getSetting('sidebarWidth_schedule'),
-      getSetting('sidebarWidth_knowledgeCat'),
-      getSetting('sidebarWidth_knowledgePages'),
-    ])
-      .then(([ln, z, theme, font, enc, wBlog, wSched, wCat, wPages]) => {
-        if (ln != null) setShowLineNumbers(ln as boolean)
-        if (z != null && typeof z === 'number') {
-          setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)))
-        }
-        // Theme
-        if (theme === 'light') {
-          document.documentElement.classList.add('light')
-        }
-        // Font
-        if (typeof font === 'string' && FONTS[font]) {
-          document.documentElement.style.setProperty('--font-sans', FONTS[font])
-        }
-        // Encoding
-        if (typeof enc === 'string') setEncoding(enc.toUpperCase())
-        const widths: Record<string, number> = {}
-        if (typeof wBlog === 'number') widths.sidebarWidth_blog = wBlog
-        if (typeof wSched === 'number') widths.sidebarWidth_schedule = wSched
-        if (typeof wCat === 'number') widths.sidebarWidth_knowledgeCat = wCat
-        if (typeof wPages === 'number') widths.sidebarWidth_knowledgePages = wPages
-        setSidebarWidths(widths)
+    getAllSettings().then(s => {
+      setShowLineNumbers(s.showLineNumbers)
+      setZoomMin(s.zoomMin); setZoomMax(s.zoomMax); setZoomStep(s.zoomStep)
+      setZoom(Math.min(s.zoomMax, Math.max(s.zoomMin, s.zoom)))
+      if (s.theme === 'light') document.documentElement.classList.add('light')
+      if (FONT_CSS_MAP[s.editorFont]) document.documentElement.style.setProperty('--font-sans', FONT_CSS_MAP[s.editorFont])
+      setEncoding(s.exportEncoding.toUpperCase())
+      setSidebarWidths({
+        sidebarWidth_blog: s.sidebarWidth_blog,
+        sidebarWidth_schedule: s.sidebarWidth_schedule,
+        sidebarWidth_knowledgeCat: s.sidebarWidth_knowledgeCat,
+        sidebarWidth_knowledgePages: s.sidebarWidth_knowledgePages,
       })
-      .finally(() => setSettingsLoaded(true))
+      setSettingsLoaded(true)
+    })
   }, [])
 
   // Listen for encoding changes from settings
@@ -128,9 +99,9 @@ export default function App() {
     const next = !showLineNumbers; setShowLineNumbers(next); setSetting('showLineNumbers', next)
   }, [showLineNumbers])
 
-  const zoomIn  = useCallback(() => setZoom(p => { const n = Math.min(ZOOM_MAX, +(p + ZOOM_STEP).toFixed(2)); setSetting('zoom', n); return n }), [])
-  const zoomOut = useCallback(() => setZoom(p => { const n = Math.max(ZOOM_MIN, +(p - ZOOM_STEP).toFixed(2)); setSetting('zoom', n); return n }), [])
-  const zoomReset = useCallback(() => { setZoom(ZOOM_BASE); setSetting('zoom', ZOOM_BASE) }, [])
+  const zoomIn  = useCallback(() => setZoom(p => { const n = Math.min(zoomMax, +(p + zoomStep).toFixed(2)); setSetting('zoom', n); return n }), [zoomMax, zoomStep])
+  const zoomOut = useCallback(() => setZoom(p => { const n = Math.max(zoomMin, +(p - zoomStep).toFixed(2)); setSetting('zoom', n); return n }), [zoomMin, zoomStep])
+  const zoomReset = useCallback(() => { setZoom(1.0); setSetting('zoom', 1.0) }, [])
 
   const handleTabChange = (tab: TabName) => {
     if (tab === activeTab) setSidebarOpen(v => !v)

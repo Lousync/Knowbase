@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code } from 'lucide-react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
+import { SETTINGS_DEFAULTS } from '../../../lib/settings'
 import Editor, { type OnMount } from '@monaco-editor/react'
 
 interface Props {
@@ -42,7 +43,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     const val = v || ''
     setContentMd(val)
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => doSave(val, dateRef.current), 2000)
+    timer.current = setTimeout(() => doSave(val, dateRef.current), SETTINGS_DEFAULTS.autoSaveDebounceMs)
   }
 
   const handleSaveAndClose = async () => {

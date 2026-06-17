@@ -1,14 +1,40 @@
 import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult } from '../types'
+import type { SettingsKey, SettingsValue, AppSettings } from './settings'
+import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
 
+// ===== Typed settings =====
+
+/** Get a typed setting value, with its default as fallback */
+export async function getSetting<K extends SettingsKey>(key: K): Promise<SettingsValue<K>> {
+  const raw = await a().getSetting(String(key))
+  return (raw ?? SETTINGS_DEFAULTS[key]) as SettingsValue<K>
+}
+
+/** Set a typed setting value — key and value type are linked */
+export async function setSetting<K extends SettingsKey>(key: K, value: SettingsValue<K>): Promise<void> {
+  await a().setSetting(String(key), value)
+}
+
+/** Get all settings at once, with defaults filled for any missing keys */
+export async function getAllSettings(): Promise<AppSettings> {
+  const s = await a().getAllSettings()
+  return { ...SETTINGS_DEFAULTS, ...s } as AppSettings
+}
+
+// Raw variants for dynamic-key use cases (e.g. sidebar width keys)
+export const getSettingRaw = (k: string) => a().getSetting(k)
+export const setSettingRaw = (k: string, v: unknown) => a().setSetting(k, v)
+
+// ===== Window control =====
 export const minimize = () => a().minimize()
 export const maximize = () => a().maximize()
 export const close = () => a().close()
 export const isMaximized = () => a().isMaximized()
 export const onMaximizeChange = (cb: (v: boolean) => void) => a().onMaximizeChange(cb)
-export const getSetting = (k: string) => a().getSetting(k)
-export const setSetting = (k: string, v: unknown) => a().setSetting(k, v)
 export const openDirDialog = () => a().openDirDialog()
+
+// ===== Blog =====
 export const getEntries = (f: EntryFilter = {}) => a().getEntries(f)
 export const getEntryById = (id: string) => a().getEntryById(id)
 export const createEntry = (d: CreateEntryDTO) => a().createEntry(d)

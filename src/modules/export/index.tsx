@@ -6,6 +6,7 @@ import {
   writeMarkdownExport, onMarkdownExportProgress, getSetting
 } from '../../lib/ipc'
 import type { BlogExportData, ScheduleExportData, KnowledgeExportData, ExportMarkdownProgress } from '../../types'
+import { SETTINGS_DEFAULTS } from '../../lib/settings'
 import { ProgressPanel } from './components/ProgressPanel'
 import { MarkdownItemSelector, SelectableItem } from './components/MarkdownItemSelector'
 
@@ -581,8 +582,8 @@ export function ExportModule() {
         success: true
       }, ...prev.slice(0, 9)])
 
-      // Auto-clear success after 5s
-      setTimeout(() => { setStatus('idle'); setStatusMessage('') }, 5000)
+      // Auto-clear success after configurable delay
+      setTimeout(() => { setStatus('idle'); setStatusMessage('') }, SETTINGS_DEFAULTS.exportStatusClearMs)
     } catch (e: unknown) {
       setStatus('error')
       setStatusMessage(`导出失败：${e instanceof Error ? e.message : String(e)}`)

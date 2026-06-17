@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getSetting, setSetting } from '../../lib/ipc'
+import { getSettingRaw, setSettingRaw } from '../../lib/ipc'
 
 interface Props {
   storageKey: string
@@ -27,7 +27,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
   // 加载持久化宽度（仅在未预加载时）
   useEffect(() => {
     if (loadedRef.current) return
-    getSetting(storageKey).then(v => {
+    getSettingRaw(storageKey).then(v => {
       if (typeof v === 'number') {
         const clamped = Math.max(minWidth, Math.min(maxWidth, v))
         setWidth(clamped)
@@ -59,7 +59,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
     const onUp = () => {
       setDragging(false)
       // 用 ref 保存最新值，避免闭包陈旧问题
-      setSetting(storageKey, widthRef.current)
+      setSettingRaw(storageKey, widthRef.current)
     }
 
     // 拖拽期间禁用文本选中
