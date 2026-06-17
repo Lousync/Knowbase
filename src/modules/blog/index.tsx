@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
 import { ConfirmDialog } from '../../components/shared'
+import { isEditingInput } from '../../lib/shortcuts'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { Sidebar } from './components/Sidebar'
 import { EntryList } from './views/EntryList'
@@ -19,6 +20,11 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const viewRef = useRef(view)
+  const selectedIdRef = useRef(selectedId)
+  useEffect(() => { viewRef.current = view }, [view])
+  useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -75,6 +81,44 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       }
     }
   }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+
+      // Ctrl+N — create/open today's entry
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault()
+        handleTodayEntry()
+        return
+      }
+
+      // Delete — delete entry in detail view
+      if (e.key === 'Delete') {
+        if (viewRef.current === 'detail' && selectedIdRef.current) {
+          e.preventDefault()
+          deleteEntry(selectedIdRef.current).then(() => {
+            setView('list')
+            setSelectedId(null)
+            loadEntries()
+          }).catch(console.error)
+        }
+        return
+      }
+
+      // Escape — back to list from editor/detail
+      if (e.key === 'Escape') {
+        if (viewRef.current !== 'list') {
+          e.preventDefault()
+          setView('list')
+          setSelectedId(null)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleTodayEntry, loadEntries])
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">

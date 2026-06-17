@@ -53,11 +53,12 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     onSave()
   }
 
-  // Ctrl+/ toggle preview, Ctrl+S save
+  // Ctrl+/ toggle preview, Ctrl+S save, Escape back
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === '/') { e.preventDefault(); setShowPreview(v => !v) }
       if (e.ctrlKey && e.key === 's') { e.preventDefault(); handleSaveAndClose() }
+      if (e.key === 'Escape') { e.preventDefault(); onCancel() }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)

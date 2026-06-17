@@ -3,6 +3,7 @@ import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { FONT_CSS_MAP } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
+import { isEditingInput } from './lib/shortcuts'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -98,6 +99,19 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [s.zoom, s.zoomMin, s.zoomMax, s.zoomStep, update])
+
+  // Ctrl+B — toggle sidebar
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+      if (e.ctrlKey && e.key === 'b') {
+        e.preventDefault()
+        setSidebarOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   if (!loaded) return null
 

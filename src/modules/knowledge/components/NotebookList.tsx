@@ -4,6 +4,7 @@ import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
+import { isEditingInput } from '../../../lib/shortcuts'
 
 interface Props {
   categories: KnowledgeCategory[]
@@ -57,6 +58,20 @@ export function NotebookList({
       if (v === true) setSkipDeleteConfirm(true)
     })
   }, [])
+
+  // F2 — keyboard rename selected notebook / folder
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+      if (e.key === 'F2' && selectedNotebookId) {
+        e.preventDefault()
+        const cat = categories.find(c => c.id === selectedNotebookId)
+        if (cat) handleStartRename(cat.id, cat.name)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedNotebookId, categories])
 
   function toggleExpand(id: string) {
     setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })

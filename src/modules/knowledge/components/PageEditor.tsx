@@ -5,6 +5,7 @@ import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
+import { isEditingInput } from '../../../lib/shortcuts'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
@@ -41,14 +42,23 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const fileTypeRef = useRef(fileType)
   const monacoRef = useRef<typeof Monaco | null>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+  const showDeleteConfirmRef = useRef(showDeleteConfirm)
+  const showLangMenuRef = useRef(showLangMenu)
+  const isCodeFileRef = useRef(false)
+  const isPdfFileRef = useRef(false)
+
+  const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt'
+  const isPdfFile = fileType === 'pdf'
 
   useEffect(() => { contentRef.current = content }, [content])
   useEffect(() => { titleRef.current = title }, [title])
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { fileTypeRef.current = fileType }, [fileType])
+  useEffect(() => { showDeleteConfirmRef.current = showDeleteConfirm }, [showDeleteConfirm])
+  useEffect(() => { showLangMenuRef.current = showLangMenu }, [showLangMenu])
+  useEffect(() => { isCodeFileRef.current = isCodeFile }, [isCodeFile])
+  useEffect(() => { isPdfFileRef.current = isPdfFile }, [isPdfFile])
 
-  const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt'
-  const isPdfFile = fileType === 'pdf'
   const [attachmentsPath, setAttachmentsPath] = useState('')
 
   useEffect(() => {
@@ -87,6 +97,41 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     saveTimer.current = setTimeout(() => doSave(title, content), s.autoSaveDebounceMs)
     return () => clearTimeout(saveTimer.current)
   }, [title, content, page, doSave])
+
+  // Keyboard shortcuts: Ctrl+S, Ctrl+/, Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ctrl+S — save immediately
+      if (e.ctrlKey && e.key === 's') {
+        if (isEditingInput(e)) return
+        e.preventDefault()
+        clearTimeout(saveTimer.current)
+        doSave(titleRef.current, contentRef.current)
+        setSaving(false)
+        return
+      }
+      // Ctrl+/ — toggle preview (md/txt only)
+      if (e.ctrlKey && e.key === '/') {
+        if (isEditingInput(e)) return
+        if (isCodeFileRef.current || isPdfFileRef.current) return
+        e.preventDefault()
+        setPreview(v => !v)
+        return
+      }
+      // Escape — back to list (respect modals)
+      if (e.key === 'Escape') {
+        if (showDeleteConfirmRef.current) return
+        if (showLangMenuRef.current) {
+          setShowLangMenu(false)
+          return
+        }
+        e.preventDefault()
+        onBack()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [doSave, onBack])
 
   // Monaco mount handler — register wiki-link completion provider
   const handleEditorMount: OnMount = (editor, monaco) => {

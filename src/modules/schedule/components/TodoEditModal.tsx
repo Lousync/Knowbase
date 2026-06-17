@@ -58,6 +58,20 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
 
   useEffect(() => { setForm(initial); const dp = parseDeadline(initial.time); setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) }); setTimeWarning('') }, [initial])
 
+  // Escape key closes modal
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   if (!open) return null
 
   const canSave = form.title.trim().length > 0

@@ -14,6 +14,7 @@ import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
+import { isEditingInput } from '../../lib/shortcuts'
 
 export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number> }: { sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number> }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
@@ -33,8 +34,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
+  const selectedNotebookIdRef = useRef(selectedNotebookId)
+  const selectedChapterIdRef = useRef(selectedChapterId)
   useEffect(() => { openPageIdsRef.current = openPageIds }, [openPageIds])
   useEffect(() => { activePageIdRef.current = activePageId }, [activePageId])
+  useEffect(() => { selectedNotebookIdRef.current = selectedNotebookId }, [selectedNotebookId])
+  useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -327,6 +332,63 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       setShowChapterPanel(cat?.categoryType === 'notebook' || hasChildren)
     }
   }
+
+  // Keyboard shortcuts — module level
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+
+      // Ctrl+N — create new loose page
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault()
+        handleCreateLoosePage()
+        return
+      }
+
+      // Ctrl+W — close current tab
+      if (e.ctrlKey && e.key === 'w') {
+        e.preventDefault()
+        const activeId = activePageIdRef.current
+        if (activeId) handleCloseTab(activeId)
+        return
+      }
+
+      // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault()
+        const ids = openPageIdsRef.current
+        if (ids.length === 0) return
+        const activeId = activePageIdRef.current
+        const idx = ids.indexOf(activeId ?? '')
+        if (e.shiftKey) {
+          const newIdx = idx <= 0 ? ids.length - 1 : idx - 1
+          setActivePageId(ids[newIdx])
+        } else {
+          const newIdx = (idx === -1 || idx >= ids.length - 1) ? 0 : idx + 1
+          setActivePageId(ids[newIdx])
+        }
+        return
+      }
+
+      // Delete — context-aware (chapter > notebook)
+      if (e.key === 'Delete') {
+        const chapterId = selectedChapterIdRef.current
+        const notebookId = selectedNotebookIdRef.current
+        if (chapterId) {
+          e.preventDefault()
+          handleDeleteChapter(chapterId)
+          return
+        }
+        if (notebookId) {
+          e.preventDefault()
+          handleDeleteNotebook(notebookId)
+          return
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleCreateLoosePage, handleCloseTab, handleDeleteChapter, handleDeleteNotebook])
 
   const panelsVisible = sidebarOpen
 

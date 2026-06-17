@@ -10,6 +10,7 @@ import { CalendarView, type ViewMode } from './views/CalendarView'
 import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
+import { isEditingInput } from '../../lib/shortcuts'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 
@@ -319,6 +320,21 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     viewMode === 'deadline' ? '截至时间线' :
     viewMode === 'quadrant' ? '四象限排列' :
     `${selectedDate === today ? `${selectedDate} 今天` : selectedDate}`
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+      // Ctrl+N — open new task modal
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault()
+        setEditTarget(null)
+        setModalOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">

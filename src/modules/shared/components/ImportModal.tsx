@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react'
 import { showImportDataDialog, readImportFile, executeImport, importDb } from '../../../lib/ipc'
 
@@ -49,6 +49,19 @@ export function ImportModal({ onClose }: Props) {
   const [summary, setSummary] = useState<{ blog: number; schedule: number; knowledge: number; version: string; total: number } | null>(null)
 
   const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null) }
+
+  // Escape key closes modal
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const handlePickFile = async () => {
     const files = await showImportDataDialog()

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
-import { Palette, Type, FileDown, Wrench, Info, Search } from 'lucide-react'
+import { Palette, Type, FileDown, Wrench, Info, Search, Keyboard } from 'lucide-react'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
 import { ExportSettingsView } from './views/ExportSettingsView'
 import { AdvancedView } from './views/AdvancedView'
+import { ShortcutsView } from './views/ShortcutsView'
 
-type SettingsSection = 'appearance' | 'editor' | 'export' | 'advanced'
+type SettingsSection = 'appearance' | 'editor' | 'export' | 'advanced' | 'shortcuts'
 
 interface SectionDef {
   id: SettingsSection
@@ -19,6 +20,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'editor',     label: '编辑器', icon: <Type size={16} />,     keywords: ['字体', '行号', '编辑', '代码', '样式', 'font', '字号'] },
   { id: 'export',     label: '导出',   icon: <FileDown size={16} />, keywords: ['编码', '导出', 'encoding', 'utf', 'gbk', '保存'] },
   { id: 'advanced',   label: '高级',   icon: <Wrench size={16} />,   keywords: ['缩放', '删除', '确认', '保存', 'zoom', '重置', '自动', '跳过'] },
+  { id: 'shortcuts',  label: '快捷键', icon: <Keyboard size={16} />, keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', 'ctrl', 'tab', '删除', '保存', '预览', '重命名', '侧栏', '切换'] },
 ]
 
 export function SettingsModule() {
@@ -101,6 +103,7 @@ export function SettingsModule() {
           {section === 'editor' && <EditorView />}
           {section === 'export' && <ExportSettingsView />}
           {section === 'advanced' && <AdvancedView />}
+          {section === 'shortcuts' && <ShortcutsView />}
           </div>
         </div>
       </div>

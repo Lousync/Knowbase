@@ -3,6 +3,7 @@ import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown } f
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
+import { isEditingInput } from '../../../lib/shortcuts'
 
 interface Props {
   notebookName: string
@@ -39,6 +40,20 @@ export function ChapterPanel({
   useEffect(() => {
     getSetting('skipDeleteConfirm_chapter').then(v => { if (v === true) setSkipDeleteConfirm(true) })
   }, [])
+
+  // F2 — keyboard rename selected chapter
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+      if (e.key === 'F2' && selectedChapterId) {
+        e.preventDefault()
+        const ch = chapters.find(c => c.id === selectedChapterId)
+        if (ch) handleStartRename(ch.id, ch.name)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedChapterId, chapters])
 
   function handleCreateChapter() {
     if (!newName.trim()) { setShowNewChapter(false); setNewName(''); return }

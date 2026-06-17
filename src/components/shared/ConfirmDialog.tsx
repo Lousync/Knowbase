@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -26,6 +26,20 @@ export function ConfirmDialog({
   onCancel
 }: ConfirmDialogProps) {
   const [skipChecked, setSkipChecked] = useState(false)
+
+  // Escape key closes dialog
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        onCancel()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onCancel])
 
   if (!open) return null
 
