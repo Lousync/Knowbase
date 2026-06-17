@@ -39,7 +39,7 @@ const MODULES: ModuleOption[] = [
 
 const FORMATS: FormatOption[] = [
   { id: 'json', label: 'JSON 单文件', desc: '完整保留关联数据，可重新导入', icon: <FileJson size={14} /> },
-  { id: 'markdown', label: 'Markdown 文件集', desc: '每篇文章/页面一个 .md 文件，导出到文件夹', icon: <FileText size={14} /> },
+  { id: 'markdown', label: '文件集导出', desc: '每篇文章/页面按类型导出为对应文件，导出到文件夹', icon: <FileText size={14} /> },
   { id: 'sqlite', label: 'SQLite 原始文件', desc: '直接复制 knowledge.db', icon: <Database size={14} /> },
 ]
 
@@ -48,6 +48,25 @@ type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
 // ---- helpers ----
 function sanitizeFilename(s: string): string {
   return s.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').slice(0, 80) || 'untitled'
+}
+
+/** Build a relative directory path from category hierarchy, for export */
+function buildPagePath(
+  page: { title: string; categoryId?: string | null; fileType?: string },
+  categories: { id: string; name: string; parentId?: string | null }[]
+): string {
+  const parts: string[] = []
+  let catId: string | null | undefined = page.categoryId
+  while (catId) {
+    const cat = categories.find(c => c.id === catId)
+    if (!cat) break
+    parts.unshift(sanitizeFilename(cat.name))
+    catId = cat.parentId
+  }
+  if (parts.length === 0) parts.push('零散文件')
+  const ext = page.fileType || 'md'
+  const fname = sanitizeFilename(page.title || 'untitled')
+  return `knowledge/${parts.join('/')}/${fname}.${ext}`
 }
 
 function toYaml(obj: Record<string, unknown>): string {
@@ -140,11 +159,32 @@ async function runMarkdownExport(
       const usedTagNames = new Set(selected.flatMap(e => e.tags?.map(t => t.name) || []))
       const filteredTags = tags.filter(t => usedTagNames.has(t.name))
       const tagList = filteredTags.map(t => `- **${t.name}**`).join('\n')
-      let blogIndex = `# 博客归档\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n## 标签列表\n${tagList || '(无)'}\n\n## 文章\n\n`
+
+      // Group by year → month
+      const grouped = new Map<string, Map<string, typeof selected>>()
       for (const e of selected) {
-        blogIndex += `- **${e.date}** — [${e.title || '无标题'}](blog/${e.date.slice(0, 4)}/${e.date.slice(5, 7)}/${sanitizeFilename(`${e.date}-${e.title || 'untitled'}`)}.md)${e.isPinned ? ' 📌' : ''}\n`
+        const [y, m] = e.date.split('-')
+        if (!grouped.has(y)) grouped.set(y, new Map())
+        if (!grouped.get(y)!.has(m)) grouped.get(y)!.set(m, [])
+        grouped.get(y)!.get(m)!.push(e)
       }
-      blogIndex += `\n共 ${selected.length} 篇文章\n`
+
+      let blogIndex = `# 博客归档\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n## 标签列表\n${tagList || '(无)'}\n\n## 文章\n\n`
+      const sortedYears = [...grouped.keys()].sort((a, b) => +b - +a)
+      for (const y of sortedYears) {
+        blogIndex += `### ${y}年\n\n`
+        const months = grouped.get(y)!
+        const sortedMonths = [...months.keys()].sort((a, b) => +b - +a)
+        for (const m of sortedMonths) {
+          blogIndex += `#### ${+m}月\n\n`
+          for (const e of months.get(m)!) {
+            const fname = sanitizeFilename(`${e.date}-${e.title || 'untitled'}`)
+            blogIndex += `- **${e.date.slice(8)}日** — [${e.title || '无标题'}](blog/${y}/${m}/${fname}.md)${e.isPinned ? ' 📌' : ''}\n`
+          }
+          blogIndex += '\n'
+        }
+      }
+      blogIndex += `共 ${selected.length} 篇文章\n`
       files.push({ relPath: 'blog/index.md', content: blogIndex })
     }
   }
@@ -156,9 +196,7 @@ async function runMarkdownExport(
 
     for (const p of selected) {
       const cat = categories.find(c => c.id === p.categoryId)
-      const ext = (p as any).fileType || 'md'
-      const fname = sanitizeFilename(p.title || 'untitled')
-      const relPath = `knowledge/pages/${fname}.${ext}`
+      const relPath = buildPagePath(p, categories as any)
 
       const frontmatter = toYaml({
         title: p.title,
@@ -172,38 +210,43 @@ async function runMarkdownExport(
     }
 
     if (selected.length > 0) {
-      const relevantCatIds = new Set(selected.map(p => p.categoryId).filter(Boolean) as string[])
+      const usedTagNames = new Set(selected.flatMap(p => p.tags?.map(t => t.name) || []))
+      const filteredTags = tags.filter(t => usedTagNames.has(t.name))
 
-      function renderCatTree(parentId: string | null, depth: number): string {
-        const cats = categories.filter(c => c.parentId === parentId && relevantCatIds.has(c.id))
+      // Helper: get display filename for a page (matches buildPagePath)
+      function pageLink(p: typeof selected[0]): string {
+        const fname = sanitizeFilename(p.title || 'untitled')
+        const ext = p.fileType || 'md'
+        return `${fname}.${ext}`
+      }
+
+      // Build directory tree index
+      function renderDirTree(parentId: string | null, depth: number): string {
+        const cats = categories.filter(c => c.parentId === parentId)
         if (cats.length === 0) return ''
         let s = ''
         for (const c of cats) {
+          const dirName = sanitizeFilename(c.name)
           s += `${'  '.repeat(depth)}- 📁 **${c.name}**\n`
           const catPages = selected.filter(p => p.categoryId === c.id)
           for (const p of catPages) {
-            const ext2 = (p as any).fileType || 'md'
-            const fname = sanitizeFilename(p.title || 'untitled')
-            s += `${'  '.repeat(depth + 1)}- [${p.title || '无标题'}](pages/${fname}.${ext2})${p.isStarred ? ' ⭐' : ''}\n`
+            const link = pageLink(p)
+            s += `${'  '.repeat(depth + 1)}- [${p.title || '无标题'}](${dirName}/${link})${p.isStarred ? ' ⭐' : ''}\n`
           }
-          s += renderCatTree(c.id, depth + 1)
+          s += renderDirTree(c.id, depth + 1)
         }
         return s
       }
 
-      const usedTagNames = new Set(selected.flatMap(p => p.tags?.map(t => t.name) || []))
-      const filteredTags = tags.filter(t => usedTagNames.has(t.name))
-
-      let knowledgeIndex = `# 知识库\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n## 分类与页面\n\n`
-      knowledgeIndex += renderCatTree(null, 0)
+      let knowledgeIndex = `# 知识库\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n## 目录结构\n\n`
+      knowledgeIndex += renderDirTree(null, 0)
 
       const uncategorized = selected.filter(p => !p.categoryId)
       if (uncategorized.length > 0) {
-        knowledgeIndex += `\n## 未分类\n\n`
+        knowledgeIndex += `\n## 零散文件\n\n`
         for (const p of uncategorized) {
-          const ext3 = (p as any).fileType || 'md'
-          const fname = sanitizeFilename(p.title || 'untitled')
-          knowledgeIndex += `- [${p.title || '无标题'}](pages/${fname}.${ext3})${p.isStarred ? ' ⭐' : ''}\n`
+          const link = pageLink(p)
+          knowledgeIndex += `- [${p.title || '无标题'}](零散文件/${link})${p.isStarred ? ' ⭐' : ''}\n`
         }
       }
 
@@ -382,17 +425,103 @@ export function ExportModule() {
   const deselectAllSchedule = () => setSelectedScheduleIds(new Set())
 
   // ---- Item lists for selector ----
-  const blogSelectableItems: SelectableItem[] = (markdownData.blog?.entries || []).map(e => ({
-    id: e.id,
-    title: e.title || '无标题',
-    subtitle: `${e.date}${e.isPinned ? '  📌置顶' : ''}${e.tags?.length ? '  ' + e.tags.map(t => t.name).join(', ') : ''}`
-  }))
+  // Blog: year → month → entries tree
+  const blogSelectableItems: SelectableItem[] = (() => {
+    const entries = markdownData.blog?.entries || []
+    const ymap = new Map<string, Map<string, typeof entries>>()
+    for (const e of entries) {
+      const [y, m] = e.date.split('-')
+      if (!ymap.has(y)) ymap.set(y, new Map())
+      if (!ymap.get(y)!.has(m)) ymap.get(y)!.set(m, [])
+      ymap.get(y)!.get(m)!.push(e)
+    }
+    const years = [...ymap.keys()].sort((a, b) => +b - +a)
+    return years.map(y => ({
+      id: `y:${y}`,
+      title: `${y}年`,
+      subtitle: '',
+      isGroup: true,
+      children: [...ymap.get(y)!.keys()].sort((a, b) => +b - +a).map(m => ({
+        id: `ym:${y}-${m}`,
+        title: `${+m}月`,
+        subtitle: '',
+        isGroup: true,
+        children: ymap.get(y)!.get(m)!.map(e => ({
+          id: e.id,
+          title: e.title || '无标题',
+          subtitle: `${e.date.slice(8)}日${e.isPinned ? ' · 📌置顶' : ''}${e.tags?.length ? ' · ' + e.tags.map(t => t.name).join(', ') : ''}`
+        }))
+      }))
+    }))
+  })()
 
-  const knowledgeSelectableItems: SelectableItem[] = (markdownData.knowledge?.pages || []).map(p => ({
-    id: p.id,
-    title: p.title || '无标题',
-    subtitle: markdownData.knowledge?.categories.find(c => c.id === p.categoryId)?.name || '未分类'
-  }))
+  // Knowledge: notebook → chapter → pages tree
+  const knowledgeSelectableItems: SelectableItem[] = (() => {
+    const pages = markdownData.knowledge?.pages || []
+    const categories = markdownData.knowledge?.categories || []
+
+    // Build children map from categories
+    const childrenMap = new Map<string | null, typeof categories>()
+    for (const c of categories) {
+      const pid = c.parentId || null
+      if (!childrenMap.has(pid)) childrenMap.set(pid, [])
+      childrenMap.get(pid)!.push(c)
+    }
+
+    // Pages by categoryId
+    const pagesByCat = new Map<string | null, typeof pages>()
+    for (const p of pages) {
+      const cid = p.categoryId || null
+      if (!pagesByCat.has(cid)) pagesByCat.set(cid, [])
+      pagesByCat.get(cid)!.push(p)
+    }
+
+    function buildCatTree(parentId: string | null): SelectableItem[] {
+      const cats = childrenMap.get(parentId) || []
+      const result: SelectableItem[] = []
+
+      for (const cat of cats) {
+        const childCats = childrenMap.get(cat.id) || []
+        const catPages = pagesByCat.get(cat.id) || []
+        const children: SelectableItem[] = [
+          ...buildCatTree(cat.id),
+          ...catPages.map(p => ({
+            id: p.id,
+            title: p.title || '无标题',
+            subtitle: (p as any).fileType?.toUpperCase() || 'MD'
+          }))
+        ]
+        result.push({
+          id: cat.id,
+          title: cat.name,
+          subtitle: cat.categoryType === 'notebook' ? '笔记本' : `${childCats.length} 章节 · ${catPages.length} 页`,
+          isGroup: true,
+          children: children.length > 0 ? children : undefined
+        })
+      }
+      return result
+    }
+
+    const tree = buildCatTree(null)
+
+    // Uncategorized pages
+    const loose = pagesByCat.get(null) || []
+    if (loose.length > 0) {
+      tree.push({
+        id: '__loose',
+        title: '零散文件',
+        subtitle: `${loose.length} 页`,
+        isGroup: true,
+        children: loose.map(p => ({
+          id: p.id,
+          title: p.title || '无标题',
+          subtitle: (p as any).fileType?.toUpperCase() || 'MD'
+        }))
+      })
+    }
+
+    return tree
+  })()
 
   const scheduleSelectableItems: SelectableItem[] = (markdownData.schedule?.todos || []).map(t => ({
     id: t.id,
