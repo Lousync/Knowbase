@@ -13,6 +13,7 @@ const INFO: Record<string, FileTypeInfo> = {
   '':   { ext: '',   label: 'Markdown',  badge: 'MD',   icon: 'file',     color: 'var(--accent)',        placeholder: '开始写 Markdown... 使用 [[页面名]] 创建链接', monacoLang: 'markdown' },
   'md': { ext: 'md', label: 'Markdown',  badge: 'MD',   icon: 'file',     color: 'var(--accent)',        placeholder: '开始写 Markdown... 使用 [[页面名]] 创建链接', monacoLang: 'markdown' },
   'txt':{ ext: 'txt',label: '纯文本',     badge: 'TXT',  icon: 'text',     color: 'var(--text-muted)',     placeholder: '开始编写...',                       monacoLang: 'plaintext' },
+  'pdf':{ ext: 'pdf',label: 'PDF',        badge: 'PDF',  icon: 'file',     color: '#e74c3c',               placeholder: 'PDF 阅读器',                      monacoLang: 'plaintext' },
   'cpp':{ ext: 'cpp',label: 'C++',        badge: 'CPP',  icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C++ 代码...',               monacoLang: 'cpp' },
   'c':  { ext: 'c',  label: 'C',          badge: 'C',    icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C 代码...',                 monacoLang: 'c' },
   'h':  { ext: 'h',  label: 'C Header',   badge: 'H',    icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C 头文件...',               monacoLang: 'c' },

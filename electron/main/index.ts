@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
-import { initDatabase, getDbPath, closeDatabase } from '../database/connection'
+import { initDatabase, getDbPath, closeDatabase, getAttachmentsDir } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
@@ -109,6 +109,10 @@ function registerWindowHandlers(): void {
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
   ipcMain.handle('db:getPath', () => getDbPath())
+  ipcMain.handle('app:getAttachmentsPath', () => getAttachmentsDir())
+  ipcMain.handle('app:openExternal', async (_e, filePath: string) => {
+    await shell.openPath(filePath)
+  })
   await initDatabase()
   registerWindowHandlers()
   registerEntryHandlers()

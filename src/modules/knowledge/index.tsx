@@ -6,7 +6,7 @@ import {
   getKnowledgePages, createKnowledgePage, deleteKnowledgePage,
   searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages, moveKnowledgePage,
   updateKnowledgePage, toggleKnowledgeStar,
-  showImportOpenDialog, readImportFiles
+  showImportOpenDialog, readImportFiles, importPdf, importPdfFile
 } from '../../lib/ipc'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
@@ -143,14 +143,31 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     try {
       const paths: string[] = await showImportOpenDialog()
       if (!paths || paths.length === 0) return
-      const results = await readImportFiles(paths)
-      for (const r of results) {
-        if (r.error) continue
-        const h1 = r.content.match(/^#\s+(.+)/m)
-        const title = h1 ? h1[1].trim() : (r.baseName || '导入页面')
-        const catId = selectedChapterId || null
-        await createKnowledgePage({ title, contentMd: r.content, categoryId: catId, fileType: r.fileType || '' })
+
+      // Separate PDF files from text files
+      const pdfPaths = paths.filter(p => p.toLowerCase().endsWith('.pdf'))
+      const textPaths = paths.filter(p => !p.toLowerCase().endsWith('.pdf'))
+
+      // Import text files
+      if (textPaths.length > 0) {
+        const results = await readImportFiles(textPaths)
+        for (const r of results) {
+          if (r.error) continue
+          const h1 = r.content.match(/^#\s+(.+)/m)
+          const title = h1 ? h1[1].trim() : (r.baseName || '导入页面')
+          const catId = selectedChapterId || null
+          await createKnowledgePage({ title, contentMd: r.content, categoryId: catId, fileType: r.fileType || '' })
+        }
       }
+
+      // Import PDF files
+      for (const pdfPath of pdfPaths) {
+        const result = await importPdfFile(pdfPath)
+        if (result.error) {
+          console.error('PDF import failed:', result.error)
+        }
+      }
+
       if (selectedChapterId) refreshChapterPages()
       else refreshLoosePages()
     } catch (e) { console.error(e) }
@@ -164,6 +181,15 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       }
       if (selectedChapterId) refreshChapterPages()
       else refreshLoosePages()
+    } catch (e) { console.error(e) }
+  }
+
+  const handleDropImportPdf = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
+    try {
+      for (const f of files) {
+        await importPdf(f.base64, f.fileName)
+      }
+      refreshLoosePages()
     } catch (e) { console.error(e) }
   }
 
@@ -258,7 +284,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropOnCategory = async (pageId: string, categoryId: string) => {
-    await updateKnowledgePage(pageId, { categoryId })
+    // Same as notebook: find/create a child chapter to hold the page
+    const childCats = categories.filter(c => c.parentId === categoryId)
+    let targetChapterId: string | null = null
+    if (childCats.length > 0) {
+      targetChapterId = childCats[0].id
+    } else {
+      await createKnowledgeCategory({ name: '默认章节', parentId: categoryId, categoryType: 'folder' })
+      await refreshCategories()
+      targetChapterId = (await getKnowledgeCategories()).find(c => c.name === '默认章节' && c.parentId === categoryId)?.id || null
+    }
+    if (targetChapterId) {
+      await updateKnowledgePage(pageId, { categoryId: targetChapterId })
+    }
     refreshLoosePages(); refreshChapterPages()
   }
 
@@ -283,16 +321,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } else {
       setSelectedNotebookId(id)
       setSelectedChapterId(null)
-      // Only notebooks have chapters; folders just show their children in the tree
+      // Show chapter panel for notebooks, or folders that have children
       const cat = categories.find(c => c.id === id)
-      setShowChapterPanel(cat?.categoryType === 'notebook')
+      const hasChildren = categories.some(c => c.parentId === id)
+      setShowChapterPanel(cat?.categoryType === 'notebook' || hasChildren)
     }
   }
 
   const panelsVisible = sidebarOpen
 
   return (
-    <ImportZone onImport={handleDropImport} className="h-full">
+    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
         {/* L1: NotebookList */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat}>

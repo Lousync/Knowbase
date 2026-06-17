@@ -1,7 +1,8 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { readFileSync, copyFileSync } from 'fs'
-import { basename, extname } from 'path'
-import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath } from '../connection'
+import { readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync } from 'fs'
+import { basename, extname, join } from 'path'
+import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir } from '../connection'
+import { randomUUID } from 'crypto'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
 
@@ -43,7 +44,9 @@ export function registerImportHandlers(): void {
     if (!win) return []
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: '文本/代码文件', extensions: TEXT_EXTS }],
+      filters: [
+        { name: '文本/代码/PDF文件', extensions: [...TEXT_EXTS, 'pdf'] },
+      ],
       title: '导入文件到知识库'
     })
     return result.canceled ? [] : result.filePaths
@@ -51,14 +54,70 @@ export function registerImportHandlers(): void {
 
   ipcMain.handle('import:readFiles', async (_e, paths: string[]) => {
     return paths.map(p => {
+      const ext = extname(p).slice(1).toLowerCase()
+      if (ext === 'pdf') {
+        return { path: p, baseName: fileNameBase(p), content: '', fileType: 'pdf', error: 'PDF files are imported via import:importPdf' }
+      }
       try {
         const content = readFileSync(p, 'utf-8')
-        const ext = extname(p).slice(1).toLowerCase()
         return { path: p, baseName: fileNameBase(p), content, fileType: extToFileType(ext) }
       } catch (e) {
         return { path: p, baseName: fileNameBase(p), content: '', fileType: '', error: String(e) }
       }
     })
+  })
+
+  // ===== PDF import =====
+  ipcMain.handle('import:importPdf', async (_e, base64: string, fileName: string) => {
+    try {
+      const id = randomUUID()
+      const pdfFileName = `${id}.pdf`
+      const pdfPath = join(getAttachmentsDir(), pdfFileName)
+      const buf = Buffer.from(base64, 'base64')
+      writeFileSync(pdfPath, buf)
+
+      const now = new Date().toISOString()
+      const db = getDatabase()
+      const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
+      const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
+      db.run(
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, fileName.replace(/\.pdf$/i, ''), pdfFileName, '', null, sortOrder, 'pdf', now, now]
+      )
+      saveToDisk()
+
+      const rows = db.exec('SELECT * FROM knowledge_pages WHERE id = ?')
+      // Return basic page info
+      return { id, title: fileName.replace(/\.pdf$/i, ''), fileType: 'pdf' }
+    } catch (e: any) {
+      return { error: String(e) }
+    }
+  })
+
+  // ===== PDF import from file path (dialog) =====
+  ipcMain.handle('import:importPdfFile', async (_e, filePath: string) => {
+    try {
+      const id = randomUUID()
+      const pdfFileName = `${id}.pdf`
+      const pdfPath = join(getAttachmentsDir(), pdfFileName)
+      copyFileSync(filePath, pdfPath)
+
+      const now = new Date().toISOString()
+      const db = getDatabase()
+      const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
+      const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
+      const title = basename(filePath).replace(/\.pdf$/i, '')
+      db.run(
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, title, pdfFileName, '', null, sortOrder, 'pdf', now, now]
+      )
+      saveToDisk()
+      return { id, title, fileType: 'pdf' }
+    } catch (e: any) {
+      return { error: String(e) }
+    }
   })
 
   // ===== Data import (JSON + db auto-detect) =====

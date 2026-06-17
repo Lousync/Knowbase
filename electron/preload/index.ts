@@ -60,10 +60,14 @@ const api = {
   // import
   showImportOpenDialog: () => ipcRenderer.invoke('import:showOpenDialog'),
   readImportFiles: (paths: string[]) => ipcRenderer.invoke('import:readFiles', paths),
+  importPdf: (base64: string, fileName: string) => ipcRenderer.invoke('import:importPdf', base64, fileName),
+  importPdfFile: (filePath: string) => ipcRenderer.invoke('import:importPdfFile', filePath),
+  openExternal: (filePath: string) => ipcRenderer.invoke('app:openExternal', filePath),
   showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
   executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),
   importDb: (srcPath: string) => ipcRenderer.invoke('import:importDb', srcPath),
+  getAttachmentsPath: () => ipcRenderer.invoke('app:getAttachmentsPath'),
 
   // recycle bin
   getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),

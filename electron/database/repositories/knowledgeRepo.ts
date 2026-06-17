@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
+import { existsSync, unlinkSync } from 'fs'
+import { join } from 'path'
+import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
@@ -278,6 +280,15 @@ export function registerKnowledgeHandlers(): void {
       updatedAt: page.updated_at,
       tags
     })
+
+    // 如果是 PDF，清理附件文件
+    const fileType = (page as any).file_type || ''
+    if (fileType === 'pdf' && page.content_md) {
+      const pdfPath = join(getAttachmentsDir(), page.content_md)
+      if (existsSync(pdfPath)) {
+        try { unlinkSync(pdfPath) } catch { /* file may already be gone */ }
+      }
+    }
 
     // 插入回收站
     const binId = randomUUID()

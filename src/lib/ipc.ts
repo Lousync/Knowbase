@@ -70,6 +70,10 @@ export const onMarkdownExportProgress = (cb: (p: ExportMarkdownProgress) => void
 // import
 export const showImportOpenDialog = () => a().showImportOpenDialog()
 export const readImportFiles = (paths: string[]) => a().readImportFiles(paths)
+export const importPdf = (base64: string, fileName: string) => a().importPdf(base64, fileName)
+export const importPdfFile = (filePath: string) => a().importPdfFile(filePath)
+export const openExternal = (filePath: string) => a().openExternal(filePath)
+export const getAttachmentsPath = () => a().getAttachmentsPath()
 export const showImportDataDialog = () => a().showImportDataDialog()
 export const readImportFile = (filePath: string) => a().readImportFile(filePath)
 export const executeImport = (data: object) => a().executeImport(data)

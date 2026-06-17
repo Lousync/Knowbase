@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
-import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink } from 'lucide-react'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting } from '../../../lib/ipc'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
@@ -44,6 +44,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => { titleRef.current = title }, [title])
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { fileTypeRef.current = fileType }, [fileType])
+
+  const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt'
+  const isPdfFile = fileType === 'pdf'
+  const [attachmentsPath, setAttachmentsPath] = useState('')
+
+  useEffect(() => {
+    getAttachmentsPath().then(setAttachmentsPath).catch(() => {})
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -172,7 +180,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <span className="text-[11px] text-[var(--text-muted)]">{getCategoryPath(page.categoryId)}</span>
           </div>
           <div className="flex items-center gap-2.5">
-            {/* Language switcher */}
+            {/* Language switcher — hidden for PDF */}
+            {!isPdfFile && (
             <div className="relative">
               <button onClick={() => setShowLangMenu(v => !v)}
                 className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors"
@@ -188,6 +197,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                       onClick={() => {
                         setFileTypeState(opt.ext)
                         setShowLangMenu(false)
+                        if (opt.ext !== '' && opt.ext !== 'md' && opt.ext !== 'txt') setPreview(false)
                         onFileTypeChange?.(opt.ext)
                         window.dispatchEvent(new CustomEvent('status-filetype', { detail: opt.label }))
                       }}
@@ -197,11 +207,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 </div>
               )}
             </div>
+            )}
             <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
             <span className="text-[12px] text-[var(--text-secondary)]">{saving ? '未保存' : '已保存'}</span>
+            {!isCodeFile && !isPdfFile && (
             <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
               {preview ? <Edit3 size={16} /> : <Eye size={16} />}
             </button>
+            )}
             <button onClick={handleDelete} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)]" title="删除">
               <Trash2 size={16} />
             </button>
@@ -209,7 +222,30 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         </div>
 
         {/* Content */}
-        {preview ? (
+        {isPdfFile ? (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <input
+              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
+              value={title}
+              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
+              placeholder="PDF 文档名称"
+            />
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
+              <FileText size={64} className="opacity-20" />
+              <p className="text-sm">PDF 文件已导入到本地附件目录</p>
+              <button
+                onClick={() => {
+                  const pdfPath = `${attachmentsPath}\\${page.contentMd}`
+                  openExternal(pdfPath)
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                <ExternalLink size={15} />
+                使用系统阅读器打开
+              </button>
+            </div>
+          </div>
+        ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <h1 className="text-xl font-bold text-[#e0e0e0] mb-3">{title}</h1>
             <div className="prose-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />

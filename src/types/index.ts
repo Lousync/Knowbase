@@ -52,8 +52,8 @@ export interface KnowledgePage {
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }
 export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }
-export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }
-export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }
+export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
+export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
 
 // import
 export interface ImportFileResult {
@@ -141,6 +141,10 @@ export interface ElectronAPI {
   // import
   showImportOpenDialog: () => Promise<string[]>
   readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>
+  importPdf: (base64: string, fileName: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importPdfFile: (filePath: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  openExternal: (filePath: string) => Promise<void>
+  getAttachmentsPath: () => Promise<string>
   showImportDataDialog: () => Promise<string[]>
   readImportFile: (filePath: string) => Promise<string | null>
   executeImport: (data: object) => Promise<{ success: boolean; imported: number; skipped: number; message: string }>
