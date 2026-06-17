@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Entry } from '../../../types'
 import { Edit3, ChevronRight, ChevronDown, FileText, Search } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
@@ -176,9 +176,16 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
     setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }
 
-  // When search activates or changes, auto-expand matching years/months
+  // When search just activates (idle → active), auto-expand matching years/months ONCE.
+  // Subsequent keystrokes leave expand/collapse control to the user.
+  const expandedOnceRef = useRef(false)
   useEffect(() => {
-    if (!activeSearch || !searchResults) return
+    if (!activeSearch) {
+      expandedOnceRef.current = false
+      return
+    }
+    if (expandedOnceRef.current || !searchResults) return
+    expandedOnceRef.current = true
     setExpanded(prev => {
       const n = new Set(prev)
       for (const y of searchResults.years) {
