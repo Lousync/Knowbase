@@ -206,7 +206,8 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
       })
       return
     }
-    if (date > today) {
+    // Block empty future dates (auto-create), but allow existing future entries
+    if (date > today && !tree[date.slice(0,4)]?.[date.slice(5,7)]?.some(d => d.date === date && d.hasContent)) {
       showToast({
         type: 'warning',
         message: '不能创建未来日期的日志。',
