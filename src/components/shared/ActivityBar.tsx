@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
 import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
-import { navigateToSettingsSection } from '../../modules/settings'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={28} strokeWidth={1.5} /> },
@@ -138,9 +137,9 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
               设置
             </button>
 
-            {/* 帮助 — navigate to shortcuts */}
+            {/* 帮助 — navigate to help tab */}
             <button
-              onClick={() => { navigateToSettingsSection('shortcuts'); setMenuOpen(false) }}
+              onClick={() => { onChange('help'); setMenuOpen(false) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
             >
               <HelpCircle size={15} className="text-[var(--text-muted)]" />

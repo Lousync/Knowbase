@@ -11,6 +11,7 @@ import { KnowledgeModule } from './modules/knowledge'
 import { ExportModule } from './modules/export'
 import { RecycleBinModule } from './modules/recycle'
 import { SettingsModule } from './modules/settings'
+import { HelpModule } from './modules/help'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 export default function App() {
@@ -59,6 +60,13 @@ export default function App() {
     const handler = () => { setActiveTab('settings'); setSidebarOpen(true) }
     window.addEventListener('settings:open', handler)
     return () => window.removeEventListener('settings:open', handler)
+  }, [])
+
+  // Listen for help:open — navigate to help tab
+  useEffect(() => {
+    const handler = () => { setActiveTab('help'); setSidebarOpen(true) }
+    window.addEventListener('help:open', handler)
+    return () => window.removeEventListener('help:open', handler)
   }, [])
 
   // Keep <html> font-size in sync when zoom changes externally
@@ -135,6 +143,7 @@ export default function App() {
           {activeTab === 'export' && <ExportModule />}
           {activeTab === 'recycle' && <RecycleBinModule />}
           {activeTab === 'settings' && <SettingsModule />}
+          {activeTab === 'help' && <HelpModule />}
         </main>
       </div>
       <StatusBar encoding={encoding} />

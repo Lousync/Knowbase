@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, AlertCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react'
 import type { ToastMessage } from '../../lib/toast'
-import { navigateToSettingsSection } from '../../modules/settings'
+import { navigateToHelp } from '../../modules/help'
 
 interface ActiveToast extends ToastMessage {
   progress: number   // 0..1, 1 = done
@@ -80,7 +80,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: ActiveToast; onDismiss: (id
 
   const handleDetail = () => {
     if (t.detail) {
-      navigateToSettingsSection(t.detail as 'shortcuts' | 'editor' | 'appearance' | 'export' | 'advanced')
+      navigateToHelp(t.detail)
     }
     onDismiss(t.id)
   }
