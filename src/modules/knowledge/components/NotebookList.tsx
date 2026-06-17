@@ -366,10 +366,10 @@ export function NotebookList({
                   (e.currentTarget as HTMLElement).style.opacity = '1'
                 }}
                 onClick={() => onOpenPage(p.id)}
-                className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
-                  activePageId === p.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
+                  activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
-                style={{ paddingLeft: '8px', paddingRight: '4px' }}
+                style={{ paddingLeft: '5px', paddingRight: '4px' }}
               >
                 <span className="w-3.5 shrink-0" />
                 <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
@@ -406,7 +406,7 @@ export function NotebookList({
             <div className="ml-5 border-l border-[var(--border-color)]">
               {starredPages.map(p => (
                 <div key={p.id} onClick={() => onOpenPage(p.id)}
-                  className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] ${activePageId === p.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
+                  className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] border-l-[3px] ${activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'}`}>
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
                   <span className="truncate flex-1">{p.title || '无标题'}</span>
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}

@@ -186,8 +186,8 @@ export function ChapterPanel({
               >
                 <div
                   onClick={() => onOpenPage(p.id)}
-                  className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded text-[13px] transition-colors ${
-                    activePageId === p.id ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                  className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded text-[13px] transition-colors border-l-[3px] ${
+                    activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                   }`}
                 >
                   <FileText size={15} className="shrink-0 text-[var(--text-muted)]" />

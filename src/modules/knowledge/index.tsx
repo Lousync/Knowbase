@@ -370,10 +370,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         return
       }
 
-      // Delete — context-aware (chapter > notebook)
+      // Delete — context-aware (page > chapter > notebook)
       if (e.key === 'Delete') {
+        const activeId = activePageIdRef.current
         const chapterId = selectedChapterIdRef.current
         const notebookId = selectedNotebookIdRef.current
+        if (activeId) {
+          e.preventDefault()
+          handlePageDeleted(activeId)
+          return
+        }
         if (chapterId) {
           e.preventDefault()
           handleDeleteChapter(chapterId)
@@ -388,7 +394,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleCreateLoosePage, handleCloseTab, handleDeleteChapter, handleDeleteNotebook])
+  }, [handleCreateLoosePage, handleCloseTab, handleDeleteChapter, handleDeleteNotebook, handlePageDeleted])
 
   const panelsVisible = sidebarOpen
 
