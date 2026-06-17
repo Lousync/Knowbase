@@ -66,24 +66,6 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     }
   }
 
-  // 指定日期创建 / 打开 — 任何日期都可编辑
-  const handleCustomDate = async (date: string) => {
-    const existing = entries.find(e => e.date === date)
-    if (existing) {
-      setSelectedId(existing.id)
-      setSelectedDate(date)
-      setView('editor')
-    } else {
-      try {
-        const entry = await createEntry({ date, title: date })
-        setSelectedId(entry.id)
-        setSelectedDate(date)
-        setView('editor')
-        loadEntries()
-      } catch (e) { console.error(e) }
-    }
-  }
-
   // 点击侧边栏日期 → 打开该日文章（不存在则自动创建）
   const handleSelectDate = async (date: string | null) => {
     setSelectedDate(date)
@@ -151,7 +133,6 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               selectedDate={selectedDate}
               onSelectDate={handleSelectDate}
               onNewEntry={handleTodayEntry}
-              onCustomDate={handleCustomDate}
             />
           </div>
         </div>
