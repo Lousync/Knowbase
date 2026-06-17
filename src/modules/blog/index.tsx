@@ -26,6 +26,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
   const today = new Date().toISOString().split('T')[0]
+  const thisMonth = today.slice(0, 7) // "2026-06"
 
   const loadEntries = useCallback(async () => {
     try {
@@ -36,6 +37,14 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       setLoading(false)
     }
   }, [])
+
+  // 回到列表：清除选中态，显示当月文章
+  const goToList = useCallback(() => {
+    setView('list')
+    setSelectedId(null)
+    setSelectedDate(null)
+    loadEntries()
+  }, [loadEntries])
 
   useEffect(() => { loadEntries() }, [loadEntries])
 
@@ -97,14 +106,12 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
         return
       }
 
-      // Delete — delete entry in detail view
+      // Delete — delete entry in editor/detail
       if (e.key === 'Delete') {
         if (viewRef.current !== 'list' && selectedIdRef.current) {
           e.preventDefault()
           deleteEntry(selectedIdRef.current).then(() => {
-            setView('list')
-            setSelectedId(null)
-            loadEntries()
+            goToList()
           }).catch(console.error)
         }
         return
@@ -114,14 +121,13 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       if (e.key === 'Escape') {
         if (viewRef.current !== 'list') {
           e.preventDefault()
-          setView('list')
-          setSelectedId(null)
+          goToList()
         }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleTodayEntry, loadEntries])
+  }, [handleTodayEntry, goToList, loadEntries])
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
@@ -140,7 +146,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       <main className="flex-1 overflow-hidden">
         {view === 'list' && (
           <EntryList
-            entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries}
+            entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries.filter(e => e.date.startsWith(thisMonth))}
             loading={loading}
             onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView('editor') }}
             onNewEntry={handleTodayEntry}
@@ -151,8 +157,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
             entryId={selectedId}
             showLineNumbers={showLineNumbers}
             zoom={zoom}
-            onSave={() => { setView('list'); setSelectedId(null); loadEntries() }}
-            onCancel={() => { setView('list'); setSelectedId(null) }}
+            onSave={goToList}
+            onCancel={goToList}
           />
         )}
         {view === 'detail' && selectedId && (
@@ -160,9 +166,9 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
             entryId={selectedId}
             onEdit={() => setView('editor')}
             onDelete={async () => {
-              await deleteEntry(selectedId); setView('list'); setSelectedId(null); loadEntries()
+              await deleteEntry(selectedId); goToList()
             }}
-            onBack={() => { setView('list'); setSelectedId(null) }}
+            onBack={goToList}
           />
         )}
       </main>
