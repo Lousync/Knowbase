@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Entry } from '../../../types'
-import { Edit3, ChevronRight, ChevronDown, FileText } from 'lucide-react'
+import { Edit3, ChevronRight, ChevronDown, FileText, Plus } from 'lucide-react'
 
 interface SidebarProps {
   entries: Entry[]
   selectedDate: string | null
   onSelectDate: (date: string | null) => void
   onNewEntry: () => void
+  onCustomDate: (date: string) => void
 }
 
 type DayNode = { date: string; hasContent: boolean }
@@ -36,7 +37,7 @@ function buildTree(entries: Entry[]): YearMap {
   return tree
 }
 
-export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
+export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry, onCustomDate }: SidebarProps) {
   const tree = buildTree(entries)
   const years = Object.keys(tree).sort((a, b) => b.localeCompare(a))
   const today = new Date().toISOString().split('T')[0]
@@ -63,7 +64,7 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
       </div>
 
       {/* 今日按钮：文案按是否有文章切换 */}
-      <div className="px-3 py-3">
+      <div className="px-3 py-3 space-y-2">
         <button
           onClick={onNewEntry}
           className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-white text-sm rounded hover:bg-[var(--accent-hover)] transition-colors"
@@ -71,6 +72,17 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
           <Edit3 size={15} />
           {hasToday ? '继续编写' : '今日文章编写'}
         </button>
+
+        {/* 指定日期创建 / 打开 */}
+        <div className="flex items-center gap-1">
+          <input
+            type="date"
+            value=""
+            onChange={e => { if (e.target.value) onCustomDate(e.target.value) }}
+            className="flex-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+          <span className="text-[10px] text-[var(--text-muted)] shrink-0">补写</span>
+        </div>
       </div>
 
       {/* 树状归档 */}

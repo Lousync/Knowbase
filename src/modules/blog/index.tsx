@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Trash2 } from 'lucide-react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
 import { ConfirmDialog } from '../../components/shared'
@@ -67,18 +66,40 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     }
   }
 
-  // 点击侧边栏日期 → 查看该日文章（已过日期为只读详情）
-  const handleSelectDate = (date: string | null) => {
+  // 指定日期创建 / 打开 — 任何日期都可编辑
+  const handleCustomDate = async (date: string) => {
+    const existing = entries.find(e => e.date === date)
+    if (existing) {
+      setSelectedId(existing.id)
+      setSelectedDate(date)
+      setView('editor')
+    } else {
+      try {
+        const entry = await createEntry({ date, title: date })
+        setSelectedId(entry.id)
+        setSelectedDate(date)
+        setView('editor')
+        loadEntries()
+      } catch (e) { console.error(e) }
+    }
+  }
+
+  // 点击侧边栏日期 → 打开该日文章（不存在则自动创建）
+  const handleSelectDate = async (date: string | null) => {
     setSelectedDate(date)
     if (!date) return
     const entry = entries.find(e => e.date === date)
     if (entry) {
       setSelectedId(entry.id)
-      if (date === today) {
+      setView('editor')
+    } else {
+      // 该日期尚无文章 → 自动创建
+      try {
+        const e = await createEntry({ date, title: date })
+        setSelectedId(e.id)
         setView('editor')
-      } else {
-        setView('detail')
-      }
+        loadEntries()
+      } catch (err) { console.error(err) }
     }
   }
 
@@ -96,7 +117,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
       // Delete — delete entry in detail view
       if (e.key === 'Delete') {
-        if (viewRef.current === 'detail' && selectedIdRef.current) {
+        if (viewRef.current !== 'list' && selectedIdRef.current) {
           e.preventDefault()
           deleteEntry(selectedIdRef.current).then(() => {
             setView('list')
@@ -130,6 +151,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               selectedDate={selectedDate}
               onSelectDate={handleSelectDate}
               onNewEntry={handleTodayEntry}
+              onCustomDate={handleCustomDate}
             />
           </div>
         </div>
@@ -139,7 +161,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           <EntryList
             entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries}
             loading={loading}
-            onEntryClick={entry => void (setSelectedId(entry.id), setView(entry.date === today ? 'editor' : 'detail'))}
+            onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView('editor') }}
             onNewEntry={handleTodayEntry}
           />
         )}
@@ -155,7 +177,6 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
         {view === 'detail' && selectedId && (
           <EntryDetail
             entryId={selectedId}
-            isToday={selectedDate === today}
             onEdit={() => setView('editor')}
             onDelete={async () => {
               await deleteEntry(selectedId); setView('list'); setSelectedId(null); loadEntries()
@@ -169,8 +190,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 }
 
 // 博文详情阅读
-function EntryDetail({ entryId, isToday, onEdit, onDelete, onBack }: {
-  entryId: string; isToday: boolean; onEdit: () => void; onDelete: () => void; onBack: () => void
+function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
+  entryId: string; onEdit: () => void; onDelete: () => void; onBack: () => void
 }) {
   const [entry, setEntry] = useState<(Entry & { tags: Tag[] }) | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -201,13 +222,12 @@ function EntryDetail({ entryId, isToday, onEdit, onDelete, onBack }: {
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-color)]">
             <button onClick={onBack} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">← 返回列表</button>
             <div className="flex gap-2">
-              {isToday && (
-                <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
-              )}
+              <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
               <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[#e8112320] rounded">删除</button>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-[#e0e0e0] mb-2">{entry.date}</h1>
+          <h1 className="text-2xl font-bold text-[#e0e0e0] mb-1">{entry.date}</h1>
+          <p className="text-[11px] text-[var(--text-muted)] mb-4">最近修改：{fmtRelative(entry.updatedAt)}</p>
           <div className="prose-content" dangerouslySetInnerHTML={{ __html: entry.contentHtml || '<p>暂无内容</p>' }} />
         </div>
       </div>
@@ -228,4 +248,21 @@ function EntryDetail({ entryId, isToday, onEdit, onDelete, onBack }: {
       />
     </>
   )
+}
+
+function fmtRelative(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = Date.now()
+  const diff = now - d.getTime()
+  if (isNaN(diff)) return dateStr
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return '刚刚'
+  if (mins < 60) return `${mins} 分钟前`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months} 个月前`
+  return d.toLocaleDateString('zh-CN')
 }
