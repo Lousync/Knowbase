@@ -216,6 +216,18 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     })
   }, [])
 
+  const handleFileTypeChange = useCallback((fileType: string) => {
+    if (!activePageIdRef.current) return
+    const pageId = activePageIdRef.current
+    setLoosePages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
+    setChapterPages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
+    setStarredPages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
+    setOpenPageInfos(prev => {
+      const existing = prev[pageId]
+      return { ...prev, [pageId]: { ...existing, fileType } }
+    })
+  }, [])
+
   const handleToggleStar = async (pageId: string) => {
     await toggleKnowledgeStar(pageId)
     refreshLoosePages(); refreshChapterPages(); refreshStarred()
@@ -349,6 +361,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onNavigate={handleOpenPage}
               onUpdate={handleRefresh}
               onTitleChange={handleTitleChange}
+              onFileTypeChange={handleFileTypeChange}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">

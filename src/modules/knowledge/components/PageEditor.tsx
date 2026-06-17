@@ -18,9 +18,10 @@ interface Props {
   onNavigate: (id: string) => void
   onUpdate: () => void
   onTitleChange?: (title: string) => void
+  onFileTypeChange?: (fileType: string) => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange }: Props) {
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -187,6 +188,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                       onClick={() => {
                         setFileTypeState(opt.ext)
                         setShowLangMenu(false)
+                        onFileTypeChange?.(opt.ext)
                         window.dispatchEvent(new CustomEvent('status-filetype', { detail: opt.label }))
                       }}
                       className={`w-full text-left px-3 py-1.5 text-[11px] ${fileType === opt.ext ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
