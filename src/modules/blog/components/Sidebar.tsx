@@ -100,12 +100,11 @@ function computeSearchResults(
     }
   }
 
-  // Year-Month: show all days in that month (or generate empty month if not in tree)
+  // Year-Month: only if the year exists in tree (don't show empty months)
   if (year && month) {
+    if (!tree[year]?.[month]) return null
     const mk = `${year}-${month}`
-    const days = tree[year]?.[month]
-      ? [...tree[year][month]]
-      : generateMonthDays(year, month)
+    const days = [...tree[year][month]]
     return {
       years: [year],
       months: { [year]: [month] },
@@ -113,15 +112,13 @@ function computeSearchResults(
     }
   }
 
-  // Year only: show all months in that year
+  // Year only: only if the year exists in tree (don't show empty years)
   if (year) {
-    const months = tree[year]
-      ? Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
-      : generateAllMonths()
+    if (!tree[year]) return null
+    const months = Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
     const days: Record<string, DayNode[]> = {}
     for (const m of months) {
-      const mk = `${year}-${m}`
-      days[mk] = tree[year]?.[m] ?? generateMonthDays(year, m)
+      days[`${year}-${m}`] = tree[year][m]
     }
     return { years: [year], months: { [year]: months }, days }
   }
@@ -153,20 +150,6 @@ function computeSearchResults(
   }
 
   return null
-}
-
-function generateMonthDays(year: string, month: string): DayNode[] {
-  const dim = new Date(parseInt(year), parseInt(month), 0).getDate()
-  const days: DayNode[] = []
-  for (let d = 1; d <= dim; d++) {
-    days.push({ date: `${year}-${month}-${String(d).padStart(2, '0')}`, hasContent: false })
-  }
-  days.sort((a, b) => b.date.localeCompare(a.date))
-  return days
-}
-
-function generateAllMonths(): string[] {
-  return ['12', '11', '10', '09', '08', '07', '06', '05', '04', '03', '02', '01']
 }
 
 export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
@@ -260,7 +243,7 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
         {effectiveYears.length === 0 && !activeSearch && (
           <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">暂无文章</p>
         )}
-        {activeSearch && searchResults === null && effectiveYears.length === 0 && (
+        {activeSearch && searchResults === null && (
           <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">未找到匹配的日期</p>
         )}
 
