@@ -181,22 +181,28 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
     setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }
 
-  // When search just activates (idle → active), auto-expand matching years/months ONCE.
-  // Subsequent keystrokes leave expand/collapse control to the user.
-  const expandedOnceRef = useRef(false)
+  const autoExpandedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!activeSearch) {
-      expandedOnceRef.current = false
+      autoExpandedRef.current = new Set()
       return
     }
-    if (expandedOnceRef.current || !searchResults) return
-    expandedOnceRef.current = true
+    if (!searchResults) return
     setExpanded(prev => {
       const n = new Set(prev)
       for (const y of searchResults.years) {
-        n.add(y)
+        if (!autoExpandedRef.current.has(y)) {
+          n.add(y)
+          autoExpandedRef.current.add(y)
+        }
         const ms = searchResults.months[y] || []
-        for (const m of ms) n.add(`${y}-${m}`)
+        for (const m of ms) {
+          const key = `${y}-${m}`
+          if (!autoExpandedRef.current.has(key)) {
+            n.add(key)
+            autoExpandedRef.current.add(key)
+          }
+        }
       }
       return n
     })
