@@ -1,13 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getEntryById, updateEntry } from '../../../lib/ipc'
-import { ArrowLeft, Eye, Code } from 'lucide-react'
+import { getEntryById, updateEntry, getTags, createTag } from '../../../lib/ipc'
+import { ArrowLeft, Eye, Code, Plus, X } from 'lucide-react'
 import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { useSettings } from '../../../lib/SettingsContext'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import type { Tag } from '../../../types'
 
 interface Props {
   entryId: string; showLineNumbers: boolean; zoom?: number; onSave: () => void; onCancel: () => void
 }
+
+const MOOD_OPTIONS = [
+  { emoji: '😄', label: '开心' },
+  { emoji: '😫', label: '疲倦' },
+  { emoji: '😢', label: '难过' },
+  { emoji: '😕', label: '困惑' },
+]
+const MAX_TAGS = 5
 
 export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel }: Props) {
   const { s } = useSettings()
@@ -21,21 +30,45 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const contentRef = useRef(contentMd)
   const dateRef = useRef(date)
 
-  // Keep refs synced for the debounced save
+  // Tags & States
+  const [allTags, setAllTags] = useState<Tag[]>([])
+  const [entryTags, setEntryTags] = useState<Tag[]>([])
+  const [entryStates, setEntryStates] = useState<string>('')
+  const [newTagName, setNewTagName] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
+
+  const tagsRef = useRef<Tag[]>([])
+  const statesRef = useRef('')
+
   useEffect(() => { contentRef.current = contentMd }, [contentMd])
   useEffect(() => { dateRef.current = date }, [date])
+  useEffect(() => { tagsRef.current = entryTags }, [entryTags])
+  useEffect(() => { statesRef.current = entryStates }, [entryStates])
 
   useEffect(() => {
-    getEntryById(entryId).then(d => {
-      if (!d) return
-      setContentMd(d.contentMd); setDate(d.date); setLoaded(true)
-    })
+    Promise.all([
+      getEntryById(entryId).then(d => {
+        if (!d) return
+        setContentMd(d.contentMd); setDate(d.date)
+        setEntryTags(d.tags || [])
+        setEntryStates(d.states || '')
+        setLoaded(true)
+      }),
+      getTags().then(setAllTags)
+    ])
   }, [entryId])
 
   const doSave = useCallback(async (c: string, d: string) => {
     setSaving(true)
     try {
-      await updateEntry(entryId, { contentMd: c, contentHtml: renderMarkdown(c), date: d })
+      const tagIds = tagsRef.current.map(t => t.id)
+      await updateEntry(entryId, {
+        contentMd: c,
+        contentHtml: renderMarkdown(c),
+        date: d,
+        tags: tagIds,
+        states: statesRef.current,
+      })
       setLastSaved(new Date())
     } catch (e) { console.error(e) } finally { setSaving(false) }
   }, [entryId])
@@ -53,6 +86,38 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     onSave()
   }
 
+  const handleAddTag = async () => {
+    const name = newTagName.trim()
+    if (!name) { setShowTagInput(false); return }
+    if (entryTags.length >= MAX_TAGS) { setShowTagInput(false); setNewTagName(''); return }
+    // Existing tag?
+    let tag = allTags.find(t => t.name === name)
+    if (!tag) {
+      tag = await createTag(name)
+      setAllTags(prev => [...prev, tag!])
+    }
+    if (!entryTags.find(t => t.id === tag!.id)) {
+      setEntryTags(prev => [...prev, tag!])
+    }
+    setNewTagName('')
+    setShowTagInput(false)
+  }
+
+  const handleRemoveTag = (tagId: string) => {
+    setEntryTags(prev => prev.filter(t => t.id !== tagId))
+  }
+
+  const handleToggleState = (emoji: string) => {
+    const states = entryStates.split(',').filter(Boolean)
+    const idx = states.indexOf(emoji)
+    if (idx >= 0) {
+      states.splice(idx, 1)
+    } else {
+      states.push(emoji)
+    }
+    setEntryStates(states.join(','))
+  }
+
   // Ctrl+/ toggle preview, Ctrl+S save, Escape back
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -68,6 +133,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-primary)]">加载中...</div>
   }
 
+  const activeStates = entryStates.split(',').filter(Boolean)
+
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* toolbar */}
@@ -78,7 +145,23 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           </button>
           <div className="w-px h-4 bg-[var(--input-bg)]" />
           <span className="text-[13px] text-[var(--text-primary)] font-medium">{date}</span>
+
+          {/* Mood states */}
+          <div className="w-px h-4 bg-[var(--input-bg)]" />
+          <div className="flex items-center gap-0.5">
+            {MOOD_OPTIONS.map(m => (
+              <button
+                key={m.emoji}
+                onClick={() => handleToggleState(m.emoji)}
+                title={m.label}
+                className={`text-[15px] px-0.5 rounded transition-opacity ${activeStates.includes(m.emoji) ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
+              >
+                {m.emoji}
+              </button>
+            ))}
+          </div>
         </div>
+
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-[var(--text-muted)] min-w-[60px] text-right">
             {saving ? '保存中...' : lastSaved ? '已保存 ' + fmtTime(lastSaved) : ''}
@@ -94,6 +177,45 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             完成
           </button>
         </div>
+      </div>
+
+      {/* Tag bar */}
+      <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto">
+        {entryTags.map(t => (
+          <span key={t.id}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
+            style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
+          >
+            {t.name}
+            <button onClick={() => handleRemoveTag(t.id)}
+              className="hover:text-[var(--danger)] transition-colors"
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+        {entryTags.length < MAX_TAGS && (
+          showTagInput ? (
+            <input
+              autoFocus
+              value={newTagName}
+              onChange={e => setNewTagName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); if (e.key === 'Escape') { setShowTagInput(false); setNewTagName('') } }}
+              onBlur={handleAddTag}
+              placeholder="标签名..."
+              className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
+            />
+          ) : (
+            <button onClick={() => setShowTagInput(true)}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded border border-dashed border-[var(--border-color)] transition-colors"
+            >
+              <Plus size={10} />标签
+            </button>
+          )
+        )}
+        {entryTags.length > 0 && (
+          <span className="text-[10px] text-[var(--text-disabled)] ml-1">{entryTags.length}/{MAX_TAGS}</span>
+        )}
       </div>
 
       {/* content */}

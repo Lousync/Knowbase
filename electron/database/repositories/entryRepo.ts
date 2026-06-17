@@ -12,6 +12,7 @@ interface EntryRow {
   updated_at: string
   is_pinned: number
   word_count: number
+  states: string
 }
 
 function rowToEntry(row: EntryRow) {
@@ -24,7 +25,8 @@ function rowToEntry(row: EntryRow) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isPinned: row.is_pinned === 1,
-    wordCount: row.word_count
+    wordCount: row.word_count,
+    states: row.states || '',
   }
 }
 
@@ -120,14 +122,15 @@ export function registerEntryHandlers(): void {
     contentHtml?: string
     date: string
     tags?: string[]
+    states?: string
   }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
 
     run(
-      `INSERT INTO entries (id, title, content_md, content_html, date, created_at, updated_at, word_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '', data.contentMd || '', data.contentHtml || '', data.date, now, now, 0]
+      `INSERT INTO entries (id, title, content_md, content_html, date, created_at, updated_at, word_count, states)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.title || '', data.contentMd || '', data.contentHtml || '', data.date, now, now, 0, data.states || '']
     )
 
     if (data.tags && data.tags.length > 0) {
@@ -148,6 +151,7 @@ export function registerEntryHandlers(): void {
     date?: string
     isPinned?: boolean
     tags?: string[]
+    states?: string
   }) => {
     const now = new Date().toISOString()
     const sets: string[] = ['updated_at = ?']
@@ -172,6 +176,10 @@ export function registerEntryHandlers(): void {
     if (data.isPinned !== undefined) {
       sets.push('is_pinned = ?')
       params.push(data.isPinned ? 1 : 0)
+    }
+    if (data.states !== undefined) {
+      sets.push('states = ?')
+      params.push(data.states)
     }
 
     params.push(id)
@@ -215,6 +223,7 @@ export function registerEntryHandlers(): void {
       updatedAt: entry.updated_at,
       isPinned: entry.is_pinned === 1,
       wordCount: entry.word_count,
+      states: entry.states || '',
       tags
     })
 

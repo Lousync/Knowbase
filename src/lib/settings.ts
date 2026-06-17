@@ -37,6 +37,12 @@ export const ICON_SIZE_OPTIONS = [
   { id: 'l', label: '大' },
 ] as const
 
+export const BLOG_SIZE_OPTIONS = [
+  { id: 's', label: '紧凑' },
+  { id: 'm', label: '标准' },
+  { id: 'l', label: '宽松' },
+] as const
+
 export const FONT_SIZE_OPTIONS = [
   { id: 12, label: '12px' },
   { id: 13, label: '13px' },
@@ -74,6 +80,9 @@ export const SETTINGS = {
 
   // ---- 日程 ----
   scheduleIconSize:  { default: 'm',         desc: '日程图标大小' },
+
+  // ---- 博客 ----
+  blogCardSize:       { default: 'm',         desc: '博客卡片大小' },
 
   // ---- 边栏宽度 ----
   sidebarWidth_blog:             { default: 240, desc: '博客边栏宽度' },

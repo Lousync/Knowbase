@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
+import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { isEditingInput } from '../../lib/shortcuts'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -13,6 +14,7 @@ type BlogView = 'list' | 'editor' | 'detail'
 export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number> }: {
   showLineNumbers?: boolean; sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>
 }) {
+  const { s } = useSettings()
   const [view, setView] = useState<BlogView>('list')
   const [entries, setEntries] = useState<Entry[]>([])
   const [tags, setTags] = useState<Tag[]>([])
@@ -150,6 +152,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
             loading={loading}
             onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView('editor') }}
             onNewEntry={handleTodayEntry}
+            cardSize={s.blogCardSize}
           />
         )}
         {view === 'editor' && selectedId && (

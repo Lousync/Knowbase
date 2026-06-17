@@ -7,9 +7,10 @@ interface EntryListProps {
   loading: boolean
   onEntryClick: (entry: Entry) => void
   onNewEntry: () => void
+  cardSize?: 's' | 'm' | 'l'
 }
 
-export function EntryList({ entries, loading, onEntryClick, onNewEntry }: EntryListProps) {
+export function EntryList({ entries, loading, onEntryClick, onNewEntry, cardSize = 'm' }: EntryListProps) {
   const today = new Date().toISOString().split('T')[0]
   const hasToday = entries.some(e => e.date === today)
 
@@ -54,7 +55,7 @@ export function EntryList({ entries, loading, onEntryClick, onNewEntry }: EntryL
         ) : (
           <div className="space-y-2">
             {sorted.map(entry => (
-              <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} />
+              <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} size={cardSize} />
             ))}
           </div>
         )}

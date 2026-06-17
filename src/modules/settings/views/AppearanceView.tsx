@@ -1,6 +1,6 @@
 import { Sun, Moon } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { THEME_OPTIONS } from '../../../lib/settings'
+import { THEME_OPTIONS, BLOG_SIZE_OPTIONS } from '../../../lib/settings'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={24} />,
@@ -42,6 +42,25 @@ export function AppearanceView() {
                 {t.label}
               </span>
               <span className="text-[10px] text-[var(--text-muted)] text-center">{THEME_DESCS[t.id]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">博客卡片大小</h3>
+        <div className="flex gap-1.5 max-w-xs">
+          {BLOG_SIZE_OPTIONS.map(bs => (
+            <button
+              key={bs.id}
+              onClick={() => update('blogCardSize', bs.id)}
+              className={`flex-1 px-2 py-2 rounded text-[12px] border transition-colors ${
+                s.blogCardSize === bs.id
+                  ? 'border-[var(--accent)] bg-[var(--bg-selected)] text-[var(--text-primary)]'
+                  : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              {bs.label}
             </button>
           ))}
         </div>

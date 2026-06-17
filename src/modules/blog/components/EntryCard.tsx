@@ -3,26 +3,66 @@ import { Entry } from '../../../types'
 interface EntryCardProps {
   entry: Entry
   onClick: () => void
+  size?: 's' | 'm' | 'l'
 }
 
-export function EntryCard({ entry, onClick }: EntryCardProps) {
+const SIZE_MAP = {
+  s: { py: 'py-1', px: 'px-3', title: 'text-[12px]', meta: 'text-[10px]', gap: 'gap-2' },
+  m: { py: 'py-3', px: 'px-4', title: 'text-[14px]', meta: 'text-[11px]', gap: 'gap-2' },
+  l: { py: 'py-4', px: 'px-5', title: 'text-[16px]', meta: 'text-[12px]', gap: 'gap-3' },
+}
+
+export function EntryCard({ entry, onClick, size = 'm' }: EntryCardProps) {
   const today = new Date().toISOString().split('T')[0]
   const isToday = entry.date === today
+  const sz = SIZE_MAP[size]
+
+  const tags = entry.tags || []
+  const states = entry.states?.split(',').filter(Boolean) || []
 
   return (
     <article
       onClick={onClick}
-      className="group flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md cursor-pointer hover:border-[var(--accent)] transition-all"
+      className={`group flex items-center justify-between ${sz.px} ${sz.py} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md cursor-pointer hover:border-[var(--accent)] transition-all`}
     >
-      <div className="flex items-center gap-2">
-        <h3 className="text-[14px] font-medium text-[#e0e0e0]">
-          {entry.date}
+      <div className={`flex items-center ${sz.gap} min-w-0`}>
+        {/* Date */}
+        <h3 className={`${sz.title} font-medium text-[#e0e0e0] shrink-0`}>
+          {entry.date.slice(-5)}
         </h3>
+
+        {/* States (emojis) */}
+        {states.length > 0 && (
+          <span className="shrink-0 text-[16px]">{states.join('')}</span>
+        )}
+
+        {/* Today badge */}
         {isToday && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)] text-white">今天</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)] text-white shrink-0">今天</span>
         )}
       </div>
-      <span className="text-[11px] text-[var(--text-muted)] shrink-0">{fmtShort(entry.updatedAt)}</span>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Tags */}
+        {tags.length > 0 && (
+          <div className="flex items-center gap-1">
+            {tags.slice(0, 3).map(t => (
+              <span key={t.id}
+                className={`${sz.meta} px-1 rounded shrink-0 max-w-[80px] truncate`}
+                style={{ backgroundColor: t.color + '20', color: t.color }}
+              >
+                {t.name}
+              </span>
+            ))}
+            {tags.length > 3 && (
+              <span className={`${sz.meta} text-[var(--text-muted)]`}>+{tags.length - 3}</span>
+            )}
+          </div>
+        )}
+
+        {/* Modified time */}
+        <span className={`${sz.meta} text-[var(--text-muted)] shrink-0`}>{fmtShort(entry.updatedAt)}</span>
+      </div>
     </article>
   )
 }

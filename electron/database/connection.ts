@@ -238,6 +238,10 @@ function runMigrations(): void {
     try { db.run("ALTER TABLE knowledge_pages ADD COLUMN file_type TEXT DEFAULT ''") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('011_knowledge_file_type')")
   }
+  if (!applied.has('012_blog_states')) {
+    try { db.run("ALTER TABLE entries ADD COLUMN states TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('012_blog_states')")
+  }
 }
 
 /**
