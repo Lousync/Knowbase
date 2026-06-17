@@ -268,6 +268,7 @@ export function registerKnowledgeHandlers(): void {
     )
 
     // 序列化完整数据
+    const pageFileType = (page as any).file_type || page.file_type || ''
     const data = JSON.stringify({
       id: page.id,
       title: page.title,
@@ -276,14 +277,14 @@ export function registerKnowledgeHandlers(): void {
       categoryId: page.category_id,
       isStarred: !!page.is_starred,
       sortOrder: page.sort_order,
+      fileType: pageFileType,
       createdAt: page.created_at,
       updatedAt: page.updated_at,
       tags
     })
 
     // 如果是 PDF，清理附件文件
-    const fileType = (page as any).file_type || ''
-    if (fileType === 'pdf' && page.content_md) {
+    if (pageFileType === 'pdf' && page.content_md) {
       const pdfPath = join(getAttachmentsDir(), page.content_md)
       if (existsSync(pdfPath)) {
         try { unlinkSync(pdfPath) } catch { /* file may already be gone */ }

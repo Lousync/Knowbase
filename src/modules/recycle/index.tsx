@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Trash2, RotateCcw, X, AlertCircle, FileText, BookOpen, Folder, ChevronRight, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Trash2, RotateCcw, X, AlertCircle, FileText, BookOpen, Folder, ChevronRight, ChevronDown, ArrowUpDown, Filter } from 'lucide-react'
 import type { RecycleBinItem } from '../../types'
 import { getRecycleBinItems, restoreRecycleBinItem, restoreRecycleBinPartial, trashRecycleBinItem, trashRecycleBinPartial, emptyRecycleBin } from '../../lib/ipc'
 
@@ -9,10 +9,46 @@ const MODULE_INFO: Record<string, { label: string; icon: React.ReactNode; badgeC
   knowledge_category: { label: '知识目录', icon: <Folder size={12} />, badgeClass: 'bg-[var(--warning)]/20 text-[var(--warning)]' },
 }
 
+const FILE_TYPE_OPTIONS = ['md', 'txt', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'json', 'java', 'rs', 'go', 'sh', 'sql', 'xml', 'yaml', 'pdf']
+
+function getItemFileType(item: RecycleBinItem): string {
+  if (item.module === 'blog') return 'md'
+  if (item.module === 'knowledge') return item.data?.fileType || 'md'
+  return 'dir' // knowledge_category
+}
+
 export function RecycleBinModule() {
   const [items, setItems] = useState<RecycleBinItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [typeFilter, setTypeFilter] = useState('') // '' = all
+
+  // Filtered + sorted items
+  const displayItems = useMemo(() => {
+    let result = [...items]
+    // Filter by type
+    if (typeFilter) {
+      result = result.filter(item => getItemFileType(item) === typeFilter)
+    }
+    // Sort by deletedAt
+    result.sort((a, b) => {
+      const da = a.deletedAt || ''
+      const db = b.deletedAt || ''
+      return sortOrder === 'desc' ? db.localeCompare(da) : da.localeCompare(db)
+    })
+    return result
+  }, [items, sortOrder, typeFilter])
+
+  // Count of items per file type
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const item of items) {
+      const ft = getItemFileType(item)
+      counts[ft] = (counts[ft] || 0) + 1
+    }
+    return counts
+  }, [items])
 
   const loadItems = async () => {
     setLoading(true)
@@ -187,21 +223,56 @@ export function RecycleBinModule() {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)] shrink-0">
-        <div className="flex items-center gap-2">
-          <Trash2 size={18} className="text-[var(--text-secondary)]" />
-          <h2 className="text-[15px] font-medium text-[var(--text-primary)]">回收站</h2>
-          <span className="text-[11px] text-[var(--text-muted)]">· {items.length} 项</span>
+      <div className="px-5 py-3 border-b border-[var(--border-color)] shrink-0 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trash2 size={18} className="text-[var(--text-secondary)]" />
+            <h2 className="text-[15px] font-medium text-[var(--text-primary)]">回收站</h2>
+            <span className="text-[11px] text-[var(--text-muted)]">· {displayItems.length}/{items.length} 项</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <button
+                onClick={handleEmptyAll}
+                className="px-3 py-1.5 text-[11px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
+              >
+                全部清空
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {items.length > 0 && (
+
+        {/* Sort + Filter bar */}
+        <div className="flex items-center gap-3">
+          {/* Sort toggle */}
+          <button
+            onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+            title={`按删除时间${sortOrder === 'desc' ? '正序' : '倒序'}`}
+          >
+            <ArrowUpDown size={12} />
+            {sortOrder === 'desc' ? '最近删除' : '最早删除'}
+          </button>
+
+          {/* Type filter */}
+          <div className="flex items-center gap-1">
+            <Filter size={12} className="text-[var(--text-muted)]" />
             <button
-              onClick={handleEmptyAll}
-              className="px-3 py-1.5 text-[11px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
-            >
-              全部清空
-            </button>
-          )}
+              onClick={() => setTypeFilter('')}
+              className={`px-1.5 py-0.5 text-[11px] rounded transition-colors ${typeFilter === '' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+            >全部</button>
+            {FILE_TYPE_OPTIONS.filter(ft => typeCounts[ft] > 0).map(ft => (
+              <button
+                key={ft}
+                onClick={() => setTypeFilter(typeFilter === ft ? '' : ft)}
+                className={`px-1.5 py-0.5 text-[11px] rounded transition-colors ${typeFilter === ft ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+                title={`${ft} (${typeCounts[ft]})`}
+              >
+                {ft.toUpperCase()}
+                <span className="ml-0.5 opacity-60">{typeCounts[ft]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -219,15 +290,15 @@ export function RecycleBinModule() {
           <div className="flex items-center justify-center py-20">
             <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-6 h-6 animate-spin" />
           </div>
-        ) : items.length === 0 ? (
+        ) : displayItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
             <Trash2 size={48} className="mb-4 opacity-25" />
-            <p className="text-[14px]">回收站为空</p>
-            <p className="text-[11px] mt-1 text-[var(--text-disabled)]">删除的内容将在 30 天后自动清空</p>
+            <p className="text-[14px]">{typeFilter ? `无 ${typeFilter.toUpperCase()} 类型文件` : '回收站为空'}</p>
+            <p className="text-[11px] mt-1 text-[var(--text-disabled)]">{typeFilter ? '尝试切换筛选条件' : '删除的内容将在 30 天后自动清空'}</p>
           </div>
         ) : (
           <div>
-            {items.map(item => {
+            {displayItems.map(item => {
               const info = MODULE_INFO[item.module] || { label: item.module, icon: null, badgeClass: 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]' }
               const isCategory = item.module === 'knowledge_category'
 
@@ -240,6 +311,11 @@ export function RecycleBinModule() {
                         {info.icon}
                         {info.label}
                       </span>
+                      {getItemFileType(item) !== 'dir' && (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium bg-[var(--bg-tertiary)] text-[var(--text-muted)] shrink-0">
+                          {getItemFileType(item).toUpperCase()}
+                        </span>
+                      )}
                       <div className="min-w-0">
                         <p className="text-[13px] text-[var(--text-primary)] truncate">{item.title || '无标题'}</p>
                         <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
