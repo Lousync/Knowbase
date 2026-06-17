@@ -205,7 +205,7 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
     if (date < EARLIEST_DATE) {
       showToast({
         type: 'warning',
-        message: `暂不支持 ${date} 之前的日期。最早可补写日期为 ${EARLIEST_DATE}。`,
+        message: '日期太早，暂不支持此日期之前的日志补写。',
         detail: 'shortcuts',
       })
       return

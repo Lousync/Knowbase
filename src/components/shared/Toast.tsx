@@ -113,7 +113,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: ActiveToast; onDismiss: (id
       {/* Progress bar */}
       <div className="h-[3px] bg-[var(--bg-tertiary)]">
         <div
-          className={`h-full transition-all ease-linear ${t.progress >= 1 ? 'bg-transparent' : t.type === 'error' ? 'bg-[#f14c4c]' : t.type === 'warning' ? 'bg-[#cca700]' : 'bg-[var(--accent)]'}`}
+          className={`h-full transition-all ease-linear ${t.progress >= 1 ? 'bg-transparent' : 'bg-[var(--accent)]'}`}
           style={{ width: `${Math.min(t.progress * 100, 100)}%` }}
         />
       </div>
