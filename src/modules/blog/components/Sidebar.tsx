@@ -101,17 +101,22 @@ function computeSearchResults(
 
   // Year-Month: only if the year exists in tree
   if (year && month) {
-    if (!tree[year]?.[month]) return null
+    // Always show this year-month, even if tree doesn't have it yet
     const mk = `${year}-${month}`
-    return { years: [year], months: { [year]: [month] }, days: { [mk]: [...tree[year][month]] } }
+    const days = tree[year]?.[month] ? [...tree[year][month]] : [{ date: mk, hasContent: false }]
+    return { years: [year], months: { [year]: [month] }, days: { [mk]: days } }
   }
 
-  // Year only: only if the year exists in tree
+  // Year only: always show
   if (year) {
-    if (!tree[year]) return null
-    const months = Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
+    const existingMonths = tree[year]
+      ? Object.keys(tree[year]).sort((a, b) => b.localeCompare(a))
+      : []
+    const months = existingMonths.length > 0 ? existingMonths : ['01']
     const days: Record<string, DayNode[]> = {}
-    for (const m of months) days[`${year}-${m}`] = tree[year][m]
+    for (const m of months) {
+      days[`${year}-${m}`] = tree[year]?.[m] ?? [{ date: `${year}-${m}`, hasContent: false }]
+    }
     return { years: [year], months: { [year]: months }, days }
   }
 
@@ -263,34 +268,31 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
                 const q = searchQuery.trim()
                 if (!q) return
                 const p = parseSearchDate(q)
-                let target: string | null = null
-                if (p) {
-                  if (p.year && p.month && p.day) {
-                    target = `${p.year}-${p.month}-${p.day}`
-                  } else if (p.year && p.month) {
-                    // Year-Month → latest day in that month
-                    const days = tree[p.year]?.[p.month]
-                    if (days && days.length > 0) {
-                      target = days[0].date  // already sorted desc
-                    }
-                  } else if (p.year) {
-                    // Year only → latest day in that year
-                    const months = Object.keys(tree[p.year] || {}).sort((a, b) => b.localeCompare(a))
-                    for (const m of months) {
-                      const days = tree[p.year][m]
-                      if (days.length > 0) { target = days[0].date; break }
-                    }
-                  }
+                if (!p) return
+                // Full date → navigate immediately
+                if (p.year && p.month && p.day) {
+                  setSearchQuery('')
+                  handleSelectDateSafe(`${p.year}-${p.month}-${p.day}`)
+                  return
                 }
-                // Substring fallback — find first date containing the query
-                if (!target) {
-                  for (const y of existingYears) {
-                    for (const m of Object.keys(tree[y] || {})) {
-                      const found = (tree[y]?.[m] || []).find(d => d.date.includes(q))
-                      if (found) { target = found.date; break }
-                    }
-                    if (target) break
+                // Partial (year / year-month) → expand tree nodes, keep search active
+                if (p.year) {
+                  setExpanded(prev => {
+                    const n = new Set(prev)
+                    n.add(p.year!)
+                    if (p.month) n.add(`${p.year}-${p.month}`)
+                    return n
+                  })
+                  return
+                }
+                // Substring fallback → find first date containing the query
+                let target: string | null = null
+                for (const y of existingYears) {
+                  for (const m of Object.keys(tree[y] || {})) {
+                    const found = (tree[y]?.[m] || []).find(d => d.date.includes(q))
+                    if (found) { target = found.date; break }
                   }
+                  if (target) break
                 }
                 if (target) {
                   setSearchQuery('')
