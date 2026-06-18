@@ -9,11 +9,9 @@ export function StatsPanel({ stats }: Props) {
 
   const items: { icon: string; label: string; value: number | string; unit?: string }[] = [
     { icon: '📝', label: '博客文章', value: stats.blogCount, unit: '篇' },
-    { icon: '📅', label: '日程待办', value: stats.scheduleTodos, unit: '条' },
     { icon: '📚', label: '知识页面', value: stats.knowledgePages, unit: '页' },
     { icon: '📁', label: '分类目录', value: stats.totalCategories, unit: '个' },
     { icon: '🔥', label: '连续记录', value: stats.consecutiveDays, unit: '天' },
-    { icon: '✏️', label: '总字数', value: stats.totalWords.toLocaleString(), unit: '字' },
   ]
 
   return (
