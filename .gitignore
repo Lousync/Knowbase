@@ -1,5 +1,6 @@
 node_modules/
 out/
+dist/
 dist-electron/
 data/
 *.db
@@ -8,7 +9,9 @@ data/
 .DS_Store
 Thumbs.db
 .env*
+*.log
 .claude/
+.mcp.json
 运行指令
 建议与要求/
 /skills

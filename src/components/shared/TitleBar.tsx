@@ -19,14 +19,12 @@ export function TitleBar() {
 
   return (
     <div
-      className="flex items-center justify-between h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
+      className="flex items-center h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
-      <div className="flex items-center gap-2 px-3 text-sm text-[var(--text-primary)]">
-        <span className="text-base">📝</span>
-        <span className="font-medium text-[13px]">KnowledgeRecorder</span>
-      </div>
-
       <div className="flex items-center h-full">
+        {/* drag region spacer */}
+        <div className="flex-1 drag-region h-full" />
+
         {/* 窗口控制按钮 */}
         <div className="flex h-full no-drag">
           <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'}>
