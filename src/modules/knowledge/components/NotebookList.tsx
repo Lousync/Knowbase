@@ -11,10 +11,11 @@ interface Props {
   allPages: KnowledgePage[]
   loosePages: KnowledgePage[]
   starredPages: KnowledgePage[]
-  selectedNotebookId: string | null
+  selectedCategoryId: string | null
+  focusChapterId: string | null
   activePageId: string | null
-  onSelectNotebook: (id: string | null) => void
-  onSelectNotebookChapter: (notebookId: string, chapterId: string) => void
+  onSelectCategory: (id: string | null) => void
+  onSelectCategoryChapter: (notebookId: string, chapterId: string) => void
   onCreateNotebook: (name: string, categoryType: 'folder' | 'notebook', parentId: string | null) => void
   onRenameNotebook: (id: string, name: string) => void
   onDeleteNotebook: (id: string) => void
@@ -30,8 +31,8 @@ interface Props {
 
 export function NotebookList({
   categories, allPages, loosePages, starredPages,
-  selectedNotebookId, activePageId,
-  onSelectNotebook, onSelectNotebookChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
+  selectedCategoryId, focusChapterId, activePageId,
+  onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
 }: Props) {
@@ -66,15 +67,15 @@ export function NotebookList({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditingInput(e)) return
-      if (e.key === 'F2' && selectedNotebookId) {
+      if (e.key === 'F2' && selectedCategoryId) {
         e.preventDefault()
-        const cat = categories.find(c => c.id === selectedNotebookId)
+        const cat = categories.find(c => c.id === selectedCategoryId)
         if (cat) handleStartRename(cat.id, cat.name)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedNotebookId, categories])
+  }, [selectedCategoryId, categories])
 
   function toggleExpand(id: string) {
     setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -110,10 +111,16 @@ export function NotebookList({
     return false
   }
 
-  // ---- whether a category can accept dropped categories (folders only, not notebooks) ----
-  function canAcceptCategory(targetId: string): boolean {
-    const cat = categories.find(c => c.id === targetId)
-    return cat?.categoryType === 'folder'
+  // ---- whether a category can accept dropped categories ----
+  // Folders accept any category. Notebooks accept folders/chapters but not other notebooks.
+  function canAcceptCategory(targetId: string, draggedId: string): boolean {
+    const target = categories.find(c => c.id === targetId)
+    const dragged = categories.find(c => c.id === draggedId)
+    if (!target || !dragged) return false
+    if (target.categoryType === 'folder') return true
+    // Notebook target: accept folders/chapters, reject notebooks
+    if (target.categoryType === 'notebook') return dragged.categoryType === 'folder'
+    return false
   }
 
   // ---- parse drag data: JSON {type, id} with legacy raw-string fallback ----
@@ -132,7 +139,7 @@ export function NotebookList({
   // ---- render a tree node (recursive) ----
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
-    const isSelected = selectedNotebookId === cat.id
+    const isSelected = selectedCategoryId === cat.id || focusChapterId === cat.id
     const children = categories.filter(c => c.parentId === cat.id)
     const hasChildren = children.length > 0
     const categoryPages = allPages.filter(p => p.categoryId === cat.id)
@@ -140,20 +147,20 @@ export function NotebookList({
     const isNotebook = cat.categoryType === 'notebook'
     const isDragOver = dragTargetId === cat.id
     // Show expand arrow for folders that have sub-categories OR pages directly
-    const canExpand = isNotebook ? hasChildren : (hasChildren || hasPages)
+    // Chapters under notebooks never expand — they toggle the sidebar instead
+    const canExpand = notebookAncestorId ? false : (isNotebook ? hasChildren : (hasChildren || hasPages))
     // Pass notebook ancestor to children
     const nbId = isNotebook ? cat.id : notebookAncestorId
 
-    // Row click: for notebooks → open sidebar; for chapters under a notebook → select chapter; for folders → expand
+    // Row click: select node (toggle if already selected), notebook opens sidebar, chapters open focus view
     const handleRowClick = () => {
       if (isNotebook) {
-        onSelectNotebook(cat.id)
+        onSelectCategory(cat.id)
       } else if (notebookAncestorId) {
-        // This is a chapter (or sub-folder) under a notebook — select it in sidebar
-        onSelectNotebookChapter(notebookAncestorId, cat.id)
-      } else if (canExpand) {
-        // Standalone folder — click to expand
-        toggleExpand(cat.id)
+        onSelectCategoryChapter(notebookAncestorId, cat.id)
+      } else {
+        // Standalone folder — select it (toggle highlight)
+        onSelectCategory(cat.id)
       }
     }
 
@@ -350,7 +357,7 @@ export function NotebookList({
             const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
             if (el) {
               const tid = el.getAttribute('data-cat-id')!
-              if (d.id !== tid && !isDescendant(tid, d.id) && canAcceptCategory(tid)) {
+              if (d.id !== tid && !isDescendant(tid, d.id) && canAcceptCategory(tid, d.id)) {
                 e.dataTransfer.dropEffect = 'move'
                 setDragTargetId(tid)
               } else {
@@ -387,7 +394,7 @@ export function NotebookList({
             const target = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
             if (target) {
               const targetId = target.getAttribute('data-cat-id')!
-              if (d.id !== targetId && !isDescendant(targetId, d.id) && canAcceptCategory(targetId)) {
+              if (d.id !== targetId && !isDescendant(targetId, d.id) && canAcceptCategory(targetId, d.id)) {
                 onMoveCategory(d.id, targetId)
               }
             } else {

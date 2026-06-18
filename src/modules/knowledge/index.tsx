@@ -21,7 +21,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [allPages, setAllPages] = useState<KnowledgePage[]>([])
   const [chapterPages, setChapterPages] = useState<KnowledgePage[]>([])
   const [starredPages, setStarredPages] = useState<KnowledgePage[]>([])
-  const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null)
   const [focusChapterId, setFocusChapterId] = useState<string | null>(null)  // when set, ChapterPanel shows only this chapter
   const [activePageId, setActivePageId] = useState<string | null>(null)
@@ -35,26 +35,26 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
-  const selectedNotebookIdRef = useRef(selectedNotebookId)
+  const selectedCategoryIdRef = useRef(selectedCategoryId)
   const selectedChapterIdRef = useRef(selectedChapterId)
   useEffect(() => { openPageIdsRef.current = openPageIds }, [openPageIds])
   useEffect(() => { activePageIdRef.current = activePageId }, [activePageId])
-  useEffect(() => { selectedNotebookIdRef.current = selectedNotebookId }, [selectedNotebookId])
+  useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
 
   useEffect(() => {
     if (sidebarOpen) {
       setShowCategoryPanel(true)
       // Only restore chapter panel for notebooks, not folders
-      const cat = selectedNotebookId ? categories.find(c => c.id === selectedNotebookId) : null
+      const cat = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId) : null
       setShowChapterPanel(cat?.categoryType === 'notebook')
     }
   }, [sidebarOpen])
 
   // --- derived ---
   const notebooks = categories.filter(c => !c.parentId)
-  const chapters = categories.filter(c => c.parentId === selectedNotebookId)
-  const selectedNotebook = selectedNotebookId ? categories.find(c => c.id === selectedNotebookId) : null
+  const chapters = categories.filter(c => c.parentId === selectedCategoryId)
+  const selectedCategory = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId) : null
   const allLoosePages = useMemo(() => allPages.filter(p => p.categoryId === null), [allPages])
 
   // --- data loading ---
@@ -109,14 +109,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
   const handleDeleteNotebook = async (id: string) => {
     await deleteKnowledgeCategory(id)
-    if (selectedNotebookId === id) { setSelectedNotebookId(null); setSelectedChapterId(null) }
+    if (selectedCategoryId === id) { setSelectedCategoryId(null); setSelectedChapterId(null) }
     refreshCategories(); refreshAllPages()
   }
 
   // --- chapter CRUD ---
   const handleCreateChapter = async (name: string) => {
-    if (!selectedNotebookId) return
-    await createKnowledgeCategory({ name, parentId: selectedNotebookId, categoryType: 'folder' })
+    if (!selectedCategoryId) return
+    await createKnowledgeCategory({ name, parentId: selectedCategoryId, categoryType: 'folder' })
     refreshCategories()
   }
   const handleRenameChapter = async (id: string, name: string) => {
@@ -328,15 +328,15 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   // --- notebook / chapter selection ---
-  const handleSelectNotebook = (id: string | null) => {
-    if (id === selectedNotebookId) {
+  const handleSelectCategory = (id: string | null) => {
+    if (id === selectedCategoryId) {
       // Toggle: collapse
-      setSelectedNotebookId(null)
+      setSelectedCategoryId(null)
       setSelectedChapterId(null)
       setFocusChapterId(null)
       setShowChapterPanel(false)
     } else {
-      setSelectedNotebookId(id)
+      setSelectedCategoryId(id)
       setSelectedChapterId(null)
       setFocusChapterId(null)  // show all chapters when clicking notebook label
       // Only notebooks open the chapter panel; folders just expand/collapse in the tree
@@ -345,12 +345,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     }
   }
 
-  // Select a chapter directly from the tree (under a notebook)
-  const handleSelectNotebookChapter = (notebookId: string, chapterId: string) => {
-    setSelectedNotebookId(notebookId)
-    setSelectedChapterId(chapterId)
-    setFocusChapterId(chapterId)
-    setShowChapterPanel(true)
+  // Select a chapter directly from the tree (under a notebook); toggle if same chapter
+  const handleSelectCategoryChapter = (notebookId: string, chapterId: string) => {
+    if (focusChapterId === chapterId) {
+      setSelectedCategoryId(null)
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(false)
+    } else {
+      setSelectedCategoryId(notebookId)
+      setSelectedChapterId(chapterId)
+      setFocusChapterId(chapterId)
+      setShowChapterPanel(true)
+    }
   }
 
   // Keyboard shortcuts — module level
@@ -394,7 +401,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       if (e.key === 'Delete') {
         const activeId = activePageIdRef.current
         const chapterId = selectedChapterIdRef.current
-        const notebookId = selectedNotebookIdRef.current
+        const notebookId = selectedCategoryIdRef.current
         if (activeId) {
           e.preventDefault()
           handlePageDeleted(activeId)
@@ -428,10 +435,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             allPages={allPages}
             loosePages={allLoosePages}
             starredPages={starredPages}
-            selectedNotebookId={selectedNotebookId}
+            selectedCategoryId={selectedCategoryId}
+            focusChapterId={focusChapterId}
             activePageId={activePageId}
-            onSelectNotebook={handleSelectNotebook}
-            onSelectNotebookChapter={handleSelectNotebookChapter}
+            onSelectCategory={handleSelectCategory}
+            onSelectCategoryChapter={handleSelectCategoryChapter}
             onCreateNotebook={handleCreateNotebook}
             onRenameNotebook={handleRenameNotebook}
             onDeleteNotebook={handleDeleteNotebook}
@@ -446,11 +454,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           />
         </ResizablePanel>
 
-        {/* L2: ChapterPanel (conditional) */}
-        {selectedNotebookId && selectedNotebook && (
-          <ResizablePanel storageKey="sidebarWidth_knowledgeChapters" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showChapterPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeChapters}>
+        {/* L2: ChapterPanel — always mounted for slide animation */}
+        <ResizablePanel storageKey="sidebarWidth_knowledgeChapters" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showChapterPanel && !!selectedCategoryId} initialWidth={sidebarWidths.sidebarWidth_knowledgeChapters}>
+          {selectedCategory && (
             <ChapterPanel
-              notebookName={selectedNotebook.name}
+              notebookName={selectedCategory.name}
               chapters={chapters}
               selectedChapterId={selectedChapterId}
               focusChapterId={focusChapterId}
@@ -464,11 +472,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onCreatePage={handleCreateChapterPage}
               onImport={handleDialogImport}
               onDropOnChapter={handleDropOnChapter}
-              onCollapse={() => { setSelectedNotebookId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
+              onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
               onToggleStar={handleToggleStar}
             />
-          </ResizablePanel>
-        )}
+          )}
+        </ResizablePanel>
 
         {/* 右侧链接提示（选中章节且无L2面板时显示） */}
         {/* Editor */}
