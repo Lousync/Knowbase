@@ -19,14 +19,13 @@ export function TitleBar() {
 
   return (
     <div
-      className="flex items-center h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
+      className="flex items-center justify-between h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
-      <div className="flex items-center h-full">
-        {/* drag region spacer */}
-        <div className="flex-1 drag-region h-full" />
+      {/* drag region spacer */}
+      <div className="flex-1" />
 
-        {/* 窗口控制按钮 */}
-        <div className="flex h-full no-drag">
+      {/* 窗口控制按钮 */}
+      <div className="flex h-full no-drag">
           <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'}>
             <Pin size={14} strokeWidth={1.5} fill={isPinned ? 'var(--text-primary)' : 'transparent'} />
           </WinBtn>
@@ -38,7 +37,6 @@ export function TitleBar() {
             <X size={16} strokeWidth={1.5} />
           </WinBtn>
         </div>
-      </div>
     </div>
   )
 }
