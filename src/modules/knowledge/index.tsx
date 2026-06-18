@@ -317,19 +317,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropOnCategory = async (pageId: string, categoryId: string) => {
-    // Same as notebook: find/create a child chapter to hold the page
-    const childCats = categories.filter(c => c.parentId === categoryId)
-    let targetChapterId: string | null = null
-    if (childCats.length > 0) {
-      targetChapterId = childCats[0].id
-    } else {
-      await createKnowledgeCategory({ name: '默认章节', parentId: categoryId, categoryType: 'folder' })
-      await refreshCategories()
-      targetChapterId = (await getKnowledgeCategories()).find(c => c.name === '默认章节' && c.parentId === categoryId)?.id || null
-    }
-    if (targetChapterId) {
-      await updateKnowledgePage(pageId, { categoryId: targetChapterId })
-    }
+    // Folder: put page directly under this category
+    await updateKnowledgePage(pageId, { categoryId })
     refreshAllPages(); refreshChapterPages()
   }
 
