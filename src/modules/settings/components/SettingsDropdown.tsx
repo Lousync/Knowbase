@@ -127,7 +127,7 @@ export function SettingsDropdown() {
         <div className="pt-1.5 border-t border-[var(--border-color)]">
           <div className="text-[10px] text-[var(--text-secondary)] mb-1">回收站文件导出目录</div>
           <p className="text-[9px] text-[var(--text-disabled)] truncate mb-1">
-            {s.trashExportDir || '默认（Documents\\KnowledgeRecorder\\回收站）'}
+            {s.trashExportDir || '默认（Documents\\Knowbase\\回收站）'}
           </p>
           <button
             onClick={async () => {

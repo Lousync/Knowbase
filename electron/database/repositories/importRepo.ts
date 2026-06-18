@@ -156,7 +156,7 @@ export function registerImportHandlers(): void {
       filters: [
         { name: '支持的数据文件 (.json, .db)', extensions: ['json', 'db'] },
       ],
-      title: '导入 KnowledgeRecorder 数据包'
+      title: '导入 Knowbase 数据包'
     })
     return result.canceled ? [] : result.filePaths
   })

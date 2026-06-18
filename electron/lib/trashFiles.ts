@@ -14,7 +14,7 @@ function getTrashExportDir(): string {
 
   if (configured && existsSync(configured)) return configured
 
-  const fallback = join(app.getPath('documents'), 'KnowledgeRecorder', '回收站')
+  const fallback = join(app.getPath('documents'), 'Knowbase', '回收站')
   mkdirSync(fallback, { recursive: true })
   return fallback
 }
@@ -88,7 +88,7 @@ function writeCategoryTree(dir: string, data: any): string[] {
 
 // ---- main export: write snapshot, then trash to OS recycle bin ----
 export async function trashItem(binId: string, item: { module: string; title: string; data: any }): Promise<string[]> {
-  const rootDir = uniqueDir(getTrashExportDir(), `knowledge-recorder-trash-${Date.now()}`)
+  const rootDir = uniqueDir(getTrashExportDir(), `knowbase-trash-${Date.now()}`)
   mkdirSync(rootDir, { recursive: true })
 
   try {
@@ -117,7 +117,7 @@ export async function trashItem(binId: string, item: { module: string; title: st
 }
 
 export async function trashAll(items: Array<{ binId: string; module: string; title: string; data: any }>): Promise<void> {
-  const rootDir = uniqueDir(getTrashExportDir(), `knowledge-recorder-trash-${Date.now()}`)
+  const rootDir = uniqueDir(getTrashExportDir(), `knowbase-trash-${Date.now()}`)
   mkdirSync(rootDir, { recursive: true })
 
   for (const item of items) {

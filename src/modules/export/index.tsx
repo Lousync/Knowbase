@@ -105,7 +105,7 @@ async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8')
   const isAll = moduleIds.has('blog') && moduleIds.has('schedule') && moduleIds.has('knowledge')
 
   const { filePath } = await showExportSaveDialog({
-    defaultName: isAll ? `knowledge-recorder-${new Date().toISOString().slice(0, 10)}.json` : 'export.json',
+    defaultName: isAll ? `knowbase-${new Date().toISOString().slice(0, 10)}.json` : 'export.json',
     filters: [{ name: 'JSON Files', extensions: ['json'] }]
   })
   if (!filePath) return { cancelled: true }
@@ -299,7 +299,7 @@ async function runMarkdownExport(
 
 async function runSqliteExport(): Promise<ExportResult> {
   const { filePath } = await showExportSaveDialog({
-    defaultName: `knowledge-recorder-${new Date().toISOString().slice(0, 10)}.db`,
+    defaultName: `knowbase-${new Date().toISOString().slice(0, 10)}.db`,
     filters: [{ name: 'SQLite Database', extensions: ['db'] }]
   })
   if (!filePath) return { cancelled: true }

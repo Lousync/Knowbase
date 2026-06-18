@@ -41,7 +41,7 @@ function createWindow(): void {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: 'KnowledgeRecorder',
+    title: 'Knowbase',
     frame: false,                          // 无边框 → 自定义标题栏
     titleBarStyle: 'hidden',              // macOS 隐藏原生标题栏
     backgroundColor: '#1e1e1e',           // 深色背景，防启动白屏

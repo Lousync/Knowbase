@@ -1,5 +1,5 @@
 {
-  "name": "knowledge-recorder",
+  "name": "knowbase",
   "version": "1.3.0",
   "description": "本地 Windows 桌面博客/日程记录软件",
   "main": "./out/main/index.js",
@@ -35,8 +35,8 @@
     "vite": "^6.0.0"
   },
   "build": {
-    "appId": "com.local.knowledge-recorder",
-    "productName": "KnowledgeRecorder",
+    "appId": "com.local.knowbase",
+    "productName": "Knowbase",
     "directories": {
       "output": "dist-electron"
     },

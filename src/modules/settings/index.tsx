@@ -85,7 +85,7 @@ export function SettingsModule() {
         <div className="mt-auto pt-2 border-t border-[var(--border-color)] px-4">
           <span className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
             <Info size={13} />
-            KnowledgeRecorder v1.3.0
+            Knowbase v1.3.0
           </span>
         </div>
       </div>
