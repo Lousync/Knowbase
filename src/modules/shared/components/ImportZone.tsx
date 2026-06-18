@@ -35,9 +35,7 @@ function fileNameTitle(name: string): string {
   return name
 }
 
-function extractTitle(fileName: string, content: string): string {
-  const h1 = content.match(/^#\s+(.+)/m)
-  if (h1) return h1[1].trim()
+function extractTitle(fileName: string, _content: string): string {
   const base = fileNameTitle(fileName.replace(/^.*[\\/]/, ''))
   return base || '导入页面'
 }

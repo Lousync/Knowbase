@@ -169,10 +169,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         const results = await readImportFiles(textPaths)
         for (const r of results) {
           if (r.error) continue
-          const h1 = r.content.match(/^#\s+(.+)/m)
-          const title = h1 ? h1[1].trim() : (r.baseName || '导入页面')
           const catId = selectedChapterId || null
-          await createKnowledgePage({ title, contentMd: r.content, categoryId: catId, fileType: r.fileType || '' })
+          await createKnowledgePage({ title: r.baseName || '导入页面', contentMd: r.content, categoryId: catId, fileType: r.fileType || '' })
         }
       }
 

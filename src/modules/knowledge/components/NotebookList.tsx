@@ -159,7 +159,8 @@ export function NotebookList({
       } else if (notebookAncestorId) {
         onSelectCategoryChapter(notebookAncestorId, cat.id)
       } else {
-        // Standalone folder — select it (toggle highlight)
+        // Standalone folder — select it and toggle expand
+        if (canExpand) toggleExpand(cat.id)
         onSelectCategory(cat.id)
       }
     }
