@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, Plus, Pencil, Trash2, Star, Download } from 'lucide-react'
+import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, FolderPlus, FilePlus, Pencil, Trash2, Star, Download } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
@@ -8,6 +8,7 @@ import { isEditingInput } from '../../../lib/shortcuts'
 
 interface Props {
   categories: KnowledgeCategory[]
+  allPages: KnowledgePage[]
   loosePages: KnowledgePage[]
   starredPages: KnowledgePage[]
   selectedNotebookId: string | null
@@ -18,6 +19,7 @@ interface Props {
   onDeleteNotebook: (id: string) => void
   onOpenPage: (id: string) => void
   onCreateLoosePage: () => void
+  onCreatePageUnder: (categoryId: string) => void
   onImport: () => void
   onDropOnNotebook: (pageId: string, notebookId: string) => void
   onDropOnCategory: (pageId: string, categoryId: string) => void
@@ -26,10 +28,10 @@ interface Props {
 }
 
 export function NotebookList({
-  categories, loosePages, starredPages,
+  categories, allPages, loosePages, starredPages,
   selectedNotebookId, activePageId,
   onSelectNotebook, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
-  onOpenPage, onCreateLoosePage, onImport,
+  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
 }: Props) {
   const rootCats = categories.filter(c => !c.parentId)
@@ -132,8 +134,12 @@ export function NotebookList({
     const isSelected = selectedNotebookId === cat.id
     const children = categories.filter(c => c.parentId === cat.id)
     const hasChildren = children.length > 0
+    const categoryPages = allPages.filter(p => p.categoryId === cat.id)
+    const hasPages = categoryPages.length > 0
     const isNotebook = cat.categoryType === 'notebook'
     const isDragOver = dragTargetId === cat.id
+    // Show expand arrow for folders that have sub-categories OR pages directly
+    const canExpand = isNotebook ? hasChildren : (hasChildren || hasPages)
 
     return (
       <div key={cat.id}>
@@ -162,7 +168,7 @@ export function NotebookList({
             />
           ) : (
             <div
-              onClick={() => { if (hasChildren) toggleExpand(cat.id); onSelectNotebook(cat.id) }}
+              onClick={() => { if (canExpand) toggleExpand(cat.id); if (isNotebook) onSelectNotebook(cat.id) }}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
                 isSelected ? 'bg-[var(--bg-selected)] text-white'
                 : isDragOver ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
@@ -171,7 +177,7 @@ export function NotebookList({
               style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px' }}
             >
               <span className="shrink-0 w-3.5 flex items-center justify-center">
-                {hasChildren ? (
+                {canExpand ? (
                   isExpanded ? <ChevronDown size={14} className="text-[var(--text-muted)]" /> : <ChevronRight size={14} className="text-[var(--text-muted)]" />
                 ) : (
                   <span className="w-3.5" />
@@ -179,7 +185,7 @@ export function NotebookList({
               </span>
               {isNotebook ? (
                 <BookOpen size={15} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
-              ) : hasChildren ? (
+              ) : canExpand ? (
                 isExpanded ? <FolderOpen size={15} className="shrink-0 text-[var(--warning)]" /> : <Folder size={15} className="shrink-0 text-[var(--warning)]" />
               ) : (
                 <Folder size={15} className="shrink-0 text-[var(--text-muted)]" />
@@ -187,10 +193,16 @@ export function NotebookList({
               <span className="flex-1 truncate text-[13px]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
                 {!isNotebook && (
-                  <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('folder'); setNewName('') }}
-                    className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="新建子目录">
-                    <Plus size={13} />
-                  </button>
+                  <>
+                    <button onClick={e => { e.stopPropagation(); onCreatePageUnder(cat.id) }}
+                      className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面">
+                      <FilePlus size={13} />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('folder'); setNewName('') }}
+                      className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建子目录">
+                      <FolderPlus size={13} />
+                    </button>
+                  </>
                 )}
                 <button onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }}
                   className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="重命名">
@@ -221,8 +233,33 @@ export function NotebookList({
             />
           </div>
         )}
-        {isExpanded && hasChildren && (
-          <div>{children.map(ch => renderCategory(ch, depth + 1))}</div>
+        {isExpanded && canExpand && (
+          <div>
+            {/* Pages directly under this category */}
+            {categoryPages.map(p => (
+              <div key={p.id}
+                draggable
+                onDragStart={e => {
+                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                  requestAnimationFrame(() => { (e.currentTarget as HTMLElement).style.opacity = '0.4' })
+                }}
+                onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                onClick={() => onOpenPage(p.id)}
+                className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
+                  activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                }`}
+                style={{ paddingLeft: `${(depth + 1) * 16 + 8}px`, paddingRight: '4px' }}
+              >
+                <span className="w-3.5 shrink-0" />
+                <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
+                <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+              </div>
+            ))}
+            {/* Sub-categories */}
+            {children.map(ch => renderCategory(ch, depth + 1))}
+          </div>
         )}
       </div>
     )

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { FileText } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
@@ -18,7 +18,7 @@ import { isEditingInput } from '../../lib/shortcuts'
 
 export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number> }: { sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number> }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
-  const [loosePages, setLoosePages] = useState<KnowledgePage[]>([])
+  const [allPages, setAllPages] = useState<KnowledgePage[]>([])
   const [chapterPages, setChapterPages] = useState<KnowledgePage[]>([])
   const [starredPages, setStarredPages] = useState<KnowledgePage[]>([])
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null)
@@ -54,18 +54,18 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const notebooks = categories.filter(c => !c.parentId)
   const chapters = categories.filter(c => c.parentId === selectedNotebookId)
   const selectedNotebook = selectedNotebookId ? categories.find(c => c.id === selectedNotebookId) : null
-  const allLoosePages = loosePages  // always all loose pages
+  const allLoosePages = useMemo(() => allPages.filter(p => p.categoryId === null), [allPages])
 
   // --- data loading ---
   const refreshCategories = useCallback(async () => {
     try { setCategories(await getKnowledgeCategories()) } catch (e) { console.error(e) }
   }, [])
 
-  const refreshLoosePages = useCallback(async () => {
+  const refreshAllPages = useCallback(async () => {
     try {
-      const result = await getKnowledgePages(null)
+      const result = await getKnowledgePages()
       for (const p of result) { p.backlinks = await getKnowledgeBacklinks(p.id) }
-      setLoosePages(result)
+      setAllPages(result)
     } catch (e) { console.error(e) }
   }, [])
 
@@ -84,16 +84,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([refreshCategories(), refreshLoosePages(), refreshStarred()])
+    Promise.all([refreshCategories(), refreshAllPages(), refreshStarred()])
       .finally(() => setLoading(false))
   }, [])
 
   // 监听数据导入事件 — 导入完成后刷新所有数据
   useEffect(() => {
-    const handler = () => { refreshCategories(); refreshLoosePages(); refreshStarred() }
+    const handler = () => { refreshCategories(); refreshAllPages(); refreshAllPages(); refreshStarred() }
     window.addEventListener('data-imported', handler)
     return () => window.removeEventListener('data-imported', handler)
-  }, [refreshCategories, refreshLoosePages, refreshStarred])
+  }, [refreshCategories, refreshAllPages, refreshStarred])
 
   useEffect(() => { refreshChapterPages() }, [refreshChapterPages])
 
@@ -109,7 +109,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleDeleteNotebook = async (id: string) => {
     await deleteKnowledgeCategory(id)
     if (selectedNotebookId === id) { setSelectedNotebookId(null); setSelectedChapterId(null) }
-    refreshCategories(); refreshLoosePages()
+    refreshCategories(); refreshAllPages()
   }
 
   // --- chapter CRUD ---
@@ -132,7 +132,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleCreateLoosePage = async () => {
     try {
       const p = await createKnowledgePage({ categoryId: null })
-      handleOpenPage(p.id); refreshLoosePages()
+      handleOpenPage(p.id); refreshAllPages()
+    } catch (e) { console.error(e) }
+  }
+
+  const handleCreatePageUnderCategory = async (categoryId: string) => {
+    try {
+      const p = await createKnowledgePage({ categoryId })
+      handleOpenPage(p.id)
+      refreshAllPages()
+      if (selectedChapterId === categoryId) refreshChapterPages()
+      else refreshAllPages()
     } catch (e) { console.error(e) }
   }
 
@@ -174,7 +184,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       }
 
       if (selectedChapterId) refreshChapterPages()
-      else refreshLoosePages()
+      else refreshAllPages()
     } catch (e) { console.error(e) }
   }
 
@@ -185,7 +195,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         await createKnowledgePage({ title: f.title, contentMd: f.content, categoryId: catId, fileType: f.fileType || '' })
       }
       if (selectedChapterId) refreshChapterPages()
-      else refreshLoosePages()
+      else refreshAllPages()
     } catch (e) { console.error(e) }
   }
 
@@ -194,19 +204,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       for (const f of files) {
         await importPdf(f.base64, f.fileName)
       }
-      refreshLoosePages()
+      refreshAllPages()
     } catch (e) { console.error(e) }
   }
 
   // --- tab management ---
   const handleOpenPage = useCallback((pageId: string) => {
-    const existing = [...loosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
+    const existing = [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
     if (existing) {
       setOpenPageInfos(prev => ({ ...prev, [pageId]: { title: existing.title, fileType: existing.fileType || '' } }))
     }
     setOpenPageIds(prev => prev.includes(pageId) ? prev : [...prev, pageId])
     setActivePageId(pageId)
-  }, [loosePages, chapterPages, starredPages])
+  }, [allLoosePages, chapterPages, starredPages])
 
   const handleCloseTab = useCallback((pageId: string) => {
     const currentIds = openPageIdsRef.current
@@ -224,22 +234,22 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handlePageDeleted = useCallback(async (id: string) => {
     await deleteKnowledgePage(id)
     handleCloseTab(id)
-    refreshLoosePages(); refreshChapterPages(); refreshStarred()
+    refreshAllPages(); refreshChapterPages(); refreshStarred()
   }, [handleCloseTab])
 
   const handleReorderTabs = useCallback((newOrder: string[]) => { setOpenPageIds(newOrder) }, [])
 
   const handleBackToList = useCallback(() => {
     if (activePageIdRef.current) handleCloseTab(activePageIdRef.current)
-    refreshLoosePages(); refreshChapterPages(); refreshStarred()
+    refreshAllPages(); refreshChapterPages(); refreshStarred()
   }, [handleCloseTab])
 
-  const handleRefresh = () => { refreshLoosePages(); refreshChapterPages(); refreshStarred() }
+  const handleRefresh = () => { refreshAllPages(); refreshChapterPages(); refreshStarred() }
 
   const handleTitleChange = useCallback((title: string) => {
     if (!activePageIdRef.current) return
     const pageId = activePageIdRef.current
-    setLoosePages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p))
+    setAllPages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p))
     setChapterPages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p))
     setOpenPageInfos(prev => {
       const existing = prev[pageId]
@@ -250,7 +260,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleFileTypeChange = useCallback((fileType: string) => {
     if (!activePageIdRef.current) return
     const pageId = activePageIdRef.current
-    setLoosePages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
+    setAllPages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
     setChapterPages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
     setStarredPages(prev => prev.map(p => p.id === pageId ? { ...p, fileType } : p))
     setOpenPageInfos(prev => {
@@ -261,7 +271,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleToggleStar = async (pageId: string) => {
     await toggleKnowledgeStar(pageId)
-    refreshLoosePages(); refreshChapterPages(); refreshStarred()
+    refreshAllPages(); refreshChapterPages(); refreshStarred()
   }
 
   // --- drag & drop move ---
@@ -279,13 +289,13 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     }
     if (targetChapterId) {
       await updateKnowledgePage(pageId, { categoryId: targetChapterId })
-      refreshLoosePages(); refreshChapterPages()
+      refreshAllPages(); refreshChapterPages()
     }
   }
 
   const handleDropOnLooseArea = async (pageId: string) => {
     await updateKnowledgePage(pageId, { categoryId: null })
-    refreshLoosePages(); refreshChapterPages()
+    refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnCategory = async (pageId: string, categoryId: string) => {
@@ -302,12 +312,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     if (targetChapterId) {
       await updateKnowledgePage(pageId, { categoryId: targetChapterId })
     }
-    refreshLoosePages(); refreshChapterPages()
+    refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnChapter = async (pageId: string, chapterId: string) => {
     await updateKnowledgePage(pageId, { categoryId: chapterId })
-    refreshLoosePages(); refreshChapterPages()
+    refreshAllPages(); refreshChapterPages()
   }
 
   // --- category move (drag & drop) ---
@@ -326,10 +336,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } else {
       setSelectedNotebookId(id)
       setSelectedChapterId(null)
-      // Show chapter panel for notebooks, or folders that have children
+      // Only notebooks open the chapter panel; folders just expand/collapse in the tree
       const cat = categories.find(c => c.id === id)
-      const hasChildren = categories.some(c => c.parentId === id)
-      setShowChapterPanel(cat?.categoryType === 'notebook' || hasChildren)
+      setShowChapterPanel(cat?.categoryType === 'notebook')
     }
   }
 
@@ -405,6 +414,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat}>
           <NotebookList
             categories={categories}
+            allPages={allPages}
             loosePages={allLoosePages}
             starredPages={starredPages}
             selectedNotebookId={selectedNotebookId}
@@ -415,6 +425,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onDeleteNotebook={handleDeleteNotebook}
             onOpenPage={handleOpenPage}
             onCreateLoosePage={handleCreateLoosePage}
+            onCreatePageUnder={handleCreatePageUnderCategory}
             onImport={handleDialogImport}
             onDropOnNotebook={handleDropOnNotebook}
             onDropOnCategory={handleDropOnCategory}
@@ -461,7 +472,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             <PageEditor
               pageId={activePageId}
               categories={categories}
-              allPages={[...loosePages, ...chapterPages]}
+              allPages={[...allLoosePages, ...chapterPages]}
               zoom={zoom}
               onBack={handleBackToList}
               onDeleted={() => handlePageDeleted(activePageId)}
