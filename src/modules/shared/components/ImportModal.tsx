@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User } from 'lucide-react'
-import { showImportDataDialog, readImportFile, executeImport, importDb, verifyImportPassword, restoreUserFromImport } from '../../../lib/ipc'
+import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User, Image, Settings2 } from 'lucide-react'
+import { showImportDataDialog, readImportFile, executeImport, importDb, verifyImportPassword, restoreUserFromImport, setSettingRaw } from '../../../lib/ipc'
 
 // ===== version compat =====
 const CURRENT_VERSION = '1.2'
@@ -50,8 +50,11 @@ export function ImportModal({ onClose }: Props) {
   // Password verification
   const [passwordInput, setPasswordInput] = useState('')
   const [passwordError, setPasswordError] = useState('')
+  // Import checkboxes
+  const [importUserData, setImportUserData] = useState(true)
+  const [importSettings, setImportSettings] = useState(true)
 
-  const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null); setPasswordInput(''); setPasswordError('') }
+  const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null); setPasswordInput(''); setPasswordError(''); setImportUserData(true); setImportSettings(true) }
 
   // Escape key closes modal
   useEffect(() => {
@@ -101,11 +104,17 @@ export function ImportModal({ onClose }: Props) {
     const blogN = (data.blog?.entries?.length || 0) + (data.blog?.tags?.length || 0)
     const schedN = (data.schedule?.todos?.length || 0) + (data.schedule?.tags?.length || 0)
     const knowN = (data.knowledge?.categories?.length || 0) + (data.knowledge?.pages?.length || 0) + (data.knowledge?.tags?.length || 0)
-    const hasUser = !!(data.user?.username || data.user?.passwordHash)
+    const hasUser = !!(data.user?.username || data.user?.passwordHash || data.user?.avatarBase64)
     const username = data.user?.username
+    const hasSettings = !!(data.user?.settings && Object.keys(data.user.settings).length > 0)
+    const settingsCount = data.user?.settings ? Object.keys(data.user.settings).length : 0
 
     setImportedData(data)
     setSummary({ blog: blogN, schedule: schedN, knowledge: knowN, version: v, total: blogN + schedN + knowN, hasUser, username })
+
+    // Reset checkboxes to defaults
+    setImportUserData(hasUser)
+    setImportSettings(hasSettings)
 
     // Check if password verification needed
     if (data.user?.passwordHash) {
@@ -135,14 +144,22 @@ export function ImportModal({ onClose }: Props) {
     setResultMsg('正在导入...')
     const r = await executeImport(importedData)
     if (r.success) {
-      // Restore user data if present
-      if (importedData.user) {
+      // Restore user data only if checkbox checked
+      if (importUserData && importedData.user) {
         await restoreUserFromImport({
           username: importedData.user.username,
           avatarPath: importedData.user.avatarPath,
           avatarBase64: importedData.user.avatarBase64,
           passwordHash: importedData.user.passwordHash,
         })
+      }
+      // Apply settings only if checkbox checked
+      if (importSettings && importedData.user?.settings) {
+        for (const [key, value] of Object.entries(importedData.user.settings)) {
+          await setSettingRaw(key, value)
+        }
+        // Force refresh the settings context by dispatching event
+        window.dispatchEvent(new CustomEvent('settings-imported'))
       }
       setResultMsg(r.message)
       setPhase('done')
@@ -254,13 +271,78 @@ export function ImportModal({ onClose }: Props) {
                 <span className="font-medium">JSON 数据包 · 版本兼容 (v{summary.version})</span>
               </div>
               <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 space-y-2 text-[12px]">
-                {summary.hasUser && summary.username && <div>👤 用户：<span className="text-[var(--text-primary)] font-medium">{summary.username}</span></div>}
                 {summary.blog > 0 && <div>📝 博客：<span className="text-[var(--text-primary)] font-medium">{summary.blog}</span> 条</div>}
                 {summary.schedule > 0 && <div>📅 日程：<span className="text-[var(--text-primary)] font-medium">{summary.schedule}</span> 条</div>}
                 {summary.knowledge > 0 && <div>📚 知识库：<span className="text-[var(--text-primary)] font-medium">{summary.knowledge}</span> 条</div>}
-                {importedData?.user?.passwordHash && <div>🔒 密码保护：已设置</div>}
                 <div className="text-[10px] text-[var(--text-muted)] pt-1">共 {summary.total} 条 · 合并到当前数据 · 相同 ID 自动跳过</div>
               </div>
+
+              {/* User data section */}
+              {summary.hasUser && (
+                <>
+                  <div className="border-t border-[var(--border-color)]" />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">
+                      <User size={13} />
+                      用户数据
+                    </div>
+
+                    {/* User info preview */}
+                    <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 space-y-2.5 text-[12px]">
+                      {importedData?.user?.username && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[var(--text-muted)]">用户名</span>
+                          <span className="text-[var(--text-primary)] font-medium">{importedData.user.username}</span>
+                        </div>
+                      )}
+                      {importedData?.user?.avatarBase64 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[var(--text-muted)]">头像</span>
+                          <img src={importedData.user.avatarBase64} alt="avatar" className="w-9 h-9 rounded-full object-cover border border-[var(--border-color)]" />
+                        </div>
+                      )}
+                      {importedData?.user?.passwordHash && (
+                        <div className="flex items-center gap-1.5 text-[var(--warning)]">
+                          <Lock size={12} />
+                          <span>已设置密码保护</span>
+                        </div>
+                      )}
+                      {importedData?.user?.settings && Object.keys(importedData.user.settings).length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[var(--text-muted)]">配置项</span>
+                          <span className="text-[var(--text-primary)] font-medium">{Object.keys(importedData.user.settings).length} 项</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Checkboxes */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                        <input
+                          type="checkbox" checked={importUserData}
+                          onChange={e => setImportUserData(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-[var(--accent)] rounded cursor-pointer"
+                        />
+                        <span className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
+                          导入用户信息（用户名、头像、密码）
+                        </span>
+                      </label>
+                      <label className={`flex items-center gap-2.5 select-none group ${importedData?.user?.settings && Object.keys(importedData.user.settings).length > 0 ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                        <input
+                          type="checkbox" checked={importSettings}
+                          disabled={!(importedData?.user?.settings && Object.keys(importedData.user.settings).length > 0)}
+                          onChange={e => setImportSettings(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-[var(--accent)] rounded cursor-pointer"
+                        />
+                        <span className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
+                          导入设置配置（主题、字体、字号、缩放等{importedData?.user?.settings ? ` ${Object.keys(importedData.user.settings).length} 项` : ''}）
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="flex gap-2">
                 <button onClick={handleConfirmJson} className="flex-1 py-2 text-[13px] bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors">确认导入</button>
                 <button onClick={() => { setPhase('idle'); reset() }} className="px-4 py-2 text-[13px] border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-hover)] transition-colors">取消</button>

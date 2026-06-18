@@ -17,6 +17,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     getAllSettings().then(setS)
   }, [])
 
+  // Listen for settings refresh from import
+  useEffect(() => {
+    const handler = () => { getAllSettings().then(setS) }
+    window.addEventListener('settings-imported', handler)
+    return () => window.removeEventListener('settings-imported', handler)
+  }, [])
+
   const update = useCallback(<K extends SettingsKey>(key: K, value: AppSettings[K]) => {
     setS(prev => ({ ...prev, [key]: value }))
     setSetting(key, value)
