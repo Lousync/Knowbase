@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { renderMarkdown } from '../../../lib/renderMarkdown'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink } from 'lucide-react'
+import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
@@ -84,7 +84,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!pageRef.current) return
     try {
       const links = parseWikiLinks(c)
-      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: renderMarkdown(c), fileType: fileTypeRef.current })
+      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current })
       await updateKnowledgeLinks(pageRef.current.id, links)
       setSaving(false)
     } catch (e) { console.error(e) }
@@ -295,7 +295,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <h1 className="text-xl font-bold text-[#e0e0e0] mb-3">{title}</h1>
-            <div className="prose-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />
+            <MarkdownPreview content={content} />
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">

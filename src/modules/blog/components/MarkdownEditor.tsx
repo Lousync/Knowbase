@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code, Plus, X, Trash2 } from 'lucide-react'
-import { renderMarkdown } from '../../../lib/renderMarkdown'
+import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { useSettings } from '../../../lib/SettingsContext'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
@@ -80,7 +80,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       const tagIds = tagsRef.current.map(t => t.id)
       await updateEntry(entryId, {
         contentMd: c,
-        contentHtml: renderMarkdown(c),
+        contentHtml: '',
         date: d,
         tags: tagIds,
         states: statesRef.current,
@@ -244,7 +244,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         {showPreview ? (
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">
-              <div className="prose-content text-[15px]" dangerouslySetInnerHTML={{ __html: renderMarkdown(contentMd) }} />
+              <MarkdownPreview content={contentMd} />
             </div>
           </div>
         ) : (

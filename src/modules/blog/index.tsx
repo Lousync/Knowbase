@@ -3,6 +3,7 @@ import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
+import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { Sidebar } from './components/Sidebar'
@@ -218,7 +219,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
           </div>
           <h1 className="text-2xl font-bold text-[#e0e0e0] mb-1">{entry.date}</h1>
           <p className="text-[11px] text-[var(--text-muted)] mb-4">最近修改：{fmtRelative(entry.updatedAt)}</p>
-          <div className="prose-content" dangerouslySetInnerHTML={{ __html: entry.contentHtml || '<p>暂无内容</p>' }} />
+          <MarkdownPreview content={entry.contentMd || ''} />
         </div>
       </div>
 

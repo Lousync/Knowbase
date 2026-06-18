@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import * as LucideIcons from 'lucide-react'
 import { loadHelpDocs, type HelpDoc } from './docsLoader'
+import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 
 // Module-level target for cross-component navigation (toast "查看详情" etc.)
 let pendingDocId: string | null = null
@@ -87,10 +88,7 @@ export function HelpModule() {
                 {activeEntry.title}
               </h2>
               <p className="text-[12px] text-[var(--text-muted)] mb-8">{activeEntry.category}</p>
-              <div
-                className="prose-content"
-                dangerouslySetInnerHTML={{ __html: activeEntry.html }}
-              />
+              <MarkdownPreview content={activeEntry.md} />
             </>
           )}
         </div>

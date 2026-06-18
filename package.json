@@ -12,18 +12,20 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "highlight.js": "^11.11.1",
     "iconv-lite": "^0.7.2",
     "lucide-react": "^1.0.0",
-    "markdown-it": "^14.2.0",
     "monaco-editor": "^0.55.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "sql.js": "^1.12.0",
     "trash": "^10.1.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
-    "@types/markdown-it": "^14.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

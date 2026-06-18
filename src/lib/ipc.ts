@@ -131,15 +131,3 @@ export const getAvatarBase64 = (): Promise<string | null> => a().getAvatarBase64
 export const getUserStats = (): Promise<UserStats> => a().getUserStats()
 export const getUserExportData = (): Promise<UserExportData | null> => a().getUserExportData()
 export const restoreUserFromImport = (data: UserImportData) => a().restoreUserFromImport(data)
-
-// Utility: parse [[wiki links]] from markdown
-export function parseWikiLinks(md: string): string[] {
-  const re = /\[\[([^\]]+)\]\]/g
-  const links: string[] = []
-  let m
-  while ((m = re.exec(md)) !== null) {
-    const title = m[1].split('|')[0].trim()
-    if (!links.includes(title)) links.push(title)
-  }
-  return links
-}

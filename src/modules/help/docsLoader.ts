@@ -11,14 +11,12 @@
  *  To add a new doc: drop a .md file in docs/ with frontmatter above. That's it.
  */
 
-import { renderMarkdown } from '../../lib/renderMarkdown'
-
 export interface HelpDoc {
   id: string
   category: string
   title: string
   icon: string          // lucide icon name, e.g. "Keyboard"
-  html: string          // rendered markdown
+  md: string            // raw markdown body
 }
 
 /** Parse YAML frontmatter from a markdown string */
@@ -51,7 +49,7 @@ export async function loadHelpDocs(): Promise<HelpDoc[]> {
       category: parsed.meta.category || '未分类',
       title: parsed.meta.title || id,
       icon: parsed.meta.icon || 'FileText',
-      html: renderMarkdown(parsed.body),
+      md: parsed.body,
     })
   }
 
