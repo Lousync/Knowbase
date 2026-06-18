@@ -9,6 +9,7 @@ interface Props {
   notebookName: string
   chapters: KnowledgeCategory[]
   selectedChapterId: string | null
+  focusChapterId: string | null  // when set, hide chapter list & show only this chapter
   onSelectChapter: (id: string | null) => void
   onCreateChapter: (name: string) => void
   onRenameChapter: (id: string, name: string) => void
@@ -24,7 +25,7 @@ interface Props {
 }
 
 export function ChapterPanel({
-  notebookName, chapters, selectedChapterId, onSelectChapter,
+  notebookName, chapters, selectedChapterId, focusChapterId, onSelectChapter,
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
   onDropOnChapter, onCollapse, onToggleStar,
@@ -60,6 +61,8 @@ export function ChapterPanel({
     onCreateChapter(newName.trim()); setNewName(''); setShowNewChapter(false)
   }
 
+  const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
+
   function handleStartRename(id: string, name: string) { setEditingId(id); setEditName(name) }
   function handleRename(id: string) {
     if (!editName.trim()) { setEditingId(null); return }
@@ -76,11 +79,14 @@ export function ChapterPanel({
             title="折叠章节面板">
             <ChevronDown size={20} />
           </button>
-          <span className="text-[12px] font-medium text-[var(--text-secondary)] truncate">{notebookName}</span>
+          <span className="text-[12px] font-medium text-[var(--text-secondary)] truncate">
+            {focusChapter ? `${notebookName} / ${focusChapter.name}` : notebookName}
+          </span>
         </div>
       </div>
 
-      {/* Chapters */}
+      {/* Chapters — hidden when focusing a single chapter */}
+      {!focusChapter && (
       <div
         data-drop-container
         className="px-2 py-1 border-b border-[var(--border-color)]"
@@ -161,6 +167,7 @@ export function ChapterPanel({
           </button>
         )}
       </div>
+      )}
 
       {/* Pages in selected chapter */}
       <div className="flex-1 overflow-y-auto px-2 py-1">
@@ -169,7 +176,9 @@ export function ChapterPanel({
           <span className="text-[10px] text-[var(--text-muted)]">{pages.length}</span>
         </div>
         {pages.length === 0 ? (
-          <p className="px-1 py-4 text-[11px] text-[var(--text-disabled)] italic text-center">暂未选中章节</p>
+          <p className="px-1 py-4 text-[11px] text-[var(--text-disabled)] italic text-center">
+            {focusChapter ? '暂无页面' : '暂未选中章节'}
+          </p>
         ) : (
           pages.map(p => (
               <div key={p.id}
@@ -200,7 +209,7 @@ export function ChapterPanel({
               </div>
             )
           ))}
-        {selectedChapterId && (
+        {(selectedChapterId || focusChapterId) && (
           <div className="flex gap-1 mt-1">
             <button onClick={onCreatePage}
               className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">

@@ -14,6 +14,7 @@ interface Props {
   selectedNotebookId: string | null
   activePageId: string | null
   onSelectNotebook: (id: string | null) => void
+  onSelectNotebookChapter: (notebookId: string, chapterId: string) => void
   onCreateNotebook: (name: string, categoryType: 'folder' | 'notebook', parentId: string | null) => void
   onRenameNotebook: (id: string, name: string) => void
   onDeleteNotebook: (id: string) => void
@@ -30,7 +31,7 @@ interface Props {
 export function NotebookList({
   categories, allPages, loosePages, starredPages,
   selectedNotebookId, activePageId,
-  onSelectNotebook, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
+  onSelectNotebook, onSelectNotebookChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
 }: Props) {
@@ -129,7 +130,7 @@ export function NotebookList({
   }
 
   // ---- render a tree node (recursive) ----
-  function renderCategory(cat: KnowledgeCategory, depth: number) {
+  function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
     const isSelected = selectedNotebookId === cat.id
     const children = categories.filter(c => c.parentId === cat.id)
@@ -140,6 +141,27 @@ export function NotebookList({
     const isDragOver = dragTargetId === cat.id
     // Show expand arrow for folders that have sub-categories OR pages directly
     const canExpand = isNotebook ? hasChildren : (hasChildren || hasPages)
+    // Pass notebook ancestor to children
+    const nbId = isNotebook ? cat.id : notebookAncestorId
+
+    // Row click: for notebooks → open sidebar; for chapters under a notebook → select chapter; for folders → expand
+    const handleRowClick = () => {
+      if (isNotebook) {
+        onSelectNotebook(cat.id)
+      } else if (notebookAncestorId) {
+        // This is a chapter (or sub-folder) under a notebook — select it in sidebar
+        onSelectNotebookChapter(notebookAncestorId, cat.id)
+      } else if (canExpand) {
+        // Standalone folder — click to expand
+        toggleExpand(cat.id)
+      }
+    }
+
+    // Chevron click: always toggle expand (never select)
+    const handleChevronClick = (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (canExpand) toggleExpand(cat.id)
+    }
 
     return (
       <div key={cat.id}>
@@ -168,7 +190,7 @@ export function NotebookList({
             />
           ) : (
             <div
-              onClick={() => { if (canExpand) toggleExpand(cat.id); if (isNotebook) onSelectNotebook(cat.id) }}
+              onClick={handleRowClick}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
                 isSelected ? 'bg-[var(--bg-selected)] text-white'
                 : isDragOver ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
@@ -176,7 +198,10 @@ export function NotebookList({
               }`}
               style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px' }}
             >
-              <span className="shrink-0 w-3.5 flex items-center justify-center">
+              <span
+                className={`shrink-0 w-3.5 flex items-center justify-center ${canExpand ? 'cursor-pointer hover:text-[var(--text-primary)]' : ''}`}
+                onClick={handleChevronClick}
+              >
                 {canExpand ? (
                   isExpanded ? <ChevronDown size={14} className="text-[var(--text-muted)]" /> : <ChevronRight size={14} className="text-[var(--text-muted)]" />
                 ) : (
@@ -258,7 +283,7 @@ export function NotebookList({
               </div>
             ))}
             {/* Sub-categories */}
-            {children.map(ch => renderCategory(ch, depth + 1))}
+            {children.map(ch => renderCategory(ch, depth + 1, nbId))}
           </div>
         )}
       </div>
