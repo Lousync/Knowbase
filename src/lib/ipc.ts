@@ -104,6 +104,7 @@ export const showImportDataDialog = () => a().showImportDataDialog()
 export const readImportFile = (filePath: string) => a().readImportFile(filePath)
 export const executeImport = (data: object) => a().executeImport(data)
 export const importDb = (srcPath: string) => a().importDb(srcPath)
+export const previewUserFromDb = (filePath: string) => a().previewUserFromDb(filePath)
 
 // recycle bin
 export const getRecycleBinItems = () => a().getRecycleBinItems()

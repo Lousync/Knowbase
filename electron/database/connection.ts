@@ -7,6 +7,8 @@ let db: SqlJsDatabase | null = null
 let SQL: SqlJsStatic | null = null
 let dbPath = ''
 
+export function getSqlJs(): SqlJsStatic { if (!SQL) throw new Error('sql.js not initialized'); return SQL }
+
 export function getDbPath(): string {
   return dbPath
 }

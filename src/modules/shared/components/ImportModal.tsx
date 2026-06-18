@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User, Image, Settings2 } from 'lucide-react'
-import { showImportDataDialog, readImportFile, executeImport, importDb, verifyImportPassword, restoreUserFromImport, setSettingRaw } from '../../../lib/ipc'
+import { showImportDataDialog, readImportFile, executeImport, importDb, previewUserFromDb, verifyImportPassword, restoreUserFromImport, setSettingRaw } from '../../../lib/ipc'
 
 // ===== version compat =====
 const CURRENT_VERSION = '1.2'
@@ -53,8 +53,10 @@ export function ImportModal({ onClose }: Props) {
   // Import checkboxes
   const [importUserData, setImportUserData] = useState(true)
   const [importSettings, setImportSettings] = useState(true)
+  // DB preview user info
+  const [dbUserPreview, setDbUserPreview] = useState<{ username: string; hasPassword: boolean; blogCount: number; scheduleCount: number; knowledgeCount: number } | null>(null)
 
-  const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null); setPasswordInput(''); setPasswordError(''); setImportUserData(true); setImportSettings(true) }
+  const reset = () => { setError(''); setResultMsg(''); setFilePath(''); setImportedData(null); setSummary(null); setPasswordInput(''); setPasswordError(''); setImportUserData(true); setImportSettings(true); setDbUserPreview(null) }
 
   // Escape key closes modal
   useEffect(() => {
@@ -82,6 +84,17 @@ export function ImportModal({ onClose }: Props) {
     // --- db file → full replacement ---
     if (ext === 'db') {
       setFileType('db')
+      // Peek into .db to extract user info
+      const preview = await previewUserFromDb(fp)
+      if (!preview.error && preview.profile) {
+        setDbUserPreview({
+          username: preview.profile.username || '(未设置)',
+          hasPassword: !!preview.profile.password_hash,
+          blogCount: preview.stats?.blogCount || 0,
+          scheduleCount: preview.stats?.scheduleCount || 0,
+          knowledgeCount: preview.stats?.knowledgeCount || 0,
+        })
+      }
       setPhase('preview_db')
       return
     }
@@ -357,9 +370,36 @@ export function ImportModal({ onClose }: Props) {
                 <AlertTriangle size={18} className="shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium">数据库文件</p>
-                  <p className="text-[var(--text-secondary)] text-[12px] mt-1">该操作将用导入的数据库文件<strong className="text-[var(--text-primary)]">整体替换</strong>当前全部数据。</p>
+                  <p className="text-[var(--text-secondary)] text-[12px] mt-1">该操作将用导入的数据库文件<strong className="text-[var(--text-primary)]">整体替换</strong>当前全部数据，包括用户信息和密码。</p>
                 </div>
               </div>
+
+              {/* User data preview from target .db */}
+              {dbUserPreview && (
+                <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 space-y-2 text-[12px]">
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] uppercase tracking-wider font-semibold mb-2">
+                    <User size={12} />目标数据库中的用户
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[var(--text-muted)]">用户名</span>
+                    <span className="text-[var(--text-primary)] font-medium">{dbUserPreview.username}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {dbUserPreview.hasPassword ? (
+                      <>
+                        <Lock size={11} className="text-[var(--warning)]" />
+                        <span className="text-[var(--warning)]">已设置密码</span>
+                      </>
+                    ) : (
+                      <span className="text-[var(--text-muted)]">未设置密码</span>
+                    )}
+                  </div>
+                  <div className="border-t border-[var(--border-color)] pt-2 mt-1 text-[11px] text-[var(--text-muted)]">
+                    <span>📝 博客 {dbUserPreview.blogCount} 篇 · 📅 日程 {dbUserPreview.scheduleCount} 条 · 📚 知识库 {dbUserPreview.knowledgeCount} 页</span>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 text-[12px]">
                 <p className="text-[var(--text-secondary)]">导入前系统会自动保存当前数据并备份。替换后无需重启，所有模块将立即刷新。</p>
               </div>

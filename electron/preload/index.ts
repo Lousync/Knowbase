@@ -68,6 +68,7 @@ const api = {
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
   executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),
   importDb: (srcPath: string) => ipcRenderer.invoke('import:importDb', srcPath),
+  previewUserFromDb: (filePath: string) => ipcRenderer.invoke('import:previewUserFromDb', filePath),
   getAttachmentsPath: () => ipcRenderer.invoke('app:getAttachmentsPath'),
 
   // recycle bin

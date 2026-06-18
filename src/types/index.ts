@@ -184,6 +184,7 @@ export interface ElectronAPI {
   readImportFile: (filePath: string) => Promise<string | null>
   executeImport: (data: object) => Promise<{ success: boolean; imported: number; skipped: number; message: string }>
   importDb: (srcPath: string) => Promise<{ success: boolean; message: string }>
+  previewUserFromDb: (filePath: string) => Promise<{ profile?: { username: string; avatar_path: string; password_hash: string }; stats?: { blogCount: number; scheduleCount: number; knowledgeCount: number }; error?: string }>
   // recycle bin
   getRecycleBinItems: () => Promise<RecycleBinItem[]>
   restoreRecycleBinItem: (id: string) => Promise<void>

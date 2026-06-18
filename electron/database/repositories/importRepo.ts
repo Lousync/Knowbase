@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync } from 'fs'
 import { basename, extname, join } from 'path'
-import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir } from '../connection'
+import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs } from '../connection'
 import { randomUUID } from 'crypto'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
@@ -36,6 +36,33 @@ function exists(table: string, id: string): boolean {
   stmt.free()
   return row
 }
+
+// ===== Peek into a .db file to extract user_profile info =====
+ipcMain.handle('import:previewUserFromDb', async (_e, filePath: string) => {
+  try {
+    const buf = readFileSync(filePath)
+    const SqlJs = getSqlJs()
+    const tempDb = new SqlJs.Database(buf)
+
+    const stmt = tempDb.prepare("SELECT * FROM user_profile WHERE id = 'default'")
+    let profile: { username: string; avatar_path: string; password_hash: string } | null = null
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as { id: string; username: string; avatar_path: string; password_hash: string; created_at: string; updated_at: string }
+      profile = { username: row.username, avatar_path: row.avatar_path, password_hash: row.password_hash }
+    }
+    stmt.free()
+
+    // Quick stats
+    const blogCount = (tempDb.exec('SELECT COUNT(*) as c FROM entries')[0]?.values?.[0]?.[0] as number) || 0
+    const scheduleCount = (tempDb.exec('SELECT COUNT(*) as c FROM schedule_todos')[0]?.values?.[0]?.[0] as number) || 0
+    const knowledgeCount = (tempDb.exec('SELECT COUNT(*) as c FROM knowledge_pages')[0]?.values?.[0]?.[0] as number) || 0
+
+    tempDb.close()
+    return { profile, stats: { blogCount, scheduleCount, knowledgeCount } }
+  } catch (e: any) {
+    return { error: String(e) }
+  }
+})
 
 export function registerImportHandlers(): void {
   // ===== 导入文件对话框 =====
