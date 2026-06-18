@@ -22,6 +22,7 @@ interface Props {
   onOpenPage: (id: string) => void
   onCreateLoosePage: () => void
   onCreatePageUnder: (categoryId: string) => void
+  onCreateChapterUnderNotebook: (notebookId: string) => void
   onImport: () => void
   onDropOnNotebook: (pageId: string, notebookId: string) => void
   onDropOnCategory: (pageId: string, categoryId: string) => void
@@ -33,7 +34,7 @@ export function NotebookList({
   categories, allPages, loosePages, starredPages,
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
-  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
+  onOpenPage, onCreateLoosePage, onCreatePageUnder, onCreateChapterUnderNotebook, onImport,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
 }: Props) {
   const rootCats = categories.filter(c => !c.parentId)
@@ -225,7 +226,12 @@ export function NotebookList({
               )}
               <span className="flex-1 truncate text-[13px]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                {!isNotebook && (
+                {isNotebook ? (
+                  <button onClick={e => { e.stopPropagation(); onCreateChapterUnderNotebook(cat.id) }}
+                    className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建章节">
+                    <FolderPlus size={13} />
+                  </button>
+                ) : (
                   <>
                     <button onClick={e => { e.stopPropagation(); onCreatePageUnder(cat.id) }}
                       className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面">

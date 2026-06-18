@@ -137,6 +137,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }
 
+  const handleCreateChapterUnderNotebook = async (notebookId: string) => {
+    await createKnowledgeCategory({ name: '新章节', parentId: notebookId, categoryType: 'folder' })
+    refreshCategories()
+    // Auto-select notebook so user sees the new chapter in sidebar
+    setSelectedCategoryId(notebookId)
+    setSelectedChapterId(null)
+    setFocusChapterId(null)
+    setShowChapterPanel(true)
+  }
+
   const handleCreatePageUnderCategory = async (categoryId: string) => {
     try {
       const p = await createKnowledgePage({ categoryId })
@@ -233,7 +243,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handlePageDeleted = useCallback(async (id: string) => {
     await deleteKnowledgePage(id)
     handleCloseTab(id)
-    refreshAllPages(); refreshChapterPages(); refreshStarred()
+    await refreshAllPages()
+    await refreshChapterPages()
+    refreshStarred()
+    // After delete, if no page is active but the chapter still has pages, auto-open first one
+    const nextActiveId = activePageIdRef.current
+    const chId = selectedChapterIdRef.current
+    if (!nextActiveId && chId) {
+      const pages = await getKnowledgePages(chId)
+      if (pages.length > 0) handleOpenPage(pages[0].id)
+    }
   }, [handleCloseTab])
 
   const handleReorderTabs = useCallback((newOrder: string[]) => { setOpenPageIds(newOrder) }, [])
@@ -444,6 +463,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onOpenPage={handleOpenPage}
             onCreateLoosePage={handleCreateLoosePage}
             onCreatePageUnder={handleCreatePageUnderCategory}
+            onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
             onImport={handleDialogImport}
             onDropOnNotebook={handleDropOnNotebook}
             onDropOnCategory={handleDropOnCategory}
