@@ -109,7 +109,7 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] transition-colors ${
                 viewMode === m.id
                   ? 'bg-[var(--accent)] text-white'
-                  : 'bg-[var(--bg-tertiary)] text-[#858585] hover:text-[var(--text-primary)] hover:bg-[var(--input-bg)]'
+                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--input-bg)]'
               }`}
             >
               {m.icon}

@@ -154,24 +154,24 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
           <Field label="标题">
             <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               placeholder="任务标题"
-              className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none"
+              className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[14px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
             />
           </Field>
 
           <Field label="描述">
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               placeholder="可选描述" rows={2}
-              className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none resize-none"
+              className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none resize-none"
             />
           </Field>
 
           <Field label="任务类型">
             <div className="flex gap-2">
               <button onClick={() => setForm(f => ({ ...f, taskType: 'daily' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[#c5a332] bg-[#c5a33220] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[#c5a332] bg-[#c5a33220] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >⚡ 琐碎</button>
               <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[#007acc20] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >📋 计划类</button>
               <button onClick={() => {
                 const n = new Date()
@@ -180,7 +180,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                 setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) })
                 setForm(f => ({ ...f, taskType: 'deadline', time: t }))
               }}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[var(--accent)] bg-[#007acc20] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >⏰ 截止类</button>
             </div>
           </Field>
@@ -193,24 +193,24 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                 <div className="flex items-center gap-1.5">
                   <input type="text" inputMode="numeric" value={dStr.year}
                     onChange={e => onDeadlinePartChange('year', e.target.value)}
-                    className="w-[72px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                    className="w-[72px] px-2 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-center text-[14px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none" />
                   <span className="text-[var(--text-muted)] text-[13px] shrink-0">年</span>
                   <input type="text" inputMode="numeric" value={dStr.month}
                     onChange={e => onDeadlinePartChange('month', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-center text-[14px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none" />
                   <span className="text-[var(--text-muted)] text-[13px] shrink-0">月</span>
                   <input type="text" inputMode="numeric" value={dStr.day}
                     onChange={e => onDeadlinePartChange('day', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-center text-[14px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none" />
                   <span className="text-[var(--text-muted)] text-[13px] shrink-0">日</span>
                   <span className="text-[var(--text-disabled)] text-[14px] shrink-0 ml-2 mr-1">·</span>
                   <input type="text" inputMode="numeric" value={dStr.hour}
                     onChange={e => onDeadlinePartChange('hour', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-center text-[14px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none" />
                   <span className="text-[var(--text-muted)] text-[13px] shrink-0">时</span>
                   <input type="text" inputMode="numeric" value={dStr.minute}
                     onChange={e => onDeadlinePartChange('minute', e.target.value)}
-                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-center text-[14px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none" />
+                    className="w-[48px] px-2 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-center text-[14px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none" />
                   <span className="text-[var(--text-muted)] text-[13px] shrink-0">分</span>
                 </div>
               </div>
@@ -224,7 +224,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
             <Field label="结束标准">
               <textarea value={form.endCriteria} onChange={e => setForm(f => ({ ...f, endCriteria: e.target.value }))}
                 placeholder="如：完成3个项目、读完5本书..." rows={2}
-                className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none resize-none"
+                className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none resize-none"
               />
             </Field>
           )}
@@ -269,7 +269,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                       onChange={e => setSubtaskTitle(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); if (e.key === 'Escape') { setSubtaskOpen(false); setSubtaskTitle('') } }}
                       placeholder="子任务标题..."
-                      className="flex-1 px-2 py-1.5 bg-[var(--input-bg)] border border-[#555] rounded text-[12px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none"
+                      className="flex-1 px-2 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
                     />
                     <button onClick={handleAddSubtask} disabled={!subtaskTitle.trim()}
                       className="px-3 py-1.5 text-[11px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
@@ -296,7 +296,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
               <div className="flex gap-2">
                 {QUADRANTS.map(q => (
                   <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
-                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[var(--accent)] bg-[#007acc20] text-[#d4d4d4]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[#555]'}`}
+                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
                   >{q.label}</button>
                 ))}
               </div>

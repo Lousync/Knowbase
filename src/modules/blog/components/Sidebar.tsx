@@ -362,12 +362,12 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
                         onClick={() => handleSelectDateSafe(day.date)}
                         className={`w-full flex items-center gap-2 ml-5 px-2 py-1 text-[13px] rounded transition-colors ${
                           selectedDate === day.date
-                            ? 'bg-[#37373d] text-white'
+                            ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                             : day.hasContent
                               ? 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                               : 'text-[var(--text-disabled)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'
                         }`}>
-                        <FileText size={14} className={`shrink-0 ${day.hasContent ? 'text-[#888]' : 'text-[#444]'}`} />
+                        <FileText size={14} className={`shrink-0 ${day.hasContent ? 'text-[var(--text-secondary)]' : 'text-[var(--text-disabled)]'}`} />
                         <span>{day.date.slice(-2)} 日</span>
                         {!day.hasContent && (
                           <span className="text-[9px] text-[var(--text-disabled)] ml-auto">+</span>

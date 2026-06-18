@@ -17,6 +17,13 @@ export function MarkdownPreview({ content, onWikiLink }: Props) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
+          // Override ul/ol to restore list-style killed by Tailwind reset
+          ul({ children }) {
+            return <ul className="list-disc pl-6 my-1.5">{children}</ul>
+          },
+          ol({ children }) {
+            return <ol className="list-decimal pl-6 my-1.5">{children}</ol>
+          },
           // Custom code block renderer — add language label
           code({ className, children, node, ...props }) {
             const match = /language-(\w+)/.exec(className || '')

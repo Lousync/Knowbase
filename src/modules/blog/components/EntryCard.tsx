@@ -27,7 +27,7 @@ export function EntryCard({ entry, onClick, size = 'm' }: EntryCardProps) {
     >
       <div className={`flex items-center ${sz.gap} min-w-0`}>
         {/* Date */}
-        <h3 className={`${sz.title} font-medium text-[#e0e0e0] shrink-0`}>
+        <h3 className={`${sz.title} font-medium text-[var(--text-primary)] shrink-0`}>
           {entry.date.slice(-5)}
         </h3>
 

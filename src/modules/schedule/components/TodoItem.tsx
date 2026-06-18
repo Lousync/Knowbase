@@ -86,7 +86,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
             </span>
             {tag && <span className={`${s.meta} text-[var(--text-muted)]`}>{tag.name}</span>}
           </div>
-          <p className={`${s.title} ${s.mTop} leading-snug font-medium ${isDone ? 'line-through text-[var(--text-muted)]' : 'text-[#d4d4d4]'}`}>
+          <p className={`${s.title} ${s.mTop} leading-snug font-medium ${isDone ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
             {todo.title}
           </p>
           {todo.description && (

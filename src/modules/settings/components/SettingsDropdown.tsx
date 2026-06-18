@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Sun, Moon, RotateCcw, Folder } from 'lucide-react'
 import { setSetting, getAllSettings, openDirDialog } from '../../../lib/ipc'
-import { THEME_OPTIONS, FONT_OPTIONS, FONT_CSS_MAP, ENCODING_OPTIONS } from '../../../lib/settings'
+import { THEME_OPTIONS, FONT_OPTIONS, FONT_CSS_MAP, ENCODING_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import type { AppSettings } from '../../../lib/settings'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
@@ -37,7 +37,7 @@ export function SettingsDropdown() {
           {THEME_OPTIONS.map(t => (
             <button key={t.id} onClick={() => {
               update('theme', t.id)
-              document.documentElement.classList.toggle('light', t.id === 'light')
+              applyThemeClass(t.id)
             }}
               className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] border transition-colors ${
                 s.theme === t.id ? 'border-[var(--accent)] bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'

@@ -89,7 +89,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       style={{
         width: displayWidth,
         borderRightWidth: showBorder ? 1 : 0,
-        borderColor: showBorder ? '#3c3c3c' : 'transparent',
+        borderColor: showBorder ? 'var(--border-color)' : 'transparent',
         transition: dragging ? 'none' : 'width 200ms ease-out'
       }}
     >
@@ -99,7 +99,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       {visible && showHandle && (
         <div
           className={`absolute top-0 right-0 w-1.5 h-full z-30 transition-colors ${
-            dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize hover:bg-[#007acc30]'
+            dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize hover:bg-[var(--accent)]/20'
           }`}
           style={{ marginRight: -3 }}
           onMouseDown={onHandleMouseDown}

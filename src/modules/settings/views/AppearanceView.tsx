@@ -1,6 +1,6 @@
 import { Sun, Moon } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { THEME_OPTIONS, BLOG_SIZE_OPTIONS } from '../../../lib/settings'
+import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={24} />,
@@ -27,7 +27,7 @@ export function AppearanceView() {
               key={t.id}
               onClick={() => {
                 update('theme', t.id)
-                document.documentElement.classList.toggle('light', t.id === 'light')
+                applyThemeClass(t.id)
               }}
               className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
                 s.theme === t.id

@@ -46,7 +46,7 @@ function WinBtn({ children, onClick, title, isClose }: {
 }) {
   return (
     <button onClick={onClick} title={title}
-      className={`flex items-center justify-center w-11 h-full transition-colors duration-100 ${isClose ? 'text-[var(--text-primary)] hover:bg-[var(--danger)] hover:text-white' : 'text-[var(--text-primary)] hover:bg-[#3e3e3e]'}`}>
+      className={`flex items-center justify-center w-11 h-full transition-colors duration-100 ${isClose ? 'text-[var(--text-primary)] hover:bg-[var(--danger)] hover:text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
       {children}
     </button>
   )

@@ -364,7 +364,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                 <div className="absolute right-0 top-full mt-1 w-24 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-1 z-50" onClick={e => e.stopPropagation()}>
                   {(['sm', 'md', 'lg'] as const).map(s => (
                     <button key={s} onClick={() => setSize(s)}
-                      className={`w-full text-left px-3 py-1.5 ${INPUT_SZ[iconSize].meta} hover:bg-[var(--bg-hover)] ${iconSize === s ? 'text-white bg-[var(--bg-selected)]' : 'text-[var(--text-secondary)]'}`}>
+                      className={`w-full text-left px-3 py-1.5 ${INPUT_SZ[iconSize].meta} hover:bg-[var(--bg-hover)] ${iconSize === s ? 'text-[var(--text-primary)] bg-[var(--bg-selected)]' : 'text-[var(--text-secondary)]'}`}>
                       {s === 'sm' ? '小' : s === 'md' ? '中' : '大'}
                     </button>
                   ))}

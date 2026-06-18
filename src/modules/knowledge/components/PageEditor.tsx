@@ -272,7 +272,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         {isPdfFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             <input
-              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
+              className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
               onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
               placeholder="PDF 文档名称"
@@ -294,13 +294,13 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
         ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
-            <h1 className="text-xl font-bold text-[#e0e0e0] mb-3">{title}</h1>
+            <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>
             <MarkdownPreview content={content} />
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
             <input
-              className="w-full bg-transparent text-xl font-bold text-[#e0e0e0] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
+              className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
               onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
               placeholder="页面标题"
@@ -310,7 +310,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
                 onChange={v => setContent(v || '')}
-                theme="vs-dark"
+                theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
                 options={{
@@ -373,7 +373,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
           <div className="flex-1 overflow-y-auto">
             {backlinks.map(bl => (
-              <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[#2d2d2d]">
+              <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)]">
                 <span className="text-[12px] text-[var(--text-primary)] truncate block">{bl.title || '无标题'}</span>
               </div>
             ))}

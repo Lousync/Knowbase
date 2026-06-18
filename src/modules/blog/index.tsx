@@ -217,7 +217,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
               <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[#e8112320] rounded">删除</button>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-[#e0e0e0] mb-1">{entry.date}</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">{entry.date}</h1>
           <p className="text-[11px] text-[var(--text-muted)] mb-4">最近修改：{fmtRelative(entry.updatedAt)}</p>
           <MarkdownPreview content={entry.contentMd || ''} />
         </div>

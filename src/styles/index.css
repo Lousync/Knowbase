@@ -11,6 +11,7 @@
   --bg-tertiary: #2d2d2d;
   --bg-hover: #2a2d2e;
   --bg-selected: #094771;
+  --activitybar-bg: #333333;
   --sidebar-bg: #252526;
   --input-bg: #3c3c3c;
   --card-bg: #2d2d2d;
@@ -30,6 +31,7 @@
 
   /* 边框 / 分割 */
   --border-color: #3c3c3c;
+  --warning-bg: #2a2a1e;
 
   /* 字体 */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
@@ -39,13 +41,14 @@
   --drop-bg: rgba(0, 122, 204, 0.28);
 }
 
-/* ===== 浅色主题覆写 ===== */
-html.light {
+/* ===== 主题覆写（通过 html.theme-<id> 控制，新增主题只需加一个同名块）===== */
+html.theme-light {
   --bg-primary: #ffffff;
   --bg-secondary: #f3f3f3;
   --bg-tertiary: #ececec;
   --bg-hover: #e8e8e8;
   --bg-selected: #d0e4f7;
+  --activitybar-bg: #e8e8e8;
   --sidebar-bg: #f3f3f3;
   --input-bg: #ffffff;
   --card-bg: #f9f9f9;
@@ -62,6 +65,7 @@ html.light {
   --warning: #8a6d15;
 
   --border-color: #e0e0e0;
+  --warning-bg: #fff8e1;
 
   /* 拖拽高亮（浅色 VS Code list.dropBackground） */
   --drop-bg: #D6EBFF;
@@ -135,7 +139,14 @@ input:focus, textarea:focus, select:focus {
 .prose-content strong { color: var(--text-primary); font-weight: 700; }
 .prose-content em { color: var(--text-secondary); font-style: italic; }
 .prose-content ul, .prose-content ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+.prose-content ul { list-style-type: disc; }
+.prose-content ul ul { list-style-type: circle; }
+.prose-content ul ul ul { list-style-type: square; }
+.prose-content ol { list-style-type: decimal; }
+.prose-content ol ol { list-style-type: lower-alpha; }
+.prose-content ol ol ol { list-style-type: lower-roman; }
 .prose-content li { margin: 0.2rem 0; }
+.prose-content li > ol, .prose-content li > ul { padding-left: 1.25rem; }
 .prose-content blockquote {
   border-left: 3px solid var(--accent);
   padding-left: 1rem; margin: 0.6rem 0;
@@ -172,6 +183,29 @@ input:focus, textarea:focus, select:focus {
   background: var(--input-bg); color: var(--text-primary); padding: 0.1rem 0.4rem; border-radius: 3px;
   border: 1px solid var(--text-disabled); font-size: 0.85em; font-family: inherit;
 }
+
+/* ===== 代码语法高亮（highlight.js → 项目 CSS 变量） ===== */
+.prose-content .hljs-keyword  { color: var(--accent); }
+.prose-content .hljs-string   { color: var(--success); }
+.prose-content .hljs-comment  { color: var(--text-muted); font-style: italic; }
+.prose-content .hljs-number   { color: var(--warning); }
+.prose-content .hljs-title    { color: var(--accent); }
+.prose-content .hljs-type     { color: var(--accent); }
+.prose-content .hljs-meta     { color: var(--text-muted); }
+.prose-content .hljs-built_in { color: var(--accent); }
+.prose-content .hljs-attr     { color: var(--warning); }
+.prose-content .hljs-params   { color: var(--text-primary); }
+.prose-content .hljs-literal  { color: var(--accent); }
+.prose-content .hljs-variable { color: var(--text-primary); }
+.prose-content .hljs-selector-class { color: var(--warning); }
+.prose-content .hljs-selector-tag   { color: var(--accent); }
+.prose-content .hljs-symbol   { color: var(--success); }
+.prose-content .hljs-function { color: var(--warning); }
+.prose-content .hljs-property { color: var(--text-primary); }
+.prose-content .hljs-name     { color: var(--accent); }
+.prose-content .hljs-tag      { color: var(--accent); }
+.prose-content .hljs-addition { color: var(--success); }
+.prose-content .hljs-deletion { color: var(--danger); }
 
 /* ===== 工具类 ===== */
 .drag-region { -webkit-app-region: drag; }

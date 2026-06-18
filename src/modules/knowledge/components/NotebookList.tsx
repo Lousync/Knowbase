@@ -201,7 +201,7 @@ export function NotebookList({
             <div
               onClick={handleRowClick}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
-                isSelected ? 'bg-[var(--bg-selected)] text-white'
+                isSelected ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                 : isDragOver ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}

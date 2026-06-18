@@ -10,6 +10,17 @@ export const THEME_OPTIONS = [
   { id: 'light', label: '浅色' },
 ] as const
 
+/** Apply a theme class to <html> — clears any previous theme-* class, adds the new one.
+ *  Call this whenever the user switches themes. New themes only need a new THEME_OPTIONS entry
+ *  and a matching `html.theme-<id>` CSS block. */
+export function applyThemeClass(themeId: string): void {
+  document.documentElement.className = document.documentElement.className
+    .split(/\s+/)
+    .filter(c => !c.startsWith('theme-'))
+    .join(' ')
+  document.documentElement.classList.add(`theme-${themeId}`)
+}
+
 export const FONT_OPTIONS = [
   { id: 'system', label: '系统默认', sample: 'System UI' },
   { id: 'yahei',  label: '微软雅黑', sample: 'Microsoft YaHei' },

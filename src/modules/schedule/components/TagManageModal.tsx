@@ -61,7 +61,7 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="标签名称"
-                className="flex-1 px-3 py-1.5 bg-[var(--input-bg)] border border-[#555] rounded text-[13px] text-[#d4d4d4] focus:border-[var(--accent)] outline-none"
+                className="flex-1 px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
                 onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
               />
               <button

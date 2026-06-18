@@ -252,7 +252,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             language="markdown"
             value={contentMd}
             onChange={handleChange}
-            theme="vs-dark"
+            theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
             loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
               fontSize: Math.round(s.editorFontSize * zoom),

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { Toast } from './components/shared/Toast'
-import { FONT_CSS_MAP } from './lib/settings'
+import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { BlogModule } from './modules/blog'
@@ -24,9 +24,11 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
   const { s, update } = useSettings()
 
+  // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
+  useEffect(() => { applyThemeClass(s.theme) }, [s.theme])
+
   // Apply persisted settings on first render
   useEffect(() => {
-    if (s.theme === 'light') document.documentElement.classList.add('light')
     if (FONT_CSS_MAP[s.editorFont]) document.documentElement.style.setProperty('--font-sans', FONT_CSS_MAP[s.editorFont])
     setEncoding(s.exportEncoding.toUpperCase())
     setSidebarWidths({

@@ -100,14 +100,14 @@ export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
             </div>
           ) : (
             <div>
-              <div className="px-5 py-2 border-b border-[var(--border-color)] flex items-start gap-1.5 text-[11px] text-[var(--warning)] bg-[#2a2a1e]">
+              <div className="px-5 py-2 border-b border-[var(--border-color)] flex items-start gap-1.5 text-[11px] text-[var(--warning)] bg-[var(--warning-bg)]">
                 <AlertCircle size={12} className="shrink-0 mt-0.5" />
                 <span>删除的内容将在 30 天后自动清空</span>
               </div>
               {items.map(item => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between px-5 py-3 border-b border-[#2d2d2d] hover:bg-[var(--bg-hover)] transition-colors"
+                  className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] text-[var(--text-primary)] truncate">{item.title || '无标题'}</p>

@@ -129,7 +129,7 @@ export function ChapterPanel({
               <div
                 onClick={() => onSelectChapter(ch.id)}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
-                  selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-white'
+                  selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                   : dragTargetId === ch.id ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
                   : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
 import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
+import { applyThemeClass } from '../../lib/settings'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={28} strokeWidth={1.5} /> },
@@ -40,11 +41,11 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
 
   const handleChooseTheme = (id: string) => {
     update('theme', id)
-    document.documentElement.classList.toggle('light', id === 'light')
+    applyThemeClass(id)
   }
 
   return (
-    <div className="w-14 bg-[#333] border-r border-[var(--border-color)] flex flex-col items-center py-2 gap-1 shrink-0 select-none">
+    <div className="w-14 bg-[var(--activitybar-bg)] border-r border-[var(--border-color)] flex flex-col items-center py-2 gap-1 shrink-0 select-none">
       {/* 模块 Tab 按钮 */}
       {tabs.map(tab => {
         const isActive = active === tab.id
@@ -61,11 +62,11 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
             title={tab.label}
             className={`
               w-14 h-14 flex items-center justify-center relative transition-colors
-              ${isActive ? 'text-white' : 'text-[#858585] hover:text-[var(--text-primary)]'}
+              ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}
             `}
           >
             {isActive && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-white rounded-r" />
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-[var(--accent)] rounded-r" />
             )}
             {tab.icon}
           </button>
@@ -77,12 +78,12 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         <button
           onClick={() => onChange('user')}
           className={`w-14 h-14 flex items-center justify-center relative transition-colors ${
-            active === 'user' ? 'text-white' : 'text-[#858585] hover:text-[var(--text-primary)]'
+            active === 'user' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
           }`}
           title="用户"
         >
           {active === 'user' && (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-white rounded-r" />
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-[var(--accent)] rounded-r" />
           )}
           <User size={28} strokeWidth={1.5} />
         </button>
@@ -93,7 +94,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         <button
           onClick={() => { setMenuOpen(v => !v); setThemeExpanded(false) }}
           className={`w-14 h-14 flex items-center justify-center relative transition-colors ${
-            active === 'settings' ? 'text-white' : menuOpen ? 'text-white' : 'text-[#858585] hover:text-[var(--text-primary)]'
+            active === 'settings' ? 'text-[var(--accent)]' : menuOpen ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
           }`}
           title="设置与主题"
         >
