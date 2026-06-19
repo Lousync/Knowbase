@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Upload, Trash2, Download, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User, Wrench } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 
@@ -8,6 +8,7 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={28} strokeWidth={1.5} /> },
   { id: 'schedule', label: '日程', icon: <Calendar size={28} strokeWidth={1.5} /> },
   { id: 'knowledge', label: '知识库', icon: <BookOpen size={28} strokeWidth={1.5} /> },
+  { id: 'toolbox', label: '工具箱', icon: <Wrench size={28} strokeWidth={1.5} /> },
   { id: 'export', label: '导出', icon: <Upload size={28} strokeWidth={1.5} /> },
   { id: 'recycle', label: '回收站', icon: <Trash2 size={28} strokeWidth={1.5} /> },
 ]

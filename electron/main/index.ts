@@ -10,6 +10,7 @@ import { registerExportHandlers } from '../database/repositories/exportRepo'
 import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
 import { registerUserHandlers } from '../database/repositories/userRepo'
+import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 
 // ===== Settings memory cache =====
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -142,6 +143,7 @@ app.whenReady().then(async () => {
   registerRecycleBinHandlers()
   registerImportHandlers()
   registerUserHandlers()
+  registerToolboxHandlers()
   createWindow()
 
   app.on('activate', () => {

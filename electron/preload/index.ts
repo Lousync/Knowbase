@@ -111,7 +111,15 @@ const api = {
     const handler = (_e: unknown, p: unknown) => cb(p)
     ipcRenderer.on('export:markdownProgress', handler)
     return () => ipcRenderer.removeListener('export:markdownProgress', handler)
-  }
+  },
+
+  // toolbox - scripts CRUD
+  getToolboxScripts: () => ipcRenderer.invoke('toolbox:getScripts'),
+  getToolboxScriptById: (id: string) => ipcRenderer.invoke('toolbox:getScriptById', id),
+  createToolboxScript: (data: unknown) => ipcRenderer.invoke('toolbox:createScript', data),
+  updateToolboxScript: (id: string, data: unknown) => ipcRenderer.invoke('toolbox:updateScript', id, data),
+  deleteToolboxScript: (id: string) => ipcRenderer.invoke('toolbox:deleteScript', id),
+  reorderToolboxScripts: (ids: string[]) => ipcRenderer.invoke('toolbox:reorderScripts', ids),
 }
 
 contextBridge.exposeInMainWorld('api', api)

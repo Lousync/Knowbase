@@ -131,3 +131,11 @@ export const getAvatarBase64 = (): Promise<string | null> => a().getAvatarBase64
 export const getUserStats = (): Promise<UserStats> => a().getUserStats()
 export const getUserExportData = (): Promise<UserExportData | null> => a().getUserExportData()
 export const restoreUserFromImport = (data: UserImportData) => a().restoreUserFromImport(data)
+
+// ===== Toolbox =====
+export const getToolboxScripts = () => a().getToolboxScripts()
+export const getToolboxScriptById = (id: string) => a().getToolboxScriptById(id)
+export const createToolboxScript = (d: { name?: string; description?: string; content?: string; language?: string }) => a().createToolboxScript(d)
+export const updateToolboxScript = (id: string, d: { name?: string; description?: string; content?: string; language?: string; sortOrder?: number }) => a().updateToolboxScript(id, d)
+export const deleteToolboxScript = (id: string) => a().deleteToolboxScript(id)
+export const reorderToolboxScripts = (ids: string[]) => a().reorderToolboxScripts(ids)

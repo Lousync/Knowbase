@@ -106,6 +106,9 @@ export const SETTINGS = {
   autoSaveDebounceMs:     { default: 2000, desc: '编辑器自动保存防抖(ms)' },
   exportStatusClearMs:    { default: 5000, desc: '导出成功提示停留(ms)' },
 
+  // ---- 工具箱 ----
+  skipDeleteConfirm_toolboxScript: { default: false, desc: '跳过工具箱脚本删除确认' },
+
   // ---- 缩放约束 ----
   zoomMin:   { default: 0.85, desc: '缩放下限' },
   zoomMax:   { default: 1.5,  desc: '缩放上限' },

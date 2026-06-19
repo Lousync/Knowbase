@@ -259,6 +259,23 @@ function runMigrations(): void {
     db.run("INSERT OR IGNORE INTO user_profile (id, username) VALUES ('default', '')")
     db.run("INSERT INTO _migrations (name) VALUES ('013_user_profile')")
   }
+
+  if (!applied.has('014_toolbox')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS toolbox_scripts (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        content     TEXT NOT NULL DEFAULT '',
+        language    TEXT NOT NULL DEFAULT 'plaintext',
+        sort_order  INTEGER DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_toolbox_scripts_sort ON toolbox_scripts(sort_order);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('014_toolbox')")
+  }
 }
 
 /**

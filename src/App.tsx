@@ -13,6 +13,7 @@ import { RecycleBinModule } from './modules/recycle'
 import { SettingsModule } from './modules/settings'
 import { HelpModule } from './modules/help'
 import { UserModule } from './modules/user'
+import { ToolboxModule } from './modules/toolbox'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 export default function App() {
@@ -146,6 +147,7 @@ export default function App() {
           {activeTab === 'export' && <ExportModule />}
           {activeTab === 'recycle' && <RecycleBinModule />}
           {activeTab === 'settings' && <SettingsModule />}
+          {activeTab === 'toolbox' && <ToolboxModule />}
           {activeTab === 'help' && <HelpModule />}
           {activeTab === 'user' && <UserModule />}
         </main>

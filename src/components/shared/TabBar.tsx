@@ -1,10 +1,11 @@
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Download } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Download, Wrench } from 'lucide-react'
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={15} /> },
   { id: 'schedule', label: '日程', icon: <Calendar size={15} /> },
   { id: 'knowledge', label: '知识库', icon: <BookOpen size={15} /> },
+  { id: 'toolbox', label: '工具箱', icon: <Wrench size={15} /> },
   { id: 'export', label: '导出', icon: <Download size={15} /> }
 ]
 

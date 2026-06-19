@@ -10,7 +10,16 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help' | 'user'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox'
+
+// toolbox
+export interface ToolboxScript {
+  id: string; name: string; description: string; content: string
+  language: string; sortOrder: number
+  createdAt: string; updatedAt: string
+}
+export interface CreateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string }
+export interface UpdateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string; sortOrder?: number }
 
 // user
 export interface UserProfile {
@@ -219,6 +228,13 @@ export interface ElectronAPI {
   copyDbFile: (destPath: string) => Promise<ExportFileResult>
   writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[], encoding?: string) => Promise<ExportMarkdownResult>
   onMarkdownExportProgress: (cb: (p: ExportMarkdownProgress) => void) => () => void
+  // toolbox
+  getToolboxScripts: () => Promise<ToolboxScript[]>
+  getToolboxScriptById: (id: string) => Promise<ToolboxScript | null>
+  createToolboxScript: (d: CreateToolboxScriptDTO) => Promise<ToolboxScript>
+  updateToolboxScript: (id: string, d: UpdateToolboxScriptDTO) => Promise<ToolboxScript>
+  deleteToolboxScript: (id: string) => Promise<void>
+  reorderToolboxScripts: (ids: string[]) => Promise<void>
 }
 
 declare global { interface Window { api: ElectronAPI } }
