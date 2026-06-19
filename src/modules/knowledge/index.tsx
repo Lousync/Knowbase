@@ -3,7 +3,7 @@ import { FileText } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
-  getKnowledgePages, createKnowledgePage, deleteKnowledgePage,
+  getKnowledgePages, getKnowledgePageById, createKnowledgePage, deleteKnowledgePage,
   searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages, moveKnowledgePage,
   updateKnowledgePage, toggleKnowledgeStar,
   showImportOpenDialog, readImportFiles, importPdf, importPdfFile
@@ -218,10 +218,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   // --- tab management ---
-  const handleOpenPage = useCallback((pageId: string) => {
-    const existing = [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
-    if (existing) {
-      setOpenPageInfos(prev => ({ ...prev, [pageId]: { title: existing.title, fileType: existing.fileType || '' } }))
+  const handleOpenPage = useCallback(async (pageId: string) => {
+    let info = [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
+    // Fallback: fetch from DB to get correct fileType (especially for imported files)
+    if (!info || !info.fileType) {
+      try { info = await getKnowledgePageById(pageId) ?? undefined } catch {}
+    }
+    if (info) {
+      setOpenPageInfos(prev => ({ ...prev, [pageId]: { title: info!.title, fileType: info!.fileType || '' } }))
     }
     setOpenPageIds(prev => prev.includes(pageId) ? prev : [...prev, pageId])
     setActivePageId(pageId)
