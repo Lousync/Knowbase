@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Key, Braces, Code, Calculator, Clock, Timer, Bot } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
-import { PomodoroTimer } from './components/PomodoroTimer'
 import { AIChatPanel } from './components/AIChatPanel'
 
 // ---- Tool registry ----
@@ -55,7 +54,7 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
   {
     id: 'pomodoro',
     name: '番茄钟',
-    desc: '25 分钟专注 + 5 分钟休息循环',
+    desc: '短时专注 + 休息循环，灵活可调节',
     icon: <Timer size={17} strokeWidth={1.5} />,
     available: true,
   },
@@ -74,12 +73,18 @@ const AI_TOOLS: ToolDefinition[] = [
 export function ToolboxModule() {
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
+  const handleActivateTool = (toolId: string) => {
+    if (toolId === 'pomodoro') {
+      window.dispatchEvent(new CustomEvent('pomodoro:activate', { detail: { preset: 0 } }))
+      return
+    }
+    setActiveTool(toolId)
+  }
+
   const renderTool = () => {
     switch (activeTool) {
       case 'password-generator':
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
-      case 'pomodoro':
-        return <PomodoroTimer onBack={() => setActiveTool(null)} />
       case 'ai-chat':
         return <AIChatPanel onBack={() => setActiveTool(null)} />
       default:
@@ -102,7 +107,7 @@ export function ToolboxModule() {
         <button
           key={tool.id}
           disabled={!tool.available}
-          onClick={() => tool.available && setActiveTool(tool.id)}
+          onClick={() => tool.available && handleActivateTool(tool.id)}
           className={`
             flex flex-col items-center gap-1.5 p-3 rounded-md border transition-all text-center
             ${tool.available
