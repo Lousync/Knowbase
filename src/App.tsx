@@ -14,6 +14,8 @@ import { SettingsModule } from './modules/settings'
 import { HelpModule } from './modules/help'
 import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
+import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
+import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 export default function App() {
@@ -138,21 +140,24 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden">
       <TitleBar />
-      <div className="flex flex-1 overflow-hidden">
-        <ActivityBar active={activeTab} onChange={handleTabChange} />
-        <main className="flex-1 overflow-hidden bg-[var(--bg-primary)]">
-          {activeTab === 'blog' && <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} />}
-          {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} />}
-          {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} />}
-          {activeTab === 'export' && <ExportModule />}
-          {activeTab === 'recycle' && <RecycleBinModule />}
-          {activeTab === 'settings' && <SettingsModule />}
-          {activeTab === 'toolbox' && <ToolboxModule />}
-          {activeTab === 'help' && <HelpModule />}
-          {activeTab === 'user' && <UserModule />}
-        </main>
-      </div>
-      <StatusBar encoding={encoding} />
+      <PomodoroProvider>
+        <div className="flex flex-1 overflow-hidden">
+          <ActivityBar active={activeTab} onChange={handleTabChange} />
+          <main className="flex-1 overflow-hidden bg-[var(--bg-primary)] relative">
+            {activeTab === 'blog' && <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} />}
+            {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} />}
+            {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} />}
+            {activeTab === 'export' && <ExportModule />}
+            {activeTab === 'recycle' && <RecycleBinModule />}
+            {activeTab === 'settings' && <SettingsModule />}
+            {activeTab === 'toolbox' && <ToolboxModule />}
+            {activeTab === 'help' && <HelpModule />}
+            {activeTab === 'user' && <UserModule />}
+            <PomodoroPanel />
+          </main>
+        </div>
+        <StatusBar encoding={encoding} />
+      </PomodoroProvider>
       <Toast />
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} />}
     </div>
