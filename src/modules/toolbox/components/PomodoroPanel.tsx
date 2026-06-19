@@ -2,9 +2,9 @@ import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react'
 import { usePomodoro } from '../hooks/PomodoroContext'
 
 const PRESETS = [
+  { label: '15 分钟', work: 15, break: 3 },
   { label: '25 分钟', work: 25, break: 5 },
   { label: '45 分钟', work: 45, break: 10 },
-  { label: '15 分钟', work: 15, break: 3 },
 ]
 
 export function PomodoroPanel() {

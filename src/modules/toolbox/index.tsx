@@ -53,7 +53,7 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
   {
     id: 'pomodoro',
     name: '番茄钟',
-    desc: '25 分钟专注 + 5 分钟休息循环',
+    desc: '短时专注 + 休息循环，灵活可调节',
     icon: <Timer size={17} strokeWidth={1.5} />,
     available: true,
   },

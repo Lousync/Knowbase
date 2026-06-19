@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 
 const PRESETS = [
+  { label: '15min', work: 15, break: 3 },
   { label: '25min', work: 25, break: 5 },
   { label: '45min', work: 45, break: 10 },
-  { label: '15min', work: 15, break: 3 },
 ]
 
 export type Phase = 'work' | 'break'
