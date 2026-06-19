@@ -1,7 +1,7 @@
 {
   "name": "knowbase",
-  "version": "1.3.2",
-  "description": "本地 Windows 桌面博客/日程记录软件",
+  "version": "1.4.0-programmer.1",
+  "description": "Knowbase Programmer Edition — 本地 Windows 桌面知识管理工具",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "node scripts/launch.js dev",
@@ -37,8 +37,8 @@
     "vite": "^6.0.0"
   },
   "build": {
-    "appId": "com.local.knowbase",
-    "productName": "Knowbase",
+    "appId": "com.local.knowbase.programmer",
+    "productName": "Knowbase Programmer Edition",
     "directories": {
       "output": "dist-electron"
     },
