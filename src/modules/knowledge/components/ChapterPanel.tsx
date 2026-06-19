@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
+import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
@@ -201,6 +202,7 @@ export function ChapterPanel({
                 >
                   <FileText size={15} className="shrink-0 text-[var(--text-muted)]" />
                   <span className="flex-1 truncate">{p.title || '无标题'}</span>
+                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return fi.badge ? <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-0.5" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> : null })()}
                   <button onClick={e => { e.stopPropagation(); onToggleStar(p.id) }}
                     className="shrink-0 p-0.5 opacity-0 group-hover:opacity-100">
                     <Star size={13} className={p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
