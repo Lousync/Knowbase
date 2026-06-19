@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react'
 import { usePomodoro } from '../hooks/PomodoroContext'
 
@@ -10,6 +11,14 @@ const PRESETS = [
 export function PomodoroPanel() {
   const pom = usePomodoro()
   const { state: ps } = pom
+
+  // Collapse when user switches tabs (so the new tab content isn't hidden behind this overlay)
+  useEffect(() => {
+    const handler = () => { pom.setState(s => ({ ...s, expanded: false })) }
+    window.addEventListener('tab-switched', handler)
+    return () => window.removeEventListener('tab-switched', handler)
+  }, [pom])
+
   if (!ps.visible || !ps.expanded) return null
 
   const radius = 100

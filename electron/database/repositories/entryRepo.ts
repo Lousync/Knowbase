@@ -93,8 +93,31 @@ export function registerEntryHandlers(): void {
       }
     }
 
+    const db = getDatabase()
     const rows = queryAll<EntryRow>(sql, params)
-    return rows.map(rowToEntry)
+    const entries = rows.map(rowToEntry)
+
+    // Batch-fetch tags for all returned entries
+    if (entries.length > 0) {
+      const ids = entries.map(e => e.id)
+      const placeholders = ids.map(() => '?').join(',')
+      const tagRows = queryAll<{ entry_id: string; id: string; name: string; color: string }>(
+        `SELECT et.entry_id, t.id, t.name, t.color
+         FROM entry_tags et JOIN tags t ON t.id = et.tag_id
+         WHERE et.entry_id IN (${placeholders})`,
+        ids
+      )
+      const tagMap = new Map<string, { id: string; name: string; color: string }[]>()
+      for (const tr of tagRows) {
+        if (!tagMap.has(tr.entry_id)) tagMap.set(tr.entry_id, [])
+        tagMap.get(tr.entry_id)!.push({ id: tr.id, name: tr.name, color: tr.color })
+      }
+      for (const e of entries) {
+        (e as Record<string, unknown>).tags = tagMap.get(e.id) || []
+      }
+    }
+
+    return entries
   })
 
   // 获取单篇博文
@@ -124,6 +147,19 @@ export function registerEntryHandlers(): void {
     tags?: string[]
     states?: string
   }) => {
+    // Defensive: if an entry for this date already exists, return it instead of creating a duplicate
+    const existing = queryAll<EntryRow>('SELECT * FROM entries WHERE date = ? ORDER BY created_at DESC LIMIT 1', [data.date])
+    if (existing.length > 0) {
+      const entry = existing[0]
+      const tags = queryAll<{ id: string; name: string; color: string }>(
+        `SELECT t.id, t.name, t.color FROM tags t
+         JOIN entry_tags et ON t.id = et.tag_id
+         WHERE et.entry_id = ?`,
+        [entry.id]
+      )
+      return { ...rowToEntry(entry), tags }
+    }
+
     const id = randomUUID()
     const now = new Date().toISOString()
 

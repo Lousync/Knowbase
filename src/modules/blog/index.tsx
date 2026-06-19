@@ -85,7 +85,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     const entry = entries.find(e => e.date === date)
     if (entry) {
       setSelectedId(entry.id)
-      setView('editor')
+      // Today → editor; past entries → preview
+      setView(date === today ? 'editor' : 'detail')
     } else {
       // 该日期尚无文章 → 自动创建
       try {
@@ -151,7 +152,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           <EntryList
             entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries.filter(e => e.date.startsWith(thisMonth))}
             loading={loading}
-            onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView('editor') }}
+                        onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail') }}
             onNewEntry={handleTodayEntry}
             cardSize={s.blogCardSize}
           />
