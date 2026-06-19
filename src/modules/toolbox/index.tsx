@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Key, Braces, Code, Calculator, Clock, Timer } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
-import { PomodoroTimer } from './components/PomodoroTimer'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -63,12 +62,18 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
 export function ToolboxModule() {
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
+  const handleActivateTool = (toolId: string) => {
+    if (toolId === 'pomodoro') {
+      window.dispatchEvent(new CustomEvent('pomodoro:activate', { detail: { preset: 0 } }))
+      return
+    }
+    setActiveTool(toolId)
+  }
+
   const renderTool = () => {
     switch (activeTool) {
       case 'password-generator':
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
-      case 'pomodoro':
-        return <PomodoroTimer onBack={() => setActiveTool(null)} />
       default:
         return null
     }
@@ -89,7 +94,7 @@ export function ToolboxModule() {
         <button
           key={tool.id}
           disabled={!tool.available}
-          onClick={() => tool.available && setActiveTool(tool.id)}
+          onClick={() => tool.available && handleActivateTool(tool.id)}
           className={`
             flex flex-col items-center gap-1.5 p-3 rounded-md border transition-all text-center
             ${tool.available
