@@ -45,11 +45,11 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
   const [subOpen, setSubOpen] = useState(false)
   const isDone = todo.status === 'done'
   const deadline = todo.taskType === 'deadline'
-  const isPlan = todo.taskType === 'plan'
   const s = SZ[iconSize]
+  const isDaily = todo.taskType === 'daily'
+  const hasSubs = (todo.subtasks?.length ?? 0) > 0
   const subtasks = todo.subtasks || []
   const subDone = subtasks.filter(st => st.status === 'done').length
-  const hasSubs = subtasks.length > 0
 
   return (
     <div>
@@ -92,8 +92,8 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
           {todo.description && (
             <p className={`${s.desc} text-[var(--text-muted)] mt-0.5 truncate`}>{todo.description}</p>
           )}
-          {/* Sub-task progress (plan tasks only) */}
-          {isPlan && hasSubs && (
+          {/* Sub-task progress (plan & deadline tasks) */}
+          {!isDaily && hasSubs && (
             <button
               onClick={e => { e.stopPropagation(); setSubOpen(v => !v) }}
               className="flex items-center gap-1 mt-1.5 text-[11px] text-[var(--accent)] hover:text-[#4fc1ff] transition-colors"
@@ -131,7 +131,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
       </div>
 
       {/* Expanded sub-task list */}
-      {isPlan && hasSubs && subOpen && (
+      {!isDaily && hasSubs && subOpen && (
         <div className="ml-4 mt-0.5 space-y-0.5">
           {subtasks.map(st => {
             const stDone = st.status === 'done'

@@ -88,11 +88,11 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     try {
       const todos = await getScheduleMonthTodos(ym)
       setMonthTodos(todos)
-      // Load subtasks for all plan-type tasks
-      const planTasks = todos.filter(t => t.taskType === 'plan')
-      if (planTasks.length > 0) {
+      // Load subtasks for plan & deadline tasks (daily has no subtasks)
+      const tasksWithSubs = todos.filter(t => t.taskType !== 'daily')
+      if (tasksWithSubs.length > 0) {
         const map: Record<string, ScheduleTodo[]> = {}
-        await Promise.all(planTasks.map(async t => {
+        await Promise.all(tasksWithSubs.map(async t => {
           map[t.id] = await getScheduleSubtasks(t.id)
         }))
         setSubtasksMap(map)
@@ -184,13 +184,19 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
   async function handleDelete(id: string) { await deleteScheduleTodo(id); await refreshAll() }
 
+  async function handleClearDone() {
+    if (doneTodos.length === 0) return
+    await Promise.all(doneTodos.map(t => deleteScheduleTodo(t.id)))
+    await refreshAll()
+  }
+
   // ---- 当日任务 ----
   const [dailyInput, setDailyInput] = useState('')
 
   async function handleAddDaily() {
     if (!dailyInput.trim()) return
     try {
-      await createScheduleTodo({ title: dailyInput.trim(), date: today, taskType: 'daily', quadrant: 3 })
+      await createScheduleTodo({ title: dailyInput.trim(), date: today, taskType: 'daily' })
       setDailyInput('')
       await refreshAll()
     } catch (e) { console.error(e) }
@@ -268,17 +274,33 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     [doneTodos]
   )
 
-  // quadrant mode: pending only, grouped
+  // quadrant mode: pending only, grouped — exclude daily (琐碎不参与四象限)
   const quadrantGrouped = useMemo(() => {
     const groups: Record<number, typeof pendingTodos> = { 0: [], 1: [], 2: [], 3: [] }
-    for (const t of pendingTodos) groups[t.quadrant].push(t)
+    for (const t of pendingTodos) {
+      if (t.taskType === 'daily') continue
+      groups[t.quadrant].push(t)
+    }
     return groups
   }, [pendingTodos])
 
-  // date mode: pending for selected date
+  // date mode: pending tasks visible on selected date
+  // - daily: only on its own date
+  // - deadline: creation date + every day from today to deadline
+  // - plan: creation date + every day from today forward
   const dateTodos = useMemo(() =>
-    pendingTodos.filter(t => t.date === selectedDate),
-    [pendingTodos, selectedDate]
+    pendingTodos.filter(t => {
+      if (t.date === selectedDate) return true
+      if (t.taskType === 'daily') return false
+      if (selectedDate < todayDateStr) return false
+      if (t.taskType === 'deadline') {
+        const deadlineDate = (t.time || '').slice(0, 10)
+        return !!deadlineDate && selectedDate <= deadlineDate
+      }
+      // plan: visible on all dates from today onward
+      return true
+    }),
+    [pendingTodos, selectedDate, todayDateStr]
   )
   const dateRegular = useMemo(() => dateTodos.filter(t => t.taskType !== 'daily'), [dateTodos])
   const dateDaily = useMemo(() => dateTodos.filter(t => t.taskType === 'daily'), [dateTodos])
@@ -536,7 +558,16 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                 已完成 · {doneTodos.length} 项
                 <span className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)]`}>（7天后自动清空）</span>
               </span>
-              <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+              <span className="flex items-center gap-2">
+                <button
+                  onClick={e => { e.stopPropagation(); handleClearDone() }}
+                  className={`px-2 py-1 ${INPUT_SZ[iconSize].meta} text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors`}
+                  title="一键清除所有已完成任务"
+                >
+                  <Trash2 size={INPUT_SZ[iconSize].metaIcon + 4} className="inline mr-0.5" />全部清除
+                </button>
+                <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+              </span>
             </button>
             {showDone && (
               <div className="px-6 py-3 max-h-[260px] overflow-y-auto space-y-3">

@@ -229,8 +229,8 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
             </Field>
           )}
 
-          {/* Sub-tasks (plan tasks only, when editing existing task) */}
-          {form.taskType === 'plan' && initial.title && (
+          {/* Sub-tasks (plan & deadline tasks only, when editing existing task) */}
+          {form.taskType !== 'daily' && initial.title && (
             <Field label={`子任务${subtasks ? ` (${subtasks.length})` : ''}`}>
               <div className="bg-[var(--bg-tertiary)] rounded-lg p-3 border border-[var(--border-color)] space-y-1.5 max-h-[200px] overflow-y-auto">
                 {subtasks && subtasks.length > 0 ? (
