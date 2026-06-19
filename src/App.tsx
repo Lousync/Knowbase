@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { Toast } from './components/shared/Toast'
@@ -16,6 +16,7 @@ import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
+import { LockScreen } from './components/shared/LockScreen'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
   const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
@@ -54,11 +56,27 @@ export default function App() {
     return () => window.removeEventListener('settings-encoding-changed', handler)
   }, [])
 
+  // Auto-lock on startup (once, after settings load)
+  const startupLockedRef = useRef(false)
+  useEffect(() => {
+    if (!startupLockedRef.current && s.lockOnStartup && s.lockPassword) {
+      startupLockedRef.current = true
+      setLocked(true)
+    }
+  }, [s.lockOnStartup, s.lockPassword])
+
   // Listen for import modal open
   useEffect(() => {
     const handler = () => setImportModalOpen(true)
     window.addEventListener('open-import-modal', handler)
     return () => window.removeEventListener('open-import-modal', handler)
+  }, [])
+
+  // Listen for lockscreen toggle
+  useEffect(() => {
+    const handler = () => setLocked(v => !v)
+    window.addEventListener('lockscreen:toggle', handler)
+    return () => window.removeEventListener('lockscreen:toggle', handler)
   }, [])
 
   // Listen for settings:open — navigate to settings tab
@@ -159,6 +177,7 @@ export default function App() {
         <StatusBar encoding={encoding} />
       </PomodoroProvider>
       <Toast />
+      <LockScreen locked={locked} onUnlock={() => setLocked(false)} />
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} />}
     </div>
   )

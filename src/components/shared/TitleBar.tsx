@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Minus, Square, X, Copy, Pin } from 'lucide-react'
+import { Minus, Square, X, Copy, Pin, Lock } from 'lucide-react'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -26,6 +26,9 @@ export function TitleBar() {
 
       {/* 窗口控制按钮 */}
       <div className="flex h-full no-drag">
+          <WinBtn onClick={() => window.dispatchEvent(new CustomEvent('lockscreen:toggle'))} title="锁屏">
+            <Lock size={14} strokeWidth={1.5} />
+          </WinBtn>
           <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'}>
             <Pin size={14} strokeWidth={1.5} fill={isPinned ? 'var(--text-primary)' : 'transparent'} />
           </WinBtn>

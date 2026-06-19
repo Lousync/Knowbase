@@ -114,6 +114,10 @@ export const SETTINGS = {
   // ---- 工具箱 ----
   skipDeleteConfirm_toolboxScript: { default: false, desc: '跳过工具箱脚本删除确认' },
 
+  // ---- 安全 ----
+  lockPassword:  { default: '',    desc: '锁屏密码（留空则点击即可解锁）' },
+  lockOnStartup: { default: false, desc: '启动时自动锁屏' },
+
   // ---- 缩放约束 ----
   zoomMin:   { default: 0.85, desc: '缩放下限' },
   zoomMax:   { default: 1.5,  desc: '缩放上限' },

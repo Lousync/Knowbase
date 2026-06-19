@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Clock } from 'lucide-react'
+import { User, Clock, Lock, Eye, EyeOff } from 'lucide-react'
 import type { UserProfile, UserStats } from '../../types'
 import { getUserProfile, setUserUsername, getUserStats } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
+import { useSettings } from '../../lib/SettingsContext'
 import { AvatarUpload } from './components/AvatarUpload'
 import { PasswordSection } from './components/PasswordSection'
 import { StatsPanel } from './components/StatsPanel'
@@ -12,6 +13,32 @@ export function UserModule() {
   const [stats, setStats] = useState<UserStats | null>(null)
   const [username, setUsername] = useState('')
   const [editing, setEditing] = useState(false)
+  const { s, update } = useSettings()
+
+  // ---- Lock screen password ----
+  const [lockPwd, setLockPwd] = useState('')
+  const [lockConfirm, setLockConfirm] = useState('')
+  const [showLockPwd, setShowLockPwd] = useState(false)
+  const [lockMsg, setLockMsg] = useState<'success' | 'error' | null>(null)
+
+  const handleLockPassword = () => {
+    if (!lockPwd) {
+      update('lockPassword', '')
+      setLockPwd(''); setLockConfirm('')
+      setLockMsg('success')
+      setTimeout(() => setLockMsg(null), 2000)
+      return
+    }
+    if (lockPwd !== lockConfirm) {
+      setLockMsg('error')
+      setTimeout(() => setLockMsg(null), 2000)
+      return
+    }
+    update('lockPassword', lockPwd)
+    setLockPwd(''); setLockConfirm('')
+    setLockMsg('success')
+    setTimeout(() => setLockMsg(null), 2000)
+  }
 
   const loadData = useCallback(async () => {
     const [p, s] = await Promise.all([getUserProfile(), getUserStats()])
@@ -103,11 +130,78 @@ export function UserModule() {
                 )}
               </div>
 
-              {/* Password */}
+              {/* Password (for import/export) */}
               <PasswordSection
                 hasPassword={profile.hasPassword}
                 onPasswordChanged={handlePasswordChanged}
               />
+
+              {/* Lock screen password */}
+              <div className="pt-3 border-t border-[var(--border-color)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock size={14} className="text-[var(--text-muted)]" />
+                  <span className="text-[12px] font-medium text-[var(--text-secondary)]">锁屏密码</span>
+                  <span className="text-[10px] text-[var(--text-disabled)]">TitleBar 点击 🔒 后需输入此密码解锁</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showLockPwd ? 'text' : 'password'}
+                        value={lockPwd}
+                        onChange={e => { setLockPwd(e.target.value); setLockMsg(null) }}
+                        placeholder="新密码（留空则清除）"
+                        className="w-full px-2.5 py-1.5 pr-8 text-[12px] rounded border bg-[var(--input-bg)] border-[var(--border-color)] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                      />
+                      <button
+                        onClick={() => setShowLockPwd(v => !v)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        tabIndex={-1}
+                      >
+                        {showLockPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showLockPwd ? 'text' : 'password'}
+                      value={lockConfirm}
+                      onChange={e => { setLockConfirm(e.target.value); setLockMsg(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') handleLockPassword() }}
+                      placeholder="确认密码"
+                      className="flex-1 px-2.5 py-1.5 text-[12px] rounded border bg-[var(--input-bg)] border-[var(--border-color)] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                    />
+                    <button
+                      onClick={handleLockPassword}
+                      disabled={lockPwd !== lockConfirm}
+                      className="px-3 py-1.5 text-[12px] font-medium rounded border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {lockPwd ? '设置' : '清除'}
+                    </button>
+                  </div>
+                  {lockMsg === 'success' && (
+                    <p className="text-[11px] text-[var(--success)]">{s.lockPassword ? '锁屏密码已更新' : '密码已清除，锁屏点击即可解锁'}</p>
+                  )}
+                  {lockMsg === 'error' && (
+                    <p className="text-[11px] text-[var(--danger)]">两次密码不一致</p>
+                  )}
+                  {s.lockPassword && !lockMsg && (
+                    <p className="text-[11px] text-[var(--text-muted)]">当前已设置密码（{s.lockPassword.length}位）</p>
+                  )}
+
+                  {/* Startup auto-lock toggle */}
+                  <label className="flex items-center justify-between cursor-pointer pt-1">
+                    <span className="text-[12px] text-[var(--text-secondary)]">启动时自动锁屏</span>
+                    <input
+                      type="checkbox"
+                      checked={s.lockOnStartup}
+                      onChange={() => update('lockOnStartup', !s.lockOnStartup)}
+                      className="accent-[var(--accent)]"
+                    />
+                  </label>
+                  <p className="text-[10px] text-[var(--text-disabled)]">开启后每次启动软件都会先显示锁屏，需输入密码后才能进入</p>
+                </div>
+              </div>
 
               {/* Created at */}
               <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
