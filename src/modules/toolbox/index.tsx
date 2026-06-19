@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Key, Braces, Code, Calculator, Clock, Timer } from 'lucide-react'
+import { Key, Braces, Code, Calculator, Clock, Timer, Bot } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
 import { PomodoroTimer } from './components/PomodoroTimer'
+import { AIChatPanel } from './components/AIChatPanel'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -60,6 +61,16 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
   },
 ]
 
+const AI_TOOLS: ToolDefinition[] = [
+  {
+    id: 'ai-chat',
+    name: 'AI 助手',
+    desc: 'AI 对话，辅助写作翻译编程',
+    icon: <Bot size={17} strokeWidth={1.5} />,
+    available: true,
+  },
+]
+
 export function ToolboxModule() {
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
@@ -69,6 +80,8 @@ export function ToolboxModule() {
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
       case 'pomodoro':
         return <PomodoroTimer onBack={() => setActiveTool(null)} />
+      case 'ai-chat':
+        return <AIChatPanel onBack={() => setActiveTool(null)} />
       default:
         return null
     }
@@ -139,6 +152,13 @@ export function ToolboxModule() {
         </div>
 
         {renderSection('效率工具', PRODUCTIVITY_TOOLS)}
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 max-w-[600px] mx-auto">
+          <div className="flex-1 h-px bg-[var(--border-color)]" />
+        </div>
+
+        {renderSection('AI 工具', AI_TOOLS)}
       </div>
     </div>
   )

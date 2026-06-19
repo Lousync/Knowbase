@@ -139,3 +139,6 @@ export const createToolboxScript = (d: { name?: string; description?: string; co
 export const updateToolboxScript = (id: string, d: { name?: string; description?: string; content?: string; language?: string; sortOrder?: number }) => a().updateToolboxScript(id, d)
 export const deleteToolboxScript = (id: string) => a().deleteToolboxScript(id)
 export const reorderToolboxScripts = (ids: string[]) => a().reorderToolboxScripts(ids)
+
+// ===== AI =====
+export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

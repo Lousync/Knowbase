@@ -11,6 +11,7 @@ import { registerRecycleBinHandlers } from '../database/repositories/recycleBinR
 import { registerImportHandlers } from '../database/repositories/importRepo'
 import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
+import { registerAIHandlers } from '../ai/aiHandler'
 
 // ===== Settings memory cache =====
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -144,6 +145,7 @@ app.whenReady().then(async () => {
   registerImportHandlers()
   registerUserHandlers()
   registerToolboxHandlers()
+  registerAIHandlers()
   createWindow()
 
   app.on('activate', () => {

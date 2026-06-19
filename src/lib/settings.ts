@@ -106,6 +106,11 @@ export const SETTINGS = {
   autoSaveDebounceMs:     { default: 2000, desc: '编辑器自动保存防抖(ms)' },
   exportStatusClearMs:    { default: 5000, desc: '导出成功提示停留(ms)' },
 
+  // ---- AI ----
+  aiApiKey:       { default: '',              desc: 'AI API 密钥' },
+  aiBaseUrl:      { default: 'https://api.deepseek.com/v1', desc: 'AI API Base URL' },
+  aiModel:        { default: 'deepseek-chat', desc: 'AI 模型名称' },
+
   // ---- 工具箱 ----
   skipDeleteConfirm_toolboxScript: { default: false, desc: '跳过工具箱脚本删除确认' },
 

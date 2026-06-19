@@ -120,6 +120,9 @@ const api = {
   updateToolboxScript: (id: string, data: unknown) => ipcRenderer.invoke('toolbox:updateScript', id, data),
   deleteToolboxScript: (id: string) => ipcRenderer.invoke('toolbox:deleteScript', id),
   reorderToolboxScripts: (ids: string[]) => ipcRenderer.invoke('toolbox:reorderScripts', ids),
+
+  // ai
+  aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),
 }
 
 contextBridge.exposeInMainWorld('api', api)

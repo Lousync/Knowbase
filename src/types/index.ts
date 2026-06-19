@@ -12,6 +12,10 @@ export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtm
 export interface Tag { id: string; name: string; color: string }
 export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox'
 
+// ai
+export interface AIChatMessage { role: 'system' | 'user' | 'assistant'; content: string }
+export interface AIChatResult { content: string; error?: string }
+
 // toolbox
 export interface ToolboxScript {
   id: string; name: string; description: string; content: string
@@ -235,6 +239,8 @@ export interface ElectronAPI {
   updateToolboxScript: (id: string, d: UpdateToolboxScriptDTO) => Promise<ToolboxScript>
   deleteToolboxScript: (id: string) => Promise<void>
   reorderToolboxScripts: (ids: string[]) => Promise<void>
+  // ai
+  aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
 }
 
 declare global { interface Window { api: ElectronAPI } }
