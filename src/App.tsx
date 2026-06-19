@@ -98,18 +98,18 @@ export default function App() {
     document.documentElement.style.fontSize = `${s.zoom * 16}px`
   }, [s.zoom])
 
-  // Blue-outline drag workaround
+  // Drag-and-drop: disable text selection during drag.
+  // NOTE: Chromium's blue dashed outline is a compositor-level artifact that
+  // appears wherever preventDefault() is called during dragover. CSS cannot
+  // remove it. Keep component containers tight to minimize visual impact.
   useEffect(() => {
-    const onDragOver = (e: DragEvent) => { e.preventDefault() }
     const onDragStart = () => { document.body.classList.add('dragging') }
     const onDragEnd = () => { document.body.classList.remove('dragging') }
-    document.addEventListener('dragover', onDragOver, true)
     document.addEventListener('dragstart', onDragStart)
     document.addEventListener('dragend', onDragEnd)
     document.addEventListener('drop', onDragEnd)
     return () => {
       document.body.classList.remove('dragging')
-      document.removeEventListener('dragover', onDragOver, true)
       document.removeEventListener('dragstart', onDragStart)
       document.removeEventListener('dragend', onDragEnd)
       document.removeEventListener('drop', onDragEnd)

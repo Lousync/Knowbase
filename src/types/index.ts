@@ -85,6 +85,7 @@ export interface UpdateScheduleTodoDTO {
 export interface KnowledgeCategory {
   id: string; name: string; parentId: string | null; sortOrder: number
   categoryType: 'notebook' | 'folder'
+  createdAt: string; updatedAt: string
   children?: KnowledgeCategory[]
 }
 export interface KnowledgePage {
@@ -189,6 +190,7 @@ export interface ElectronAPI {
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
+  moveKnowledgeCategory: (id: string, direction: 'up' | 'down') => Promise<void>
   // import
   showImportOpenDialog: () => Promise<string[]>
   readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>

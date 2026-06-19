@@ -330,6 +330,12 @@ export function runMigrations(): void {
     } catch (_) { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('016_blog_star')")
   }
+
+  if (!applied.has('017_knowledge_category_dates')) {
+    try { db.run("ALTER TABLE knowledge_categories ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+    try { db.run("ALTER TABLE knowledge_categories ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+    db.run("INSERT INTO _migrations (name) VALUES ('017_knowledge_category_dates')")
+  }
 }
 
 /**

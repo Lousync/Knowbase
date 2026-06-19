@@ -5,7 +5,7 @@ import { join } from 'path'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
 
 // ---- row types (snake_case matching SQLite columns) ----
-interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
+interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string; created_at: string; updated_at: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 
 function mapPage(r: PageRow) {
@@ -48,7 +48,9 @@ export function registerKnowledgeHandlers(): void {
       name: r.name,
       parentId: r.parent_id,
       sortOrder: r.sort_order,
-      categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder'
+      categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder',
+      createdAt: r.created_at || '',
+      updatedAt: r.updated_at || '',
     }))
   })
 
@@ -66,24 +68,38 @@ export function registerKnowledgeHandlers(): void {
     )
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
     const r = rows[0]
-    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
+    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder', createdAt: r.created_at || '', updatedAt: r.updated_at || '' }
   })
 
   // 更新分类（重命名/移动）
   ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }) => {
-    const sets: string[] = []
+    const sets: string[] = ["updated_at = datetime('now')"]
     const params: unknown[] = []
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
     if (data.parentId !== undefined) { sets.push('parent_id = ?'); params.push(data.parentId) }
     if (data.sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(data.sortOrder) }
     if (data.categoryType !== undefined) { sets.push('category_type = ?'); params.push(data.categoryType) }
-    if (sets.length > 0) {
-      params.push(id)
-      run(`UPDATE knowledge_categories SET ${sets.join(', ')} WHERE id = ?`, params)
-    }
+    params.push(id)
+    run(`UPDATE knowledge_categories SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
     const r = rows[0]
-    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
+    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder', createdAt: r.created_at || '', updatedAt: r.updated_at || '' }
+  })
+
+  // 移动分类（上下排序）
+  ipcMain.handle('knowledge:moveCategory', (_e, id: string, direction: 'up' | 'down') => {
+    const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
+    if (!cat) return
+    const parentId = cat.parent_id
+    const cmp = direction === 'up' ? '<' : '>'
+    const ord = direction === 'up' ? 'DESC' : 'ASC'
+    const neighbor = queryAll<CategoryRow>(
+      `SELECT * FROM knowledge_categories WHERE parent_id IS ? AND sort_order ${cmp} ? ORDER BY sort_order ${ord} LIMIT 1`,
+      [parentId, cat.sort_order]
+    )
+    if (neighbor.length === 0) return
+    run('UPDATE knowledge_categories SET sort_order = ? WHERE id = ?', [neighbor[0].sort_order, id])
+    run('UPDATE knowledge_categories SET sort_order = ? WHERE id = ?', [cat.sort_order, neighbor[0].id])
   })
 
   // 删除分类 — 软删除（完整快照存入回收站，子树页面全删）
@@ -109,8 +125,8 @@ export function registerKnowledgeHandlers(): void {
         category: {
           id: ch.id, name: ch.name, parentId: ch.parent_id,
           sortOrder: ch.sort_order, categoryType: (ch.category_type === 'notebook' ? 'notebook' : 'folder'),
+          createdAt: ch.created_at || '', updatedAt: ch.updated_at || '',
         },
-        children: collectChildren(ch.id),
         pages: queryAll<PageRow>(
           'SELECT * FROM knowledge_pages WHERE category_id = ?', [ch.id]
         ).map(p => ({
@@ -137,6 +153,7 @@ export function registerKnowledgeHandlers(): void {
       category: {
         id: cat.id, name: cat.name, parentId: cat.parent_id,
         sortOrder: cat.sort_order, categoryType: (cat.category_type === 'notebook' ? 'notebook' : 'folder'),
+        createdAt: cat.created_at || '', updatedAt: cat.updated_at || '',
       },
       children: collectChildren(id),
       pages: directPages,

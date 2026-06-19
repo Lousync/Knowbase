@@ -4,7 +4,8 @@ import type { KnowledgeCategory, KnowledgePage } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, getKnowledgePageById, createKnowledgePage, deleteKnowledgePage,
-  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages, moveKnowledgePage,
+  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages,
+  moveKnowledgePage, moveKnowledgeCategory,
   updateKnowledgePage, toggleKnowledgeStar,
   showImportOpenDialog, readImportFiles, importPdf, importPdfFile
 } from '../../lib/ipc'
@@ -337,6 +338,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshCategories()
   }
 
+  // --- sort (up/down reorder) ---
+  const handleSortCategory = async (id: string, direction: 'up' | 'down') => {
+    await moveKnowledgeCategory(id, direction)
+    refreshCategories()
+  }
+  const handleSortPage = async (id: string, direction: 'up' | 'down') => {
+    await moveKnowledgePage(id, direction)
+    refreshAllPages()
+    refreshChapterPages()
+  }
+
   // --- notebook / chapter selection ---
   const handleSelectCategory = (id: string | null) => {
     if (id === selectedCategoryId) {
@@ -462,6 +474,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onDropOnCategory={handleDropOnCategory}
             onDropOnLooseArea={handleDropOnLooseArea}
             onMoveCategory={handleMoveCategory}
+            onSortCategory={handleSortCategory}
+            onSortPage={handleSortPage}
           />
         </ResizablePanel>
 
@@ -485,6 +499,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onDropOnChapter={handleDropOnChapter}
               onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
               onToggleStar={handleToggleStar}
+              onSortChapter={handleSortCategory}
+              onSortPage={handleSortPage}
             />
           )}
         </ResizablePanel>

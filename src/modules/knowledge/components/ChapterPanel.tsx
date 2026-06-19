@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown } from 'lucide-react'
+import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
@@ -23,13 +23,15 @@ interface Props {
   onDropOnChapter: (pageId: string, chapterId: string) => void
   onCollapse: () => void
   onToggleStar: (id: string) => void
+  onSortChapter: (id: string, direction: 'up' | 'down') => void
+  onSortPage: (id: string, direction: 'up' | 'down') => void
 }
 
 export function ChapterPanel({
   notebookName, chapters, selectedChapterId, focusChapterId, onSelectChapter,
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
-  onDropOnChapter, onCollapse, onToggleStar,
+  onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
@@ -89,9 +91,9 @@ export function ChapterPanel({
       {/* Chapters — hidden when focusing a single chapter */}
       {!focusChapter && (
       <div
-        data-drop-container
         className="px-2 py-1 border-b border-[var(--border-color)]"
         onDragOver={e => {
+          e.preventDefault()
           e.dataTransfer.dropEffect = 'move'
           const el = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
           setDragTargetId(el ? el.getAttribute('data-chapter-id')! : null)
@@ -131,13 +133,21 @@ export function ChapterPanel({
                 onClick={() => onSelectChapter(ch.id)}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
                   selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
-                  : dragTargetId === ch.id ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
+                  : dragTargetId === ch.id ? 'text-[var(--text-primary)]'
                   : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
                 <Folder size={16} className={`shrink-0 ${selectedChapterId === ch.id ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}`} />
                 <span className="flex-1 truncate">{ch.name}</span>
                 <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                  <button onClick={e => { e.stopPropagation(); onSortChapter(ch.id, 'up') }}
+                    className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移">
+                    <ChevronUp size={13} />
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); onSortChapter(ch.id, 'down') }}
+                    className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移">
+                    <ChevronDown size={13} />
+                  </button>
                   <button onClick={e => { e.stopPropagation(); handleStartRename(ch.id, ch.name) }}
                     className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="重命名">
                     <Pencil size={13} />
@@ -203,6 +213,16 @@ export function ChapterPanel({
                   <FileText size={15} className="shrink-0 text-[var(--text-muted)]" />
                   <span className="flex-1 truncate">{p.title || '无标题'}</span>
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return fi.badge ? <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-0.5" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> : null })()}
+                  <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }}
+                      className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移">
+                      <ChevronUp size={11} />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }}
+                      className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移">
+                      <ChevronDown size={11} />
+                    </button>
+                  </div>
                   <button onClick={e => { e.stopPropagation(); onToggleStar(p.id) }}
                     className="shrink-0 p-0.5 opacity-0 group-hover:opacity-100">
                     <Star size={13} className={p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />

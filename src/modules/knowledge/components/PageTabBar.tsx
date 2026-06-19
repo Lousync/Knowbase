@@ -36,6 +36,7 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectT
   }, [])
 
   const handleContainerDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
 
     const sourceId = e.dataTransfer.getData('text/plain')
@@ -84,7 +85,6 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectT
 
   return (
     <div
-      data-drop-container
       className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] select-none shrink-0 overflow-x-auto"
       onDragOver={handleContainerDragOver}
       onDrop={handleContainerDrop}

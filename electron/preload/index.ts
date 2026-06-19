@@ -60,6 +60,7 @@ const api = {
   toggleKnowledgeStar: (id: string) => ipcRenderer.invoke('knowledge:toggleStar', id),
   getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages'),
   moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction),
+  moveKnowledgeCategory: (id: string, direction: string) => ipcRenderer.invoke('knowledge:moveCategory', id, direction),
 
   // import
   showImportOpenDialog: () => ipcRenderer.invoke('import:showOpenDialog'),
