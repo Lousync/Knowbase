@@ -1,128 +1,116 @@
-# 软件简介
-一个windows桌面端的知识日程管理工具，用于知识整理，提升效率
-[图片占位]
+# Knowbase
 
-## 功能简介
-### 用户模块
-新用户第一次使用需要进行用户注册，注册后之后导出整个用户数据后，导出的数据会包含用户的一些设置和密码验证
+Windows 桌面端知识日程管理工具，纯本地运行，对标 VS Code 体验。
 
-### 博客模块
-每日博客限定了每天只能编写一篇博客用于记录每一天的日常。对于每日的博客还可以设置标签和状态
+## 功能模块
 
-### 日程任务模块
+| 模块 | 说明 |
+|------|------|
+| 📝 博客 | 每日一篇，Markdown 写作，标签分类，日历筛选，全文搜索 |
+| 📅 日程 | 日历视图，待办列表，四象限优先级，子任务，截止日期 |
+| 📚 知识库 | 分类树 + 笔记本，Wiki 风格页面，Markdown 编辑，附件导入 |
+| 🧰 工具箱 | 强密码生成器、番茄钟、AI 助手等内嵌实用工具 |
+| 💾 导出 | 一键导出全部模块数据（JSON / Markdown / ZIP），增量备份 |
+| 🗑️ 回收站 | 软删除，可恢复，30 天自动清理 |
+| ⚙️ 设置 | 主题切换、字体、编码、AI 服务配置等 |
 
-### 知识库模块
-
-### 导出模块
-
-### 回收站模块
-
-### 用户模块
-
-### 设置模块
-
-# 技术栈介绍
+## 技术栈
 
 | 层级 | 技术 | 版本 | 说明 |
 |------|------|------|------|
-| 桌面框架 | Electron | ^33.2.0 | 无边框窗口 + 自定义标题栏，对标 VS Code 体验 |
-| 前端框架 | React + TypeScript | ^19.0 / ^5.7 | 函数组件 + Hooks，启用严格模式 |
-| 构建工具 | electron-vite | ^5.0 | 主进程 / preload / 渲染进程统一构建，开发 HMR |
-| UI 样式 | TailwindCSS | ^4.0 | 原子化 CSS，统一使用深色主题配色 |
-| 数据库 | sql.js (SQLite WASM) | ^1.12 | 纯 JavaScript 实现，无需原生编译，零跨平台摩擦 |
-| 编辑器 | Monaco Editor | ^0.55 | VS Code 同款编辑器内核，Markdown 语法高亮 |
-| Markdown 渲染 | markdown-it | ^14.2 | 服务端级渲染性能，插件生态丰富 |
-| 图标 | lucide-react | ^1.0 | 轻量 SVG 图标，按需引入 |
-| 打包 | electron-builder | ^26.0 | NSIS 安装包，支持自定义安装路径 |
-| 编码处理 | iconv-lite | ^0.7.2 | 纯 JS 字符编码转换，导出文件时处理编码 |
-| 文件回收 | trash | ^10.1.1 | 删除文件进回收站而非直接抹除 |
+| 桌面框架 | Electron | ^33.2.0 | 无边框窗口 + 自定义标题栏 |
+| 前端框架 | React + TypeScript | ^19.0 / ^5.7 | 函数组件 + Hooks，严格模式 |
+| 构建工具 | electron-vite | ^5.0 | 主进程 / preload / 渲染进程统一构建 |
+| UI 样式 | TailwindCSS | ^4.0 | 原子化 CSS，深色/浅色双主题 |
+| 数据库 | sql.js (SQLite WASM) | ^1.12 | 纯 JS，零原生依赖 |
+| 编辑器 | Monaco Editor | ^0.55 | VS Code 同款内核 |
+| Markdown 渲染 | react-markdown + rehype-highlight | | 安全渲染，无 XSS 风险 |
+| 图标 | lucide-react | ^1.0 | 轻量 SVG 图标 |
+| 打包 | electron-builder | ^26.0 | NSIS 安装包 |
 
-### 项目架构
+## 项目架构
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Electron 主进程 (electron/main/)                        │
-│  ├─ 窗口管理 (frameless + 自定义标题栏)                   │
-│  ├─ IPC 桥接 (contextBridge)                             │
-│  └─ 数据库层 (sql.js 初始化 / 迁移 / 持久化)              │
-├──────────────────────────────────────────────────────────┤
-│  Electron Preload (electron/preload/)                    │
-│  └─ 安全暴露 API 给渲染进程                               │
-├──────────────────────────────────────────────────────────┤
-│  React 渲染进程 (src/)                                    │
-│  ├─ modules/blog/      博客模块（三栏布局）               │
-│  ├─ modules/schedule/  日程模块（日历 + 待办列表）        │
-│  ├─ modules/knowledge/ 知识库模块（分类树 + Wiki）        │
-│  ├─ modules/export/    导出模块（格式选择 + 备份历史）    │
-│  └─ shared/            通用组件 / Hooks / 工具函数        │
-└──────────────────────────────────────────────────────────┘
+Knowbase/
+├── electron/
+│   ├── main/index.ts          # 窗口管理 + IPC 调度
+│   ├── preload/index.ts       # 安全 API 桥接
+│   ├── database/              # sql.js 初始化 / 迁移 / Repository
+│   ├── ai/                    # AI API 调用处理 (Node fetch)
+│   └── terminal/              # 终端管理器（预留）
+├── src/
+│   ├── App.tsx                # 主组件：TitleBar + ActivityBar + 路由
+│   ├── modules/
+│   │   ├── blog/              # 博客模块
+│   │   ├── schedule/          # 日程模块
+│   │   ├── knowledge/         # 知识库模块
+│   │   ├── export/            # 数据导出模块
+│   │   ├── recycle/           # 回收站模块
+│   │   ├── settings/          # 设置模块
+│   │   ├── help/              # 帮助文档模块
+│   │   ├── user/              # 用户模块
+│   │   └── toolbox/           # 工具箱模块
+│   └── components/shared/     # 通用 UI 组件
+└── scripts/                   # 脚本工具
 ```
 
----
-
-## 部署介绍
+## 部署
 
 ### 环境要求
 
-| 依赖 | 最低版本 | 说明 |
-|------|---------|------|
-| Windows | 10 / 11 (64 位) | 32 位未测试 |
-| Node.js | 18+ | 推荐 20 LTS |
-| npm | 9+ | 随 Node.js 附带 |
+| 依赖 | 最低版本 |
+|------|---------|
+| Windows | 10 / 11 (64 位) |
+| Node.js | 18+（推荐 20 LTS） |
+| npm | 9+ |
 
-### 开发环境部署
+### 开发环境
 
 ```bash
-# 1. 克隆仓库
 git clone <repo-url>
 cd KnowledgeRecorder
-
-# 2. 安装依赖
 npm install
-
-# 3. 启动开发模式（热更新，保存即刷新）
-npm run dev
-
-# 4. 仅构建生产产物（不打包）
-npm run build
-npm run preview
+npm run dev       # 启动开发模式（热更新）
 ```
-
-`npm run dev` 会同时启动 Vite 开发服务器和 Electron 窗口，修改源码后自动热更新。
 
 ### 生产打包
 
 ```bash
-# 一键构建 + 打包为 Windows NSIS 安装包
+# 一键构建 + 打包 NSIS 安装包
 npm run pack
+
+# 若遇到 SSL 证书错误，使用：
+NODE_OPTIONS="--use-system-ca" npm run pack
 ```
 
-打包产物在 `dist-electron/` 目录，生成 `.exe` 安装包。NSIS 安装包特点：
-- 图形化安装向导，可自定义安装路径
-- 自动创建桌面快捷方式和开始菜单条目
-- 支持卸载程序
+打包产物在 `dist-electron/` 目录，生成 `Knowbase Setup x.x.x.exe` 安装包。
 
-### 环境检查清单
+## AI 助手配置
 
-部署前请确认以下事项：
+1. 打开 **设置** → **AI 服务**
+2. 填入 API 密钥（支持 OpenAI / DeepSeek 及其他兼容接口）
+3. 确认 Base URL 和模型名称
+4. 切换到 **工具箱** → 点击「AI 助手」卡片即可对话
 
-1. **`ELECTRON_RUN_AS_NODE` 环境变量** — 系统中若存在此变量需删除，否则 Electron 会以纯 Node.js 模式运行，无法启动 GUI 窗口
-2. **安装路径** — 建议安装在非 C 盘目录，避免用户目录路径含中文字符导致数据库写入异常
-3. **杀毒软件** — NSIS 安装包可能被误报，建议添加信任或使用便携版
-4. **数据备份** — 数据库文件存储在应用数据目录，建议定期使用导出功能生成备份
+默认配置为 DeepSeek（`https://api.deepseek.com/v1`，模型 `deepseek-chat`），只需填入密钥即可使用。
 
-### 数据目录
+## 数据目录
 
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| 主数据库 | `%APPDATA%/knowledge-recorder/data.db` | SQLite 数据库，含所有模块数据 |
-| 用户设置 | `%APPDATA%/knowledge-recorder/settings.json` | 编辑器字号、主题等偏好配置 |
+| 文件 | 路径 |
+|------|------|
+| 数据库 | `%APPDATA%/knowbase/data/knowledge.db` |
+| 设置 | `%APPDATA%/knowbase/settings.json` |
 
-# 暂未解决的问题
+## 环境检查
 
-# 免责声明
-这是一个纯vibecoding的个人项目，如果使用本软件造成了文件资源的损坏或丢失本作者概不负责。
+1. **`ELECTRON_RUN_AS_NODE`** — 系统环境变量中若存在需删除，否则 Electron 以纯 Node 模式运行
+2. **安装路径** — 建议非 C 盘，避免中文路径导致数据库异常
+3. **数据备份** — 定期使用导出功能备份数据库
 
-# 欢迎大家参与！！
-如果有更好的想法或者发现了Bug,欢迎在项目中留言！
+## 免责声明
 
+纯 vibecoding 个人项目，使用本软件造成文件损坏或数据丢失概不负责。
+
+## 参与贡献
+
+有更好的想法或发现 Bug，欢迎在项目中提 Issue 或 PR。
