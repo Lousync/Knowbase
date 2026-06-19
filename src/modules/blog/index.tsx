@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Star } from 'lucide-react'
 import { Entry, Tag } from '../../types'
-import { getEntries, createEntry, deleteEntry, getEntryById, getSetting, setSetting } from '../../lib/ipc'
+import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -29,7 +30,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
   const today = new Date().toISOString().split('T')[0]
-  const thisMonth = today.slice(0, 7) // "2026-06"
+  const thisMonth = today.slice(0, 7)
 
   const loadEntries = useCallback(async () => {
     try {
@@ -51,23 +52,28 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   useEffect(() => { loadEntries() }, [loadEntries])
 
-  // 监听数据导入事件 — 导入完成后刷新博文列表
+  // 监听数据导入事件
   useEffect(() => {
     const handler = () => { loadEntries() }
     window.addEventListener('data-imported', handler)
     return () => window.removeEventListener('data-imported', handler)
   }, [loadEntries])
 
-  // 今日文章编写 → 检查今天是否已有文章
+  // Toggle star on an entry
+  const handleToggleStar = useCallback(async (id: string) => {
+    const updated = await toggleEntryStar(id)
+    if (updated) {
+      setEntries(prev => prev.map(e => e.id === id ? { ...e, isStarred: updated.isStarred } : e))
+    }
+  }, [])
+
   const handleTodayEntry = async () => {
     const todayEntry = entries.find(e => e.date === today)
     if (todayEntry) {
-      // 已有文章 → 直接打开编辑
       setSelectedId(todayEntry.id)
       setSelectedDate(today)
       setView('editor')
     } else {
-      // 没有文章 → 新建
       try {
         const entry = await createEntry({ date: today, title: today })
         setSelectedId(entry.id)
@@ -78,17 +84,14 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     }
   }
 
-  // 点击侧边栏日期 → 打开该日文章（不存在则自动创建）
   const handleSelectDate = async (date: string | null) => {
     setSelectedDate(date)
     if (!date) return
     const entry = entries.find(e => e.date === date)
     if (entry) {
       setSelectedId(entry.id)
-      // Today → editor; past entries → preview
       setView(date === today ? 'editor' : 'detail')
     } else {
-      // 该日期尚无文章 → 自动创建
       try {
         const e = await createEntry({ date, title: date })
         setSelectedId(e.id)
@@ -103,25 +106,20 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     const onKey = (e: KeyboardEvent) => {
       if (isEditingInput(e)) return
 
-      // Ctrl+N — create/open today's entry
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault()
         handleTodayEntry()
         return
       }
 
-      // Delete — delete entry in editor/detail
       if (e.key === 'Delete') {
         if (viewRef.current !== 'list' && selectedIdRef.current) {
           e.preventDefault()
-          deleteEntry(selectedIdRef.current).then(() => {
-            goToList()
-          }).catch(console.error)
+          deleteEntry(selectedIdRef.current).then(() => goToList()).catch(console.error)
         }
         return
       }
 
-      // Escape — back to list from editor/detail
       if (e.key === 'Escape') {
         if (viewRef.current !== 'list') {
           e.preventDefault()
@@ -133,6 +131,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     return () => window.removeEventListener('keydown', onKey)
   }, [handleTodayEntry, goToList, loadEntries])
 
+  const starredEntries = entries.filter(e => e.isStarred)
+
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
       <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_blog}>
@@ -140,6 +140,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           <div className="flex-1 overflow-hidden">
             <Sidebar
               entries={entries}
+              starredEntries={starredEntries}
               selectedDate={selectedDate}
               onSelectDate={handleSelectDate}
               onNewEntry={handleTodayEntry}
@@ -152,7 +153,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           <EntryList
             entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries.filter(e => e.date.startsWith(thisMonth))}
             loading={loading}
-                        onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail') }}
+            onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail') }}
+            onToggleStar={handleToggleStar}
             onNewEntry={handleTodayEntry}
             cardSize={s.blogCardSize}
           />
@@ -170,9 +172,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           <EntryDetail
             entryId={selectedId}
             onEdit={() => setView('editor')}
-            onDelete={async () => {
-              await deleteEntry(selectedId); goToList()
-            }}
+            onDelete={async () => { await deleteEntry(selectedId); goToList() }}
             onBack={goToList}
           />
         )}
@@ -197,14 +197,15 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
     })
   }, [])
 
+  const handleToggleStar = async () => {
+    const updated = await toggleEntryStar(entryId)
+    if (updated) setEntry(prev => prev ? { ...prev, isStarred: updated.isStarred, tags: prev.tags } : null)
+  }
+
   if (!entry) return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">加载中...</div>
 
   const handleDeleteClick = () => {
-    if (skipDeleteConfirm) {
-      onDelete()
-    } else {
-      setShowDeleteConfirm(true)
-    }
+    if (skipDeleteConfirm) { onDelete() } else { setShowDeleteConfirm(true) }
   }
 
   return (
@@ -214,6 +215,9 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-color)]">
             <button onClick={onBack} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">← 返回列表</button>
             <div className="flex gap-2">
+              <button onClick={handleToggleStar} className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors" title={entry.isStarred ? '取消收藏' : '收藏'}>
+                <Star size={16} className={entry.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
+              </button>
               <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
               <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[#e8112320] rounded">删除</button>
             </div>
@@ -229,10 +233,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
         title="确认删除"
         message={`确定要删除博文「${entry.title || entry.date}」吗？删除后可在回收站恢复，30天后将自动清空。`}
         onConfirm={(skipNext) => {
-          if (skipNext) {
-            setSetting('skipDeleteConfirm_blog', true)
-            setSkipDeleteConfirm(true)
-          }
+          if (skipNext) { setSetting('skipDeleteConfirm_blog', true); setSkipDeleteConfirm(true) }
           setShowDeleteConfirm(false)
           onDelete()
         }}

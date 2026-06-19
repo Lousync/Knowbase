@@ -11,6 +11,7 @@ interface EntryRow {
   created_at: string
   updated_at: string
   is_pinned: number
+  is_starred: number
   word_count: number
   states: string
 }
@@ -25,6 +26,7 @@ function rowToEntry(row: EntryRow) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isPinned: row.is_pinned === 1,
+    isStarred: row.is_starred === 1,
     wordCount: row.word_count,
     states: row.states || '',
   }
@@ -56,6 +58,7 @@ export function registerEntryHandlers(): void {
     date?: string
     tagId?: string
     pinnedOnly?: boolean
+    starredOnly?: boolean
     limit?: number
     offset?: number
   }) => {
@@ -78,11 +81,15 @@ export function registerEntryHandlers(): void {
       conditions.push('e.is_pinned = 1')
     }
 
+    if (filter?.starredOnly) {
+      conditions.push('e.is_starred = 1')
+    }
+
     if (conditions.length > 0) {
       sql += ` WHERE ` + conditions.join(' AND ')
     }
 
-    sql += ` ORDER BY e.is_pinned DESC, e.created_at DESC`
+    sql += ` ORDER BY e.is_pinned DESC, e.is_starred DESC, e.created_at DESC`
 
     if (filter?.limit) {
       sql += ` LIMIT ?`
@@ -217,6 +224,10 @@ export function registerEntryHandlers(): void {
       sets.push('states = ?')
       params.push(data.states)
     }
+    if ((data as Record<string, unknown>).isStarred !== undefined) {
+      sets.push('is_starred = ?')
+      params.push((data as Record<string, unknown>).isStarred ? 1 : 0)
+    }
 
     params.push(id)
 
@@ -286,5 +297,20 @@ export function registerEntryHandlers(): void {
       [like, like]
     )
     return rows.map(rowToEntry)
+  })
+
+  // 切换博文收藏状态
+  ipcMain.handle('db:toggleEntryStar', (_event, id: string) => {
+    const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
+    if (rows.length === 0) return null
+    const next = rows[0].is_starred === 0 ? 1 : 0
+    run('UPDATE entries SET is_starred = ?, updated_at = ? WHERE id = ?', [next, new Date().toISOString(), id])
+    const updated = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
+    const tags = queryAll<{ id: string; name: string; color: string }>(
+      `SELECT t.id, t.name, t.color FROM tags t
+       JOIN entry_tags et ON t.id = et.tag_id
+       WHERE et.entry_id = ?`, [id]
+    )
+    return { ...rowToEntry(updated[0]), tags }
   })
 }

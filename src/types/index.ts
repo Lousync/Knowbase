@@ -3,12 +3,12 @@
 export interface Entry {
   id: string; title: string; contentMd: string; contentHtml: string
   date: string; createdAt: string; updatedAt: string
-  isPinned: boolean; wordCount: number; tags?: Tag[]
+  isPinned: boolean; isStarred: boolean; wordCount: number; tags?: Tag[]
   states: string
 }
-export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boolean; limit?: number; offset?: number }
+export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boolean; starredOnly?: boolean; limit?: number; offset?: number }
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
-export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; tags?: string[]; states?: string }
+export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
 export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox'
 
@@ -146,10 +146,13 @@ export interface ElectronAPI {
   getAllSettings: () => Promise<Record<string, unknown>>
   setSetting: (key: string, value: unknown) => Promise<void>
   openDirDialog: () => Promise<string | null>
+  reloadWindow: () => Promise<void>
+  clearAllData: () => Promise<{ success: boolean; error?: string }>
   getEntries: (f: EntryFilter) => Promise<Entry[]>
   getEntryById: (id: string) => Promise<(Entry & { tags: Tag[] }) | null>
   createEntry: (d: CreateEntryDTO) => Promise<Entry>
   updateEntry: (id: string, d: UpdateEntryDTO) => Promise<Entry>
+  toggleEntryStar: (id: string) => Promise<(Entry & { tags: Tag[] }) | null>
   deleteEntry: (id: string) => Promise<void>
   searchEntries: (q: string) => Promise<Entry[]>
   getTags: () => Promise<Tag[]>

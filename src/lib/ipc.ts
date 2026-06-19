@@ -34,12 +34,17 @@ export const isMaximized = () => a().isMaximized()
 export const onMaximizeChange = (cb: (v: boolean) => void) => a().onMaximizeChange(cb)
 export const openDirDialog = () => a().openDirDialog()
 
+// ===== Data =====
+export const clearAllData = (): Promise<{ success: boolean; error?: string }> => a().clearAllData()
+export const reloadWindow = () => a().reloadWindow()
+
 // ===== Blog =====
 export const getEntries = (f: EntryFilter = {}) => a().getEntries(f)
 export const getEntryById = (id: string) => a().getEntryById(id)
 export const createEntry = (d: CreateEntryDTO) => a().createEntry(d)
 export const updateEntry = (id: string, d: UpdateEntryDTO) => a().updateEntry(id, d)
 export const deleteEntry = (id: string) => a().deleteEntry(id)
+export const toggleEntryStar = (id: string) => a().toggleEntryStar(id)
 export const searchEntries = (q: string) => a().searchEntries(q)
 export const getTags = () => a().getTags()
 export const createTag = (n: string, c?: string) => a().createTag(n, c)

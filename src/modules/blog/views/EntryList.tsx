@@ -6,11 +6,12 @@ interface EntryListProps {
   entries: Entry[]
   loading: boolean
   onEntryClick: (entry: Entry) => void
+  onToggleStar: (id: string) => void
   onNewEntry: () => void
   cardSize?: 's' | 'm' | 'l'
 }
 
-export function EntryList({ entries, loading, onEntryClick, onNewEntry, cardSize = 'm' }: EntryListProps) {
+export function EntryList({ entries, loading, onEntryClick, onToggleStar, onNewEntry, cardSize = 'm' }: EntryListProps) {
   const today = new Date().toISOString().split('T')[0]
   const hasToday = entries.some(e => e.date === today)
 
@@ -25,7 +26,6 @@ export function EntryList({ entries, loading, onEntryClick, onNewEntry, cardSize
     )
   }
 
-  // 按日期分组
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date))
 
   return (
@@ -55,7 +55,7 @@ export function EntryList({ entries, loading, onEntryClick, onNewEntry, cardSize
         ) : (
           <div className="space-y-2">
             {sorted.map(entry => (
-              <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} size={cardSize} />
+              <EntryCard key={entry.id} entry={entry} onClick={() => onEntryClick(entry)} onToggleStar={onToggleStar} size={cardSize} />
             ))}
           </div>
         )}

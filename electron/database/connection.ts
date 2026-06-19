@@ -54,7 +54,7 @@ export async function initDatabase(): Promise<void> {
   saveToDisk()
 }
 
-function runMigrations(): void {
+export function runMigrations(): void {
   if (!db) return
 
   db.run(`
@@ -321,6 +321,14 @@ function runMigrations(): void {
       }
     } catch (_) { /* ignore dedup errors */ }
     db.run("INSERT INTO _migrations (name) VALUES ('015_dedup_entries')")
+  }
+
+  if (!applied.has('016_blog_star')) {
+    // Add is_starred column to blog entries for favorites support
+    try {
+      db.run('ALTER TABLE entries ADD COLUMN is_starred INTEGER DEFAULT 0')
+    } catch (_) { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('016_blog_star')")
   }
 }
 

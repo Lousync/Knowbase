@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Entry } from '../../../types'
-import { Edit3, ChevronRight, ChevronDown, FileText, Search } from 'lucide-react'
+import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
 
 interface SidebarProps {
   entries: Entry[]
+  starredEntries: Entry[]
   selectedDate: string | null
   onSelectDate: (date: string | null) => void
   onNewEntry: () => void
@@ -149,7 +150,7 @@ function computeSearchResults(
   return null
 }
 
-export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
+export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
   const today = new Date().toISOString().split('T')[0]
   const thisYear = new Date().getFullYear().toString()
   const thisMonth = (new Date().getMonth() + 1).toString().padStart(2, '0')
@@ -247,6 +248,33 @@ export function Sidebar({ entries, selectedDate, onSelectDate, onNewEntry }: Sid
           {hasToday ? '继续编写' : '今日文章编写'}
         </button>
       </div>
+
+      {/* 收藏 */}
+      {starredEntries.length > 0 && (
+        <div className="px-2 py-1 border-b border-[var(--border-color)]">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-semibold text-[var(--warning)] uppercase tracking-wider">
+            <Star size={11} fill="#c5a332" />
+            收藏
+            <span className="text-[var(--text-disabled)] font-normal normal-case">{starredEntries.length}</span>
+          </div>
+          <div className="space-y-0.5">
+            {starredEntries.map(e => (
+              <button
+                key={e.id}
+                onClick={() => handleSelectDateSafe(e.date)}
+                className={`w-full flex items-center gap-1.5 pl-6 pr-2 py-0.5 text-[12px] rounded transition-colors text-left ${
+                  selectedDate === e.date
+                    ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                <Star size={10} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
+                <span className="truncate flex-1">{e.date.slice(-5)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 树状归档 */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-1 flex flex-col">

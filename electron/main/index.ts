@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { initDatabase, getDbPath, closeDatabase, getAttachmentsDir } from '../database/connection'
+import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
@@ -92,6 +92,7 @@ function registerWindowHandlers(): void {
     return mainWindow?.isAlwaysOnTop() ?? false
   })
   ipcMain.handle('window:isAlwaysOnTop', () => mainWindow?.isAlwaysOnTop() ?? false)
+  ipcMain.handle('window:reload', () => { mainWindow?.webContents.reload() })
 
   mainWindow?.on('maximize', () => mainWindow?.webContents.send('window:maximizeChange', true))
   mainWindow?.on('unmaximize', () => mainWindow?.webContents.send('window:maximizeChange', false))
@@ -111,6 +112,38 @@ function registerWindowHandlers(): void {
     // Debounce write to disk — coalesce rapid setSetting calls into one write
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(flushSettingsToDisk, 500)
+  })
+
+  // 清空所有数据 + 恢复默认设置
+  ipcMain.handle('db:clearAllData', () => {
+    try {
+      const db = getDatabase()
+
+      // Drop all user data tables
+      const tables = [
+        'entries', 'tags', 'entry_tags',
+        'schedule_todos', 'schedule_tags',
+        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags',
+        'recycle_bin', 'user_profile', 'toolbox_scripts',
+      ]
+      for (const t of tables) {
+        db.run(`DROP TABLE IF EXISTS ${t}`)
+      }
+      // Clear migration records so schema is re-created fresh
+      db.run('DELETE FROM _migrations')
+
+      // Wipe settings to defaults
+      settingsCache = {}
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+      flushSettingsToDisk()
+
+      // Re-create all tables from scratch
+      runMigrations()
+      saveToDisk()
+      return { success: true }
+    } catch (err: unknown) {
+      return { success: false, error: (err as Error).message || String(err) }
+    }
   })
 
   // 选择目录对话框

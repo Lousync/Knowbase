@@ -1,8 +1,10 @@
+import { Star } from 'lucide-react'
 import { Entry } from '../../../types'
 
 interface EntryCardProps {
   entry: Entry
   onClick: () => void
+  onToggleStar: (id: string) => void
   size?: 's' | 'm' | 'l'
 }
 
@@ -12,7 +14,7 @@ const SIZE_MAP = {
   l: { py: 'py-4', px: 'px-5', title: 'text-[16px]', meta: 'text-[12px]', gap: 'gap-3' },
 }
 
-export function EntryCard({ entry, onClick, size = 'm' }: EntryCardProps) {
+export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCardProps) {
   const today = new Date().toISOString().split('T')[0]
   const isToday = entry.date === today
   const sz = SIZE_MAP[size]
@@ -26,6 +28,15 @@ export function EntryCard({ entry, onClick, size = 'm' }: EntryCardProps) {
       className={`group flex items-center justify-between ${sz.px} ${sz.py} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md cursor-pointer hover:border-[var(--accent)] transition-all`}
     >
       <div className={`flex items-center ${sz.gap} min-w-0`}>
+        {/* Star */}
+        <button
+          onClick={e => { e.stopPropagation(); onToggleStar(entry.id) }}
+          className="shrink-0 p-0.5 hover:scale-110 transition-transform"
+          title={entry.isStarred ? '取消收藏' : '收藏'}
+        >
+          <Star size={14} className={entry.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
+        </button>
+
         {/* Date */}
         <h3 className={`${sz.title} font-medium text-[var(--text-primary)] shrink-0`}>
           {entry.date.slice(-5)}

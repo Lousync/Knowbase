@@ -7,6 +7,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { AvatarUpload } from './components/AvatarUpload'
 import { PasswordSection } from './components/PasswordSection'
 import { StatsPanel } from './components/StatsPanel'
+import { DataClearSection } from './components/DataClearSection'
 
 export function UserModule() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -216,6 +217,12 @@ export function UserModule() {
 
           {/* Stats */}
           <StatsPanel stats={stats} />
+
+          {/* Divider */}
+          <div className="border-t border-[var(--border-color)]" />
+
+          {/* Danger zone: clear all data */}
+          <DataClearSection />
         </div>
       </div>
     </div>
