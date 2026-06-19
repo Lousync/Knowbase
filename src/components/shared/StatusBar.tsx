@@ -37,8 +37,13 @@ export function StatusBar({
   // Listen for activate event from toolbox
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { preset?: number } | undefined
-      pom.activate(detail?.preset)
+      if (pom.state.visible) {
+        // Already active — just expand, don't reset
+        pom.setState(s => ({ ...s, expanded: true }))
+      } else {
+        const detail = (e as CustomEvent).detail as { preset?: number } | undefined
+        pom.activate(detail?.preset)
+      }
     }
     window.addEventListener('pomodoro:activate', handler)
     return () => window.removeEventListener('pomodoro:activate', handler)
