@@ -40,32 +40,21 @@ export function NotebookList({
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory, onSortCategory, onSortPage,
 }: Props) {
   const sortModes: Array<{ id: 'custom' | 'name' | 'created' | 'updated' | 'type'; label: string }> = [
-    { id: 'custom', label: '自定义' },
-    { id: 'type', label: '类型' },
-    { id: 'name', label: '名称' },
-    { id: 'created', label: '创建时间' },
-    { id: 'updated', label: '更新时间' },
+    { id: 'custom', label: '自定义' }, { id: 'type', label: '类型' }, { id: 'name', label: '名称' },
+    { id: 'created', label: '创建时间' }, { id: 'updated', label: '更新时间' },
   ]
   const [sortMode, setSortMode] = useState<'custom' | 'name' | 'created' | 'updated' | 'type'>('custom')
   const [sortOpen, setSortOpen] = useState(false)
-
   const TYPE_ORDER: Record<string, number> = { notebook: 0, folder: 1 }
-
   function sortCats(list: KnowledgeCategory[]): KnowledgeCategory[] {
     return [...list].sort((a, b) => {
-      if (sortMode === 'type') {
-        const ta = TYPE_ORDER[a.categoryType] ?? 2
-        const tb = TYPE_ORDER[b.categoryType] ?? 2
-        if (ta !== tb) return ta - tb
-        return a.sortOrder - b.sortOrder
-      }
+      if (sortMode === 'type') { const ta = TYPE_ORDER[a.categoryType] ?? 2; const tb = TYPE_ORDER[b.categoryType] ?? 2; if (ta !== tb) return ta - tb; return a.sortOrder - b.sortOrder }
       if (sortMode === 'name') return a.name.localeCompare(b.name)
       if (sortMode === 'created') return b.createdAt.localeCompare(a.createdAt)
       if (sortMode === 'updated') return b.updatedAt.localeCompare(a.updatedAt)
       return a.sortOrder - b.sortOrder
     })
   }
-
   const rootCats = sortCats(categories.filter(c => !c.parentId))
   const [newName, setNewName] = useState('')
   const [createMode, setCreateMode] = useState<'folder' | 'notebook' | null>(null)
@@ -77,8 +66,6 @@ export function NotebookList({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [dragTargetId, setDragTargetId] = useState<string | null>(null)  // which node is currently hovered during drag
-  const dragTargetIdRef = useRef(dragTargetId)
-  useEffect(() => { dragTargetIdRef.current = dragTargetId }, [dragTargetId])
 
   // Barrier ref: set on mousedown of create-mode buttons so that the ensuing
   // blur of the current input (which fires before click) aborts without creating.
@@ -99,21 +86,10 @@ export function NotebookList({
   const sortBtnRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!sortOpen) return
-    const onMouseDown = (e: MouseEvent) => {
-      if (sortBtnRef.current && !sortBtnRef.current.contains(e.target as Node)) {
-        setSortOpen(false)
-      }
-    }
+    const onMouseDown = (e: MouseEvent) => { if (sortBtnRef.current && !sortBtnRef.current.contains(e.target as Node)) setSortOpen(false) }
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [sortOpen])
-
-  // Clear drag highlight on any drag end (safety net for cancelled / out-of-bounds drops)
-  useEffect(() => {
-    const onDragEnd = () => { if (dragTargetIdRef.current !== null) setDragTargetId(null) }
-    document.addEventListener('dragend', onDragEnd)
-    return () => document.removeEventListener('dragend', onDragEnd)
-  }, [])
 
   // F2 — keyboard rename selected notebook / folder
   useEffect(() => {
@@ -164,26 +140,16 @@ export function NotebookList({
   }
 
   // ---- whether a category can accept dropped categories ----
-  // – Folders accept any category (nesting).
-  // – Notebooks accept flat folders only (no sub-categories, only pages) — they become chapters.
-  // – Notebooks also accept chapters (folders already under a notebook) for reordering.
-  // – Notebooks reject other notebooks and nested folders.
+  // Folders accept any category. Notebooks accept flat folders only (no sub-categories).
   function canAcceptCategory(targetId: string, draggedId: string): boolean {
     const target = categories.find(c => c.id === targetId)
     const dragged = categories.find(c => c.id === draggedId)
     if (!target || !dragged) return false
-
-    // Folders accept any category
     if (target.categoryType === 'folder') return true
-
-    // Notebook target: accept flat folders and chapters, reject notebooks
     if (target.categoryType === 'notebook') {
       if (dragged.categoryType !== 'folder') return false
-      // Reject folders that have sub-categories (would nest too deep)
-      const hasSubCategories = categories.some(c => c.parentId === draggedId)
-      return !hasSubCategories
+      return !categories.some(c => c.parentId === draggedId)
     }
-
     return false
   }
 
@@ -236,7 +202,7 @@ export function NotebookList({
     }
 
     return (
-      <div key={cat.id} data-cat-id={cat.id}>
+      <div key={cat.id}>
         <div
           data-cat-id={cat.id}
           draggable
@@ -249,31 +215,6 @@ export function NotebookList({
           }}
           onDragEnd={e => {
             (e.currentTarget as HTMLElement).style.opacity = '1'
-            setDragTargetId(null)
-          }}
-          onDragOver={e => {
-            // Category drops handled at row level for reliable targeting
-            const d = parseDragData(e.dataTransfer.getData('text/plain'))
-            if (!d || d.type !== 'category') return // page drops handled at page-row level
-            e.stopPropagation()
-            e.preventDefault()
-            if (d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
-              e.dataTransfer.dropEffect = 'move'
-              setDragTargetId(cat.id)
-            } else {
-              e.dataTransfer.dropEffect = 'none'
-              setDragTargetId(null)
-            }
-          }}
-          onDrop={e => {
-            const d = parseDragData(e.dataTransfer.getData('text/plain'))
-            if (!d || d.type !== 'category') return // let page drops bubble to tree
-            e.stopPropagation()
-            e.preventDefault()
-            setDragTargetId(null)
-            if (d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
-              onMoveCategory(d.id, cat.id)
-            }
           }}
         >
           {editingId === cat.id ? (
@@ -288,7 +229,7 @@ export function NotebookList({
           ) : (
             <div
               onClick={handleRowClick}
-              className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-all ${
+              className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
                 isSelected ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                 : isDragOver ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -314,15 +255,8 @@ export function NotebookList({
               )}
               <span className="flex-1 truncate text-[13px]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                {/* Move up/down */}
-                <button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'up') }}
-                  className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移">
-                  <ChevronUp size={13} />
-                </button>
-                <button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'down') }}
-                  className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移">
-                  <ChevronDown size={13} />
-                </button>
+                <button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={13} /></button>
+                <button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={13} /></button>
                 {isNotebook ? (
                   <button onClick={e => { e.stopPropagation(); onCreateChapterUnderNotebook(cat.id) }}
                     className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建章节">
@@ -370,7 +304,7 @@ export function NotebookList({
           </div>
         )}
         {isExpanded && canExpand && (
-          <div data-cat-id={cat.id}>
+          <div>
             {/* Pages directly under this category */}
             {categoryPages.map(p => (
               <div key={p.id}
@@ -379,32 +313,7 @@ export function NotebookList({
                   e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
                   requestAnimationFrame(() => { (e.currentTarget as HTMLElement).style.opacity = '0.4' })
                 }}
-                onDragEnd={e => {
-                  (e.currentTarget as HTMLElement).style.opacity = '1'
-                  setDragTargetId(null)
-                }}
-                onDragOver={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  e.dataTransfer.dropEffect = 'move'
-                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-                  setDragTargetId(el ? el.getAttribute('data-cat-id')! : null)
-                }}
-                onDrop={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setDragTargetId(null)
-                  const d = parseDragData(e.dataTransfer.getData('text/plain'))
-                  const draggedId = d?.id
-                  if (!draggedId) return
-                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-                  if (el) {
-                    const tid = el.getAttribute('data-cat-id')!
-                    const cat = categories.find(c => c.id === tid)
-                    if (cat?.categoryType === 'notebook') onDropOnNotebook(draggedId, tid)
-                    else onDropOnCategory(draggedId, tid)
-                  }
-                }}
+                onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
                 onClick={() => onOpenPage(p.id)}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -415,14 +324,8 @@ export function NotebookList({
                 <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
                 <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
                 <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                  <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }}
-                    className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移">
-                    <ChevronUp size={11} />
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }}
-                    className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移">
-                    <ChevronDown size={11} />
-                  </button>
+                  <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button>
+                  <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button>
                 </div>
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
@@ -443,25 +346,13 @@ export function NotebookList({
         <div className="flex items-center justify-between px-0.5 mb-0.5">
           <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">资源管理器</span>
           <div className="relative" ref={sortBtnRef}>
-            <button
-              onClick={() => setSortOpen(v => !v)}
-              className="flex items-center gap-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              title="排序方式"
-            >
-              <ArrowUpDown size={11} />
-              {sortModes.find(m => m.id === sortMode)?.label}
+            <button onClick={() => setSortOpen(v => !v)} className="flex items-center gap-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="排序方式">
+              <ArrowUpDown size={11} />{sortModes.find(m => m.id === sortMode)?.label}
             </button>
             {sortOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-md shadow-lg z-40 py-0.5 min-w-[100px]"
-                onMouseDown={e => e.stopPropagation()}>
+              <div className="absolute right-0 top-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-md shadow-lg z-40 py-0.5 min-w-[100px]" onMouseDown={e => e.stopPropagation()}>
                 {sortModes.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => { setSortMode(m.id); setSortOpen(false) }}
-                    className={`w-full text-left px-2 py-1 text-[11px] transition-colors ${
-                      sortMode === m.id ? 'text-[var(--accent)] bg-[var(--bg-hover)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                    }`}
-                  >{m.label}</button>
+                  <button key={m.id} onClick={() => { setSortMode(m.id); setSortOpen(false) }} className={`w-full text-left px-2 py-1 text-[11px] transition-colors ${sortMode === m.id ? 'text-[var(--accent)] bg-[var(--bg-hover)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}>{m.label}</button>
                 ))}
               </div>
             )}
@@ -510,6 +401,7 @@ export function NotebookList({
 
       {/* ===== Tree ===== */}
       <div
+        data-drop-container
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onDragOver={e => {
           const d = parseDragData(e.dataTransfer.getData('text/plain'))
@@ -520,7 +412,6 @@ export function NotebookList({
             if (el) {
               const tid = el.getAttribute('data-cat-id')!
               if (d.id !== tid && !isDescendant(tid, d.id) && canAcceptCategory(tid, d.id)) {
-                e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
                 setDragTargetId(tid)
               } else {
@@ -528,32 +419,22 @@ export function NotebookList({
                 setDragTargetId(null)
               }
             } else {
-              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__root')
             }
           } else if (d.type === 'page') {
-            // Page-row handlers already call preventDefault(); only fire
-            // for empty-space areas where the row handler didn't catch it
             const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
             if (el) {
-              // Mouse is over a category-row or wrapper — page-row handler
-              // already stopped propagation, so we shouldn't be here.
-              // If we are (e.g. dropped on expanded wrapper edge),
-              // allow the drop.
-              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId(el.getAttribute('data-cat-id')!)
             } else {
-              // Empty space (root area) — allow drop to loose
-              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__loose')
             }
           }
         }}
         onDragLeave={e => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node) || e.relatedTarget === null) {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
             setDragTargetId(null)
           }
         }}
@@ -593,7 +474,7 @@ export function NotebookList({
 
         {/* Root-level loose pages */}
         {loosePages.length > 0 && (
-          <div className={dragTargetId === '__loose' ? 'rounded mx-1' : ''}
+          <div className={dragTargetId === '__loose' ? 'bg-[var(--drop-bg)] rounded mx-1' : ''}
           >
             {loosePages.map(p => (
               <div key={p.id}
@@ -606,30 +487,6 @@ export function NotebookList({
                 }}
                 onDragEnd={e => {
                   (e.currentTarget as HTMLElement).style.opacity = '1'
-                  setDragTargetId(null)
-                }}
-                onDragOver={e => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-                  setDragTargetId(el ? el.getAttribute('data-cat-id')! : '__loose')
-                }}
-                onDrop={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setDragTargetId(null)
-                  const d = parseDragData(e.dataTransfer.getData('text/plain'))
-                  const draggedId = d?.id
-                  if (!draggedId) return
-                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-                  if (el) {
-                    const tid = el.getAttribute('data-cat-id')!
-                    const cat = categories.find(c => c.id === tid)
-                    if (cat?.categoryType === 'notebook') onDropOnNotebook(draggedId, tid)
-                    else onDropOnCategory(draggedId, tid)
-                  } else {
-                    onDropOnLooseArea(draggedId)
-                  }
                 }}
                 onClick={() => onOpenPage(p.id)}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
