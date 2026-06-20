@@ -155,14 +155,26 @@ export function NotebookList({
   }
 
   // ---- whether a category can accept dropped categories ----
-  // Folders accept any category. Notebooks accept folders/chapters but not other notebooks.
+  // – Folders accept any category (nesting).
+  // – Notebooks accept flat folders only (no sub-categories, only pages) — they become chapters.
+  // – Notebooks also accept chapters (folders already under a notebook) for reordering.
+  // – Notebooks reject other notebooks and nested folders.
   function canAcceptCategory(targetId: string, draggedId: string): boolean {
     const target = categories.find(c => c.id === targetId)
     const dragged = categories.find(c => c.id === draggedId)
     if (!target || !dragged) return false
+
+    // Folders accept any category
     if (target.categoryType === 'folder') return true
-    // Notebook target: accept folders/chapters, reject notebooks
-    if (target.categoryType === 'notebook') return dragged.categoryType === 'folder'
+
+    // Notebook target: accept flat folders and chapters, reject notebooks
+    if (target.categoryType === 'notebook') {
+      if (dragged.categoryType !== 'folder') return false
+      // Reject folders that have sub-categories (would nest too deep)
+      const hasSubCategories = categories.some(c => c.parentId === draggedId)
+      return !hasSubCategories
+    }
+
     return false
   }
 
@@ -215,7 +227,7 @@ export function NotebookList({
     }
 
     return (
-      <div key={cat.id}>
+      <div key={cat.id} data-cat-id={cat.id}>
         <div
           data-cat-id={cat.id}
           draggable
@@ -228,6 +240,30 @@ export function NotebookList({
           }}
           onDragEnd={e => {
             (e.currentTarget as HTMLElement).style.opacity = '1'
+          }}
+          onDragOver={e => {
+            // Category drops handled at row level for reliable targeting
+            const d = parseDragData(e.dataTransfer.getData('text/plain'))
+            if (!d || d.type !== 'category') return // let page drops bubble to tree
+            e.stopPropagation()
+            e.preventDefault()
+            if (d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
+              e.dataTransfer.dropEffect = 'move'
+              setDragTargetId(cat.id)
+            } else {
+              e.dataTransfer.dropEffect = 'none'
+              setDragTargetId(null)
+            }
+          }}
+          onDrop={e => {
+            const d = parseDragData(e.dataTransfer.getData('text/plain'))
+            if (!d || d.type !== 'category') return // let page drops bubble to tree
+            e.stopPropagation()
+            e.preventDefault()
+            setDragTargetId(null)
+            if (d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
+              onMoveCategory(d.id, cat.id)
+            }
           }}
         >
           {editingId === cat.id ? (
@@ -244,7 +280,7 @@ export function NotebookList({
               onClick={handleRowClick}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-all ${
                 isSelected ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
-                : isDragOver ? 'text-[var(--text-primary)]'
+                : isDragOver ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}
               style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px' }}

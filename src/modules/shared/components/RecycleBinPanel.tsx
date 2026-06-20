@@ -17,6 +17,7 @@ const MODULE_LABEL: Record<string, string> = {
 export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
   const [items, setItems] = useState<RecycleBinItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [emptying, setEmptying] = useState(false)
 
   const loadItems = async () => {
     setLoading(true)
@@ -48,11 +49,18 @@ export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
   }
 
   const handleEmptyAll = async () => {
+    setEmptying(true)
     try {
+      // Clear UI optimistically — DB is already cleared by the IPC handler
+      setItems([])
       await emptyRecycleBin()
-      await loadItems()
       onRestored()
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      console.error(e)
+      await loadItems()
+    } finally {
+      setEmptying(false)
+    }
   }
 
   return (
@@ -72,9 +80,10 @@ export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
             {items.length > 0 && (
               <button
                 onClick={handleEmptyAll}
-                className="px-2 py-1 text-[11px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
+                disabled={emptying}
+                className="px-2 py-1 text-[11px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                全部清空
+                {emptying ? '清空中...' : '全部清空'}
               </button>
             )}
             <button

@@ -139,11 +139,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleCreateChapterUnderNotebook = async (notebookId: string) => {
-    await createKnowledgeCategory({ name: '新章节', parentId: notebookId, categoryType: 'folder' })
-    refreshCategories()
-    // Auto-select notebook so user sees the new chapter in sidebar
+    const newChapter = await createKnowledgeCategory({ name: '新章节', parentId: notebookId, categoryType: 'folder' })
+    await refreshCategories()
+    // Auto-select notebook + new chapter so user sees it highlighted in ChapterPanel
     setSelectedCategoryId(notebookId)
-    setSelectedChapterId(null)
+    setSelectedChapterId(newChapter.id)
     setFocusChapterId(null)
     setShowChapterPanel(true)
   }

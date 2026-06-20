@@ -410,12 +410,17 @@ export function registerRecycleBinHandlers(): void {
 
   // ---- 清空回收站（移入系统回收站） ----
   ipcMain.handle('recycleBin:emptyAll', async () => {
+    // 1) Snapshot items before deleting — so we can write them to disk
     const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin ORDER BY deleted_at DESC')
-    if (rows.length > 0) {
-      const items = rows.map(r => ({ binId: r.id, module: r.module, title: r.title, data: JSON.parse(r.data) }))
-      await trashAll(items)
-    }
+    const items = rows.map(r => ({ binId: r.id, module: r.module, title: r.title, data: JSON.parse(r.data) }))
+
+    // 2) Clear DB immediately — the frontend sees instant feedback
     run('DELETE FROM recycle_bin')
+
+    // 3) Write files + move to OS recycle bin in background (don't block the response)
+    if (items.length > 0) {
+      trashAll(items).catch(e => console.error('trashAll failed:', e))
+    }
   })
 
   // ---- 清除过期项（独立调用） ----

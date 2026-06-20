@@ -41,30 +41,33 @@ export function ChapterPanel({
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [dragTargetId, setDragTargetId] = useState<string | null>(null)
 
+  const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
+
   useEffect(() => {
     getSetting('skipDeleteConfirm_chapter').then(v => { if (v === true) setSkipDeleteConfirm(true) })
   }, [])
 
-  // F2 — keyboard rename selected chapter
+  // F2 — keyboard rename selected / focused chapter
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditingInput(e)) return
-      if (e.key === 'F2' && selectedChapterId) {
+      if (e.key === 'F2') {
+        // Priority: focused chapter → selected chapter
+        const targetId = focusChapter?.id ?? selectedChapterId
+        if (!targetId) return
         e.preventDefault()
-        const ch = chapters.find(c => c.id === selectedChapterId)
+        const ch = chapters.find(c => c.id === targetId)
         if (ch) handleStartRename(ch.id, ch.name)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedChapterId, chapters])
+  }, [selectedChapterId, focusChapter, chapters])
 
   function handleCreateChapter() {
     if (!newName.trim()) { setShowNewChapter(false); setNewName(''); return }
     onCreateChapter(newName.trim()); setNewName(''); setShowNewChapter(false)
   }
-
-  const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
 
   function handleStartRename(id: string, name: string) { setEditingId(id); setEditName(name) }
   function handleRename(id: string) {
@@ -76,16 +79,36 @@ export function ChapterPanel({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--border-color)]">
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <button onClick={onCollapse}
             className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             title="折叠章节面板">
             <ChevronDown size={20} />
           </button>
-          <span className="text-[12px] font-medium text-[var(--text-secondary)] truncate">
-            {focusChapter ? `${notebookName} / ${focusChapter.name}` : notebookName}
-          </span>
+          {focusChapter && editingId === focusChapter.id ? (
+            <input
+              className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[12px] outline-none text-[var(--text-primary)] min-w-0"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onBlur={() => handleRename(focusChapter.id)}
+              onKeyDown={e => { if (e.key === 'Enter') handleRename(focusChapter.id); if (e.key === 'Escape') setEditingId(null) }}
+              placeholder="章节名称"
+              autoFocus
+            />
+          ) : (
+            <span className="text-[12px] font-medium text-[var(--text-secondary)] truncate">
+              {focusChapter ? `${notebookName} / ${focusChapter.name}` : notebookName}
+            </span>
+          )}
         </div>
+        {focusChapter && editingId !== focusChapter.id && (
+          <button
+            onClick={() => handleStartRename(focusChapter.id, focusChapter.name)}
+            className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+            title="重命名章节 (F2)">
+            <Pencil size={13} />
+          </button>
+        )}
       </div>
 
       {/* Chapters — hidden when focusing a single chapter */}

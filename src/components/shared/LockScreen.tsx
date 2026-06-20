@@ -2,6 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 import { Lock } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 
+function useClock(active: boolean) {
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    if (!active) return
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [active])
+  return now
+}
+
 interface Props {
   locked: boolean
   onUnlock: () => void
@@ -16,6 +27,7 @@ export function LockScreen({ locked, onUnlock }: Props) {
   const { s } = useSettings()
 
   const hasPassword = s.lockPassword.length > 0
+  const now = useClock(locked)
 
   useEffect(() => {
     if (locked) {
@@ -57,7 +69,6 @@ export function LockScreen({ locked, onUnlock }: Props) {
 
   if (!visible) return null
 
-  const now = new Date()
   const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   const dateStr = now.toLocaleDateString('zh-CN', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
