@@ -202,7 +202,7 @@ export function NotebookList({
     }
 
     return (
-      <div key={cat.id}>
+      <div key={cat.id} data-cat-id={cat.id}>
         <div
           data-cat-id={cat.id}
           draggable
@@ -412,6 +412,7 @@ export function NotebookList({
             if (el) {
               const tid = el.getAttribute('data-cat-id')!
               if (d.id !== tid && !isDescendant(tid, d.id) && canAcceptCategory(tid, d.id)) {
+                e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
                 setDragTargetId(tid)
               } else {
@@ -419,15 +420,18 @@ export function NotebookList({
                 setDragTargetId(null)
               }
             } else {
+              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__root')
             }
           } else if (d.type === 'page') {
             const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
             if (el) {
+              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId(el.getAttribute('data-cat-id')!)
             } else {
+              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__loose')
             }
