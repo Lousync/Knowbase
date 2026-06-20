@@ -385,6 +385,7 @@ export function NotebookList({
                 }}
                 onDragOver={e => {
                   e.preventDefault()
+                  e.stopPropagation()
                   e.dataTransfer.dropEffect = 'move'
                   const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
                   setDragTargetId(el ? el.getAttribute('data-cat-id')! : null)
@@ -511,7 +512,6 @@ export function NotebookList({
       <div
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onDragOver={e => {
-          e.preventDefault()
           const d = parseDragData(e.dataTransfer.getData('text/plain'))
           if (!d) return
 
@@ -520,6 +520,7 @@ export function NotebookList({
             if (el) {
               const tid = el.getAttribute('data-cat-id')!
               if (d.id !== tid && !isDescendant(tid, d.id) && canAcceptCategory(tid, d.id)) {
+                e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
                 setDragTargetId(tid)
               } else {
@@ -527,15 +528,26 @@ export function NotebookList({
                 setDragTargetId(null)
               }
             } else {
+              e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__root')
             }
           } else if (d.type === 'page') {
-            e.dataTransfer.dropEffect = 'move'
+            // Page-row handlers already call preventDefault(); only fire
+            // for empty-space areas where the row handler didn't catch it
             const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
             if (el) {
+              // Mouse is over a category-row or wrapper — page-row handler
+              // already stopped propagation, so we shouldn't be here.
+              // If we are (e.g. dropped on expanded wrapper edge),
+              // allow the drop.
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
               setDragTargetId(el.getAttribute('data-cat-id')!)
             } else {
+              // Empty space (root area) — allow drop to loose
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
               setDragTargetId('__loose')
             }
           }
