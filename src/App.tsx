@@ -98,26 +98,18 @@ export default function App() {
     document.documentElement.style.fontSize = `${s.zoom * 16}px`
   }, [s.zoom])
 
-  // Drag-and-drop: disable text selection during drag.
-  // Chromium draws a blue dashed compositor outline wherever dragover
-  // has preventDefault() called. We confine PD calls to small per-row
-  // handlers so the outline is contained, then force-clear on dragend.
+  // Blue-outline drag workaround
   useEffect(() => {
+    const onDragOver = (e: DragEvent) => { e.preventDefault() }
     const onDragStart = () => { document.body.classList.add('dragging') }
-    const onDragEnd = () => {
-      document.body.classList.remove('dragging')
-      // Clear lingering focus ring from the drag operation
-      const ae = document.activeElement as HTMLElement | null
-      if (ae) ae.blur()
-      // Force compositor layer clean-up for residual blue dashes
-      document.body.style.transform = 'translateZ(0)'
-      requestAnimationFrame(() => { document.body.style.transform = '' })
-    }
+    const onDragEnd = () => { document.body.classList.remove('dragging') }
+    document.addEventListener('dragover', onDragOver, true)
     document.addEventListener('dragstart', onDragStart)
     document.addEventListener('dragend', onDragEnd)
     document.addEventListener('drop', onDragEnd)
     return () => {
       document.body.classList.remove('dragging')
+      document.removeEventListener('dragover', onDragOver, true)
       document.removeEventListener('dragstart', onDragStart)
       document.removeEventListener('dragend', onDragEnd)
       document.removeEventListener('drop', onDragEnd)

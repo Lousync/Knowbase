@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, ArrowUpDown } from 'lucide-react'
+import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, FolderPlus, FilePlus, Pencil, Trash2, Star, Download } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
@@ -28,8 +28,6 @@ interface Props {
   onDropOnCategory: (pageId: string, categoryId: string) => void
   onDropOnLooseArea: (pageId: string) => void
   onMoveCategory: (categoryId: string, newParentId: string | null) => void
-  onSortCategory: (id: string, direction: 'up' | 'down') => void
-  onSortPage: (id: string, direction: 'up' | 'down') => void
 }
 
 export function NotebookList({
@@ -37,25 +35,9 @@ export function NotebookList({
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onCreateChapterUnderNotebook, onImport,
-  onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory, onSortCategory, onSortPage,
+  onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
 }: Props) {
-  const sortModes: Array<{ id: 'custom' | 'name' | 'created' | 'updated' | 'type'; label: string }> = [
-    { id: 'custom', label: '自定义' }, { id: 'type', label: '类型' }, { id: 'name', label: '名称' },
-    { id: 'created', label: '创建时间' }, { id: 'updated', label: '更新时间' },
-  ]
-  const [sortMode, setSortMode] = useState<'custom' | 'name' | 'created' | 'updated' | 'type'>('custom')
-  const [sortOpen, setSortOpen] = useState(false)
-  const TYPE_ORDER: Record<string, number> = { notebook: 0, folder: 1 }
-  function sortCats(list: KnowledgeCategory[]): KnowledgeCategory[] {
-    return [...list].sort((a, b) => {
-      if (sortMode === 'type') { const ta = TYPE_ORDER[a.categoryType] ?? 2; const tb = TYPE_ORDER[b.categoryType] ?? 2; if (ta !== tb) return ta - tb; return a.sortOrder - b.sortOrder }
-      if (sortMode === 'name') return a.name.localeCompare(b.name)
-      if (sortMode === 'created') return b.createdAt.localeCompare(a.createdAt)
-      if (sortMode === 'updated') return b.updatedAt.localeCompare(a.updatedAt)
-      return a.sortOrder - b.sortOrder
-    })
-  }
-  const rootCats = sortCats(categories.filter(c => !c.parentId))
+  const rootCats = categories.filter(c => !c.parentId)
   const [newName, setNewName] = useState('')
   const [createMode, setCreateMode] = useState<'folder' | 'notebook' | null>(null)
   const [createParentId, setCreateParentId] = useState<string | null>(null)
@@ -81,15 +63,6 @@ export function NotebookList({
       if (v === true) setSkipDeleteConfirm(true)
     })
   }, [])
-
-  // Close sort dropdown on outside click
-  const sortBtnRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!sortOpen) return
-    const onMouseDown = (e: MouseEvent) => { if (sortBtnRef.current && !sortBtnRef.current.contains(e.target as Node)) setSortOpen(false) }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [sortOpen])
 
   // F2 — keyboard rename selected notebook / folder
   useEffect(() => {
@@ -140,16 +113,14 @@ export function NotebookList({
   }
 
   // ---- whether a category can accept dropped categories ----
-  // Folders accept any category. Notebooks accept flat folders only (no sub-categories).
+  // Folders accept any category. Notebooks accept folders/chapters but not other notebooks.
   function canAcceptCategory(targetId: string, draggedId: string): boolean {
     const target = categories.find(c => c.id === targetId)
     const dragged = categories.find(c => c.id === draggedId)
     if (!target || !dragged) return false
     if (target.categoryType === 'folder') return true
-    if (target.categoryType === 'notebook') {
-      if (dragged.categoryType !== 'folder') return false
-      return !categories.some(c => c.parentId === draggedId)
-    }
+    // Notebook target: accept folders/chapters, reject notebooks
+    if (target.categoryType === 'notebook') return dragged.categoryType === 'folder'
     return false
   }
 
@@ -170,7 +141,7 @@ export function NotebookList({
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
     const isSelected = selectedCategoryId === cat.id || focusChapterId === cat.id
-    const children = sortCats(categories.filter(c => c.parentId === cat.id))
+    const children = categories.filter(c => c.parentId === cat.id)
     const hasChildren = children.length > 0
     const categoryPages = allPages.filter(p => p.categoryId === cat.id)
     const hasPages = categoryPages.length > 0
@@ -255,8 +226,6 @@ export function NotebookList({
               )}
               <span className="flex-1 truncate text-[13px]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                <button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={13} /></button>
-                <button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={13} /></button>
                 {isNotebook ? (
                   <button onClick={e => { e.stopPropagation(); onCreateChapterUnderNotebook(cat.id) }}
                     className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建章节">
@@ -323,10 +292,6 @@ export function NotebookList({
                 <span className="w-3.5 shrink-0" />
                 <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
                 <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
-                <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                  <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button>
-                  <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button>
-                </div>
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
               </div>
@@ -345,18 +310,6 @@ export function NotebookList({
       <div className="px-2 py-1.5 border-b border-[var(--border-color)] space-y-0.5">
         <div className="flex items-center justify-between px-0.5 mb-0.5">
           <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">资源管理器</span>
-          <div className="relative" ref={sortBtnRef}>
-            <button onClick={() => setSortOpen(v => !v)} className="flex items-center gap-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="排序方式">
-              <ArrowUpDown size={11} />{sortModes.find(m => m.id === sortMode)?.label}
-            </button>
-            {sortOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-md shadow-lg z-40 py-0.5 min-w-[100px]" onMouseDown={e => e.stopPropagation()}>
-                {sortModes.map(m => (
-                  <button key={m.id} onClick={() => { setSortMode(m.id); setSortOpen(false) }} className={`w-full text-left px-2 py-1 text-[11px] transition-colors ${sortMode === m.id ? 'text-[var(--accent)] bg-[var(--bg-hover)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}>{m.label}</button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Three create buttons */}

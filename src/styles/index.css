@@ -107,17 +107,6 @@ body.dragging {
   user-select: none;
   -webkit-user-select: none;
 }
-/* 永久消除拖拽元素上的蓝色虚线框（Chromium compositor 反馈） */
-[draggable="true"] {
-  outline: none !important;
-}
-[draggable="true"]:focus-visible {
-  outline: none !important;
-}
-/* 拖拽期间全局无 outline */
-body.dragging * {
-  outline: none !important;
-}
 
 /* ===== 输入框基础样式 ===== */
 input, textarea, select {
