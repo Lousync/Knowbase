@@ -1,9 +1,10 @@
-import { FileText, Hash, ArrowLeft } from 'lucide-react'
+import { FileText, ArrowLeft } from 'lucide-react'
 
 export interface HeadingNode {
   level: number       // 1-6
   text: string
   id: string          // anchor id derived from text
+  line: number        // 1-indexed line number in source md
   children: HeadingNode[]
 }
 
@@ -33,7 +34,8 @@ export function parseHeadings(md: string): HeadingNode[] {
         .replace(/\s+/g, '-')
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '')
-      const node: HeadingNode = { level, text, id, children: [] }
+      const line = i + 1  // 1-indexed
+      const node: HeadingNode = { level, text, id, line, children: [] }
 
       // Pop stack to find the correct parent
       while (stack.length > 0 && stack[stack.length - 1].level >= level) {
@@ -51,6 +53,11 @@ export function parseHeadings(md: string): HeadingNode[] {
   return root
 }
 
+/** Navigate to a heading — dispatches custom event consumed by PageEditor (editor + preview) */
+export function navigateToHeading(line: number, id: string) {
+  window.dispatchEvent(new CustomEvent('outline:go-to-heading', { detail: { line, id } }))
+}
+
 // ---- render ----
 interface OutlinePanelProps {
   pageTitle: string
@@ -58,22 +65,29 @@ interface OutlinePanelProps {
   onBackToFile: () => void
 }
 
+const LEVEL_STYLE: Record<number, string> = {
+  1: 'text-[14px] font-bold text-[var(--text-primary)]',
+  2: 'text-[13px] font-semibold text-[var(--text-primary)]',
+  3: 'text-[12px] font-medium text-[var(--text-secondary)]',
+  4: 'text-[12px] font-normal text-[var(--text-muted)]',
+  5: 'text-[11px] font-normal text-[var(--text-disabled)]',
+  6: 'text-[11px] font-normal text-[var(--text-disabled)] italic',
+}
+
 function HeadingRow({ node, depth = 0 }: { node: HeadingNode; depth: number }) {
+  const levelClass = LEVEL_STYLE[node.level] ?? LEVEL_STYLE[3]
+
   return (
     <>
       <div
-        className="flex items-center gap-1.5 py-1 cursor-pointer hover:bg-[var(--bg-hover)] rounded text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-        style={{ paddingLeft: `${depth * 14 + 8}px`, paddingRight: '8px' }}
-        onClick={() => {
-          const el = document.getElementById(node.id)
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }}
+        className={`flex items-center gap-1.5 py-0.5 cursor-pointer hover:bg-[var(--bg-hover)] rounded transition-colors ${levelClass}`}
+        style={{ paddingLeft: `${depth * 12 + 12}px`, paddingRight: '10px' }}
+        onClick={() => navigateToHeading(node.line, node.id)}
       >
-        <Hash size={11 + ((6 - node.level) * 1.5)} className="shrink-0 text-[var(--text-muted)]" />
         <span className="truncate">{node.text}</span>
       </div>
       {node.children.map(ch => (
-        <HeadingRow key={ch.id + '-' + (depth + 1)} node={ch} depth={depth + 1} />
+        <HeadingRow key={ch.id + ':' + (depth + 1)} node={ch} depth={depth + 1} />
       ))}
     </>
   )
@@ -98,7 +112,7 @@ export function OutlinePanel({ pageTitle, headings, onBackToFile }: OutlinePanel
       </div>
 
       {/* Heading tree */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
+      <div className="flex-1 overflow-y-auto px-1 py-1">
         {headings.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
             <FileText size={28} className="mb-2 opacity-25" />

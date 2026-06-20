@@ -77,6 +77,8 @@ export function NotebookList({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [dragTargetId, setDragTargetId] = useState<string | null>(null)  // which node is currently hovered during drag
+  const dragTargetIdRef = useRef(dragTargetId)
+  useEffect(() => { dragTargetIdRef.current = dragTargetId }, [dragTargetId])
 
   // Barrier ref: set on mousedown of create-mode buttons so that the ensuing
   // blur of the current input (which fires before click) aborts without creating.
@@ -105,6 +107,13 @@ export function NotebookList({
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [sortOpen])
+
+  // Clear drag highlight on any drag end (safety net for cancelled / out-of-bounds drops)
+  useEffect(() => {
+    const onDragEnd = () => { if (dragTargetIdRef.current !== null) setDragTargetId(null) }
+    document.addEventListener('dragend', onDragEnd)
+    return () => document.removeEventListener('dragend', onDragEnd)
+  }, [])
 
   // F2 — keyboard rename selected notebook / folder
   useEffect(() => {
@@ -240,11 +249,12 @@ export function NotebookList({
           }}
           onDragEnd={e => {
             (e.currentTarget as HTMLElement).style.opacity = '1'
+            setDragTargetId(null)
           }}
           onDragOver={e => {
             // Category drops handled at row level for reliable targeting
             const d = parseDragData(e.dataTransfer.getData('text/plain'))
-            if (!d || d.type !== 'category') return // let page drops bubble to tree
+            if (!d || d.type !== 'category') return // page drops handled at page-row level
             e.stopPropagation()
             e.preventDefault()
             if (d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
@@ -360,7 +370,7 @@ export function NotebookList({
           </div>
         )}
         {isExpanded && canExpand && (
-          <div>
+          <div data-cat-id={cat.id}>
             {/* Pages directly under this category */}
             {categoryPages.map(p => (
               <div key={p.id}
@@ -369,7 +379,31 @@ export function NotebookList({
                   e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
                   requestAnimationFrame(() => { (e.currentTarget as HTMLElement).style.opacity = '0.4' })
                 }}
-                onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                onDragEnd={e => {
+                  (e.currentTarget as HTMLElement).style.opacity = '1'
+                  setDragTargetId(null)
+                }}
+                onDragOver={e => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
+                  setDragTargetId(el ? el.getAttribute('data-cat-id')! : null)
+                }}
+                onDrop={e => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setDragTargetId(null)
+                  const d = parseDragData(e.dataTransfer.getData('text/plain'))
+                  const draggedId = d?.id
+                  if (!draggedId) return
+                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
+                  if (el) {
+                    const tid = el.getAttribute('data-cat-id')!
+                    const cat = categories.find(c => c.id === tid)
+                    if (cat?.categoryType === 'notebook') onDropOnNotebook(draggedId, tid)
+                    else onDropOnCategory(draggedId, tid)
+                  }
+                }}
                 onClick={() => onOpenPage(p.id)}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -507,7 +541,7 @@ export function NotebookList({
           }
         }}
         onDragLeave={e => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          if (!e.currentTarget.contains(e.relatedTarget as Node) || e.relatedTarget === null) {
             setDragTargetId(null)
           }
         }}
@@ -560,6 +594,30 @@ export function NotebookList({
                 }}
                 onDragEnd={e => {
                   (e.currentTarget as HTMLElement).style.opacity = '1'
+                  setDragTargetId(null)
+                }}
+                onDragOver={e => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
+                  setDragTargetId(el ? el.getAttribute('data-cat-id')! : '__loose')
+                }}
+                onDrop={e => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setDragTargetId(null)
+                  const d = parseDragData(e.dataTransfer.getData('text/plain'))
+                  const draggedId = d?.id
+                  if (!draggedId) return
+                  const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
+                  if (el) {
+                    const tid = el.getAttribute('data-cat-id')!
+                    const cat = categories.find(c => c.id === tid)
+                    if (cat?.categoryType === 'notebook') onDropOnNotebook(draggedId, tid)
+                    else onDropOnCategory(draggedId, tid)
+                  } else {
+                    onDropOnLooseArea(draggedId)
+                  }
                 }}
                 onClick={() => onOpenPage(p.id)}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${

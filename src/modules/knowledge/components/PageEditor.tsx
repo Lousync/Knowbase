@@ -133,6 +133,28 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     return () => window.removeEventListener('keydown', onKey)
   }, [doSave, onBack])
 
+  // Outline panel navigation — scroll editor or preview DOM to target heading
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { line, id } = (e as CustomEvent).detail as { line: number; id: string }
+      if (preview) {
+        // Reading mode: scroll DOM element
+        const el = document.getElementById(id)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        // Editing mode: use Monaco editor API
+        const ed = editorRef.current
+        if (ed) {
+          ed.revealLineInCenter(line)
+          ed.setPosition({ lineNumber: line, column: 1 })
+          ed.focus()
+        }
+      }
+    }
+    window.addEventListener('outline:go-to-heading', handler)
+    return () => window.removeEventListener('outline:go-to-heading', handler)
+  }, [preview])
+
   // Monaco mount handler — register wiki-link completion provider
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
