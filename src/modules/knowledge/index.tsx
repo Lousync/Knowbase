@@ -13,6 +13,7 @@ import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
+import { OutlinePanel, parseHeadings } from './components/OutlinePanel'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { isEditingInput } from '../../lib/shortcuts'
@@ -33,6 +34,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showChapterPanel, setShowChapterPanel] = useState(true)
+  const [showOutline, setShowOutline] = useState(false)
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
@@ -445,7 +447,33 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     return () => window.removeEventListener('keydown', onKey)
   }, [handleCreateLoosePage, handleCloseTab, handleDeleteChapter, handleDeleteNotebook, handlePageDeleted])
 
-  const panelsVisible = sidebarOpen
+  // --- outline ---
+  const activePageForOutline = useMemo(() => {
+    if (!activePageId) return null
+    return [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === activePageId) ?? null
+  }, [activePageId, allLoosePages, chapterPages, starredPages])
+  const outlineHeadings = useMemo(() => {
+    if (!activePageForOutline?.contentMd) return []
+    return parseHeadings(activePageForOutline.contentMd)
+  }, [activePageForOutline])
+
+  const handleToggleOutline = useCallback(() => {
+    setShowOutline(v => {
+      const next = !v
+      if (next) {
+        // Hide both sidebars when entering outline mode
+        setShowCategoryPanel(false)
+        setShowChapterPanel(false)
+      } else {
+        // Restore sidebars when exiting
+        setShowCategoryPanel(true)
+        if (selectedCategory) setShowChapterPanel(true)
+      }
+      return next
+    })
+  }, [selectedCategory])
+
+  const panelsVisible = sidebarOpen && !showOutline
 
   return (
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="h-full">
@@ -500,10 +528,20 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
               onToggleStar={handleToggleStar}
               onSortChapter={handleSortCategory}
+              onToggleOutline={handleToggleOutline}
               onSortPage={handleSortPage}
             />
           )}
         </ResizablePanel>
+
+        {/* Outline panel — replaces sidebars when toggled */}
+        {showOutline && activePageForOutline && (
+          <OutlinePanel
+            pageTitle={activePageForOutline.title}
+            headings={outlineHeadings}
+            onBackToFile={handleToggleOutline}
+          />
+        )}
 
         {/* 右侧链接提示（选中章节且无L2面板时显示） */}
         {/* Editor */}

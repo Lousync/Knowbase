@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
@@ -25,6 +25,7 @@ interface Props {
   onToggleStar: (id: string) => void
   onSortChapter: (id: string, direction: 'up' | 'down') => void
   onSortPage: (id: string, direction: 'up' | 'down') => void
+  onToggleOutline: () => void
 }
 
 export function ChapterPanel({
@@ -32,6 +33,7 @@ export function ChapterPanel({
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage,
+  onToggleOutline,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
@@ -101,14 +103,23 @@ export function ChapterPanel({
             </span>
           )}
         </div>
-        {focusChapter && editingId !== focusChapter.id && (
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
-            onClick={() => handleStartRename(focusChapter.id, focusChapter.name)}
-            className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-            title="重命名章节 (F2)">
-            <Pencil size={13} />
+            onClick={onToggleOutline}
+            className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            title="大纲视图"
+          >
+            <ListTree size={14} />
           </button>
-        )}
+          {focusChapter && editingId !== focusChapter.id && (
+            <button
+              onClick={() => handleStartRename(focusChapter.id, focusChapter.name)}
+              className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              title="重命名章节 (F2)">
+              <Pencil size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Chapters — hidden when focusing a single chapter */}
