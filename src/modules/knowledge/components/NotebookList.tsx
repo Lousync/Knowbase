@@ -72,6 +72,7 @@ export function NotebookList({
   const [contextMenu, setContextMenu] = useState<{ type: 'category' | 'page'; id: string; x: number; y: number } | null>(null)
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [movePickerData, setMovePickerData] = useState<{ type: 'category' | 'page'; id: string } | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)  // visual feedback during drag
 
   // Barrier ref: set on mousedown of create-mode buttons so that the ensuing
   // blur of the current input (which fires before click) aborts without creating.
@@ -244,14 +245,32 @@ export function NotebookList({
           }}
           onDragEnd={e => {
             ;(e.currentTarget as HTMLElement).style.opacity = '1'
+            setDragOverId(null)
           }}
           onDragOver={e => {
             e.preventDefault()
-            e.dataTransfer.dropEffect = 'move'
+            const d = parseDrop(e)
+            if (!d) { setDragOverId(null); return }
+            const valid = (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id))
+                       || d.type === 'page'
+            if (valid) {
+              e.dataTransfer.dropEffect = 'move'
+              setDragOverId(cat.id)
+            } else {
+              e.dataTransfer.dropEffect = 'none'
+              setDragOverId(null)
+            }
+          }}
+          onDragLeave={e => {
+            if (dragOverId === cat.id && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+              setDragOverId(null)
+            }
           }}
           onDrop={e => {
             e.preventDefault()
+            e.stopPropagation()
             ;(e.currentTarget as HTMLElement).style.opacity = '1'
+            setDragOverId(null)
             const d = parseDrop(e)
             if (!d) return
             if (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
@@ -281,6 +300,7 @@ export function NotebookList({
               onClick={handleRowClick}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
                 isSelected ? 'bg-[var(--bg-selected)] text-white'
+                : dragOverId === cat.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}
               style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px' }}
@@ -449,9 +469,17 @@ export function NotebookList({
         {/* Root-level loose pages */}
         {loosePages.length > 0 && (
           <div
-            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+            className={`mx-1 rounded transition-colors ${dragOverId === '__loose' ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)]' : ''}`}
+            onDragOver={e => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              const d = parseDrop(e)
+              if (d?.type === 'page') setDragOverId('__loose')
+            }}
+            onDragLeave={() => setDragOverId(null)}
             onDrop={e => {
               e.preventDefault()
+              setDragOverId(null)
               const d = parseDrop(e)
               if (d?.type === 'page') onDropOnLooseArea(d.id)
             }}

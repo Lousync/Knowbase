@@ -52,6 +52,7 @@ export function ChapterPanel({
   const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(null)
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [movePickerPageId, setMovePickerPageId] = useState<string | null>(null)
+  const [dragOverChId, setDragOverChId] = useState<string | null>(null)
 
   const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
 
@@ -160,9 +161,19 @@ export function ChapterPanel({
             ) : (
               <div
                 onClick={() => onSelectChapter(ch.id)}
-                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                onDragOver={e => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setDragOverChId(ch.id)
+                }}
+                onDragLeave={e => {
+                  if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+                    setDragOverChId(null)
+                  }
+                }}
                 onDrop={e => {
                   e.preventDefault()
+                  setDragOverChId(null)
                   const raw = e.dataTransfer.getData('text/plain')
                   if (!raw) return
                   let pageId = raw
@@ -171,6 +182,7 @@ export function ChapterPanel({
                 }}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
                   selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
+                  : dragOverChId === ch.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                   : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >

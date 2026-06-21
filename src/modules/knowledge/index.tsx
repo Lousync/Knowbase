@@ -302,13 +302,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- drag & drop move ---
   const handleDropOnNotebook = async (pageId: string, notebookId: string) => {
-    // Find the first chapter in the notebook, create a default one if none
     const notebookChapters = categories.filter(c => c.parentId === notebookId)
     let targetChapterId: string | null = null
     if (notebookChapters.length > 0) {
       targetChapterId = notebookChapters[0].id
     } else {
-      // Auto-create a default chapter
       const ch = await createKnowledgeCategory({ name: '默认章节', parentId: notebookId, categoryType: 'folder' })
       await refreshCategories()
       targetChapterId = (await getKnowledgeCategories()).find(c => c.name === '默认章节' && c.parentId === notebookId)?.id || null
@@ -325,7 +323,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropOnCategory = async (pageId: string, categoryId: string) => {
-    // Folder: put page directly under this category
     await updateKnowledgePage(pageId, { categoryId })
     refreshAllPages(); refreshChapterPages()
   }
