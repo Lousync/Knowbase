@@ -228,7 +228,7 @@ export function NotebookList({
     }
 
     return (
-      <div key={cat.id}>
+      <div key={cat.id} data-cat-id={cat.id}>
         <div
           data-cat-id={cat.id}
           draggable
