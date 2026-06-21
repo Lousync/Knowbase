@@ -28,32 +28,25 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
-  const defaultTabSet = useRef(false)
 
-  // Set default tab to first visible module from persisted order
+  // Set startup tab from settings (fires once with defaults, then again with persisted values)
   useEffect(() => {
-    if (defaultTabSet.current) return
     try {
-      const order: string[] = JSON.parse(s.activityBarOrder || '[]')
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
       const all = ['blog','schedule','knowledge','toolbox','export','recycle','help'] as const
-      for (const id of order) {
-        if (all.includes(id as any) && !hidden.includes(id)) {
-          defaultTabSet.current = true
-          setActiveTab(id as TabName)
-          return
-        }
+      if (all.includes(s.startupTab as any) && !hidden.includes(s.startupTab)) {
+        setActiveTab(s.startupTab as TabName)
+        return
       }
-      // Fallback: first non-hidden default
+      const order: string[] = JSON.parse(s.activityBarOrder || '[]')
+      for (const id of order) {
+        if (all.includes(id as any) && !hidden.includes(id)) { setActiveTab(id as TabName); return }
+      }
       for (const id of all) {
-        if (!hidden.includes(id)) {
-          defaultTabSet.current = true
-          setActiveTab(id as TabName)
-          return
-        }
+        if (!hidden.includes(id)) { setActiveTab(id as TabName); return }
       }
     } catch {}
-  }, [s.activityBarOrder, s.activityBarHidden])
+  }, [s.startupTab, s.activityBarOrder, s.activityBarHidden])
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   useEffect(() => { applyThemeClass(s.theme) }, [s.theme])

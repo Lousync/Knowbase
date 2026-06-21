@@ -126,6 +126,7 @@ export const SETTINGS = {
   // ---- 活动栏 ----
   activityBarOrder:  { default: '["blog","schedule","knowledge","toolbox","export","recycle"]', desc: '活动栏图标顺序 (JSON)' },
   activityBarHidden: { default: '[]', desc: '活动栏隐藏的模块 (JSON)' },
+  startupTab:        { default: 'blog', desc: '启动时默认显示的模块' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

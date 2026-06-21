@@ -35,10 +35,41 @@ function remainingLabel(time: string): string {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
-  if (diff < 0) return `已过期${Math.abs(diff)}天`
-  if (diff === 0) return '今天截止'
-  if (diff === 1) return '明天截止'
-  return `剩余${diff}天`
+  if (diff < -1) return `已过期 ${Math.abs(diff)} 天`
+  if (diff === -1) return '昨天截止'
+  if (diff === 0) return '今天截止！'
+  if (diff === 1) return '明天截止！'
+  if (diff === 2) return '后天截止！'
+  if (diff <= 7) return `${diff} 天后截止`
+  if (diff <= 30) return `还有 ${diff} 天`
+  return `⏰ ${time}`
+}
+
+function formatDeadlineTime(time: string): string {
+  if (!time) return ''
+  const m = time.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
+  if (!m) return time
+  const mo = m[2], d = m[3], hh = m[4], mm = m[5]
+  if (hh !== undefined && mm !== undefined) {
+    return `${Number(mo)}月${Number(d)}日 ${hh}:${mm}`
+  }
+  return `${Number(mo)}月${Number(d)}日`
+}
+
+/** Quick urgency class for deadline labels */
+function urgencyClass(time: string): string {
+  if (!time) return ''
+  const match = time.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return ''
+  const target = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  if (diff < 0) return 'text-[#f44747]'
+  if (diff === 0) return 'text-[#f44747] font-semibold'
+  if (diff === 1) return 'text-[#d16969] font-semibold'
+  if (diff <= 3) return 'text-[#d16969]'
+  return ''
 }
 
 export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, onToggleDone, onDelete, onRestore, onToggleSubtask, onDeleteSubtask }: Props) {
@@ -104,20 +135,20 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
           )}
         </div>
 
-        {/* 截止时间 / 结束标准 */}
+        {/* 截止时间 */}
         <div className="shrink-0 flex flex-col items-end gap-0.5 self-stretch justify-between">
           {deadline && todo.time ? (
-            <span className={`${s.meta} ${showRemaining ? 'text-[#d16969] font-medium' : 'text-[#569cd6]'}`}>
-              {showRemaining ? remainingLabel(todo.time) : `⏰ ${todo.time}`}
-            </span>
+            <>
+              <span className={`${s.meta} ${urgencyClass(todo.time)}`}>
+                {remainingLabel(todo.time)}
+              </span>
+              <span className={`${s.meta} text-[var(--text-muted)]`}>{formatDeadlineTime(todo.time)}</span>
+            </>
           ) : !deadline && todo.endCriteria ? (
             <span className={`${s.meta} text-[var(--text-muted)] max-w-[100px] truncate`} title={todo.endCriteria}>
               🎯 {todo.endCriteria}
             </span>
           ) : <span />}
-          {showRemaining && (
-            <span className={`${s.meta} text-[var(--text-muted)]`}>{todo.date}</span>
-          )}
         </div>
 
         {/* 删除 */}
