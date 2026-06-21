@@ -160,6 +160,15 @@ export function ChapterPanel({
             ) : (
               <div
                 onClick={() => onSelectChapter(ch.id)}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                onDrop={e => {
+                  e.preventDefault()
+                  const raw = e.dataTransfer.getData('text/plain')
+                  if (!raw) return
+                  let pageId = raw
+                  try { const p = JSON.parse(raw); if (p.type === 'page') pageId = p.id } catch {}
+                  if (pageId) onDropOnChapter(pageId, ch.id)
+                }}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
                   selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                   : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -221,6 +230,13 @@ export function ChapterPanel({
         ) : (
           pages.map(p => (
                 <div key={p.id}
+                  draggable
+                  onDragStart={e => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                    ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
+                  }}
+                  onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1' }}
                   onClick={() => onOpenPage(p.id)}
                   onContextMenu={e => {
                     e.preventDefault()

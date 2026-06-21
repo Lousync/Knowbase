@@ -191,6 +191,14 @@ export function NotebookList({
     return false
   }
 
+  // ---- parse drop data (same format as ActivityBar) ----
+  function parseDrop(e: React.DragEvent): { type: 'category' | 'page'; id: string } | null {
+    const raw = e.dataTransfer.getData('text/plain')
+    if (!raw) return null
+    try { const v = JSON.parse(raw); if ((v.type === 'category' || v.type === 'page') && typeof v.id === 'string') return v } catch {}
+    return null
+  }
+
   // ---- render a tree node (recursive) ----
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
@@ -228,6 +236,32 @@ export function NotebookList({
       <div key={cat.id} data-cat-id={cat.id}>
         <div
           data-cat-id={cat.id}
+          draggable
+          onDragStart={e => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'category', id: cat.id }))
+            ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
+          }}
+          onDragEnd={e => {
+            ;(e.currentTarget as HTMLElement).style.opacity = '1'
+          }}
+          onDragOver={e => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+          }}
+          onDrop={e => {
+            e.preventDefault()
+            ;(e.currentTarget as HTMLElement).style.opacity = '1'
+            const d = parseDrop(e)
+            if (!d) return
+            if (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
+              onMoveCategory(d.id, cat.id)
+            } else if (d.type === 'page') {
+              const c = categories.find(x => x.id === cat.id)
+              if (c?.categoryType === 'notebook') onDropOnNotebook(d.id, cat.id)
+              else onDropOnCategory(d.id, cat.id)
+            }
+          }}
           onContextMenu={e => {
             e.preventDefault()
             setContextMenu({ type: 'category', id: cat.id, x: e.clientX, y: e.clientY })
@@ -308,6 +342,15 @@ export function NotebookList({
             {categoryPages.map(p => (
               <div key={p.id}
                 data-page-id={p.id}
+                draggable
+                onDragStart={e => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                  ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
+                }}
+                onDragEnd={e => {
+                  ;(e.currentTarget as HTMLElement).style.opacity = '1'
+                }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
                   e.preventDefault()
@@ -387,15 +430,42 @@ export function NotebookList({
       </div>
 
       {/* ===== Tree ===== */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+        onDrop={e => {
+          // Dropped on empty space → move category to root / page to loose
+          const d = parseDrop(e)
+          if (!d) return
+          const onCat = (e.target as HTMLElement).closest('[data-cat-id]')
+          const onPage = (e.target as HTMLElement).closest('[data-page-id]')
+          if (onCat || onPage) return  // handled by row-level onDrop
+          if (d.type === 'category') onMoveCategory(d.id, null)
+          else if (d.type === 'page') onDropOnLooseArea(d.id)
+        }}
+      >
         {rootCats.map(cat => renderCategory(cat, 0))}
 
         {/* Root-level loose pages */}
         {loosePages.length > 0 && (
-          <div>
+          <div
+            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+            onDrop={e => {
+              e.preventDefault()
+              const d = parseDrop(e)
+              if (d?.type === 'page') onDropOnLooseArea(d.id)
+            }}
+          >
             {loosePages.map(p => (
               <div key={p.id}
                 data-page-id={p.id}
+                draggable
+                onDragStart={e => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                  ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
+                }}
+                onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1' }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
                   e.preventDefault()
