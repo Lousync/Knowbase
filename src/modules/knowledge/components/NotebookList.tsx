@@ -30,6 +30,7 @@ interface Props {
   onMoveCategory: (categoryId: string, newParentId: string | null) => void
   onSortCategory: (id: string, direction: 'up' | 'down') => void
   onSortPage: (id: string, direction: 'up' | 'down') => void
+  locatePageId?: string | null
 }
 
 export function NotebookList({
@@ -37,6 +38,7 @@ export function NotebookList({
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onCreateChapterUnderNotebook, onImport,
+  locatePageId,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory, onSortCategory, onSortPage,
 }: Props) {
   // -- sort --
@@ -86,6 +88,40 @@ export function NotebookList({
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [sortOpen])
+
+  // Auto-expand ancestors and scroll to page when locatePageId changes
+  useEffect(() => {
+    if (!locatePageId) return
+    const page = allPages.find(p => p.id === locatePageId)
+    if (!page?.categoryId) return
+
+    const ancestors: string[] = []
+    let currentId: string | null = page.categoryId
+    const seen = new Set<string>()
+    while (currentId) {
+      if (seen.has(currentId)) break
+      seen.add(currentId)
+      ancestors.push(currentId)
+      const cat = categories.find(c => c.id === currentId)
+      currentId = cat?.parentId ?? null
+    }
+    if (ancestors.length === 0) return
+
+    setExpanded(prev => {
+      const next = new Set(prev)
+      ancestors.forEach(id => next.add(id))
+      return next
+    })
+
+    // Scroll to page after render
+    const pageId = locatePageId
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-page-id="${pageId}"]`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    })
+  }, [locatePageId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -256,6 +292,7 @@ export function NotebookList({
                   requestAnimationFrame(() => { (e.currentTarget as HTMLElement).style.opacity = '0.4' })
                 }}
                 onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                data-page-id={p.id}
                 onClick={() => onOpenPage(p.id)}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -388,6 +425,7 @@ export function NotebookList({
                   requestAnimationFrame(() => { (e.currentTarget as HTMLElement).style.opacity = '0.4' })
                 }}
                 onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                data-page-id={p.id}
                 onClick={() => onOpenPage(p.id)}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree } from 'lucide-react'
+import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree, FolderSearch } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
@@ -26,6 +26,7 @@ interface Props {
   onSortChapter: (id: string, direction: 'up' | 'down') => void
   onSortPage: (id: string, direction: 'up' | 'down') => void
   onToggleOutline: () => void
+  onLocateInExplorer?: (pageId: string) => void
 }
 
 export function ChapterPanel({
@@ -33,7 +34,7 @@ export function ChapterPanel({
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage,
-  onToggleOutline,
+  onToggleOutline, onLocateInExplorer,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
@@ -42,12 +43,26 @@ export function ChapterPanel({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [dragTargetId, setDragTargetId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(null)
 
   const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
 
   useEffect(() => {
     getSetting('skipDeleteConfirm_chapter').then(v => { if (v === true) setSkipDeleteConfirm(true) })
   }, [])
+
+  // Dismiss context menu on outside click / Escape
+  useEffect(() => {
+    if (!contextMenu) return
+    const onDown = () => setContextMenu(null)
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setContextMenu(null) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [contextMenu])
 
   // F2 — keyboard rename selected / focused chapter
   useEffect(() => {
@@ -240,6 +255,10 @@ export function ChapterPanel({
               >
                 <div
                   onClick={() => onOpenPage(p.id)}
+                  onContextMenu={e => {
+                    e.preventDefault()
+                    setContextMenu({ pageId: p.id, x: e.clientX, y: e.clientY })
+                  }}
                   className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded text-[13px] transition-colors border-l-[3px] ${
                     activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                   }`}
@@ -278,6 +297,25 @@ export function ChapterPanel({
           </div>
         )}
       </div>
+
+      {/* Context menu */}
+      {contextMenu && onLocateInExplorer && (
+        <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
+          <div
+            className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[160px]"
+            style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 60) }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { onLocateInExplorer(contextMenu.pageId); setContextMenu(null) }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+            >
+              <FolderSearch size={14} className="text-[var(--text-muted)]" />
+              在资源管理器中显示
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation */}
       <ConfirmDialog

@@ -35,6 +35,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showChapterPanel, setShowChapterPanel] = useState(true)
   const [showOutline, setShowOutline] = useState(false)
+  const [locatePageId, setLocatePageId] = useState<string | null>(null)
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
@@ -473,6 +474,53 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     })
   }, [selectedCategory])
 
+  const handleLocateInExplorer = useCallback((pageId: string) => {
+    const page = allPages.find(p => p.id === pageId)
+    if (!page) return
+
+    // Find the category chain: page.categoryId → parent → ... → notebook
+    let catId = page.categoryId
+    if (!catId) {
+      // Loose page — just select null category and highlight
+      setSelectedCategoryId(null)
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(false)
+      setLocatePageId(pageId)
+      return
+    }
+
+    // Walk up to find notebook
+    let notebookId: string | null = null
+    const chain: string[] = [catId]
+    let current = categories.find(c => c.id === catId)
+    while (current?.parentId) {
+      chain.push(current!.parentId)
+      current = categories.find(c => c.id === current!.parentId)
+    }
+    // current is now the top-level node
+    if (current) {
+      notebookId = current.categoryType === 'notebook' ? current.id : null
+    }
+
+    // Select the notebook (or top-level folder)
+    setSelectedCategoryId(current?.id ?? catId)
+    // If under a notebook, select the chapter too
+    if (notebookId) {
+      setSelectedChapterId(catId)
+      setFocusChapterId(null)
+      setShowChapterPanel(true)
+    } else {
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(false)
+    }
+
+    // Trigger auto-expand + scroll in NotebookList
+    setLocatePageId(null)
+    requestAnimationFrame(() => setLocatePageId(pageId))
+  }, [allPages, categories])
+
   const panelsVisible = sidebarOpen && !showOutline
 
   return (
@@ -504,6 +552,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onMoveCategory={handleMoveCategory}
             onSortCategory={handleSortCategory}
             onSortPage={handleSortPage}
+            locatePageId={locatePageId}
           />
         </ResizablePanel>
 
@@ -529,6 +578,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onToggleStar={handleToggleStar}
               onSortChapter={handleSortCategory}
               onToggleOutline={handleToggleOutline}
+              onLocateInExplorer={handleLocateInExplorer}
               onSortPage={handleSortPage}
             />
           )}
