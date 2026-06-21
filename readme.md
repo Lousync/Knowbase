@@ -114,3 +114,7 @@ NODE_OPTIONS="--use-system-ca" npm run pack
 ## 参与贡献
 
 有更好的想法或发现 Bug，欢迎在项目中提 Issue 或 PR。
+
+## 致谢
+
+- 文件类型图标来自 [vscode-icons](https://github.com/vscode-icons/vscode-icons) (CC BY 4.0)

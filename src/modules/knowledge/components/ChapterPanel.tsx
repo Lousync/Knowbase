@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree, FolderSearch, FolderInput, Link2Off } from 'lucide-react'
+import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree, FolderSearch, FolderInput, Link2Off } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
+import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
@@ -258,7 +259,7 @@ export function ChapterPanel({
                     activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                   }`}
                 >
-                  <FileText size={15} className="shrink-0 text-[var(--text-muted)]" />
+                  <FileIcon ext={p.fileType || ''} size={15} />
                   <span className="flex-1 truncate">{p.title || '无标题'}</span>
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return fi.badge ? <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-0.5" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> : null })()}
                   <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">

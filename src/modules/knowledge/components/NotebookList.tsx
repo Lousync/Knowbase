@@ -3,6 +3,7 @@ import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, Chev
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
+import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { CategoryMovePicker } from './CategoryMovePicker'
@@ -382,7 +383,7 @@ export function NotebookList({
                 style={{ paddingLeft: `${(depth + 1) * 16 + 8}px`, paddingRight: '4px' }}
               >
                 <span className="w-3.5 shrink-0" />
-                <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
+                <FileIcon ext={p.fileType || ''} size={14} />
                 <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
@@ -505,7 +506,7 @@ export function NotebookList({
                 style={{ paddingLeft: '5px', paddingRight: '4px' }}
               >
                 <span className="w-3.5 shrink-0" />
-                <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
+                <FileIcon ext={p.fileType || ''} size={14} />
                 <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}

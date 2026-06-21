@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { FileText, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 
 export interface PageInfo {
@@ -88,9 +89,9 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectT
       {openPageIds.map(pageId => {
         const info = openPageInfos[pageId]
         const title = info?.title || ''
-        const fileInfo = getFileTypeInfo(info?.fileType || '')
         const isActive = pageId === activePageId
         const isDragged = pageId === draggedId
+        const fileType = info?.fileType || ''
 
         return (
           <div
@@ -113,12 +114,9 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectT
               }
             `}
           >
-            <FileText size={14} className={`shrink-0 ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
+            <FileIcon ext={fileType} size={14} />
             <span className="truncate max-w-[140px]">{title || '加载中...'}</span>
-            <span
-              className="shrink-0 text-[8px] px-1 rounded font-medium"
-              style={{ backgroundColor: `${fileInfo.color}20`, color: fileInfo.color }}
-            >{fileInfo.badge}</span>
+            {(() => { const fi = getFileTypeInfo(fileType); return <span className="shrink-0 text-[8px] px-1 rounded font-medium" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
             <button
               onClick={e => { e.stopPropagation(); onCloseTab(pageId) }}
               className={`p-0.5 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0

@@ -1,0 +1,68 @@
+/**
+ * vscode-icons file type icons — CC BY 4.0
+ * Source: https://github.com/vscode-icons/vscode-icons
+ */
+import defaultSvg from '../assets/default.svg?raw'
+import mdSvg from '../assets/md.svg?raw'
+import txtSvg from '../assets/txt.svg?raw'
+import pdfSvg from '../assets/pdf.svg?raw'
+import cppSvg from '../assets/cpp.svg?raw'
+import cSvg from '../assets/c.svg?raw'
+import hSvg from '../assets/h.svg?raw'
+import hppSvg from '../assets/hpp.svg?raw'
+import pySvg from '../assets/py.svg?raw'
+import jsSvg from '../assets/js.svg?raw'
+import jsxSvg from '../assets/jsx.svg?raw'
+import tsSvg from '../assets/ts.svg?raw'
+import tsxSvg from '../assets/tsx.svg?raw'
+import jsonSvg from '../assets/json.svg?raw'
+import htmlSvg from '../assets/html.svg?raw'
+import cssSvg from '../assets/css.svg?raw'
+import javaSvg from '../assets/java.svg?raw'
+import rsSvg from '../assets/rs.svg?raw'
+import goSvg from '../assets/go.svg?raw'
+import shSvg from '../assets/sh.svg?raw'
+import batSvg from '../assets/bat.svg?raw'
+import sqlSvg from '../assets/sql.svg?raw'
+import xmlSvg from '../assets/xml.svg?raw'
+import yamlSvg from '../assets/yaml.svg?raw'
+import rSvg from '../assets/r.svg?raw'
+import rbSvg from '../assets/rb.svg?raw'
+import phpSvg from '../assets/php.svg?raw'
+import luaSvg from '../assets/lua.svg?raw'
+
+export const FILE_ICONS: Record<string, string> = {
+  '': defaultSvg,
+  md: mdSvg,
+  txt: txtSvg,
+  pdf: pdfSvg,
+  cpp: cppSvg,
+  c: cSvg,
+  h: hSvg,
+  hpp: hppSvg,
+  py: pySvg,
+  js: jsSvg,
+  jsx: jsxSvg,
+  ts: tsSvg,
+  tsx: tsxSvg,
+  json: jsonSvg,
+  html: htmlSvg,
+  css: cssSvg,
+  java: javaSvg,
+  rs: rsSvg,
+  go: goSvg,
+  sh: shSvg,
+  bat: batSvg,
+  sql: sqlSvg,
+  xml: xmlSvg,
+  yaml: yamlSvg,
+  yml: yamlSvg,
+  r: rSvg,
+  rb: rbSvg,
+  php: phpSvg,
+  lua: luaSvg,
+}
+
+export function getFileIcon(ext: string): string {
+  return FILE_ICONS[ext] || defaultSvg
+}
