@@ -28,6 +28,32 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
+  const defaultTabSet = useRef(false)
+
+  // Set default tab to first visible module from persisted order
+  useEffect(() => {
+    if (defaultTabSet.current) return
+    try {
+      const order: string[] = JSON.parse(s.activityBarOrder || '[]')
+      const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
+      const all = ['blog','schedule','knowledge','toolbox','export','recycle','help'] as const
+      for (const id of order) {
+        if (all.includes(id as any) && !hidden.includes(id)) {
+          defaultTabSet.current = true
+          setActiveTab(id as TabName)
+          return
+        }
+      }
+      // Fallback: first non-hidden default
+      for (const id of all) {
+        if (!hidden.includes(id)) {
+          defaultTabSet.current = true
+          setActiveTab(id as TabName)
+          return
+        }
+      }
+    } catch {}
+  }, [s.activityBarOrder, s.activityBarHidden])
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   useEffect(() => { applyThemeClass(s.theme) }, [s.theme])
@@ -162,9 +188,9 @@ export default function App() {
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
           <main className="flex-1 overflow-hidden bg-[var(--bg-primary)] relative">
-            {activeTab === 'blog' && <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} />}
-            {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} />}
-            {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} />}
+            {activeTab === 'blog' && <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />}
+            {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />}
+            {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />}
             {activeTab === 'export' && <ExportModule />}
             {activeTab === 'recycle' && <RecycleBinModule />}
             {activeTab === 'settings' && <SettingsModule />}

@@ -18,7 +18,7 @@ import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { isEditingInput } from '../../lib/shortcuts'
 
-export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number> }: { sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number> }) {
+export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar }: { sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
   const [allPages, setAllPages] = useState<KnowledgePage[]>([])
   const [chapterPages, setChapterPages] = useState<KnowledgePage[]>([])
@@ -527,7 +527,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
         {/* L1: NotebookList */}
-        <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat}>
+        <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)}>
           <NotebookList
             categories={categories}
             allPages={allPages}
@@ -557,7 +557,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         </ResizablePanel>
 
         {/* L2: ChapterPanel — always mounted for slide animation */}
-        <ResizablePanel storageKey="sidebarWidth_knowledgeChapters" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showChapterPanel && !!selectedCategoryId} initialWidth={sidebarWidths.sidebarWidth_knowledgeChapters}>
+        <ResizablePanel storageKey="sidebarWidth_knowledgeChapters" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showChapterPanel && !!selectedCategoryId} initialWidth={sidebarWidths.sidebarWidth_knowledgeChapters} onSnapClose={() => setShowChapterPanel(false)}>
           {selectedCategory && (
             <ChapterPanel
               notebookName={selectedCategory.name}

@@ -122,6 +122,10 @@ export const SETTINGS = {
   zoomMin:   { default: 0.85, desc: '缩放下限' },
   zoomMax:   { default: 1.5,  desc: '缩放上限' },
   zoomStep:  { default: 0.05, desc: '缩放步进' },
+
+  // ---- 活动栏 ----
+  activityBarOrder:  { default: '["blog","schedule","knowledge","toolbox","export","recycle"]', desc: '活动栏图标顺序 (JSON)' },
+  activityBarHidden: { default: '[]', desc: '活动栏隐藏的模块 (JSON)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

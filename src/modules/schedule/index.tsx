@@ -28,7 +28,7 @@ function localToday(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Record<string, number> }: { sidebarOpen?: boolean; sidebarWidths?: Record<string, number> }) {
+export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar }: { sidebarOpen?: boolean; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void }) {
   const now = new Date()
   const today = localToday()
   const [year, setYear] = useState(now.getFullYear())
@@ -360,7 +360,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
-      <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule}>
+      <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule} onSnapClose={onSnapCloseSidebar}>
         <CalendarView
           year={year} month={month} selectedDate={selectedDate}
           dotDates={dotDates} deadlineCounts={deadlineCounts}

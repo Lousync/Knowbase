@@ -13,9 +13,11 @@ interface Props {
   initialWidth?: number
   /** Show drag handle on right edge. Default true. */
   showHandle?: boolean
+  /** VS Code snap-close: called when dragged left past minWidth/2 */
+  onSnapClose?: () => void
 }
 
-export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true }: Props) {
+export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose }: Props) {
   const [width, setWidth] = useState(initialWidth ?? defaultWidth)
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -49,17 +51,29 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
   useEffect(() => {
     if (!dragging) return
 
+    let snapped = false
+
     const onMove = (e: MouseEvent) => {
+      if (snapped) return
       const delta = e.clientX - startXRef.current
-      const next = Math.max(minWidth, Math.min(maxWidth, startWRef.current + delta))
+      const raw = startWRef.current + delta
+      // VS Code snap-close: drag past half of minWidth → auto-collapse
+      if (onSnapClose && raw < minWidth * 0.5) {
+        snapped = true
+        setDragging(false)
+        onSnapClose()
+        return
+      }
+      const next = Math.max(minWidth, Math.min(maxWidth, raw))
       widthRef.current = next
       setWidth(next)
     }
 
     const onUp = () => {
       setDragging(false)
-      // 用 ref 保存最新值，避免闭包陈旧问题
-      setSettingRaw(storageKey, widthRef.current)
+      if (!snapped) {
+        setSettingRaw(storageKey, widthRef.current)
+      }
     }
 
     // 拖拽期间禁用文本选中
@@ -75,7 +89,7 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
     }
-  }, [dragging, minWidth, maxWidth, storageKey])
+  }, [dragging, minWidth, maxWidth, storageKey, onSnapClose])
   // 注意：width 不在依赖中 — 用 widthRef 避免每次像素变化都重建监听器
 
   // 折叠时重置为 0
