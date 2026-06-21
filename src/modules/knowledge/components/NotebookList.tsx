@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, ArrowUpDown } from 'lucide-react'
+import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, ArrowUpDown, CornerLeftUp, FolderInput, Link2Off } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
+import { CategoryMovePicker } from './CategoryMovePicker'
 
 interface Props {
   categories: KnowledgeCategory[]
@@ -68,7 +69,9 @@ export function NotebookList({
   const [starredOpen, setStarredOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
-  const [dragTargetId, setDragTargetId] = useState<string | null>(null)  // which node is currently hovered during drag
+  const [contextMenu, setContextMenu] = useState<{ type: 'category' | 'page'; id: string; x: number; y: number } | null>(null)
+  const [movePickerOpen, setMovePickerOpen] = useState(false)
+  const [movePickerData, setMovePickerData] = useState<{ type: 'category' | 'page'; id: string } | null>(null)
 
   // Barrier ref: set on mousedown of create-mode buttons so that the ensuing
   // blur of the current input (which fires before click) aborts without creating.
@@ -93,6 +96,14 @@ export function NotebookList({
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [sortOpen])
+
+  // Context menu dismiss (Escape only — backdrop onClick handles outside clicks)
+  useEffect(() => {
+    if (!contextMenu) return
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setContextMenu(null) }
+    document.addEventListener('keydown', onEsc)
+    return () => { document.removeEventListener('keydown', onEsc) }
+  }, [contextMenu])
 
   // Auto-expand ancestors and scroll when locatePageId changes
   useEffect(() => {
@@ -152,7 +163,7 @@ export function NotebookList({
     onRenameNotebook(id, editName.trim()); setEditingId(null)
   }
 
-  // ---- cycle prevention for drag-and-drop ----
+  // ---- cycle prevention for category moves ----
   function isDescendant(ancestorId: string, nodeId: string): boolean {
     const visited = new Set<string>()
     let currentId: string | null = nodeId
@@ -180,19 +191,6 @@ export function NotebookList({
     return false
   }
 
-  // ---- parse drag data: JSON {type, id} with legacy raw-string fallback ----
-  function parseDragData(raw: string): { type: 'page' | 'category'; id: string } | null {
-    if (!raw) return null
-    try {
-      const parsed = JSON.parse(raw)
-      if (parsed.type === 'page' || parsed.type === 'category') {
-        if (typeof parsed.id === 'string') return parsed
-      }
-    } catch {}
-    // Legacy: raw string = page ID
-    return { type: 'page', id: raw }
-  }
-
   // ---- render a tree node (recursive) ----
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
@@ -202,7 +200,6 @@ export function NotebookList({
     const categoryPages = allPages.filter(p => p.categoryId === cat.id)
     const hasPages = categoryPages.length > 0
     const isNotebook = cat.categoryType === 'notebook'
-    const isDragOver = dragTargetId === cat.id
     // Show expand arrow for folders that have sub-categories OR pages directly
     // Chapters under notebooks never expand — they toggle the sidebar instead
     const canExpand = notebookAncestorId ? false : (isNotebook ? hasChildren : (hasChildren || hasPages))
@@ -231,16 +228,9 @@ export function NotebookList({
       <div key={cat.id} data-cat-id={cat.id}>
         <div
           data-cat-id={cat.id}
-          draggable
-          onDragStart={e => {
-            e.dataTransfer.effectAllowed = 'move'
-            e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'category', id: cat.id }))
-            requestAnimationFrame(() => {
-              (e.currentTarget as HTMLElement).style.opacity = '0.4'
-            })
-          }}
-          onDragEnd={e => {
-            (e.currentTarget as HTMLElement).style.opacity = '1'
+          onContextMenu={e => {
+            e.preventDefault()
+            setContextMenu({ type: 'category', id: cat.id, x: e.clientX, y: e.clientY })
           }}
         >
           {editingId === cat.id ? (
@@ -257,7 +247,6 @@ export function NotebookList({
               onClick={handleRowClick}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
                 isSelected ? 'bg-[var(--bg-selected)] text-white'
-                : isDragOver ? 'bg-[var(--drop-bg)] text-[var(--text-primary)]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}
               style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px' }}
@@ -319,13 +308,11 @@ export function NotebookList({
             {categoryPages.map(p => (
               <div key={p.id}
                 data-page-id={p.id}
-                draggable
-                onDragStart={e => {
-                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
-                  requestAnimationFrame(() => { (e.currentTarget as HTMLElement).style.opacity = '0.4' })
-                }}
-                onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
                 onClick={() => onOpenPage(p.id)}
+                onContextMenu={e => {
+                  e.preventDefault()
+                  setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
+                }}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
@@ -400,96 +387,20 @@ export function NotebookList({
       </div>
 
       {/* ===== Tree ===== */}
-      <div
-        data-drop-container
-        className="flex-1 overflow-y-auto overflow-x-hidden"
-        onDragOver={e => {
-          const d = parseDragData(e.dataTransfer.getData('text/plain'))
-          if (!d) return
-
-          if (d.type === 'category') {
-            const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-            if (el) {
-              const tid = el.getAttribute('data-cat-id')!
-              if (d.id !== tid && !isDescendant(tid, d.id) && canAcceptCategory(tid, d.id)) {
-                e.dataTransfer.dropEffect = 'move'
-                setDragTargetId(tid)
-              } else {
-                e.dataTransfer.dropEffect = 'none'
-                setDragTargetId(null)
-              }
-            } else {
-              e.dataTransfer.dropEffect = 'move'
-              setDragTargetId('__root')
-            }
-          } else if (d.type === 'page') {
-            const el = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-            if (el) {
-              e.dataTransfer.dropEffect = 'move'
-              setDragTargetId(el.getAttribute('data-cat-id')!)
-            } else {
-              e.dataTransfer.dropEffect = 'move'
-              setDragTargetId('__loose')
-            }
-          }
-        }}
-        onDragLeave={e => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            setDragTargetId(null)
-          }
-        }}
-        onDrop={e => {
-          e.preventDefault()
-          setDragTargetId(null)
-          const d = parseDragData(e.dataTransfer.getData('text/plain'))
-          if (!d) return
-
-          if (d.type === 'category') {
-            const target = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-            if (target) {
-              const targetId = target.getAttribute('data-cat-id')!
-              if (d.id !== targetId && !isDescendant(targetId, d.id) && canAcceptCategory(targetId, d.id)) {
-                onMoveCategory(d.id, targetId)
-              }
-            } else {
-              onMoveCategory(d.id, null)
-            }
-          } else if (d.type === 'page') {
-            const catTarget = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-            if (catTarget) {
-              const tid = catTarget.getAttribute('data-cat-id')!
-              const cat = categories.find(c => c.id === tid)
-              if (cat?.categoryType === 'notebook') {
-                onDropOnNotebook(d.id, tid)
-              } else {
-                onDropOnCategory(d.id, tid)
-              }
-            } else {
-              onDropOnLooseArea(d.id)
-            }
-          }
-        }}
-      >
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {rootCats.map(cat => renderCategory(cat, 0))}
 
         {/* Root-level loose pages */}
         {loosePages.length > 0 && (
-          <div className={dragTargetId === '__loose' ? 'bg-[var(--drop-bg)] rounded mx-1' : ''}
-          >
+          <div>
             {loosePages.map(p => (
               <div key={p.id}
                 data-page-id={p.id}
-                draggable
-                onDragStart={e => {
-                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
-                  requestAnimationFrame(() => {
-                    (e.currentTarget as HTMLElement).style.opacity = '0.4'
-                  })
-                }}
-                onDragEnd={e => {
-                  (e.currentTarget as HTMLElement).style.opacity = '1'
-                }}
                 onClick={() => onOpenPage(p.id)}
+                onContextMenu={e => {
+                  e.preventDefault()
+                  setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
+                }}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
@@ -539,6 +450,90 @@ export function NotebookList({
             </div>
           )}
         </div>
+      )}
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
+          <div
+            className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[160px]"
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 170),
+              top: Math.min(contextMenu.y, window.innerHeight - 120)
+            }}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          >
+            {contextMenu.type === 'category' && (
+              <>
+                <button
+                  onClick={() => {
+                    onMoveCategory(contextMenu.id, null)
+                    setContextMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+                >
+                  <CornerLeftUp size={14} className="text-[var(--text-muted)]" />
+                  移到根层级
+                </button>
+                <button
+                  onClick={() => {
+                    setMovePickerData({ type: 'category', id: contextMenu.id })
+                    setMovePickerOpen(true)
+                    setContextMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+                >
+                  <FolderInput size={14} className="text-[var(--text-muted)]" />
+                  移到目录...
+                </button>
+              </>
+            )}
+            {contextMenu.type === 'page' && (
+              <>
+                <button
+                  onClick={() => {
+                    onDropOnLooseArea(contextMenu.id)
+                    setContextMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+                >
+                  <Link2Off size={14} className="text-[var(--text-muted)]" />
+                  取消归属
+                </button>
+                <button
+                  onClick={() => {
+                    setMovePickerData({ type: 'page', id: contextMenu.id })
+                    setMovePickerOpen(true)
+                    setContextMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+                >
+                  <FolderInput size={14} className="text-[var(--text-muted)]" />
+                  移到目录...
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Category move picker modal */}
+      {movePickerData && (
+        <CategoryMovePicker
+          open={movePickerOpen}
+          moveType={movePickerData.type}
+          moveId={movePickerData.id}
+          categories={categories}
+          sortCats={sortCats}
+          isDescendant={isDescendant}
+          canAcceptCategory={canAcceptCategory}
+          onMoveCategory={onMoveCategory}
+          onMovePageToNotebook={onDropOnNotebook}
+          onMovePageToCategory={onDropOnCategory}
+          onMovePageToLoose={onDropOnLooseArea}
+          onClose={() => { setMovePickerOpen(false); setMovePickerData(null) }}
+        />
       )}
 
       {/* Delete confirmation */}

@@ -40,16 +40,23 @@ function extractTitle(fileName: string, _content: string): string {
   return base || '导入页面'
 }
 
+function hasFiles(e: React.DragEvent) {
+  return e.dataTransfer.types.includes('Files')
+}
+
 export function ImportZone({ onImport, onImportPdf, children, className }: Props) {
   const [dragging, setDragging] = useState(false)
   const [counter, setCounter] = useState(0)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    // Always preventDefault so browser allows drops (both internal and external)
     e.preventDefault()
+    if (!hasFiles(e)) return
     e.stopPropagation()
   }, [])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!hasFiles(e)) return
     e.preventDefault()
     e.stopPropagation()
     setCounter(c => {
@@ -60,6 +67,7 @@ export function ImportZone({ onImport, onImportPdf, children, className }: Props
   }, [])
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!hasFiles(e)) return
     e.preventDefault()
     e.stopPropagation()
     setCounter(c => {
@@ -72,6 +80,8 @@ export function ImportZone({ onImport, onImportPdf, children, className }: Props
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    // Only handle file imports — internal drags are handled by child components
+    if (!hasFiles(e)) return
     setDragging(false)
     setCounter(0)
 

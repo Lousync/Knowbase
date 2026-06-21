@@ -332,9 +332,41 @@ export function runMigrations(): void {
   }
 
   if (!applied.has('017_knowledge_category_dates')) {
-    try { db.run("ALTER TABLE knowledge_categories ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
-    try { db.run("ALTER TABLE knowledge_categories ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+    // Check which columns exist before attempting ALTER (prevents silent failures)
+    let hasCreatedAt = false
+    let hasUpdatedAt = false
+    try {
+      const info = db.exec("PRAGMA table_info('knowledge_categories')")
+      if (info[0]) {
+        hasCreatedAt = info[0].values.some((row: any[]) => row[1] === 'created_at')
+        hasUpdatedAt = info[0].values.some((row: any[]) => row[1] === 'updated_at')
+      }
+    } catch (_) { /* PRAGMA failed — table might not exist yet */ }
+    if (!hasCreatedAt) {
+      try { db.run("ALTER TABLE knowledge_categories ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+    }
+    if (!hasUpdatedAt) {
+      try { db.run("ALTER TABLE knowledge_categories ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+    }
     db.run("INSERT INTO _migrations (name) VALUES ('017_knowledge_category_dates')")
+  }
+
+  // Repair: if 017 was marked applied but columns are still missing (e.g. ALTER TABLE silently failed)
+  if (applied.has('017_knowledge_category_dates') && !applied.has('018_repair_category_dates')) {
+    let needsRepair = false
+    try {
+      const info = db.exec("PRAGMA table_info('knowledge_categories')")
+      if (info[0]) {
+        const hasCreatedAt = info[0].values.some((row: any[]) => row[1] === 'created_at')
+        const hasUpdatedAt = info[0].values.some((row: any[]) => row[1] === 'updated_at')
+        if (!hasCreatedAt || !hasUpdatedAt) needsRepair = true
+      }
+    } catch (_) { }
+    if (needsRepair) {
+      try { db.run("ALTER TABLE knowledge_categories ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+      try { db.run("ALTER TABLE knowledge_categories ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) { }
+    }
+    db.run("INSERT INTO _migrations (name) VALUES ('018_repair_category_dates')")
   }
 }
 

@@ -580,6 +580,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onToggleOutline={handleToggleOutline}
               onLocateInExplorer={handleLocateInExplorer}
               onSortPage={handleSortPage}
+              allCategories={categories}
+              onMovePageToLoose={handleDropOnLooseArea}
+              onMovePageToNotebook={handleDropOnNotebook}
+              onMovePageToCategory={handleDropOnCategory}
             />
           )}
         </ResizablePanel>

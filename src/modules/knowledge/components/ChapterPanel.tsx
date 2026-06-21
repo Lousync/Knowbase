@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree, FolderSearch } from 'lucide-react'
+import { FileText, Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree, FolderSearch, FolderInput, Link2Off } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
+import { CategoryMovePicker } from './CategoryMovePicker'
 
 interface Props {
   notebookName: string
@@ -27,6 +28,11 @@ interface Props {
   onSortPage: (id: string, direction: 'up' | 'down') => void
   onToggleOutline: () => void
   onLocateInExplorer?: (pageId: string) => void
+  // Move callbacks (for context menu)
+  allCategories: KnowledgeCategory[]
+  onMovePageToLoose: (pageId: string) => void
+  onMovePageToNotebook: (pageId: string, notebookId: string) => void
+  onMovePageToCategory: (pageId: string, categoryId: string) => void
 }
 
 export function ChapterPanel({
@@ -35,6 +41,7 @@ export function ChapterPanel({
   pages, activePageId, onOpenPage, onCreatePage, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage,
   onToggleOutline, onLocateInExplorer,
+  allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
@@ -42,8 +49,9 @@ export function ChapterPanel({
   const [editName, setEditName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
-  const [dragTargetId, setDragTargetId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(null)
+  const [movePickerOpen, setMovePickerOpen] = useState(false)
+  const [movePickerPageId, setMovePickerPageId] = useState<string | null>(null)
 
   const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
 
@@ -51,17 +59,12 @@ export function ChapterPanel({
     getSetting('skipDeleteConfirm_chapter').then(v => { if (v === true) setSkipDeleteConfirm(true) })
   }, [])
 
-  // Dismiss context menu on outside click / Escape
+  // Dismiss context menu on Escape (backdrop onClick handles outside clicks)
   useEffect(() => {
     if (!contextMenu) return
-    const onDown = () => setContextMenu(null)
     const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setContextMenu(null) }
-    document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onEsc)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onEsc)
-    }
+    return () => { document.removeEventListener('keydown', onEsc) }
   }, [contextMenu])
 
   // F2 — keyboard rename selected / focused chapter
@@ -141,29 +144,6 @@ export function ChapterPanel({
       {!focusChapter && (
       <div
         className="px-2 py-1 border-b border-[var(--border-color)]"
-        onDragOver={e => {
-          e.preventDefault()
-          e.dataTransfer.dropEffect = 'move'
-          const el = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
-          setDragTargetId(el ? el.getAttribute('data-chapter-id')! : null)
-        }}
-        onDragLeave={e => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            setDragTargetId(null)
-          }
-        }}
-        onDrop={e => {
-          e.preventDefault()
-          setDragTargetId(null)
-          const raw = e.dataTransfer.getData('text/plain')
-          let pageId = raw
-          try { const p = JSON.parse(raw); if (p.type === 'page') pageId = p.id } catch {}
-          if (!pageId) return
-          const chTarget = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
-          if (chTarget) {
-            onDropOnChapter(pageId, chTarget.getAttribute('data-chapter-id')!)
-          }
-        }}
       >
         <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-1 mb-1">章节</div>
         {chapters.map(ch => (
@@ -182,7 +162,6 @@ export function ChapterPanel({
                 onClick={() => onSelectChapter(ch.id)}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
                   selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
-                  : dragTargetId === ch.id ? 'text-[var(--text-primary)]'
                   : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
@@ -241,19 +220,7 @@ export function ChapterPanel({
           </p>
         ) : (
           pages.map(p => (
-              <div key={p.id}
-                draggable
-                onDragStart={e => {
-                  e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
-                  requestAnimationFrame(() => {
-                    (e.currentTarget as HTMLElement).style.opacity = '0.4'
-                  })
-                }}
-                onDragEnd={e => {
-                  (e.currentTarget as HTMLElement).style.opacity = '1'
-                }}
-              >
-                <div
+                <div key={p.id}
                   onClick={() => onOpenPage(p.id)}
                   onContextMenu={e => {
                     e.preventDefault()
@@ -281,7 +248,6 @@ export function ChapterPanel({
                     <Star size={13} className={p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
                   </button>
                 </div>
-              </div>
             )
           ))}
         {(selectedChapterId || focusChapterId) && (
@@ -299,22 +265,67 @@ export function ChapterPanel({
       </div>
 
       {/* Context menu */}
-      {contextMenu && onLocateInExplorer && (
+      {contextMenu && (
         <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
           <div
             className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[160px]"
-            style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 60) }}
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 170),
+              top: Math.min(contextMenu.y, window.innerHeight - 170)
+            }}
             onMouseDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
           >
+            {onLocateInExplorer && (
+              <button
+                onClick={() => { onLocateInExplorer(contextMenu.pageId); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+              >
+                <FolderSearch size={14} className="text-[var(--text-muted)]" />
+                在资源管理器中显示
+              </button>
+            )}
             <button
-              onClick={() => { onLocateInExplorer(contextMenu.pageId); setContextMenu(null) }}
+              onClick={() => {
+                onMovePageToLoose(contextMenu.pageId)
+                setContextMenu(null)
+              }}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
             >
-              <FolderSearch size={14} className="text-[var(--text-muted)]" />
-              在资源管理器中显示
+              <Link2Off size={14} className="text-[var(--text-muted)]" />
+              取消归属
+            </button>
+            <button
+              onClick={() => {
+                setMovePickerPageId(contextMenu.pageId)
+                setMovePickerOpen(true)
+                setContextMenu(null)
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
+            >
+              <FolderInput size={14} className="text-[var(--text-muted)]" />
+              移到目录...
             </button>
           </div>
         </div>
+      )}
+
+      {/* Category move picker */}
+      {movePickerOpen && movePickerPageId && (
+        <CategoryMovePicker
+          open={movePickerOpen}
+          moveType="page"
+          moveId={movePickerPageId}
+          categories={allCategories}
+          sortCats={list => [...list].sort((a, b) => a.sortOrder - b.sortOrder)}
+          isDescendant={() => false}
+          canAcceptCategory={() => true}
+          onMoveCategory={() => {}}
+          onMovePageToNotebook={onMovePageToNotebook}
+          onMovePageToCategory={onMovePageToCategory}
+          onMovePageToLoose={onMovePageToLoose}
+          onClose={() => { setMovePickerOpen(false); setMovePickerPageId(null) }}
+        />
       )}
 
       {/* Delete confirmation */}
