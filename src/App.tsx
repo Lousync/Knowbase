@@ -29,8 +29,9 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
 
-  // Set startup tab from settings (fires once with defaults, then again with persisted values)
+  // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
   useEffect(() => {
+    if (!loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
       const all = ['blog','schedule','knowledge','toolbox','export','recycle','help'] as const
@@ -46,7 +47,8 @@ export default function App() {
         if (!hidden.includes(id)) { setActiveTab(id as TabName); return }
       }
     } catch {}
-  }, [s.startupTab, s.activityBarOrder, s.activityBarHidden])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded])
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   useEffect(() => { applyThemeClass(s.theme) }, [s.theme])
