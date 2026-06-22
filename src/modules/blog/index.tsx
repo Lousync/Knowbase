@@ -13,8 +13,8 @@ import { MarkdownEditor } from './components/MarkdownEditor'
 
 type BlogView = 'list' | 'editor' | 'detail'
 
-export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar }: {
-  showLineNumbers?: boolean; sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void
+export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar }: {
+  showLineNumbers?: boolean; sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void
 }) {
   const { s } = useSettings()
   const [view, setView] = useState<BlogView>('list')
@@ -135,7 +135,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
-      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar}>
+      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">
             <Sidebar

@@ -89,7 +89,7 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
 
         <button
           onClick={onToday}
-          className="w-full text-[12px] py-1 bg-[var(--input-bg)] text-[var(--text-primary)] rounded hover:bg-[#4a4a4a] transition-colors"
+          className="w-full text-[12px] py-1 bg-[var(--input-bg)] text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)] transition-colors"
         >
           今天
         </button>

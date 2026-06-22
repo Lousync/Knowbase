@@ -15,7 +15,7 @@ import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
-const QUADRANT_COLORS: Record<number, string> = { 0: 'text-red-400', 1: 'text-blue-400', 2: 'text-yellow-400', 3: 'text-gray-400' }
+const QUADRANT_COLORS: Record<number, string> = { 0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]' }
 
 const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; placeholder: string; meta: string; metaIcon: number; sectionTitle: string }> = {
   sm: { icon: 14, text: 'text-[11px]', padY: 'py-1.5', placeholder: '零碎任务...', meta: 'text-[11px]', metaIcon: 10, sectionTitle: 'text-[12px]' },
@@ -28,7 +28,7 @@ function localToday(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar }: { sidebarOpen?: boolean; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void }) {
+export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar }: { sidebarOpen?: boolean; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void }) {
   const now = new Date()
   const today = localToday()
   const [year, setYear] = useState(now.getFullYear())
@@ -360,7 +360,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
-      <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule} onSnapClose={onSnapCloseSidebar}>
+      <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
         <CalendarView
           year={year} month={month} selectedDate={selectedDate}
           dotDates={dotDates} deadlineCounts={deadlineCounts}
@@ -424,7 +424,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {/* ===== EXPIRED DAILY TASKS ===== */}
           {dailyExpired.length > 0 && (selectedDate === today || viewMode !== 'date') && (
-            <div className="mb-4 p-3 bg-[#2a2a1e] border border-[var(--border-color)] rounded">
+            <div className="mb-4 p-3 bg-[var(--warning-bg)] border border-[var(--border-color)] rounded">
               <p className={`${INPUT_SZ[iconSize].meta} text-[var(--warning)] mb-2`}>📌 {dailyExpired.length} 项过期当日任务</p>
               <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
                 {dailyExpired.map(t => (
@@ -484,7 +484,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
             <div className="space-y-4">
               {deadlineOverdue.length > 0 && (
                 <div>
-                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-red-400 mb-2`}>⚠ 超期未完成 ({deadlineOverdue.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--danger)] mb-2`}>⚠ 超期未完成 ({deadlineOverdue.length})</h4>
                   <div className="space-y-2">
                     {deadlineOverdue.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining

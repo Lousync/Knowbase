@@ -168,7 +168,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
           <Field label="任务类型">
             <div className="flex gap-2">
               <button onClick={() => setForm(f => ({ ...f, taskType: 'daily' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[#c5a332] bg-[#c5a33220] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[var(--warning)] bg-[var(--warning-bg)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >⚡ 琐碎</button>
               <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
                 className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
@@ -215,7 +215,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                 </div>
               </div>
               {timeWarning && (
-                <p className={`text-[11px] mt-1 ${timeWarning.includes('早于') ? 'text-red-400' : 'text-yellow-400'}`}>⚠ {timeWarning}</p>
+                <p className={`text-[11px] mt-1 ${timeWarning.includes('早于') ? 'text-[var(--danger)]' : 'text-[var(--warning)]'}`}>⚠ {timeWarning}</p>
               )}
             </Field>
           )}

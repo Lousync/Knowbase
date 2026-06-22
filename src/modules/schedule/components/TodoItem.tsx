@@ -4,7 +4,7 @@ import type { ScheduleTodo, ScheduleTag } from '../../../types'
 
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要', 2: '⚡ 紧急', 3: '💤 消遣' }
 const QUADRANT_COLORS: Record<number, string> = {
-  0: 'text-red-400', 1: 'text-blue-400', 2: 'text-yellow-400', 3: 'text-gray-500'
+  0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]'
 }
 
 interface Props {
@@ -65,10 +65,10 @@ function urgencyClass(time: string): string {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
-  if (diff < 0) return 'text-[#f44747]'
-  if (diff === 0) return 'text-[#f44747] font-semibold'
-  if (diff === 1) return 'text-[#d16969] font-semibold'
-  if (diff <= 3) return 'text-[#d16969]'
+  if (diff < 0) return 'text-[var(--danger)]'
+  if (diff === 0) return 'text-[var(--danger)] font-semibold'
+  if (diff === 1) return 'text-[var(--warning)] font-semibold'
+  if (diff <= 3) return 'text-[var(--warning)]'
   return ''
 }
 
