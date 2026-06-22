@@ -358,7 +358,38 @@ export function NotebookList({
           </div>
         )}
         {isExpanded && canExpand && (
-          <div>
+          <div
+            onDragOver={e => {
+              e.preventDefault()
+              const d = parseDrop(e)
+              if (!d) return
+              // Visual feedback: highlight parent category when dragging over its sub-content
+              const valid = (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id))
+                         || d.type === 'page'
+              if (valid) {
+                e.dataTransfer.dropEffect = 'move'
+                setDragOverId(cat.id)
+              }
+            }}
+            onDragLeave={e => {
+              if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+                setDragOverId(null)
+              }
+            }}
+            onDrop={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDragOverId(null)
+              const d = parseDrop(e)
+              if (!d) return
+              if (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
+                onMoveCategory(d.id, cat.id)
+              } else if (d.type === 'page') {
+                if (isNotebook) onDropOnNotebook(d.id, cat.id)
+                else onDropOnCategory(d.id, cat.id)
+              }
+            }}
+          >
             {/* Pages directly under this category */}
             {categoryPages.map(p => (
               <div key={p.id}
@@ -453,14 +484,33 @@ export function NotebookList({
       {/* ===== Tree ===== */}
       <div
         className="flex-1 overflow-y-auto overflow-x-hidden"
-        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+        onDragOver={e => {
+          const d = parseDrop(e)
+          if (d) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+          }
+        }}
         onDrop={e => {
-          // Dropped on empty space → move category to root / page to loose
+          // Fallback: delegate to closest category, or root/loose if on empty space
           const d = parseDrop(e)
           if (!d) return
           const onCat = (e.target as HTMLElement).closest('[data-cat-id]')
+          if (onCat) {
+            // Delegate to the containing category (handles drops on sub-content areas)
+            const catId = (onCat as HTMLElement).dataset.catId!
+            if (d.type === 'category' && d.id !== catId && !isDescendant(catId, d.id) && canAcceptCategory(catId, d.id)) {
+              onMoveCategory(d.id, catId)
+            } else if (d.type === 'page') {
+              const c = categories.find(x => x.id === catId)
+              if (c?.categoryType === 'notebook') onDropOnNotebook(d.id, catId)
+              else onDropOnCategory(d.id, catId)
+            }
+            return
+          }
           const onPage = (e.target as HTMLElement).closest('[data-page-id]')
-          if (onCat || onPage) return  // handled by row-level onDrop
+          if (onPage) return  // page-to-page reorder handled by individual page handlers
+          // Empty space → move category to root / page to loose
           if (d.type === 'category') onMoveCategory(d.id, null)
           else if (d.type === 'page') onDropOnLooseArea(d.id)
         }}

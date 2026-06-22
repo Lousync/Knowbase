@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Star } from 'lucide-react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting } from '../../lib/ipc'
@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
+import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { Sidebar } from './components/Sidebar'
 import { EntryList } from './views/EntryList'
 import { MarkdownEditor } from './components/MarkdownEditor'
@@ -23,6 +24,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showOutline, setShowOutline] = useState(false)
+  const [liveContent, setLiveContent] = useState('')
 
   const viewRef = useRef(view)
   const selectedIdRef = useRef(selectedId)
@@ -133,6 +136,29 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   const starredEntries = entries.filter(e => e.isStarred)
 
+  // Reset liveContent when switching entries
+  useEffect(() => { setLiveContent('') }, [selectedId])
+
+  // Outline headings from live content
+  const outlineHeadings = useMemo(() => parseHeadings(liveContent), [liveContent])
+
+  const handleToggleOutline = useCallback(() => {
+    setShowOutline(v => !v)
+  }, [])
+
+  // Ctrl+O toggle outline
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditingInput(e)) return
+      if (e.ctrlKey && e.key === 'o' && view === 'editor') {
+        e.preventDefault()
+        setShowOutline(v => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view])
+
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
       <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
@@ -160,13 +186,26 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           />
         )}
         {view === 'editor' && selectedId && (
-          <MarkdownEditor
-            entryId={selectedId}
-            showLineNumbers={showLineNumbers}
-            zoom={zoom}
-            onSave={goToList}
-            onCancel={goToList}
-          />
+          <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <MarkdownEditor
+                entryId={selectedId}
+                showLineNumbers={showLineNumbers}
+                zoom={zoom}
+                onSave={goToList}
+                onCancel={goToList}
+                onContentChange={setLiveContent}
+                onToggleOutline={handleToggleOutline}
+              />
+            </div>
+            {showOutline && (
+              <OutlinePanel
+                pageTitle={entries.find(e => e.id === selectedId)?.title || ''}
+                headings={outlineHeadings}
+                onBackToFile={handleToggleOutline}
+              />
+            )}
+          </div>
         )}
         {view === 'detail' && selectedId && (
           <EntryDetail

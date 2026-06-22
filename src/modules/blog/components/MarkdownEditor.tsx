@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting } from '../../../lib/ipc'
-import { ArrowLeft, Eye, Code, Plus, X, Trash2 } from 'lucide-react'
+import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { useSettings } from '../../../lib/SettingsContext'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import type * as Monaco from 'monaco-editor'
 import type { Tag } from '../../../types'
 
 interface Props {
   entryId: string; showLineNumbers: boolean; zoom?: number; onSave: () => void; onCancel: () => void
+  onContentChange?: (content: string) => void
+  onToggleOutline?: () => void
 }
 
 const MOOD_OPTIONS = [
@@ -19,7 +22,7 @@ const MOOD_OPTIONS = [
 ]
 const MAX_TAGS = 5
 
-export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel }: Props) {
+export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel, onContentChange, onToggleOutline }: Props) {
   const { s } = useSettings()
   const [contentMd, setContentMd] = useState('')
   const [date, setDate] = useState('')
@@ -30,6 +33,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>()
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const contentRef = useRef(contentMd)
   const dateRef = useRef(date)
 
@@ -92,6 +96,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const handleChange = (v: string | undefined) => {
     const val = v || ''
     setContentMd(val)
+    onContentChange?.(val)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => doSave(val, dateRef.current), s.autoSaveDebounceMs)
   }
@@ -145,6 +150,21 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // Outline navigation — scroll Monaco editor to heading line
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { line } = (e as CustomEvent).detail as { line: number; id: string }
+      const ed = editorRef.current
+      if (ed) {
+        ed.revealLineInCenter(line)
+        ed.setPosition({ lineNumber: line, column: 1 })
+        ed.focus()
+      }
+    }
+    window.addEventListener('outline:go-to-heading', handler)
+    return () => window.removeEventListener('outline:go-to-heading', handler)
+  }, [])
+
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-primary)]">加载中...</div>
   }
@@ -188,6 +208,14 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             {showPreview ? <Code size={13} /> : <Eye size={13} />}
             {showPreview ? '源码' : '预览'}
           </button>
+          {onToggleOutline && (
+            <button onClick={onToggleOutline}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+              title="大纲 (Ctrl+O)">
+              <ListTree size={13} />
+              大纲
+            </button>
+          )}
           <button onClick={handleSaveAndClose}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">
             完成
@@ -252,6 +280,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             language="markdown"
             value={contentMd}
             onChange={handleChange}
+            onMount={(editor) => { editorRef.current = editor }}
             theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
             loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
