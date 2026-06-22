@@ -561,6 +561,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           {selectedCategory && (
             <ChapterPanel
               notebookName={selectedCategory.name}
+              notebookId={selectedCategory.id}
               chapters={chapters}
               selectedChapterId={selectedChapterId}
               focusChapterId={focusChapterId}
@@ -580,6 +581,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onLocateInExplorer={handleLocateInExplorer}
               onSortPage={handleSortPage}
               onRefreshPages={() => { refreshAllPages(); refreshChapterPages() }}
+              onMoveCategory={handleMoveCategory}
               allCategories={categories}
               onMovePageToLoose={handleDropOnLooseArea}
               onMovePageToNotebook={handleDropOnNotebook}

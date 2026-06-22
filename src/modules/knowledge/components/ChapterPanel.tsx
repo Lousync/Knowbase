@@ -10,6 +10,7 @@ import { CategoryMovePicker } from './CategoryMovePicker'
 
 interface Props {
   notebookName: string
+  notebookId: string
   chapters: KnowledgeCategory[]
   selectedChapterId: string | null
   focusChapterId: string | null  // when set, hide chapter list & show only this chapter
@@ -29,6 +30,8 @@ interface Props {
   onSortPage: (id: string, direction: 'up' | 'down') => void
   onRefreshPages: () => void
   onLocateInExplorer?: (pageId: string) => void
+  // Category drag-drop: move a category under a specific parent
+  onMoveCategory: (categoryId: string, newParentId: string | null) => void
   // Move callbacks (for context menu)
   allCategories: KnowledgeCategory[]
   onMovePageToLoose: (pageId: string) => void
@@ -37,11 +40,11 @@ interface Props {
 }
 
 export function ChapterPanel({
-  notebookName, chapters, selectedChapterId, focusChapterId, onSelectChapter,
+  notebookName, notebookId, chapters, selectedChapterId, focusChapterId, onSelectChapter,
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
-  onLocateInExplorer,
+  onLocateInExplorer, onMoveCategory,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
@@ -56,6 +59,7 @@ export function ChapterPanel({
   const [dragOverChId, setDragOverChId] = useState<string | null>(null)
   const [dragOverPageId, setDragOverPageId] = useState<string | null>(null)
   const [dragOverPageSide, setDragOverPageSide] = useState<'left' | 'right'>('left')
+  const [dragOverNotebookArea, setDragOverNotebookArea] = useState(false)
 
   const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
 
@@ -97,6 +101,31 @@ export function ChapterPanel({
   function handleRename(id: string) {
     if (!editName.trim()) { setEditingId(null); return }
     onRenameChapter(id, editName.trim()); setEditingId(null)
+  }
+
+  // ---- cycle detection for category moves ----
+  function isDescendantOf(ancestorId: string, nodeId: string): boolean {
+    const visited = new Set<string>()
+    let currentId: string | null = nodeId
+    while (currentId) {
+      if (visited.has(currentId)) break
+      visited.add(currentId)
+      if (currentId === ancestorId) return true
+      const cat = allCategories.find(c => c.id === currentId)
+      currentId = cat?.parentId ?? null
+    }
+    return false
+  }
+
+  // ---- parse drag data (category or page) ----
+  function parseDrag(e: React.DragEvent): { type: 'category' | 'page'; id: string } | null {
+    const raw = e.dataTransfer.getData('text/plain')
+    if (!raw) return null
+    try {
+      const v = JSON.parse(raw)
+      if ((v.type === 'category' || v.type === 'page') && typeof v.id === 'string') return v
+    } catch {}
+    return null
   }
 
   return (
@@ -156,11 +185,24 @@ export function ChapterPanel({
               />
             ) : (
               <div
+                data-chapter-id={ch.id}
                 onClick={() => onSelectChapter(ch.id)}
                 onDragOver={e => {
                   e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  setDragOverChId(ch.id)
+                  const d = parseDrag(e)
+                  if (!d) return
+                  // Category drop on chapter: move into this chapter (become sub-category)
+                  if (d.type === 'category' && d.id !== ch.id && !isDescendantOf(d.id, ch.id)) {
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverChId(ch.id)
+                    return
+                  }
+                  // Page drop on chapter: move page into this chapter
+                  if (d.type === 'page') {
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverChId(ch.id)
+                    return
+                  }
                 }}
                 onDragLeave={e => {
                   if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
@@ -170,11 +212,13 @@ export function ChapterPanel({
                 onDrop={e => {
                   e.preventDefault()
                   setDragOverChId(null)
-                  const raw = e.dataTransfer.getData('text/plain')
-                  if (!raw) return
-                  let pageId = raw
-                  try { const p = JSON.parse(raw); if (p.type === 'page') pageId = p.id } catch {}
-                  if (pageId) onDropOnChapter(pageId, ch.id)
+                  const d = parseDrag(e)
+                  if (!d) return
+                  if (d.type === 'category' && d.id !== ch.id && !isDescendantOf(d.id, ch.id)) {
+                    onMoveCategory(d.id, ch.id)
+                  } else if (d.type === 'page') {
+                    onDropOnChapter(d.id, ch.id)
+                  }
                 }}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
                   selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
@@ -226,7 +270,30 @@ export function ChapterPanel({
       )}
 
       {/* Pages in selected chapter */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
+      <div
+        className={`flex-1 overflow-y-auto px-2 py-1 transition-colors ${dragOverNotebookArea ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)] outline-offset-[-2px]' : ''}`}
+        onDragOver={e => {
+          const d = parseDrag(e)
+          if (d?.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            setDragOverNotebookArea(true)
+          }
+        }}
+        onDragLeave={e => {
+          if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+            setDragOverNotebookArea(false)
+          }
+        }}
+        onDrop={e => {
+          setDragOverNotebookArea(false)
+          const d = parseDrag(e)
+          if (d?.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
+            e.preventDefault()
+            onMoveCategory(d.id, notebookId)
+          }
+        }}
+      >
         <div className="flex items-center justify-between px-1 mb-1">
           <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">页面</span>
           <span className="text-[10px] text-[var(--text-muted)]">{pages.length}</span>
