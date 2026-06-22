@@ -35,6 +35,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [showCategoryPanel, setShowCategoryPanel] = useState(true)
   const [showChapterPanel, setShowChapterPanel] = useState(true)
   const [showOutline, setShowOutline] = useState(false)
+  const [liveContent, setLiveContent] = useState('')
   const [locatePageId, setLocatePageId] = useState<string | null>(null)
 
   const openPageIdsRef = useRef(openPageIds)
@@ -43,6 +44,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const selectedChapterIdRef = useRef(selectedChapterId)
   useEffect(() => { openPageIdsRef.current = openPageIds }, [openPageIds])
   useEffect(() => { activePageIdRef.current = activePageId }, [activePageId])
+  useEffect(() => { setLiveContent('') }, [activePageId])  // reset live outline when switching pages
   useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
 
@@ -451,9 +453,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     return [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === activePageId) ?? null
   }, [activePageId, allLoosePages, chapterPages, starredPages])
   const outlineHeadings = useMemo(() => {
-    if (!activePageForOutline?.contentMd) return []
-    return parseHeadings(activePageForOutline.contentMd)
-  }, [activePageForOutline])
+    const md = liveContent || activePageForOutline?.contentMd || ''
+    return parseHeadings(md)
+  }, [liveContent, activePageForOutline?.contentMd])
 
   const handleToggleOutline = useCallback(() => {
     setShowOutline(v => {
@@ -574,7 +576,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
               onToggleStar={handleToggleStar}
               onSortChapter={handleSortCategory}
-              onToggleOutline={handleToggleOutline}
               onLocateInExplorer={handleLocateInExplorer}
               onSortPage={handleSortPage}
               allCategories={categories}
@@ -617,6 +618,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onUpdate={handleRefresh}
               onTitleChange={handleTitleChange}
               onFileTypeChange={handleFileTypeChange}
+              onContentChange={setLiveContent}
+              onToggleOutline={handleToggleOutline}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">

@@ -148,7 +148,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           </div>
         </div>
       </ResizablePanel>
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden">
         {view === 'list' && (
           <EntryList
             entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries.filter(e => e.date.startsWith(thisMonth))}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ListTree, FolderSearch, FolderInput, Link2Off } from 'lucide-react'
+import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, FolderSearch, FolderInput, Link2Off } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -27,7 +27,6 @@ interface Props {
   onToggleStar: (id: string) => void
   onSortChapter: (id: string, direction: 'up' | 'down') => void
   onSortPage: (id: string, direction: 'up' | 'down') => void
-  onToggleOutline: () => void
   onLocateInExplorer?: (pageId: string) => void
   // Move callbacks (for context menu)
   allCategories: KnowledgeCategory[]
@@ -41,7 +40,7 @@ export function ChapterPanel({
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage,
-  onToggleOutline, onLocateInExplorer,
+  onLocateInExplorer,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
@@ -124,13 +123,6 @@ export function ChapterPanel({
           )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            onClick={onToggleOutline}
-            className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-            title="大纲视图"
-          >
-            <ListTree size={14} />
-          </button>
           {focusChapter && editingId !== focusChapter.id && (
             <button
               onClick={() => handleStartRename(focusChapter.id, focusChapter.name)}

@@ -28,6 +28,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
+  const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
   useEffect(() => {
@@ -176,22 +177,33 @@ export default function App() {
 
   if (!loaded) return null
 
+  function renderTab(name: TabName, children: React.ReactNode) {
+    if (activeTab === name) {
+      mountedTabs.current.add(name)
+      return <div key={name} className="flex-1">{children}</div>
+    }
+    if (mountedTabs.current.has(name)) {
+      return <div key={name} className="flex-1" style={{ display: 'none' }}>{children}</div>
+    }
+    return null
+  }
+
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden">
       <TitleBar />
       <PomodoroProvider>
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
-          <main className="flex-1 overflow-hidden bg-[var(--bg-primary)] relative">
-            {activeTab === 'blog' && <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />}
-            {activeTab === 'schedule' && <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />}
-            {activeTab === 'knowledge' && <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />}
-            {activeTab === 'export' && <ExportModule />}
-            {activeTab === 'recycle' && <RecycleBinModule />}
-            {activeTab === 'settings' && <SettingsModule />}
-            {activeTab === 'toolbox' && <ToolboxModule />}
-            {activeTab === 'help' && <HelpModule />}
-            {activeTab === 'user' && <UserModule />}
+          <main className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-primary)] relative">
+            {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />)}
+            {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />)}
+            {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} />)}
+            {renderTab('export', <ExportModule />)}
+            {renderTab('recycle', <RecycleBinModule />)}
+            {renderTab('settings', <SettingsModule />)}
+            {renderTab('toolbox', <ToolboxModule />)}
+            {renderTab('help', <HelpModule />)}
+            {renderTab('user', <UserModule />)}
             <PomodoroPanel />
           </main>
         </div>

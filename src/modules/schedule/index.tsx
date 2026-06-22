@@ -599,7 +599,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         onDeleteSubtask={handleDeleteSubtask}
         onCreateSubtask={handleCreateSubtask}
       />
-      <QuadrantChart open={quadrantOpen} todos={pendingTodos} tags={tags} onClose={() => setQuadrantOpen(false)} />
+      <QuadrantChart open={quadrantOpen} todos={pendingTodos.filter(t => t.taskType !== 'daily')} tags={tags} onClose={() => setQuadrantOpen(false)} />
       <TagManageModal open={tagManageOpen} tags={tags} onClose={() => setTagManageOpen(false)} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} />
     </div>
   )

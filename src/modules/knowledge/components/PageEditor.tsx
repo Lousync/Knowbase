@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
@@ -21,9 +21,11 @@ interface Props {
   onUpdate: () => void
   onTitleChange?: (title: string) => void
   onFileTypeChange?: (fileType: string) => void
+  onContentChange?: (content: string) => void
+  onToggleOutline?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -280,9 +282,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
             <span className="text-[12px] text-[var(--text-secondary)]">{saving ? '未保存' : '已保存'}</span>
             {!isCodeFile && !isPdfFile && (
+            <>
+            <button onClick={onToggleOutline} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]" title="大纲视图">
+              <ListTree size={16} />
+            </button>
             <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
               {preview ? <Edit3 size={16} /> : <Eye size={16} />}
             </button>
+            </>
             )}
             <button onClick={handleDelete} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)]" title="删除">
               <Trash2 size={16} />
@@ -331,7 +338,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               <Editor
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
-                onChange={v => setContent(v || '')}
+                onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c) }}
                 theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
