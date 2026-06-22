@@ -60,6 +60,7 @@ const api = {
   toggleKnowledgeStar: (id: string) => ipcRenderer.invoke('knowledge:toggleStar', id),
   getKnowledgeStarredPages: () => ipcRenderer.invoke('knowledge:getStarredPages'),
   moveKnowledgePage: (id: string, direction: string) => ipcRenderer.invoke('knowledge:movePage', id, direction),
+  reorderKnowledgePage: (id: string, targetIndex: number) => ipcRenderer.invoke('knowledge:reorderPage', id, targetIndex),
   moveKnowledgeCategory: (id: string, direction: string) => ipcRenderer.invoke('knowledge:moveCategory', id, direction),
 
   // import

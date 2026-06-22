@@ -190,6 +190,7 @@ export interface ElectronAPI {
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
   getKnowledgeStarredPages: () => Promise<KnowledgePage[]>
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
+  reorderKnowledgePage: (id: string, targetIndex: number) => Promise<void>
   moveKnowledgeCategory: (id: string, direction: 'up' | 'down') => Promise<void>
   // import
   showImportOpenDialog: () => Promise<string[]>

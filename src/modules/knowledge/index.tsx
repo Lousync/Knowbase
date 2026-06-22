@@ -304,7 +304,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- drag & drop move ---
   const handleDropOnNotebook = async (pageId: string, notebookId: string) => {
-    const notebookChapters = categories.filter(c => c.parentId === notebookId)
+    const freshCats = await getKnowledgeCategories()
+    const notebookChapters = freshCats.filter(c => c.parentId === notebookId)
     let targetChapterId: string | null = null
     if (notebookChapters.length > 0) {
       targetChapterId = notebookChapters[0].id
@@ -578,6 +579,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onSortChapter={handleSortCategory}
               onLocateInExplorer={handleLocateInExplorer}
               onSortPage={handleSortPage}
+              onRefreshPages={() => { refreshAllPages(); refreshChapterPages() }}
               allCategories={categories}
               onMovePageToLoose={handleDropOnLooseArea}
               onMovePageToNotebook={handleDropOnNotebook}

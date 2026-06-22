@@ -79,6 +79,18 @@ export function registerKnowledgeHandlers(): void {
     if (data.parentId !== undefined) { sets.push('parent_id = ?'); params.push(data.parentId) }
     if (data.sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(data.sortOrder) }
     if (data.categoryType !== undefined) { sets.push('category_type = ?'); params.push(data.categoryType) }
+    // When moving category to a different parent, reset sort_order to append at end
+    if (data.parentId !== undefined) {
+      const oldCat = queryAll<CategoryRow>('SELECT parent_id FROM knowledge_categories WHERE id = ?', [id])[0]
+      if (oldCat && oldCat.parent_id !== data.parentId && data.sortOrder === undefined) {
+        const maxOrder = queryAll<{ m: number }>(
+          'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
+          [data.parentId]
+        )
+        sets.push('sort_order = ?')
+        params.push(maxOrder[0]?.m ?? 0)
+      }
+    }
     params.push(id)
     run(`UPDATE knowledge_categories SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
@@ -245,6 +257,18 @@ export function registerKnowledgeHandlers(): void {
         params.push(v)
       }
     }
+    // When moving page to a different category, reset sort_order to append at end
+    if (data.categoryId !== undefined) {
+      const oldPage = queryAll<PageRow>('SELECT category_id FROM knowledge_pages WHERE id = ?', [id])[0]
+      if (oldPage && oldPage.category_id !== data.categoryId) {
+        const maxOrder = queryAll<{ m: number }>(
+          'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
+          [data.categoryId]
+        )
+        sets.push('sort_order = ?')
+        params.push(maxOrder[0]?.m ?? 0)
+      }
+    }
     params.push(id)
     run(`UPDATE knowledge_pages SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
@@ -267,6 +291,33 @@ export function registerKnowledgeHandlers(): void {
     // 交换 sort_order
     run('UPDATE knowledge_pages SET sort_order = ? WHERE id = ?', [neighbor[0].sort_order, id])
     run('UPDATE knowledge_pages SET sort_order = ? WHERE id = ?', [page.sort_order, neighbor[0].id])
+  })
+
+  // 重排页面到指定索引（拖拽排序用）
+  ipcMain.handle('knowledge:reorderPage', (_e, id: string, targetIndex: number) => {
+    const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])[0]
+    if (!page) return
+    const catId = page.category_id
+    // Get all sibling pages ordered by sort_order (excluding the moved page)
+    const siblings = queryAll<PageRow>(
+      'SELECT * FROM knowledge_pages WHERE category_id IS ? AND id != ? ORDER BY sort_order',
+      [catId, id]
+    )
+    // Build new order: insert the moved page at targetIndex
+    const newOrder: { id: string; sortOrder: number }[] = []
+    for (let i = 0; i < siblings.length; i++) {
+      if (newOrder.length === targetIndex) {
+        newOrder.push({ id: page.id, sortOrder: targetIndex })
+      }
+      newOrder.push({ id: siblings[i].id, sortOrder: newOrder.length })
+    }
+    if (newOrder.length <= targetIndex) {
+      newOrder.push({ id: page.id, sortOrder: newOrder.length })
+    }
+    // Write back all sort_orders
+    for (const item of newOrder) {
+      run('UPDATE knowledge_pages SET sort_order = ? WHERE id = ?', [item.sortOrder, item.id])
+    }
   })
 
   // 删除页面（软删除 → 回收站）

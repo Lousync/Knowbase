@@ -83,6 +83,7 @@ export const deleteKnowledgeTag = (id: string) => a().deleteKnowledgeTag(id)
 export const toggleKnowledgeStar = (id: string) => a().toggleKnowledgeStar(id)
 export const getKnowledgeStarredPages = () => a().getKnowledgeStarredPages()
 export const moveKnowledgePage = (id: string, direction: 'up' | 'down') => a().moveKnowledgePage(id, direction)
+export const reorderKnowledgePage = (id: string, targetIndex: number) => a().reorderKnowledgePage(id, targetIndex)
 export const moveKnowledgeCategory = (id: string, direction: 'up' | 'down') => a().moveKnowledgeCategory(id, direction)
 
 // export

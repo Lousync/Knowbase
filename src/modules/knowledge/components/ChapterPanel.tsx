@@ -4,7 +4,7 @@ import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
-import { getSetting, setSetting } from '../../../lib/ipc'
+import { getSetting, setSetting, reorderKnowledgePage } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { CategoryMovePicker } from './CategoryMovePicker'
 
@@ -27,6 +27,7 @@ interface Props {
   onToggleStar: (id: string) => void
   onSortChapter: (id: string, direction: 'up' | 'down') => void
   onSortPage: (id: string, direction: 'up' | 'down') => void
+  onRefreshPages: () => void
   onLocateInExplorer?: (pageId: string) => void
   // Move callbacks (for context menu)
   allCategories: KnowledgeCategory[]
@@ -39,7 +40,7 @@ export function ChapterPanel({
   notebookName, chapters, selectedChapterId, focusChapterId, onSelectChapter,
   onCreateChapter, onRenameChapter, onDeleteChapter,
   pages, activePageId, onOpenPage, onCreatePage, onImport,
-  onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage,
+  onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
   onLocateInExplorer,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
 }: Props) {
@@ -53,6 +54,8 @@ export function ChapterPanel({
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [movePickerPageId, setMovePickerPageId] = useState<string | null>(null)
   const [dragOverChId, setDragOverChId] = useState<string | null>(null)
+  const [dragOverPageId, setDragOverPageId] = useState<string | null>(null)
+  const [dragOverPageSide, setDragOverPageSide] = useState<'left' | 'right'>('left')
 
   const focusChapter = focusChapterId ? chapters.find(c => c.id === focusChapterId) : null
 
@@ -233,15 +236,57 @@ export function ChapterPanel({
             {focusChapter ? '暂无页面' : '暂未选中章节'}
           </p>
         ) : (
-          pages.map(p => (
+          pages.map((p, idx) => (
                 <div key={p.id}
+                  data-page-id={p.id}
                   draggable
                   onDragStart={e => {
                     e.dataTransfer.effectAllowed = 'move'
                     e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
                     ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
                   }}
-                  onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1' }}
+                  onDragEnd={e => {
+                    ;(e.currentTarget as HTMLElement).style.opacity = '1'
+                    setDragOverPageId(null)
+                  }}
+                  onDragOver={e => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const raw = e.dataTransfer.getData('text/plain')
+                    if (!raw) return
+                    let srcId = raw
+                    try { const d = JSON.parse(raw); if (d.type === 'page') srcId = d.id } catch {}
+                    if (!srcId || srcId === p.id) return
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverPageId(p.id)
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    setDragOverPageSide(e.clientY < rect.top + rect.height / 2 ? 'left' : 'right')
+                  }}
+                  onDragLeave={e => {
+                    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+                      setDragOverPageId(null)
+                    }
+                  }}
+                  onDrop={async e => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setDragOverPageId(null)
+                    const raw = e.dataTransfer.getData('text/plain')
+                    if (!raw) return
+                    let srcId = raw
+                    try { const d = JSON.parse(raw); if (d.type === 'page') srcId = d.id } catch {}
+                    if (!srcId || srcId === p.id) return
+                    const srcIdx = pages.findIndex(pg => pg.id === srcId)
+                    if (srcIdx === -1) return
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    const side = e.clientY < rect.top + rect.height / 2 ? 'left' : 'right'
+                    let targetIdx = side === 'left' ? idx : idx + 1
+                    if (srcIdx < targetIdx) targetIdx--
+                    if (targetIdx !== srcIdx) {
+                      await reorderKnowledgePage(srcId, targetIdx)
+                      onRefreshPages()
+                    }
+                  }}
                   onClick={() => onOpenPage(p.id)}
                   onContextMenu={e => {
                     e.preventDefault()
@@ -249,6 +294,12 @@ export function ChapterPanel({
                   }}
                   className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded text-[13px] transition-colors border-l-[3px] ${
                     activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  } ${
+                    dragOverPageId === p.id
+                      ? dragOverPageSide === 'left'
+                        ? 'border-t-2 border-t-[var(--accent)]'
+                        : 'border-b-2 border-b-[var(--accent)]'
+                      : ''
                   }`}
                 >
                   <FileIcon ext={p.fileType || ''} size={15} />
