@@ -171,7 +171,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   }, [view, handleToggleOutline])
 
   return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-1 min-h-0 bg-[var(--bg-primary)]">
       <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen && !showOutline} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">

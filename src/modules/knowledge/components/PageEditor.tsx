@@ -236,7 +236,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   }
 
   return (
-    <div className="flex-1 flex min-h-0 overflow-hidden">
+    <div className="flex-1 flex overflow-hidden">
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Toolbar */}
@@ -334,7 +334,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
               placeholder="页面标题"
             />
-            <div className="flex-1">
+            <div className="flex-1 min-h-0">
               <Editor
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}

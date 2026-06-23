@@ -524,8 +524,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const panelsVisible = sidebarOpen && !showOutline
 
   return (
-    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="h-full">
-      <div className="flex h-full bg-[var(--bg-primary)]">
+    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="flex-1 flex flex-col min-h-0">
+      <div className="flex flex-1 min-h-0 bg-[var(--bg-primary)]">
         {/* L1: NotebookList */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <NotebookList
