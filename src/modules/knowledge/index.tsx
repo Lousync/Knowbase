@@ -337,8 +337,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- category move (drag & drop) ---
   const handleMoveCategory = async (categoryId: string, newParentId: string | null) => {
+    const catName = categories.find(c => c.id === categoryId)?.name ?? categoryId
+    const targetName = newParentId ? categories.find(c => c.id === newParentId)?.name ?? newParentId : 'root'
+    console.log(`[handleMoveCategory] moving "${catName}" (${categoryId}) → parent="${targetName}" (${newParentId})`)
     try {
-      await updateKnowledgeCategory(categoryId, { parentId: newParentId })
+      const result = await updateKnowledgeCategory(categoryId, { parentId: newParentId })
+      console.log(`[handleMoveCategory] DB updated OK:`, result)
       refreshCategories()
     } catch (e) { console.error('handleMoveCategory failed:', e) }
   }

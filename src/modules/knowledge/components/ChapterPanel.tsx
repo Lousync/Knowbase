@@ -173,6 +173,46 @@ export function ChapterPanel({
       {!focusChapter && (
       <div
         className="px-2 py-1 border-b border-[var(--border-color)]"
+        onDragOver={e => {
+          const d = dragRef.current
+          if (!d) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+
+          const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
+          if (targetChapter) {
+            const chId = targetChapter.dataset.chapterId!
+            if (d.type === 'category') {
+              if (d.id !== chId && !isDescendantOf(d.id, chId)) {
+                setDragOverChId(chId)
+              } else {
+                setDragOverChId(null)
+              }
+            } else {
+              setDragOverChId(chId)
+            }
+          } else {
+            setDragOverChId(null)
+          }
+        }}
+        onDrop={e => {
+          e.preventDefault()
+          const dragged = dragRef.current
+          dragRef.current = null
+          setDragOverChId(null)
+          const d = dragged || parseDrag(e)
+          if (!d) return
+
+          const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
+          if (targetChapter) {
+            const chId = targetChapter.dataset.chapterId!
+            if (d.type === 'category' && d.id !== chId && !isDescendantOf(d.id, chId)) {
+              onMoveCategory(d.id, chId)
+            } else if (d.type === 'page') {
+              onDropOnChapter(d.id, chId)
+            }
+          }
+        }}
       >
         <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-1 mb-1">章节</div>
         {chapters.map(ch => (
@@ -190,41 +230,6 @@ export function ChapterPanel({
               <div
                 data-chapter-id={ch.id}
                 onClick={() => onSelectChapter(ch.id)}
-                onDragOver={e => {
-                  e.preventDefault()
-                  const d = dragRef.current
-                  if (!d) return
-                  // Category drop on chapter: move into this chapter (become sub-category)
-                  if (d.type === 'category' && d.id !== ch.id && !isDescendantOf(d.id, ch.id)) {
-                    e.dataTransfer.dropEffect = 'move'
-                    setDragOverChId(ch.id)
-                    return
-                  }
-                  // Page drop on chapter: move page into this chapter
-                  if (d.type === 'page') {
-                    e.dataTransfer.dropEffect = 'move'
-                    setDragOverChId(ch.id)
-                    return
-                  }
-                }}
-                onDragLeave={e => {
-                  if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
-                    setDragOverChId(null)
-                  }
-                }}
-                onDrop={e => {
-                  e.preventDefault()
-                  const dragged = dragRef.current
-                  dragRef.current = null
-                  setDragOverChId(null)
-                  const d = dragged || parseDrag(e)
-                  if (!d) return
-                  if (d.type === 'category' && d.id !== ch.id && !isDescendantOf(d.id, ch.id)) {
-                    onMoveCategory(d.id, ch.id)
-                  } else if (d.type === 'page') {
-                    onDropOnChapter(d.id, ch.id)
-                  }
-                }}
                 className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
                   selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                   : dragOverChId === ch.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
@@ -279,24 +284,94 @@ export function ChapterPanel({
         className={`flex-1 overflow-y-auto px-2 py-1 transition-colors ${dragOverNotebookArea ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)] outline-offset-[-2px]' : ''}`}
         onDragOver={e => {
           const d = dragRef.current
-          if (d?.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
-            e.preventDefault()
-            e.dataTransfer.dropEffect = 'move'
+          if (!d) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+
+          const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
+          const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
+
+          if (targetChapter) {
+            const chId = targetChapter.dataset.chapterId!
+            if (d.type === 'category') {
+              if (d.id !== chId && !isDescendantOf(d.id, chId)) {
+                setDragOverChId(chId)
+              } else {
+                setDragOverChId(null)
+              }
+            } else {
+              // page drop on chapter is always valid
+              setDragOverChId(chId)
+            }
+            setDragOverNotebookArea(false)
+            setDragOverPageId(null)
+          } else if (targetPage && d.type === 'page' && d.id !== targetPage.dataset.pageId!) {
+            setDragOverPageId(targetPage.dataset.pageId!)
+            const rect = targetPage.getBoundingClientRect()
+            setDragOverPageSide(e.clientY < rect.top + rect.height / 2 ? 'left' : 'right')
+            setDragOverChId(null)
+            setDragOverNotebookArea(false)
+          } else if (d.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
             setDragOverNotebookArea(true)
+            setDragOverChId(null)
+            setDragOverPageId(null)
+          } else {
+            setDragOverChId(null)
+            setDragOverPageId(null)
+            setDragOverNotebookArea(false)
           }
         }}
         onDragLeave={e => {
           if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+            setDragOverChId(null)
+            setDragOverPageId(null)
             setDragOverNotebookArea(false)
           }
         }}
         onDrop={e => {
+          e.preventDefault()
           const dragged = dragRef.current
           dragRef.current = null
+          setDragOverChId(null)
+          setDragOverPageId(null)
           setDragOverNotebookArea(false)
           const d = dragged || parseDrag(e)
-          if (d?.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
-            e.preventDefault()
+          if (!d) return
+
+          const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
+          const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
+
+          if (targetChapter) {
+            const chId = targetChapter.dataset.chapterId!
+            if (d.type === 'category' && d.id !== chId && !isDescendantOf(d.id, chId)) {
+              onMoveCategory(d.id, chId)
+            } else if (d.type === 'page') {
+              onDropOnChapter(d.id, chId)
+            }
+            return
+          }
+
+          if (targetPage && d.type === 'page' && d.id !== targetPage.dataset.pageId!) {
+            const srcId = d.id
+            const srcIdx = pages.findIndex(pg => pg.id === srcId)
+            if (srcIdx !== -1) {
+              const targetIdx = pages.findIndex(pg => pg.id === targetPage.dataset.pageId!)
+              if (targetIdx !== -1) {
+                const rect = targetPage.getBoundingClientRect()
+                const side = e.clientY < rect.top + rect.height / 2 ? 'left' : 'right'
+                let newIdx = side === 'left' ? targetIdx : targetIdx + 1
+                if (srcIdx < newIdx) newIdx--
+                if (newIdx !== srcIdx) {
+                  reorderKnowledgePage(srcId, newIdx)
+                  onRefreshPages()
+                }
+              }
+            }
+            return
+          }
+
+          // Category drop on notebook area → become chapter
+          if (d.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
             onMoveCategory(d.id, notebookId)
           }
         }}
@@ -324,40 +399,6 @@ export function ChapterPanel({
                     ;(e.currentTarget as HTMLElement).style.opacity = '1'
                     dragRef.current = null
                     setDragOverPageId(null)
-                  }}
-                  onDragOver={e => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    const d = dragRef.current
-                    if (!d || d.type !== 'page' || d.id === p.id) return
-                    e.dataTransfer.dropEffect = 'move'
-                    setDragOverPageId(p.id)
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                    setDragOverPageSide(e.clientY < rect.top + rect.height / 2 ? 'left' : 'right')
-                  }}
-                  onDragLeave={e => {
-                    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
-                      setDragOverPageId(null)
-                    }
-                  }}
-                  onDrop={async e => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    const dragged = dragRef.current
-                    dragRef.current = null
-                    setDragOverPageId(null)
-                    if (!dragged || dragged.type !== 'page' || dragged.id === p.id) return
-                    const srcId = dragged.id
-                    const srcIdx = pages.findIndex(pg => pg.id === srcId)
-                    if (srcIdx === -1) return
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                    const side = e.clientY < rect.top + rect.height / 2 ? 'left' : 'right'
-                    let targetIdx = side === 'left' ? idx : idx + 1
-                    if (srcIdx < targetIdx) targetIdx--
-                    if (targetIdx !== srcIdx) {
-                      await reorderKnowledgePage(srcId, targetIdx)
-                      onRefreshPages()
-                    }
                   }}
                   onClick={() => onOpenPage(p.id)}
                   onContextMenu={e => {

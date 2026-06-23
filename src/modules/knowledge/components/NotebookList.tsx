@@ -255,45 +255,6 @@ export function NotebookList({
             dragRef.current = null
             setDragOverId(null)
           }}
-          onDragOver={e => {
-            e.preventDefault()
-            const d = dragRef.current
-            if (!d) return
-            // Prevent cycle: target must not be a descendant of the dragged item
-            const isCycle = d.type === 'category' && isDescendant(d.id, cat.id)
-            const valid = (d.type === 'category' && d.id !== cat.id && !isCycle && canAcceptCategory(cat.id, d.id))
-                       || d.type === 'page'
-            if (valid) {
-              e.dataTransfer.dropEffect = 'move'
-              setDragOverId(cat.id)
-            } else {
-              e.dataTransfer.dropEffect = 'none'
-              setDragOverId(null)
-            }
-          }}
-          onDragLeave={e => {
-            if (dragOverId === cat.id && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
-              setDragOverId(null)
-            }
-          }}
-          onDrop={e => {
-            e.preventDefault()
-            e.stopPropagation()
-            ;(e.currentTarget as HTMLElement).style.opacity = '1'
-            const dragged = dragRef.current
-            dragRef.current = null
-            setDragOverId(null)
-            const d = dragged || parseDrop(e)
-            if (!d) return
-            if (d.type === 'category' && d.id !== cat.id && !isDescendant(d.id, cat.id) && canAcceptCategory(cat.id, d.id)) {
-              setExpanded(prev => new Set(prev).add(cat.id))
-              onMoveCategory(d.id, cat.id)
-            } else if (d.type === 'page') {
-              const c = categories.find(x => x.id === cat.id)
-              if (c?.categoryType === 'notebook') onDropOnNotebook(d.id, cat.id)
-              else onDropOnCategory(d.id, cat.id)
-            }
-          }}
           onContextMenu={e => {
             e.preventDefault()
             setContextMenu({ type: 'category', id: cat.id, x: e.clientX, y: e.clientY })
@@ -370,41 +331,7 @@ export function NotebookList({
           </div>
         )}
         {isExpanded && canExpand && (
-          <div
-            onDragOver={e => {
-              e.preventDefault()
-              const d = dragRef.current
-              if (!d) return
-              const isCycle = d.type === 'category' && isDescendant(d.id, cat.id)
-              const valid = (d.type === 'category' && d.id !== cat.id && !isCycle && canAcceptCategory(cat.id, d.id))
-                         || d.type === 'page'
-              if (valid) {
-                e.dataTransfer.dropEffect = 'move'
-                setDragOverId(cat.id)
-              }
-            }}
-            onDragLeave={e => {
-              if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
-                setDragOverId(null)
-              }
-            }}
-            onDrop={e => {
-              e.preventDefault()
-              e.stopPropagation()
-              const dragged = dragRef.current
-              dragRef.current = null
-              setDragOverId(null)
-              const d = dragged || parseDrop(e)
-              if (!d) return
-              if (d.type === 'category' && d.id !== cat.id && !isDescendant(d.id, cat.id) && canAcceptCategory(cat.id, d.id)) {
-                setExpanded(prev => new Set(prev).add(cat.id))
-                onMoveCategory(d.id, cat.id)
-              } else if (d.type === 'page') {
-                if (isNotebook) onDropOnNotebook(d.id, cat.id)
-                else onDropOnCategory(d.id, cat.id)
-              }
-            }}
-          >
+          <div>
             {/* Pages directly under this category */}
             {categoryPages.map(p => (
               <div key={p.id}
@@ -502,21 +429,47 @@ export function NotebookList({
       <div
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onDragOver={e => {
-          if (dragRef.current) {
-            e.preventDefault()
-            e.dataTransfer.dropEffect = 'move'
+          const d = dragRef.current
+          if (!d) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+
+          const targetCat = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
+          const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
+
+          if (targetCat) {
+            const catId = targetCat.dataset.catId!
+            if (d.type === 'category') {
+              if (d.id !== catId && !isDescendant(d.id, catId) && canAcceptCategory(catId, d.id)) {
+                setDragOverId(catId)
+              } else {
+                setDragOverId(null)
+              }
+            } else {
+              // page drop on any category is always valid
+              setDragOverId(catId)
+            }
+          } else if (targetPage && d.type === 'page') {
+            setDragOverId(targetPage.dataset.pageId!)
+          } else if (!targetCat && d.type === 'page') {
+            setDragOverId('__loose')
+          } else {
+            setDragOverId(null)
           }
         }}
         onDrop={e => {
-          // Fallback: delegate to closest category, or root/loose if on empty space
+          e.preventDefault()
           const dragged = dragRef.current
-          const d = dragged || parseDrop(e)
           dragRef.current = null
+          setDragOverId(null)
+          const d = dragged || parseDrop(e)
           if (!d) return
-          const onCat = (e.target as HTMLElement).closest('[data-cat-id]')
-          if (onCat) {
-            // Delegate to the containing category (handles drops on sub-content areas)
-            const catId = (onCat as HTMLElement).dataset.catId!
+
+          const targetCat = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
+          const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
+
+          if (targetCat) {
+            const catId = targetCat.dataset.catId!
             if (d.type === 'category' && d.id !== catId && !isDescendant(d.id, catId) && canAcceptCategory(catId, d.id)) {
               setExpanded(prev => new Set(prev).add(catId))
               onMoveCategory(d.id, catId)
@@ -527,9 +480,8 @@ export function NotebookList({
             }
             return
           }
-          const onPage = (e.target as HTMLElement).closest('[data-page-id]')
-          if (onPage) return  // page-to-page reorder handled by individual page handlers
-          // Empty space → move category to root / page to loose
+
+          // Empty space / loose area
           if (d.type === 'category') onMoveCategory(d.id, null)
           else if (d.type === 'page') onDropOnLooseArea(d.id)
         }}
@@ -540,23 +492,6 @@ export function NotebookList({
         {loosePages.length > 0 && (
           <div
             className={`mx-1 rounded transition-colors ${dragOverId === '__loose' ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)]' : ''}`}
-            onDragOver={e => {
-              e.preventDefault()
-              const d = dragRef.current
-              if (d?.type === 'page') {
-                e.dataTransfer.dropEffect = 'move'
-                setDragOverId('__loose')
-              }
-            }}
-            onDragLeave={() => setDragOverId(null)}
-            onDrop={e => {
-              e.preventDefault()
-              const dragged = dragRef.current
-              dragRef.current = null
-              setDragOverId(null)
-              const d = dragged || parseDrop(e)
-              if (d?.type === 'page') onDropOnLooseArea(d.id)
-            }}
           >
             {loosePages.map(p => (
               <div key={p.id}

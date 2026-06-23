@@ -73,6 +73,7 @@ export function registerKnowledgeHandlers(): void {
 
   // 更新分类（重命名/移动）
   ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }) => {
+    console.log(`[knowledge:updateCategory] id=${id} data=`, JSON.stringify(data))
     const sets: string[] = ["updated_at = datetime('now')"]
     const params: unknown[] = []
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
