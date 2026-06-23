@@ -180,10 +180,10 @@ export default function App() {
   function renderTab(name: TabName, children: React.ReactNode) {
     if (activeTab === name) {
       mountedTabs.current.add(name)
-      return <div key={name} className="flex-1">{children}</div>
+      return <div key={name} className="flex-1 min-h-0">{children}</div>
     }
     if (mountedTabs.current.has(name)) {
-      return <div key={name} className="flex-1" style={{ display: 'none' }}>{children}</div>
+      return <div key={name} className="flex-1 min-h-0" style={{ display: 'none' }}>{children}</div>
     }
     return null
   }
