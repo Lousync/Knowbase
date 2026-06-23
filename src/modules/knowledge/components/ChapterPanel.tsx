@@ -214,9 +214,10 @@ export function ChapterPanel({
                 }}
                 onDrop={e => {
                   e.preventDefault()
+                  const dragged = dragRef.current
                   dragRef.current = null
                   setDragOverChId(null)
-                  const d = parseDrag(e)
+                  const d = dragged || parseDrag(e)
                   if (!d) return
                   if (d.type === 'category' && d.id !== ch.id && !isDescendantOf(d.id, ch.id)) {
                     onMoveCategory(d.id, ch.id)
@@ -290,9 +291,10 @@ export function ChapterPanel({
           }
         }}
         onDrop={e => {
+          const dragged = dragRef.current
           dragRef.current = null
           setDragOverNotebookArea(false)
-          const d = parseDrag(e)
+          const d = dragged || parseDrag(e)
           if (d?.type === 'category' && d.id !== notebookId && !chapters.some(ch => ch.id === d.id)) {
             e.preventDefault()
             onMoveCategory(d.id, notebookId)
@@ -326,11 +328,8 @@ export function ChapterPanel({
                   onDragOver={e => {
                     e.preventDefault()
                     e.stopPropagation()
-                    const raw = e.dataTransfer.getData('text/plain')
-                    if (!raw) return
-                    let srcId = raw
-                    try { const d = JSON.parse(raw); if (d.type === 'page') srcId = d.id } catch {}
-                    if (!srcId || srcId === p.id) return
+                    const d = dragRef.current
+                    if (!d || d.type !== 'page' || d.id === p.id) return
                     e.dataTransfer.dropEffect = 'move'
                     setDragOverPageId(p.id)
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -344,12 +343,11 @@ export function ChapterPanel({
                   onDrop={async e => {
                     e.preventDefault()
                     e.stopPropagation()
+                    const dragged = dragRef.current
+                    dragRef.current = null
                     setDragOverPageId(null)
-                    const raw = e.dataTransfer.getData('text/plain')
-                    if (!raw) return
-                    let srcId = raw
-                    try { const d = JSON.parse(raw); if (d.type === 'page') srcId = d.id } catch {}
-                    if (!srcId || srcId === p.id) return
+                    if (!dragged || dragged.type !== 'page' || dragged.id === p.id) return
+                    const srcId = dragged.id
                     const srcIdx = pages.findIndex(pg => pg.id === srcId)
                     if (srcIdx === -1) return
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()

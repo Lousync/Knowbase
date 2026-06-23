@@ -280,9 +280,10 @@ export function NotebookList({
             e.preventDefault()
             e.stopPropagation()
             ;(e.currentTarget as HTMLElement).style.opacity = '1'
+            const dragged = dragRef.current
             dragRef.current = null
             setDragOverId(null)
-            const d = parseDrop(e)
+            const d = dragged || parseDrop(e)
             if (!d) return
             if (d.type === 'category' && d.id !== cat.id && !isDescendant(d.id, cat.id) && canAcceptCategory(cat.id, d.id)) {
               setExpanded(prev => new Set(prev).add(cat.id))
@@ -390,9 +391,10 @@ export function NotebookList({
             onDrop={e => {
               e.preventDefault()
               e.stopPropagation()
+              const dragged = dragRef.current
               dragRef.current = null
               setDragOverId(null)
-              const d = parseDrop(e)
+              const d = dragged || parseDrop(e)
               if (!d) return
               if (d.type === 'category' && d.id !== cat.id && !isDescendant(d.id, cat.id) && canAcceptCategory(cat.id, d.id)) {
                 setExpanded(prev => new Set(prev).add(cat.id))
@@ -507,9 +509,10 @@ export function NotebookList({
         }}
         onDrop={e => {
           // Fallback: delegate to closest category, or root/loose if on empty space
-          const d = parseDrop(e)
-          if (!d) return
+          const dragged = dragRef.current
+          const d = dragged || parseDrop(e)
           dragRef.current = null
+          if (!d) return
           const onCat = (e.target as HTMLElement).closest('[data-cat-id]')
           if (onCat) {
             // Delegate to the containing category (handles drops on sub-content areas)
@@ -548,9 +551,10 @@ export function NotebookList({
             onDragLeave={() => setDragOverId(null)}
             onDrop={e => {
               e.preventDefault()
+              const dragged = dragRef.current
               dragRef.current = null
               setDragOverId(null)
-              const d = parseDrop(e)
+              const d = dragged || parseDrop(e)
               if (d?.type === 'page') onDropOnLooseArea(d.id)
             }}
           >

@@ -337,8 +337,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- category move (drag & drop) ---
   const handleMoveCategory = async (categoryId: string, newParentId: string | null) => {
-    await updateKnowledgeCategory(categoryId, { parentId: newParentId })
-    refreshCategories()
+    try {
+      await updateKnowledgeCategory(categoryId, { parentId: newParentId })
+      refreshCategories()
+    } catch (e) { console.error('handleMoveCategory failed:', e) }
   }
 
   // --- sort (up/down reorder) ---
