@@ -79,6 +79,10 @@ export function NotebookList({
   // blur of the current input (which fires before click) aborts without creating.
   const switchingModeRef = useRef(false)
 
+  // Drag ref: store drag data so dragOver can read it without relying on getData()
+  // (Chromium security may block getData() during dragover events)
+  const dragRef = useRef<{ type: 'category' | 'page'; id: string } | null>(null)
+
   // When createMode changes, clear any previously-typed name to prevent
   // onBlur of the old input from creating a category with the wrong type.
   useEffect(() => { setNewName('') }, [createMode])
@@ -241,18 +245,23 @@ export function NotebookList({
           draggable
           onDragStart={e => {
             e.dataTransfer.effectAllowed = 'move'
-            e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'category', id: cat.id }))
+            const payload = JSON.stringify({ type: 'category', id: cat.id })
+            e.dataTransfer.setData('text/plain', payload)
+            dragRef.current = { type: 'category', id: cat.id }
             ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
           }}
           onDragEnd={e => {
             ;(e.currentTarget as HTMLElement).style.opacity = '1'
+            dragRef.current = null
             setDragOverId(null)
           }}
           onDragOver={e => {
             e.preventDefault()
-            const d = parseDrop(e)
-            if (!d) { setDragOverId(null); return }
-            const valid = (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id))
+            const d = dragRef.current
+            if (!d) return
+            // Prevent cycle: target must not be a descendant of the dragged item
+            const isCycle = d.type === 'category' && isDescendant(d.id, cat.id)
+            const valid = (d.type === 'category' && d.id !== cat.id && !isCycle && canAcceptCategory(cat.id, d.id))
                        || d.type === 'page'
             if (valid) {
               e.dataTransfer.dropEffect = 'move'
@@ -271,10 +280,12 @@ export function NotebookList({
             e.preventDefault()
             e.stopPropagation()
             ;(e.currentTarget as HTMLElement).style.opacity = '1'
+            dragRef.current = null
             setDragOverId(null)
             const d = parseDrop(e)
             if (!d) return
-            if (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
+            if (d.type === 'category' && d.id !== cat.id && !isDescendant(d.id, cat.id) && canAcceptCategory(cat.id, d.id)) {
+              setExpanded(prev => new Set(prev).add(cat.id))
               onMoveCategory(d.id, cat.id)
             } else if (d.type === 'page') {
               const c = categories.find(x => x.id === cat.id)
@@ -361,10 +372,10 @@ export function NotebookList({
           <div
             onDragOver={e => {
               e.preventDefault()
-              const d = parseDrop(e)
+              const d = dragRef.current
               if (!d) return
-              // Visual feedback: highlight parent category when dragging over its sub-content
-              const valid = (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id))
+              const isCycle = d.type === 'category' && isDescendant(d.id, cat.id)
+              const valid = (d.type === 'category' && d.id !== cat.id && !isCycle && canAcceptCategory(cat.id, d.id))
                          || d.type === 'page'
               if (valid) {
                 e.dataTransfer.dropEffect = 'move'
@@ -379,10 +390,12 @@ export function NotebookList({
             onDrop={e => {
               e.preventDefault()
               e.stopPropagation()
+              dragRef.current = null
               setDragOverId(null)
               const d = parseDrop(e)
               if (!d) return
-              if (d.type === 'category' && d.id !== cat.id && !isDescendant(cat.id, d.id) && canAcceptCategory(cat.id, d.id)) {
+              if (d.type === 'category' && d.id !== cat.id && !isDescendant(d.id, cat.id) && canAcceptCategory(cat.id, d.id)) {
+                setExpanded(prev => new Set(prev).add(cat.id))
                 onMoveCategory(d.id, cat.id)
               } else if (d.type === 'page') {
                 if (isNotebook) onDropOnNotebook(d.id, cat.id)
@@ -398,10 +411,12 @@ export function NotebookList({
                 onDragStart={e => {
                   e.dataTransfer.effectAllowed = 'move'
                   e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                  dragRef.current = { type: 'page', id: p.id }
                   ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
                 }}
                 onDragEnd={e => {
                   ;(e.currentTarget as HTMLElement).style.opacity = '1'
+                  dragRef.current = null
                 }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
@@ -485,8 +500,7 @@ export function NotebookList({
       <div
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onDragOver={e => {
-          const d = parseDrop(e)
-          if (d) {
+          if (dragRef.current) {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
           }
@@ -495,11 +509,13 @@ export function NotebookList({
           // Fallback: delegate to closest category, or root/loose if on empty space
           const d = parseDrop(e)
           if (!d) return
+          dragRef.current = null
           const onCat = (e.target as HTMLElement).closest('[data-cat-id]')
           if (onCat) {
             // Delegate to the containing category (handles drops on sub-content areas)
             const catId = (onCat as HTMLElement).dataset.catId!
-            if (d.type === 'category' && d.id !== catId && !isDescendant(catId, d.id) && canAcceptCategory(catId, d.id)) {
+            if (d.type === 'category' && d.id !== catId && !isDescendant(d.id, catId) && canAcceptCategory(catId, d.id)) {
+              setExpanded(prev => new Set(prev).add(catId))
               onMoveCategory(d.id, catId)
             } else if (d.type === 'page') {
               const c = categories.find(x => x.id === catId)
@@ -523,13 +539,16 @@ export function NotebookList({
             className={`mx-1 rounded transition-colors ${dragOverId === '__loose' ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)]' : ''}`}
             onDragOver={e => {
               e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-              const d = parseDrop(e)
-              if (d?.type === 'page') setDragOverId('__loose')
+              const d = dragRef.current
+              if (d?.type === 'page') {
+                e.dataTransfer.dropEffect = 'move'
+                setDragOverId('__loose')
+              }
             }}
             onDragLeave={() => setDragOverId(null)}
             onDrop={e => {
               e.preventDefault()
+              dragRef.current = null
               setDragOverId(null)
               const d = parseDrop(e)
               if (d?.type === 'page') onDropOnLooseArea(d.id)
@@ -542,9 +561,10 @@ export function NotebookList({
                 onDragStart={e => {
                   e.dataTransfer.effectAllowed = 'move'
                   e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                  dragRef.current = { type: 'page', id: p.id }
                   ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
                 }}
-                onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1' }}
+                onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1'; dragRef.current = null }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
                   e.preventDefault()
