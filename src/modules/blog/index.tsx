@@ -50,8 +50,10 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     setView('list')
     setSelectedId(null)
     setSelectedDate(null)
+    setShowOutline(false)
+    onSnapOpenSidebar?.()
     loadEntries()
-  }, [loadEntries])
+  }, [loadEntries, onSnapOpenSidebar])
 
   useEffect(() => { loadEntries() }, [loadEntries])
 
@@ -143,8 +145,16 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   const outlineHeadings = useMemo(() => parseHeadings(liveContent), [liveContent])
 
   const handleToggleOutline = useCallback(() => {
-    setShowOutline(v => !v)
-  }, [])
+    setShowOutline(v => {
+      const next = !v
+      if (next) {
+        onSnapCloseSidebar?.()
+      } else {
+        onSnapOpenSidebar?.()
+      }
+      return next
+    })
+  }, [onSnapCloseSidebar, onSnapOpenSidebar])
 
   // Ctrl+O toggle outline
   useEffect(() => {
@@ -152,16 +162,16 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       if (isEditingInput(e)) return
       if (e.ctrlKey && e.key === 'o' && view === 'editor') {
         e.preventDefault()
-        setShowOutline(v => !v)
+        handleToggleOutline()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view])
+  }, [view, handleToggleOutline])
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
-      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
+      <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={224} minWidth={160} maxWidth={450} visible={sidebarOpen && !showOutline} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">
             <Sidebar
@@ -174,6 +184,16 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           </div>
         </div>
       </ResizablePanel>
+
+      {/* Outline panel — replaces sidebar on the left when toggled */}
+      {showOutline && view === 'editor' && (
+        <OutlinePanel
+          pageTitle={entries.find(e => e.id === selectedId)?.title || ''}
+          headings={outlineHeadings}
+          onBackToFile={handleToggleOutline}
+        />
+      )}
+
       <main className="flex-1 flex flex-col overflow-hidden">
         {view === 'list' && (
           <EntryList
@@ -186,26 +206,15 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           />
         )}
         {view === 'editor' && selectedId && (
-          <div className="flex-1 flex overflow-hidden">
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <MarkdownEditor
-                entryId={selectedId}
-                showLineNumbers={showLineNumbers}
-                zoom={zoom}
-                onSave={goToList}
-                onCancel={goToList}
-                onContentChange={setLiveContent}
-                onToggleOutline={handleToggleOutline}
-              />
-            </div>
-            {showOutline && (
-              <OutlinePanel
-                pageTitle={entries.find(e => e.id === selectedId)?.title || ''}
-                headings={outlineHeadings}
-                onBackToFile={handleToggleOutline}
-              />
-            )}
-          </div>
+          <MarkdownEditor
+            entryId={selectedId}
+            showLineNumbers={showLineNumbers}
+            zoom={zoom}
+            onSave={goToList}
+            onCancel={goToList}
+            onContentChange={setLiveContent}
+            onToggleOutline={handleToggleOutline}
+          />
         )}
         {view === 'detail' && selectedId && (
           <EntryDetail

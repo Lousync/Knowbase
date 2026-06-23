@@ -59,6 +59,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         setContentMd(d.contentMd); setDate(d.date)
         setEntryTags(d.tags || [])
         setEntryStates(d.states || '')
+        onContentChange?.(d.contentMd)  // seed outline with existing content
         setLoaded(true)
       }),
       getTags().then(setAllTags)
@@ -150,20 +151,44 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // Outline navigation — scroll Monaco editor to heading line
+  // Outline navigation — scroll editor or preview DOM to target heading
   useEffect(() => {
     const handler = (e: Event) => {
-      const { line } = (e as CustomEvent).detail as { line: number; id: string }
-      const ed = editorRef.current
-      if (ed) {
-        ed.revealLineInCenter(line)
-        ed.setPosition({ lineNumber: line, column: 1 })
-        ed.focus()
+      const { line, id } = (e as CustomEvent).detail as { line: number; id: string }
+      if (showPreview) {
+        // Preview mode: scroll DOM element
+        const el = document.getElementById(id)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        // Editing mode: use Monaco editor API
+        const ed = editorRef.current
+        if (ed) {
+          ed.revealLineInCenter(line)
+          ed.setPosition({ lineNumber: line, column: 1 })
+          ed.focus()
+        }
       }
     }
     window.addEventListener('outline:go-to-heading', handler)
     return () => window.removeEventListener('outline:go-to-heading', handler)
-  }, [])
+  }, [showPreview])
+
+  // Ensure preview renders heading IDs so outline navigation works
+  useEffect(() => {
+    if (!showPreview) return
+    // Attach IDs to preview DOM after render (MarkdownPreview renders raw HTML)
+    const timer = setTimeout(() => {
+      const previewEl = document.querySelector('.markdown-preview')
+      if (!previewEl) return
+      const headings = previewEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
+      headings.forEach(h => {
+        const text = h.textContent || ''
+        const id = text.toLowerCase().replace(/[^\w一-鿿\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+        if (!h.id) h.id = id
+      })
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [showPreview, contentMd])
 
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-primary)]">加载中...</div>
