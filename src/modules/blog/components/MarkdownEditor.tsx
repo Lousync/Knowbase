@@ -276,7 +276,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       </div>
 
       {/* content */}
-      <div className="flex-1 overflow-hidden bg-[var(--bg-primary)]">
+      <div className="flex-1 min-h-0 overflow-hidden bg-[var(--bg-primary)]">
         {showPreview ? (
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">

@@ -112,7 +112,7 @@ export function OutlinePanel({ pageTitle, headings, onBackToFile }: OutlinePanel
       </div>
 
       {/* Heading tree */}
-      <div className="flex-1 overflow-y-auto px-1 py-1">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-1 py-1">
         {headings.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
             <FileText size={28} className="mb-2 opacity-25" />
