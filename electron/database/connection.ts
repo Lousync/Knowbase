@@ -150,7 +150,10 @@ export function runMigrations(): void {
         id          TEXT PRIMARY KEY,
         name        TEXT NOT NULL,
         parent_id   TEXT REFERENCES knowledge_categories(id) ON DELETE SET NULL,
-        sort_order  INTEGER DEFAULT 0
+        sort_order  INTEGER DEFAULT 0,
+        category_type TEXT NOT NULL DEFAULT 'folder',
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
       CREATE TABLE IF NOT EXISTS knowledge_pages (

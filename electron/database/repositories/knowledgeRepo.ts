@@ -56,6 +56,9 @@ export function registerKnowledgeHandlers(): void {
 
   // 创建分类
   ipcMain.handle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }) => {
+    // Ensure columns exist (migration may have failed silently before)
+    try { getDatabase().run("ALTER TABLE knowledge_categories ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) {}
+    try { getDatabase().run("ALTER TABLE knowledge_categories ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) {}
     const id = randomUUID()
     const ct = data.categoryType === 'notebook' ? 'notebook' : 'folder'
     const maxOrder = queryAll<{ m: number }>(
@@ -74,6 +77,10 @@ export function registerKnowledgeHandlers(): void {
   // 更新分类（重命名/移动）
   ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }) => {
     console.log(`[knowledge:updateCategory] id=${id} data=`, JSON.stringify(data))
+    // Ensure updated_at column exists (migration may have failed silently)
+    try { getDatabase().run("ALTER TABLE knowledge_categories ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) {}
+    try { getDatabase().run("ALTER TABLE knowledge_categories ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))") } catch (_) {}
+
     const sets: string[] = ["updated_at = datetime('now')"]
     const params: unknown[] = []
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
