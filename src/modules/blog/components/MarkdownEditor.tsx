@@ -211,7 +211,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             {saving ? '保存中...' : lastSaved ? '已保存 ' + fmtTime(lastSaved) : ''}
           </span>
           <button onClick={() => setShowPreview(!showPreview)}
-            className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[#37373d] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]')}
+            className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]')}
             title="Ctrl+/">
             {showPreview ? <Code size={13} /> : <Eye size={13} />}
             {showPreview ? '源码' : '预览'}
