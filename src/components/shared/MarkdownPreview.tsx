@@ -3,6 +3,16 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 
+// Same ID generation as parseHeadings() in OutlinePanel — must match for outline navigation
+function headingId(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w一-鿿\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 interface Props {
   content: string
   /** Called when a [[wiki link]] is clicked. If omitted, wiki links render as plain text. */
@@ -52,13 +62,28 @@ export function MarkdownPreview({ content, onWikiLink }: Props) {
             return <li>{renderWikiLinks(children, onWikiLink)}</li>
           },
           h1({ children }) {
-            return <h1>{renderWikiLinks(children, onWikiLink)}</h1>
+            const text = extractText(children)
+            return <h1 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h1>
           },
           h2({ children }) {
-            return <h2>{renderWikiLinks(children, onWikiLink)}</h2>
+            const text = extractText(children)
+            return <h2 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h2>
           },
           h3({ children }) {
-            return <h3>{renderWikiLinks(children, onWikiLink)}</h3>
+            const text = extractText(children)
+            return <h3 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h3>
+          },
+          h4({ children }) {
+            const text = extractText(children)
+            return <h4 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h4>
+          },
+          h5({ children }) {
+            const text = extractText(children)
+            return <h5 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h5>
+          },
+          h6({ children }) {
+            const text = extractText(children)
+            return <h6 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h6>
           },
         }}
       >
@@ -69,6 +94,16 @@ export function MarkdownPreview({ content, onWikiLink }: Props) {
 }
 
 const WIKI_RE = /\[\[([^\]]+)\]\]/
+
+/** Extract plain text from React children for heading ID generation */
+function extractText(children: React.ReactNode): string {
+  return React.Children.toArray(children).map(c => {
+    if (typeof c === 'string') return c
+    if (typeof c === 'number') return String(c)
+    if (React.isValidElement(c)) return extractText((c.props as any)?.children)
+    return ''
+  }).join('')
+}
 
 /** Recursively scan React children for `[[wiki links]]` in text nodes and replace them with clickable spans. */
 function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string) => void): React.ReactNode {

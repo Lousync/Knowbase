@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Star } from 'lucide-react'
+import { Star, ListTree } from 'lucide-react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
@@ -96,6 +96,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     if (entry) {
       setSelectedId(entry.id)
       setView(date === today ? 'editor' : 'detail')
+      if (date !== today) setLiveContent(entry.contentMd || '')
     } else {
       try {
         const e = await createEntry({ date, title: date })
@@ -160,7 +161,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditingInput(e)) return
-      if (e.ctrlKey && e.key === 'o' && view === 'editor') {
+      if (e.ctrlKey && e.key === 'o' && (view === 'editor' || view === 'detail')) {
         e.preventDefault()
         handleToggleOutline()
       }
@@ -186,9 +187,9 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       </ResizablePanel>
 
       {/* Outline panel — replaces sidebar on the left when toggled */}
-      {showOutline && view === 'editor' && (
+      {showOutline && (view === 'editor' || view === 'detail') && (
         <OutlinePanel
-          pageTitle={entries.find(e => e.id === selectedId)?.title || ''}
+          pageTitle={view === 'editor' ? (entries.find(e => e.id === selectedId)?.title || '') : (entries.find(e => e.id === selectedId)?.date || '')}
           headings={outlineHeadings}
           onBackToFile={handleToggleOutline}
         />
@@ -199,7 +200,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           <EntryList
             entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries.filter(e => e.date.startsWith(thisMonth))}
             loading={loading}
-            onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail') }}
+            onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail'); if (entry.date !== today) setLiveContent(entry.contentMd || '') }}
             onToggleStar={handleToggleStar}
             onNewEntry={handleTodayEntry}
             cardSize={s.blogCardSize}
@@ -222,6 +223,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
             onEdit={() => setView('editor')}
             onDelete={async () => { await deleteEntry(selectedId); goToList() }}
             onBack={goToList}
+            onToggleOutline={handleToggleOutline}
           />
         )}
       </main>
@@ -230,8 +232,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 }
 
 // 博文详情阅读
-function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
-  entryId: string; onEdit: () => void; onDelete: () => void; onBack: () => void
+function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
+  entryId: string; onEdit: () => void; onDelete: () => void; onBack: () => void; onToggleOutline?: () => void
 }) {
   const [entry, setEntry] = useState<(Entry & { tags: Tag[] }) | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -263,6 +265,11 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack }: {
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-color)]">
             <button onClick={onBack} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">← 返回列表</button>
             <div className="flex gap-2">
+              {onToggleOutline && (
+                <button onClick={onToggleOutline} className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)]" title="大纲 (Ctrl+O)">
+                  <ListTree size={16} />
+                </button>
+              )}
               <button onClick={handleToggleStar} className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors" title={entry.isStarred ? '取消收藏' : '收藏'}>
                 <Star size={16} className={entry.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
               </button>

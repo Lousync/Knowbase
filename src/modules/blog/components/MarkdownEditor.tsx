@@ -173,23 +173,6 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     return () => window.removeEventListener('outline:go-to-heading', handler)
   }, [showPreview])
 
-  // Ensure preview renders heading IDs so outline navigation works
-  useEffect(() => {
-    if (!showPreview) return
-    // Attach IDs to preview DOM after render (MarkdownPreview renders raw HTML)
-    const timer = setTimeout(() => {
-      const previewEl = document.querySelector('.markdown-preview')
-      if (!previewEl) return
-      const headings = previewEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
-      headings.forEach(h => {
-        const text = h.textContent || ''
-        const id = text.toLowerCase().replace(/[^\w一-鿿\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-        if (!h.id) h.id = id
-      })
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [showPreview, contentMd])
-
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-primary)]">加载中...</div>
   }
