@@ -83,6 +83,22 @@ export function NotebookList({
   // (Chromium security may block getData() during dragover events)
   const dragRef = useRef<{ type: 'category' | 'page'; id: string } | null>(null)
 
+  // Direct DOM refs to avoid React re-renders during drag (which can kill the operation)
+  const treeRef = useRef<HTMLDivElement>(null)
+  const dragOverTargetRef = useRef<string | null>(null)  // current drag-over target (id-based)
+  const prevHighlightRef = useRef<Element | null>(null)  // previously highlighted element
+
+  // Inject drag highlight CSS (DOM-based, avoids React re-render during drag)
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.textContent = `
+      .drag-over-highlight { outline: 2px solid var(--accent) !important; outline-offset: -2px !important; background-color: var(--accent-alpha-10, rgba(0,122,204,0.08)) !important; }
+      .drag-over-loose { background-color: var(--accent-alpha-10, rgba(0,122,204,0.08)) !important; outline: 2px dashed var(--accent) !important; }
+    `
+    document.head.appendChild(style)
+    return () => { document.head.removeChild(style) }
+  }, [])
+
   // When createMode changes, clear any previously-typed name to prevent
   // onBlur of the old input from creating a category with the wrong type.
   useEffect(() => { setNewName('') }, [createMode])
@@ -205,6 +221,23 @@ export function NotebookList({
     return null
   }
 
+  // ---- DOM-based drag highlight (avoids React re-render during drag) ----
+  function clearDragHighlight() {
+    if (prevHighlightRef.current) {
+      prevHighlightRef.current.classList.remove('drag-over-highlight', 'drag-over-loose')
+      prevHighlightRef.current = null
+    }
+    dragOverTargetRef.current = null
+  }
+
+  function applyDragHighlight(el: Element) {
+    if (prevHighlightRef.current === el) return  // already highlighted
+    clearDragHighlight()
+    el.classList.add('drag-over-highlight')
+    prevHighlightRef.current = el
+    dragOverTargetRef.current = (el as HTMLElement).dataset.catId || (el as HTMLElement).dataset.pageId || null
+  }
+
   // ---- render a tree node (recursive) ----
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
@@ -244,16 +277,19 @@ export function NotebookList({
           data-cat-id={cat.id}
           draggable
           onDragStart={e => {
+            console.log('[NB dragStart] category:', cat.name, cat.id)
             e.dataTransfer.effectAllowed = 'move'
             const payload = JSON.stringify({ type: 'category', id: cat.id })
             e.dataTransfer.setData('text/plain', payload)
             dragRef.current = { type: 'category', id: cat.id }
+            console.log('[NB dragStart] dragRef set:', dragRef.current)
             ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
           }}
           onDragEnd={e => {
+            console.log('[NB dragEnd] category:', cat.name, cat.id)
             ;(e.currentTarget as HTMLElement).style.opacity = '1'
             dragRef.current = null
-            setDragOverId(null)
+            clearDragHighlight()
           }}
           onContextMenu={e => {
             e.preventDefault()
@@ -338,6 +374,7 @@ export function NotebookList({
                 data-page-id={p.id}
                 draggable
                 onDragStart={e => {
+                  console.log('[NB page dragStart] page:', p.title, p.id)
                   e.dataTransfer.effectAllowed = 'move'
                   e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
                   dragRef.current = { type: 'page', id: p.id }
@@ -346,6 +383,7 @@ export function NotebookList({
                 onDragEnd={e => {
                   ;(e.currentTarget as HTMLElement).style.opacity = '1'
                   dragRef.current = null
+                  clearDragHighlight()
                 }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
@@ -427,6 +465,7 @@ export function NotebookList({
 
       {/* ===== Tree ===== */}
       <div
+        ref={treeRef}
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onDragOver={e => {
           const d = dragRef.current
@@ -437,53 +476,82 @@ export function NotebookList({
           const targetCat = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
           const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
 
+          // Use direct DOM manipulation for highlight — NO React state update during drag
           if (targetCat) {
             const catId = targetCat.dataset.catId!
             if (d.type === 'category') {
-              if (d.id !== catId && !isDescendant(d.id, catId) && canAcceptCategory(catId, d.id)) {
-                setDragOverId(catId)
+              const valid = d.id !== catId && !isDescendant(d.id, catId) && canAcceptCategory(catId, d.id)
+              if (valid) {
+                applyDragHighlight(targetCat)
               } else {
-                setDragOverId(null)
+                clearDragHighlight()
               }
             } else {
-              // page drop on any category is always valid
-              setDragOverId(catId)
+              // page drop on any category
+              applyDragHighlight(targetCat)
             }
           } else if (targetPage && d.type === 'page') {
-            setDragOverId(targetPage.dataset.pageId!)
+            applyDragHighlight(targetPage)
           } else if (!targetCat && d.type === 'page') {
-            setDragOverId('__loose')
+            // highlight the loose pages container
+            const looseEl = treeRef.current?.querySelector('[data-loose-area]') as HTMLElement | null
+            if (looseEl) { clearDragHighlight(); looseEl.classList.add('drag-over-loose'); prevHighlightRef.current = looseEl; dragOverTargetRef.current = '__loose' }
           } else {
-            setDragOverId(null)
+            clearDragHighlight()
+          }
+        }}
+        onDragLeave={e => {
+          // Only clear when leaving the tree container entirely
+          if (!treeRef.current?.contains(e.relatedTarget as Node)) {
+            clearDragHighlight()
           }
         }}
         onDrop={e => {
+          console.log('[NB drop] FIRED. dragRef=', dragRef.current, 'dragOverTargetRef=', dragOverTargetRef.current)
           e.preventDefault()
           const dragged = dragRef.current
+          const targetId = dragOverTargetRef.current
           dragRef.current = null
-          setDragOverId(null)
+          clearDragHighlight()
+
           const d = dragged || parseDrop(e)
+          console.log('[NB drop] d=', d, 'targetId=', targetId)
           if (!d) return
 
-          const targetCat = (e.target as HTMLElement).closest('[data-cat-id]') as HTMLElement | null
-          const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
-
-          if (targetCat) {
-            const catId = targetCat.dataset.catId!
-            if (d.type === 'category' && d.id !== catId && !isDescendant(d.id, catId) && canAcceptCategory(catId, d.id)) {
-              setExpanded(prev => new Set(prev).add(catId))
-              onMoveCategory(d.id, catId)
-            } else if (d.type === 'page') {
-              const c = categories.find(x => x.id === catId)
-              if (c?.categoryType === 'notebook') onDropOnNotebook(d.id, catId)
-              else onDropOnCategory(d.id, catId)
+          if (targetId && targetId !== '__loose') {
+            // Determine if targetId is a category or page
+            const targetCat = categories.find(c => c.id === targetId)
+            if (targetCat) {
+              if (d.type === 'category' && d.id !== targetId && !isDescendant(d.id, targetId) && canAcceptCategory(targetId, d.id)) {
+                console.log('[NB drop] → onMoveCategory:', d.id, '→', targetId)
+                setExpanded(prev => new Set(prev).add(targetId))
+                onMoveCategory(d.id, targetId)
+              } else if (d.type === 'page') {
+                const c = categories.find(x => x.id === targetId)
+                if (c?.categoryType === 'notebook') onDropOnNotebook(d.id, targetId)
+                else onDropOnCategory(d.id, targetId)
+              }
+              return
             }
-            return
+            // If targetId is a page, handle page-to-page reorder (within NotebookList)
+            if (d.type === 'page' && targetId !== d.id) {
+              // page-to-page — handled below if needed, or just ignore (reorder happens in ChapterPanel)
+              return
+            }
           }
 
           // Empty space / loose area
-          if (d.type === 'category') onMoveCategory(d.id, null)
-          else if (d.type === 'page') onDropOnLooseArea(d.id)
+          if (targetId === '__loose' || !targetId) {
+            const looseEl = treeRef.current?.querySelector('[data-loose-area]') as HTMLElement | null
+            if (looseEl) looseEl.classList.remove('drag-over-loose')
+            if (d.type === 'category') onMoveCategory(d.id, null)
+            else if (d.type === 'page') onDropOnLooseArea(d.id)
+          } else if (d.type === 'category') {
+            // Category dropped on empty space → move to root
+            onMoveCategory(d.id, null)
+          } else if (d.type === 'page') {
+            onDropOnLooseArea(d.id)
+          }
         }}
       >
         {rootCats.map(cat => renderCategory(cat, 0))}
@@ -491,13 +559,15 @@ export function NotebookList({
         {/* Root-level loose pages */}
         {loosePages.length > 0 && (
           <div
-            className={`mx-1 rounded transition-colors ${dragOverId === '__loose' ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)]' : ''}`}
+            data-loose-area="true"
+            className="mx-1 rounded transition-colors"
           >
             {loosePages.map(p => (
               <div key={p.id}
                 data-page-id={p.id}
                 draggable
                 onDragStart={e => {
+                  console.log('[NB page dragStart] page:', p.title, p.id)
                   e.dataTransfer.effectAllowed = 'move'
                   e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
                   dragRef.current = { type: 'page', id: p.id }
