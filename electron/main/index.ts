@@ -1,5 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, protocol, net } from 'electron'
-import { join } from 'path'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol } from 'electron'
+import { join, extname } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
@@ -158,25 +158,37 @@ function registerWindowHandlers(): void {
   })
 }
 
+// ===== 允许 file:// 图片跨域加载 =====
+app.commandLine.appendSwitch('allow-file-access-from-files')
+app.commandLine.appendSwitch('disable-web-security')
+
 // ===== 自定义协议：local-file:// 用于本地文件图片加载 =====
-// Bypasses Chromium cross-origin restrictions when page is loaded from localhost in dev mode.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'local-file', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true } }
 ])
 
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
-  // Register custom protocol handler for local file access
-  // <img src="local-file:///C:/path/file.png"> → load the file from disk
+  // Register custom protocol for local file images
+  // <img src="local-file:///C:/path/file.png"> → load from disk directly
   protocol.handle('local-file', (request) => {
-    let filePath = request.url.replace('local-file:///', '')
-    // Decode percent-encoded characters (e.g. %20 → space, Chinese chars)
-    try { filePath = decodeURIComponent(filePath) } catch {}
-    // Normalize: use forward slashes, strip leading slash if just a drive letter path
-    filePath = filePath.replace(/\\/g, '/')
-    // Convert to absolute Windows path → file:// URI
-    const fileUrl = 'file:///' + filePath
-    return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true })
+    let filePath = decodeURIComponent(request.url.replace('local-file:///', ''))
+    filePath = filePath.replace(/\//g, '\\')
+    try {
+      const buf = readFileSync(filePath)
+      const ext = extname(filePath).toLowerCase()
+      const mimes: Record<string, string> = {
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+        '.bmp': 'image/bmp', '.ico': 'image/x-icon',
+      }
+      return new Response(buf, {
+        headers: { 'Content-Type': mimes[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' }
+      })
+    } catch (e: any) {
+      console.error('[local-file] failed:', filePath, e.message)
+      return new Response('', { status: 404 })
+    }
   })
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()

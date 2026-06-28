@@ -23,22 +23,21 @@ interface Props {
   onLinkClick?: (href: string) => void
 }
 
-/** Convert a markdown image src to a loadable local-file:// URL (bypasses CSP) */
+/** Convert markdown image src to file:// URL. webSecurity:false allows cross-origin file loads. */
 function resolveImageSrc(src: string | undefined, imageBaseDir?: string): string {
   if (!src) return ''
   // External URLs and data URIs pass through
-  if (/^https?:\/\//i.test(src) || /^data:/i.test(src)) return src
-  // Already local-file:// → pass through
+  if (/^https?:\/\//i.test(src) || /^data:/i.test(src) || /^file:\/\//i.test(src)) return src
   if (/^local-file:\/\//i.test(src)) return src
-  // Absolute Windows path e.g. C:\Users\... → local-file:///C:/Users/...
+  // Absolute Windows path e.g. C:\Users\...
   if (/^[a-zA-Z]:[/\\]/.test(src)) {
-    return 'local-file:///' + src.replace(/\\/g, '/')
+    return 'file:///' + src.replace(/\\/g, '/')
   }
   // Relative path → resolve against imageBaseDir
   if (imageBaseDir && !src.startsWith('/')) {
     const cleaned = src.replace(/\\/g, '/').replace(/^\.\//, '')
     const base = imageBaseDir.replace(/\\/g, '/').replace(/\/$/, '')
-    return 'local-file:///' + base + '/' + cleaned
+    return 'file:///' + base + '/' + cleaned
   }
   return src
 }
@@ -84,14 +83,16 @@ export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick
               </a>
             )
           },
-          // Custom image handler — resolve local paths to file:// URLs
+          // Custom image handler — resolve local paths to local-file:// URLs
           img({ src, alt, ...props }) {
             const resolved = resolveImageSrc(src, imageBaseDir)
+            console.log('[MarkdownPreview img] src:', src, '→ resolved:', resolved, 'baseDir:', imageBaseDir)
             return (
               <img
                 src={resolved}
                 alt={alt || ''}
-                {...props}
+                onError={(e) => console.error('[MarkdownPreview img] LOAD FAILED:', resolved, e)}
+                onLoad={() => console.log('[MarkdownPreview img] LOAD OK:', resolved)}
                 className="max-w-full h-auto rounded my-2"
                 style={{ maxHeight: '500px', objectFit: 'contain' }}
               />
