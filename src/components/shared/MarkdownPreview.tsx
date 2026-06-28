@@ -23,21 +23,20 @@ interface Props {
   onLinkClick?: (href: string) => void
 }
 
-/** Convert markdown image src to file:// URL. webSecurity:false allows cross-origin file loads. */
+/** Convert markdown image src to local-file:// URL. This custom protocol bypasses CSP entirely. */
 function resolveImageSrc(src: string | undefined, imageBaseDir?: string): string {
   if (!src) return ''
-  // External URLs and data URIs pass through
-  if (/^https?:\/\//i.test(src) || /^data:/i.test(src) || /^file:\/\//i.test(src)) return src
+  if (/^https?:\/\//i.test(src) || /^data:/i.test(src)) return src
   if (/^local-file:\/\//i.test(src)) return src
   // Absolute Windows path e.g. C:\Users\...
   if (/^[a-zA-Z]:[/\\]/.test(src)) {
-    return 'file:///' + src.replace(/\\/g, '/')
+    return 'local-file:///' + src.replace(/\\/g, '/')
   }
   // Relative path → resolve against imageBaseDir
   if (imageBaseDir && !src.startsWith('/')) {
     const cleaned = src.replace(/\\/g, '/').replace(/^\.\//, '')
     const base = imageBaseDir.replace(/\\/g, '/').replace(/\/$/, '')
-    return 'file:///' + base + '/' + cleaned
+    return 'local-file:///' + base + '/' + cleaned
   }
   return src
 }
