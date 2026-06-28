@@ -506,43 +506,41 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         />
       )}
 
-      {/* Right: Backlinks — collapsible */}
-      <div className={`bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col transition-all duration-200 ${showBacklinks ? 'w-48' : 'w-1'}`}>
-        {showBacklinks ? (
-          <>
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">反向链接 · {backlinks.length}</span>
-              <button
-                onClick={() => setShowBacklinks(false)}
-                className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                title="折叠反向链接面板"
-              >
-                <ChevronRight size={13} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {backlinks.length === 0 ? (
-                <p className="px-3 py-4 text-[11px] text-[var(--text-disabled)] italic text-center">暂无反向链接</p>
-              ) : (
-                backlinks.map(bl => (
+      {/* Right: Backlinks — collapsible, only visible when page has backlinks */}
+      {backlinks.length > 0 && (
+        <div className={`bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col transition-all duration-200 ${showBacklinks ? 'w-48' : 'w-1'}`}>
+          {showBacklinks ? (
+            <>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">反向链接 · {backlinks.length}</span>
+                <button
+                  onClick={() => setShowBacklinks(false)}
+                  className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  title="折叠反向链接面板"
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {backlinks.map(bl => (
                   <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)]">
                     <span className="text-[12px] text-[var(--text-primary)] truncate block">{bl.title || '无标题'}</span>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
+            </>
+          ) : (
+            // Collapsed strip — click to expand
+            <div
+              className="flex-1 cursor-pointer hover:bg-[var(--accent)]/10 flex items-center justify-center"
+              onClick={() => setShowBacklinks(true)}
+              title="展开反向链接面板"
+            >
+              <ChevronLeft size={11} className="text-[var(--text-muted)]" />
             </div>
-          </>
-        ) : (
-          // Collapsed strip — click to expand
-          <div
-            className="flex-1 cursor-pointer hover:bg-[var(--accent)]/10 flex items-center justify-center"
-            onClick={() => setShowBacklinks(true)}
-            title="展开反向链接面板"
-          >
-            <ChevronLeft size={11} className="text-[var(--text-muted)]" />
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
