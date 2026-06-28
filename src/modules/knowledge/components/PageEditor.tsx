@@ -77,6 +77,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       }),
       getKnowledgeBacklinks(pageId).then(setBacklinks)
     ])
+    setShowBacklinks(true)  // reset when switching pages
   }, [pageId])
 
   useEffect(() => {
@@ -508,7 +509,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* Right: Backlinks — collapsible, only visible when page has backlinks */}
       {backlinks.length > 0 && (
-        <div className={`bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col transition-all duration-200 ${showBacklinks ? 'w-48' : 'w-1'}`}>
+        <div className={`bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col transition-all duration-200 ${showBacklinks ? 'w-48' : 'w-6'}`}>
           {showBacklinks ? (
             <>
               <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
@@ -530,13 +531,13 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               </div>
             </>
           ) : (
-            // Collapsed strip — click to expand
+            // Collapsed strip — blue edge on hover, click to expand
             <div
-              className="flex-1 cursor-pointer hover:bg-[var(--accent)]/10 flex items-center justify-center"
+              className="flex-1 cursor-col-resize hover:bg-[var(--accent)]/20 flex items-center justify-center group"
               onClick={() => setShowBacklinks(true)}
               title="展开反向链接面板"
             >
-              <ChevronLeft size={11} className="text-[var(--text-muted)]" />
+              <ChevronLeft size={12} className="text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
             </div>
           )}
         </div>
