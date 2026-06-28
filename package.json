@@ -1,6 +1,6 @@
 {
   "name": "knowbase",
-  "version": "1.6.0-programmer.1",
+  "version": "1.7.0",
   "description": "Knowbase Programmer Edition — 本地 Windows 桌面知识管理工具",
   "main": "./out/main/index.js",
   "scripts": {
@@ -58,6 +58,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
