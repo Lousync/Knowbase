@@ -33,10 +33,12 @@ interface Props {
   onSortPage?: (id: string, direction: 'up' | 'down') => void
   onCreateChapterUnderNotebook?: (notebookId: string) => void
   locatePageId?: string | null
+  locateCategoryId?: string | null
   onCopy?: (items: { type: 'category' | 'page'; id: string }[]) => void
   onCut?: (items: { type: 'category' | 'page'; id: string }[]) => void
   onPaste?: (targetCategoryId: string | null) => void
   onExportPage?: (pageId: string) => void
+  onDeletePage?: (pageId: string) => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
 }
@@ -47,8 +49,8 @@ export function NotebookList({
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
-  onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId,
-  onCopy, onCut, onPaste, onExportPage, clipboard, cutItemIds,
+  onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
+  onCopy, onCut, onPaste, onExportPage, onDeletePage, clipboard, cutItemIds,
 }: Props) {
   // -- sort --
   const sortModes: Array<{ id: string; label: string }> = [
@@ -157,6 +159,40 @@ export function NotebookList({
       })
     })
   }, [locatePageId])
+
+  // Auto-expand ancestors and scroll to locateCategoryId
+  useEffect(() => {
+    if (!locateCategoryId) return
+    const cat = categories.find(c => c.id === locateCategoryId)
+    if (!cat) return
+    // Collect ancestors
+    const ancestors: string[] = []
+    let currentId: string | null = cat.parentId
+    const seen = new Set<string>()
+    while (currentId) {
+      if (seen.has(currentId)) break; seen.add(currentId)
+      ancestors.push(currentId)
+      const parent = categories.find(c => c.id === currentId)
+      currentId = parent?.parentId ?? null
+    }
+    if (ancestors.length === 0) {
+      // Root-level category — just scroll to it
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = document.querySelector(`[data-cat-id="${locateCategoryId}"]`)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        })
+      })
+      return
+    }
+    setExpanded(prev => { const next = new Set(prev); ancestors.forEach(id => next.add(id)); return next })
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-cat-id="${locateCategoryId}"]`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    })
+  }, [locateCategoryId])
 
   // F2 — keyboard rename selected notebook / folder
   useEffect(() => {
@@ -680,16 +716,29 @@ export function NotebookList({
                     <Scissors size={14} className="text-[var(--text-muted)]" />剪切
                   </button>
                 )}
-                {clipboard && clipboard.items.length > 0 && onPaste && (
+                {onPaste && (
                   <>
                     <div className="border-t border-[var(--border-color)] my-0.5" />
-                    <button onClick={() => { onPaste(contextMenu.id); setContextMenu(null) }}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
-                      <ClipboardPaste size={14} className="text-[var(--text-muted)]" />粘贴{clipboard.items.length > 1 ? ` (${clipboard.items.length})` : ''}
+                    <button
+                      onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(contextMenu.id); setContextMenu(null) } }}
+                      disabled={!clipboard || clipboard.items.length === 0}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${
+                        clipboard && clipboard.items.length > 0
+                          ? 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                          : 'text-[var(--text-disabled)] cursor-not-allowed'
+                      }`}>
+                      <ClipboardPaste size={14} className={clipboard && clipboard.items.length > 0 ? 'text-[var(--text-muted)]' : 'text-[var(--text-disabled)]'} />粘贴{clipboard && clipboard.items.length > 1 ? ` (${clipboard.items.length})` : ''}
                     </button>
                   </>
                 )}
                 <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => {
+                  const cat = categories.find(c => c.id === contextMenu.id)
+                  if (cat) { handleStartRename(cat.id, cat.name); setContextMenu(null) }
+                }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                  <Pencil size={14} className="text-[var(--text-muted)]" />重命名
+                </button>
                 <button
                   onClick={() => {
                     onMoveCategory(contextMenu.id, null)
@@ -710,6 +759,18 @@ export function NotebookList({
                 >
                   <FolderInput size={14} className="text-[var(--text-muted)]" />
                   移到目录...
+                </button>
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => {
+                  const cat = categories.find(c => c.id === contextMenu.id)
+                  if (cat) {
+                    if (skipDeleteConfirm) onDeleteNotebook(cat.id)
+                    else setDeleteTarget({ id: cat.id, name: cat.name })
+                  }
+                  setContextMenu(null)
+                }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-left">
+                  <Trash2 size={14} />删除
                 </button>
               </>
             )}
@@ -737,6 +798,10 @@ export function NotebookList({
                   </>
                 )}
                 <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => { onOpenPage(contextMenu.id); setContextMenu(null) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                  <Pencil size={14} className="text-[var(--text-muted)]" />重命名
+                </button>
                 <button
                   onClick={() => {
                     onDropOnLooseArea(contextMenu.id)
@@ -758,19 +823,30 @@ export function NotebookList({
                   <FolderInput size={14} className="text-[var(--text-muted)]" />
                   移到目录...
                 </button>
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                {onDeletePage && (
+                  <button onClick={() => { onDeletePage(contextMenu.id); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-left">
+                    <Trash2 size={14} />删除
+                  </button>
+                )}
               </>
             )}
             {contextMenu.type === 'blank' && (
               <>
-                {clipboard && clipboard.items.length > 0 && onPaste && (
-                  <button onClick={() => { onPaste(null); setContextMenu(null) }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
-                    <ClipboardPaste size={14} className="text-[var(--text-muted)]" />粘贴{clipboard.items.length > 1 ? ` (${clipboard.items.length})` : ''}
+                {onPaste && (
+                  <button
+                    onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(null); setContextMenu(null) } }}
+                    disabled={!clipboard || clipboard.items.length === 0}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${
+                      clipboard && clipboard.items.length > 0
+                        ? 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                        : 'text-[var(--text-disabled)] cursor-not-allowed'
+                    }`}>
+                    <ClipboardPaste size={14} className={clipboard && clipboard.items.length > 0 ? 'text-[var(--text-muted)]' : 'text-[var(--text-disabled)]'} />粘贴{clipboard && clipboard.items.length > 1 ? ` (${clipboard.items.length})` : ''}
                   </button>
                 )}
-                {clipboard && clipboard.items.length > 0 && onPaste && (
-                  <div className="border-t border-[var(--border-color)] my-0.5" />
-                )}
+                <div className="border-t border-[var(--border-color)] my-0.5" />
                 <button onClick={() => { setContextMenu(null); onImport() }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
                   <Download size={14} className="text-[var(--text-muted)]" />导入文件...

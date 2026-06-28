@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft } from 'lucide-react'
+import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
-import type { KnowledgePage, KnowledgeCategory } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
+import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
@@ -23,9 +23,10 @@ interface Props {
   onFileTypeChange?: (fileType: string) => void
   onContentChange?: (content: string) => void
   onToggleOutline?: () => void
+  onTagsChange?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -37,14 +38,21 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
+  // Tags
+  const [allTags, setAllTags] = useState<KnowledgeTag[]>([])
+  const [entryTags, setEntryTags] = useState<KnowledgeTag[]>([])
+  const [newTagName, setNewTagName] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
   // Wiki link disambiguation: when multiple pages share the same title
   const [wikiPicker, setWikiPicker] = useState<{ title: string; candidates: KnowledgePage[] } | null>(null)
   const [showBacklinks, setShowBacklinks] = useState(true)
+  const MAX_TAGS = 5
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   const contentRef = useRef(content)
   const titleRef = useRef(title)
   const pageRef = useRef(page)
   const fileTypeRef = useRef(fileType)
+  const tagsRef = useRef<KnowledgeTag[]>([])
   const monacoRef = useRef<typeof Monaco | null>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const showDeleteConfirmRef = useRef(showDeleteConfirm)
@@ -59,6 +67,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => { titleRef.current = title }, [title])
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { fileTypeRef.current = fileType }, [fileType])
+  useEffect(() => { tagsRef.current = entryTags }, [entryTags])
   useEffect(() => { showDeleteConfirmRef.current = showDeleteConfirm }, [showDeleteConfirm])
   useEffect(() => { showLangMenuRef.current = showLangMenu }, [showLangMenu])
   useEffect(() => { isCodeFileRef.current = isCodeFile }, [isCodeFile])
@@ -73,9 +82,10 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
-        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
+        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); setEntryTags(p.tags || []); window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
       }),
-      getKnowledgeBacklinks(pageId).then(setBacklinks)
+      getKnowledgeBacklinks(pageId).then(setBacklinks),
+      getKnowledgeTags().then(setAllTags)
     ])
     setShowBacklinks(true)  // reset when switching pages
   }, [pageId])
@@ -90,7 +100,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!pageRef.current) return
     try {
       const links = parseWikiLinks(c)
-      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current })
+      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current, tags: tagsRef.current.map(tag => tag.id) })
       await updateKnowledgeLinks(pageRef.current.id, links)
       setSaving(false)
     } catch (e) { console.error(e) }
@@ -225,6 +235,29 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     } catch (e) { console.error(e) }
   }
 
+  const handleAddTag = async () => {
+    const name = newTagName.trim()
+    if (!name) { setShowTagInput(false); return }
+    if (entryTags.length >= MAX_TAGS) { setShowTagInput(false); setNewTagName(''); return }
+    let tag = allTags.find(t => t.name === name)
+    if (!tag) {
+      try {
+        tag = await createKnowledgeTag(name)
+        setAllTags(prev => [...prev, tag!])
+      } catch (e) { console.error(e); return }
+    }
+    if (!entryTags.find(t => t.id === tag!.id)) {
+      setEntryTags(prev => [...prev, tag!])
+    }
+    setNewTagName(''); setShowTagInput(false)
+    onTagsChange?.()
+  }
+
+  const handleRemoveTag = (tagId: string) => {
+    setEntryTags(prev => prev.filter(t => t.id !== tagId))
+    onTagsChange?.()
+  }
+
   if (!page) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
@@ -328,6 +361,45 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               <Trash2 size={16} />
             </button>
           </div>
+        </div>
+
+        {/* Tag bar */}
+        <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto">
+          {entryTags.map(t => (
+            <span key={t.id}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
+              style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
+            >
+              {t.name}
+              <button onClick={() => handleRemoveTag(t.id)}
+                className="hover:text-[var(--danger)] transition-colors"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+          {entryTags.length < MAX_TAGS && (
+            showTagInput ? (
+              <input
+                autoFocus
+                value={newTagName}
+                onChange={e => setNewTagName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); if (e.key === 'Escape') { setShowTagInput(false); setNewTagName('') } }}
+                onBlur={handleAddTag}
+                placeholder="标签名..."
+                className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
+              />
+            ) : (
+              <button onClick={() => setShowTagInput(true)}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded border border-dashed border-[var(--border-color)] transition-colors"
+              >
+                <Plus size={10} />标签
+              </button>
+            )
+          )}
+          {entryTags.length > 0 && (
+            <span className="text-[10px] text-[var(--text-disabled)] ml-1">{entryTags.length}/{MAX_TAGS}</span>
+          )}
         </div>
 
         {/* Content */}

@@ -40,6 +40,8 @@ interface Props {
   onCopy?: (items: { type: 'category' | 'page'; id: string }[]) => void
   onCut?: (items: { type: 'category' | 'page'; id: string }[]) => void
   onExportPage?: (pageId: string) => void
+  onDeletePage?: (pageId: string) => void
+  onRenamePage?: (pageId: string) => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
 }
@@ -51,7 +53,7 @@ export function ChapterPanel({
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
   onLocateInExplorer, onMoveCategory,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
-  onCopy, onCut, onExportPage, clipboard, cutItemIds,
+  onCopy, onCut, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
@@ -492,6 +494,12 @@ export function ChapterPanel({
               </>
             )}
             <div className="border-t border-[var(--border-color)] my-0.5" />
+            {onRenamePage && (
+              <button onClick={() => { onRenamePage(contextMenu.pageId); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                <Pencil size={14} className="text-[var(--text-muted)]" />重命名
+              </button>
+            )}
             {onLocateInExplorer && (
               <button
                 onClick={() => { onLocateInExplorer(contextMenu.pageId); setContextMenu(null) }}
@@ -522,6 +530,13 @@ export function ChapterPanel({
               <FolderInput size={14} className="text-[var(--text-muted)]" />
               移到目录...
             </button>
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+            {onDeletePage && (
+              <button onClick={() => { onDeletePage(contextMenu.pageId); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-left">
+                <Trash2 size={14} />删除
+              </button>
+            )}
           </div>
         </div>
       )}

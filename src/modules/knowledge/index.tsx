@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { FileText } from 'lucide-react'
-import type { KnowledgeCategory, KnowledgePage } from '../../types'
+import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, getKnowledgePageById, createKnowledgePage, deleteKnowledgePage,
@@ -9,13 +9,15 @@ import {
   updateKnowledgePage, toggleKnowledgeStar,
   showImportOpenDialog, readImportFiles, importPdf, importPdfFile,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
-  showExportSaveDialog, writeExportTextFile, openExternal
+  showExportSaveDialog, writeExportTextFile,
+  getKnowledgeTags
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
+import { QuickSearch } from './components/QuickSearch'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -44,6 +46,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [showOutline, setShowOutline] = useState(false)
   const [liveContent, setLiveContent] = useState('')
   const [locatePageId, setLocatePageId] = useState<string | null>(null)
+  const [locateCategoryId, setLocateCategoryId] = useState<string | null>(null)
+  const [allKnowledgeTags, setAllKnowledgeTags] = useState<KnowledgeTag[]>([])
 
   // ---- 剪贴板 ----
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
@@ -106,15 +110,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     try { setStarredPages(await getKnowledgeStarredPages()) } catch (e) { console.error(e) }
   }, [])
 
+  const refreshTags = useCallback(async () => {
+    try { setAllKnowledgeTags(await getKnowledgeTags()) } catch (e) { console.error(e) }
+  }, [])
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([refreshCategories(), refreshAllPages(), refreshStarred()])
+    Promise.all([refreshCategories(), refreshAllPages(), refreshStarred(), refreshTags()])
       .finally(() => setLoading(false))
   }, [])
 
   // 监听数据导入事件 — 导入完成后刷新所有数据
   useEffect(() => {
-    const handler = () => { refreshCategories(); refreshAllPages(); refreshAllPages(); refreshStarred() }
+    const handler = () => { refreshCategories(); refreshAllPages(); refreshAllPages(); refreshStarred(); refreshTags() }
     window.addEventListener('data-imported', handler)
     return () => window.removeEventListener('data-imported', handler)
   }, [refreshCategories, refreshAllPages, refreshStarred])
@@ -294,7 +302,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshAllPages(); refreshChapterPages(); refreshStarred()
   }, [handleCloseTab])
 
-  const handleRefresh = () => { refreshAllPages(); refreshChapterPages(); refreshStarred() }
+  const handleRefresh = () => { refreshAllPages(); refreshChapterPages(); refreshStarred(); refreshTags() }
+  const handleSearchRefresh = useCallback(() => { refreshAllPages(); refreshTags() }, [refreshAllPages, refreshTags])
 
   const handleTitleChange = useCallback((title: string) => {
     if (!activePageIdRef.current) return
@@ -613,6 +622,53 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     })
   }, [selectedCategory])
 
+  // 搜索定位到分类/笔记本（展开树并滚动到目标）
+  const handleLocateCategory = useCallback((categoryId: string) => {
+    const cat = categories.find(c => c.id === categoryId)
+    if (!cat) return
+
+    // 展开所有祖先
+    const ancestors: string[] = []
+    let currentId: string | null = cat.parentId
+    const seen = new Set<string>()
+    while (currentId) {
+      if (seen.has(currentId)) break; seen.add(currentId)
+      ancestors.push(currentId)
+      const parent = categories.find(c => c.id === currentId)
+      currentId = parent?.parentId ?? null
+    }
+
+    if (cat.categoryType === 'notebook') {
+      setSelectedCategoryId(categoryId)
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(true)
+    } else if (cat.parentId) {
+      // Folder/chapter under a notebook
+      const parent = categories.find(c => c.id === cat.parentId)
+      if (parent?.categoryType === 'notebook') {
+        setSelectedCategoryId(cat.parentId)
+        setSelectedChapterId(categoryId)
+        setFocusChapterId(null)
+        setShowChapterPanel(true)
+      } else {
+        setSelectedCategoryId(categoryId)
+        setSelectedChapterId(null)
+        setFocusChapterId(null)
+        setShowChapterPanel(false)
+      }
+    } else {
+      setSelectedCategoryId(categoryId)
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(false)
+    }
+
+    // Trigger auto-expand + scroll in NotebookList
+    setLocateCategoryId(null)
+    requestAnimationFrame(() => setLocateCategoryId(categoryId))
+  }, [categories])
+
   const handleLocateInExplorer = useCallback((pageId: string) => {
     const page = allPages.find(p => p.id === pageId)
     if (!page) return
@@ -692,10 +748,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onSortCategory={handleSortCategory}
             onSortPage={handleSortPage}
             locatePageId={locatePageId}
+            locateCategoryId={locateCategoryId}
             onCopy={handleCopy}
             onCut={handleCut}
             onPaste={handlePaste}
             onExportPage={handleExportPage}
+            onDeletePage={handlePageDeleted}
             clipboard={clipboard}
             cutItemIds={cutItemIds}
           />
@@ -734,6 +792,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onCopy={handleCopy}
               onCut={handleCut}
               onExportPage={handleExportPage}
+              onDeletePage={handlePageDeleted}
+              onRenamePage={handleOpenPage}
               clipboard={clipboard}
               cutItemIds={cutItemIds}
             />
@@ -774,6 +834,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onFileTypeChange={handleFileTypeChange}
               onContentChange={setLiveContent}
               onToggleOutline={handleToggleOutline}
+              onTagsChange={handleSearchRefresh}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
@@ -785,6 +846,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           )}
         </div>
       </div>
+      <QuickSearch
+        pages={allPages}
+        categories={categories}
+        tags={allKnowledgeTags}
+        onOpenPage={handleOpenPage}
+        onLocateCategory={handleLocateCategory}
+        onRequestRefresh={handleSearchRefresh}
+      />
     </ImportZone>
   )
 }

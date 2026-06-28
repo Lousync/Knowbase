@@ -9,13 +9,15 @@ interface CategoryRow { id: string; name: string; parent_id: string | null; sort
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 
 function mapPage(r: PageRow) {
+  const raw = ((r as any).file_type || '')
+  const normalized = raw.replace(/^\./, '').toLowerCase()
   return {
     id: r.id, title: r.title,
     contentMd: r.content_md, contentHtml: r.content_html || '',
     categoryId: r.category_id,
     isStarred: !!r.is_starred,
     sortOrder: r.sort_order,
-    fileType: (r as any).file_type || r.file_type || '',
+    fileType: normalized,
     createdAt: r.created_at, updatedAt: r.updated_at
   }
 }
@@ -220,14 +222,27 @@ export function registerKnowledgeHandlers(): void {
         'SELECT * FROM knowledge_pages ORDER BY sort_order, updated_at DESC'
       )
     }
-    return rows.map(mapPage)
+    return rows.map(r => ({
+      ...mapPage(r),
+      tags: queryAll<{ id: string; name: string; color: string }>(
+        `SELECT t.id, t.name, t.color FROM knowledge_tags t
+         JOIN knowledge_page_tags pt ON t.id = pt.tag_id WHERE pt.page_id = ?`, [r.id]
+      )
+    }))
   })
 
   // 获取单个页面
   ipcMain.handle('knowledge:getPageById', (_e, id: string) => {
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     if (rows.length === 0) return null
-    return mapPage(rows[0])
+    const page = mapPage(rows[0])
+    return {
+      ...page,
+      tags: queryAll<{ id: string; name: string; color: string }>(
+        `SELECT t.id, t.name, t.color FROM knowledge_tags t
+         JOIN knowledge_page_tags pt ON t.id = pt.tag_id WHERE pt.page_id = ?`, [id]
+      )
+    }
   })
 
   // 创建页面
@@ -238,21 +253,22 @@ export function registerKnowledgeHandlers(): void {
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
       [data.categoryId || null]
     )
+    const ft = (data.fileType || '').replace(/^\./, '').toLowerCase()
     run(
       `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, data.fileType || '', now, now]
+      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, ft, now, now]
     )
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     return mapPage(rows[0])
   })
 
   // 更新页面
-  ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
+  ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
     for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined) {
+      if (v !== undefined && k !== 'tags') {
         sets.push(`${camelToSnake(k)} = ?`)
         params.push(v)
       }
@@ -271,6 +287,15 @@ export function registerKnowledgeHandlers(): void {
     }
     params.push(id)
     run(`UPDATE knowledge_pages SET ${sets.join(', ')} WHERE id = ?`, params)
+
+    // Update tags if provided
+    if (data.tags !== undefined) {
+      run('DELETE FROM knowledge_page_tags WHERE page_id = ?', [id])
+      for (const tagId of data.tags) {
+        run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [id, tagId])
+      }
+    }
+
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     return mapPage(rows[0])
   })

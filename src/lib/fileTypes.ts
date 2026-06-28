@@ -42,7 +42,8 @@ const INFO: Record<string, FileTypeInfo> = {
 }
 
 export function getFileTypeInfo(ext: string): FileTypeInfo {
-  return INFO[ext] || { ext, label: ext || 'Markdown', badge: ext.toUpperCase() || 'MD', icon: 'file', color: 'var(--text-muted)', placeholder: '开始编辑...', monacoLang: 'markdown' }
+  const key = ext.replace(/^\./, '').toLowerCase()
+  return INFO[key] || { ext: key, label: key || 'Markdown', badge: (key || 'MD').toUpperCase(), icon: 'file', color: 'var(--text-muted)', placeholder: '开始编辑...', monacoLang: 'markdown' }
 }
 
 export const FILE_LANG_OPTIONS = [
