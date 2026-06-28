@@ -296,15 +296,15 @@ export function NotebookList({
     // Pass notebook ancestor to children
     const nbId = isNotebook ? cat.id : notebookAncestorId
 
-    // Row click: select node (toggle if already selected), notebook opens sidebar, chapters open focus view
+    // Row click: notebook opens chapter sidebar, chapter under notebook opens focus view, folder toggles expand
     const handleRowClick = () => {
       if (isNotebook) {
         onSelectCategory(cat.id)
       } else if (notebookAncestorId) {
         onSelectCategoryChapter(notebookAncestorId, cat.id)
       } else {
-        // Standalone folder — select it (toggle highlight)
-        onSelectCategory(cat.id)
+        // Standalone folder — toggle expand/collapse, like clicking the chevron
+        if (canExpand) toggleExpand(cat.id)
       }
     }
 
