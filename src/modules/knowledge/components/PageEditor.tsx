@@ -332,8 +332,25 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 if (target) onNavigate(target.id)
               }}
               onLinkClick={href => {
-                // File/URL links: open with system handler
-                openExternal(href)
+                // If it's a web URL, open in browser directly
+                if (/^https?:\/\//i.test(href)) { openExternal(href); return }
+                // Try to resolve as a knowledge base page by extracting the title from the path
+                // e.g. "./Books/C++ Primer.md" → "C++ Primer"
+                //      "./C++学习/print.cpp" → "print"
+                //      "My Page" → "My Page"
+                const basename = href.replace(/^.*[/\\]/, '')        // strip directory
+                const titleFromPath = basename.replace(/\.[^.]+$/, '') // strip extension
+                // Match by full href first, then by basename without ext
+                const target = allPages.find(p =>
+                  p.title === href ||
+                  p.title === basename ||
+                  p.title === titleFromPath
+                )
+                if (target) {
+                  onNavigate(target.id)
+                } else {
+                  openExternal(href)
+                }
               }}
             />
           </div>
