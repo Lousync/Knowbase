@@ -324,7 +324,18 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>
-            <MarkdownPreview content={content} />
+            <MarkdownPreview
+              content={content}
+              onWikiLink={title => {
+                // Find the page with this title and navigate to it
+                const target = allPages.find(p => p.title === title)
+                if (target) onNavigate(target.id)
+              }}
+              onLinkClick={href => {
+                // File/URL links: open with system handler
+                openExternal(href)
+              }}
+            />
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">

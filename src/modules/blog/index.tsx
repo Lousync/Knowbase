@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Star, ListTree } from 'lucide-react'
 import { Entry, Tag } from '../../types'
-import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting } from '../../lib/ipc'
+import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -279,7 +279,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">{entry.date}</h1>
           <p className="text-[11px] text-[var(--text-muted)] mb-4">最近修改：{fmtRelative(entry.updatedAt)}</p>
-          <MarkdownPreview content={entry.contentMd || ''} />
+          <MarkdownPreview content={entry.contentMd || ''} onLinkClick={href => openExternal(href)} />
         </div>
       </div>
 
