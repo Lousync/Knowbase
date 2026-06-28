@@ -57,6 +57,15 @@ export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick
     }
   }
 
+  // Pre-process image paths in content BEFORE react-markdown renders them.
+  // This avoids all component-override/closure timing issues.
+  const processedContent = React.useMemo(() => {
+    return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+      const resolved = resolveImageSrc(src, imageBaseDir)
+      return `![${alt}](${resolved})`
+    })
+  }, [content, imageBaseDir])
+
   return (
     <div className="prose-content">
       <ReactMarkdown
@@ -83,16 +92,12 @@ export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick
               </a>
             )
           },
-          // Custom image handler — resolve local paths to local-file:// URLs
+          // Custom image handler — pass through (paths already resolved in processedContent)
           img({ src, alt, ...props }) {
-            const resolved = resolveImageSrc(src, imageBaseDir)
-            console.log('[MarkdownPreview img] src:', src, '→ resolved:', resolved, 'baseDir:', imageBaseDir)
             return (
               <img
-                src={resolved}
+                src={src || ''}
                 alt={alt || ''}
-                onError={(e) => console.error('[MarkdownPreview img] LOAD FAILED:', resolved, e)}
-                onLoad={() => console.log('[MarkdownPreview img] LOAD OK:', resolved)}
                 className="max-w-full h-auto rounded my-2"
                 style={{ maxHeight: '500px', objectFit: 'contain' }}
               />
