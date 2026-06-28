@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, FolderSearch, FolderInput, Link2Off } from 'lucide-react'
+import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, FolderSearch, FolderInput, Link2Off, Copy, Scissors, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -37,6 +37,13 @@ interface Props {
   onMovePageToLoose: (pageId: string) => void
   onMovePageToNotebook: (pageId: string, notebookId: string) => void
   onMovePageToCategory: (pageId: string, categoryId: string) => void
+  onCopy?: (items: { type: 'category' | 'page'; id: string }[]) => void
+  onCut?: (items: { type: 'category' | 'page'; id: string }[]) => void
+  onExportPage?: (pageId: string) => void
+  onDeletePage?: (pageId: string) => void
+  onRenamePage?: (pageId: string) => void
+  clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
+  cutItemIds?: Set<string>
 }
 
 export function ChapterPanel({
@@ -46,6 +53,7 @@ export function ChapterPanel({
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
   onLocateInExplorer, onMoveCategory,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
+  onCopy, onCut, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds,
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
@@ -402,7 +410,7 @@ export function ChapterPanel({
                   }}
                   onClick={() => onOpenPage(p.id)}
                   onContextMenu={e => {
-                    e.preventDefault()
+                    e.preventDefault(); e.stopPropagation()
                     setContextMenu({ pageId: p.id, x: e.clientX, y: e.clientY })
                   }}
                   className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded text-[13px] transition-colors border-l-[3px] ${
@@ -414,6 +422,9 @@ export function ChapterPanel({
                         : 'border-b-2 border-b-[var(--accent)]'
                       : ''
                   }`}
+                  style={{
+                    ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
+                  }}
                 >
                   <FileIcon ext={p.fileType || ''} size={15} />
                   <span className="flex-1 truncate">{p.title || '无标题'}</span>
@@ -453,14 +464,42 @@ export function ChapterPanel({
       {contextMenu && (
         <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
           <div
-            className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[160px]"
+            className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[170px]"
             style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 170),
-              top: Math.min(contextMenu.y, window.innerHeight - 170)
+              left: Math.min(contextMenu.x, window.innerWidth - 180),
+              top: Math.min(contextMenu.y, window.innerHeight - 220)
             }}
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
+            {onCopy && (
+              <button onClick={() => { onCopy([{ type: 'page', id: contextMenu.pageId }]); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                <Copy size={14} className="text-[var(--text-muted)]" />复制
+              </button>
+            )}
+            {onCut && (
+              <button onClick={() => { onCut([{ type: 'page', id: contextMenu.pageId }]); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                <Scissors size={14} className="text-[var(--text-muted)]" />剪切
+              </button>
+            )}
+            {onExportPage && (
+              <>
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => { onExportPage(contextMenu.pageId); setContextMenu(null) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                  <FileOutput size={14} className="text-[var(--text-muted)]" />导出文件...
+                </button>
+              </>
+            )}
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+            {onRenamePage && (
+              <button onClick={() => { onRenamePage(contextMenu.pageId); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                <Pencil size={14} className="text-[var(--text-muted)]" />重命名
+              </button>
+            )}
             {onLocateInExplorer && (
               <button
                 onClick={() => { onLocateInExplorer(contextMenu.pageId); setContextMenu(null) }}
@@ -491,6 +530,13 @@ export function ChapterPanel({
               <FolderInput size={14} className="text-[var(--text-muted)]" />
               移到目录...
             </button>
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+            {onDeletePage && (
+              <button onClick={() => { onDeletePage(contextMenu.pageId); setContextMenu(null) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-left">
+                <Trash2 size={14} />删除
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, ArrowUpDown, CornerLeftUp, FolderInput, Link2Off } from 'lucide-react'
+import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, ArrowUpDown, CornerLeftUp, FolderInput, Link2Off, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
@@ -33,6 +33,14 @@ interface Props {
   onSortPage?: (id: string, direction: 'up' | 'down') => void
   onCreateChapterUnderNotebook?: (notebookId: string) => void
   locatePageId?: string | null
+  locateCategoryId?: string | null
+  onCopy?: (items: { type: 'category' | 'page'; id: string }[]) => void
+  onCut?: (items: { type: 'category' | 'page'; id: string }[]) => void
+  onPaste?: (targetCategoryId: string | null) => void
+  onExportPage?: (pageId: string) => void
+  onDeletePage?: (pageId: string) => void
+  clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
+  cutItemIds?: Set<string>
 }
 
 export function NotebookList({
@@ -41,7 +49,8 @@ export function NotebookList({
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
-  onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId,
+  onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
+  onCopy, onCut, onPaste, onExportPage, onDeletePage, clipboard, cutItemIds,
 }: Props) {
   // -- sort --
   const sortModes: Array<{ id: string; label: string }> = [
@@ -70,7 +79,7 @@ export function NotebookList({
   const [starredOpen, setStarredOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
-  const [contextMenu, setContextMenu] = useState<{ type: 'category' | 'page'; id: string; x: number; y: number } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ type: 'category' | 'page' | 'blank'; id: string; x: number; y: number } | null>(null)
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [movePickerData, setMovePickerData] = useState<{ type: 'category' | 'page'; id: string } | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)  // visual feedback during drag
@@ -92,8 +101,16 @@ export function NotebookList({
   useEffect(() => {
     const style = document.createElement('style')
     style.textContent = `
-      .drag-over-highlight { outline: 2px solid var(--accent) !important; outline-offset: -2px !important; background-color: var(--accent-alpha-10, rgba(0,122,204,0.08)) !important; }
-      .drag-over-loose { background-color: var(--accent-alpha-10, rgba(0,122,204,0.08)) !important; outline: 2px dashed var(--accent) !important; }
+      .drag-over-highlight {
+        background-color: rgba(0,122,204,0.15) !important;
+        border-radius: 4px !important;
+      }
+      .drag-over-loose {
+        background-color: rgba(0,122,204,0.10) !important;
+        outline: 2px dashed var(--accent) !important;
+        outline-offset: -2px !important;
+        border-radius: 4px !important;
+      }
     `
     document.head.appendChild(style)
     return () => { document.head.removeChild(style) }
@@ -150,6 +167,40 @@ export function NotebookList({
       })
     })
   }, [locatePageId])
+
+  // Auto-expand ancestors and scroll to locateCategoryId
+  useEffect(() => {
+    if (!locateCategoryId) return
+    const cat = categories.find(c => c.id === locateCategoryId)
+    if (!cat) return
+    // Collect ancestors
+    const ancestors: string[] = []
+    let currentId: string | null = cat.parentId
+    const seen = new Set<string>()
+    while (currentId) {
+      if (seen.has(currentId)) break; seen.add(currentId)
+      ancestors.push(currentId)
+      const parent = categories.find(c => c.id === currentId)
+      currentId = parent?.parentId ?? null
+    }
+    if (ancestors.length === 0) {
+      // Root-level category — just scroll to it
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = document.querySelector(`[data-cat-id="${locateCategoryId}"]`)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        })
+      })
+      return
+    }
+    setExpanded(prev => { const next = new Set(prev); ancestors.forEach(id => next.add(id)); return next })
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-cat-id="${locateCategoryId}"]`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    })
+  }, [locateCategoryId])
 
   // F2 — keyboard rename selected notebook / folder
   useEffect(() => {
@@ -253,15 +304,15 @@ export function NotebookList({
     // Pass notebook ancestor to children
     const nbId = isNotebook ? cat.id : notebookAncestorId
 
-    // Row click: select node (toggle if already selected), notebook opens sidebar, chapters open focus view
+    // Row click: notebook opens chapter sidebar, chapter under notebook opens focus view, folder toggles expand
     const handleRowClick = () => {
       if (isNotebook) {
         onSelectCategory(cat.id)
       } else if (notebookAncestorId) {
         onSelectCategoryChapter(notebookAncestorId, cat.id)
       } else {
-        // Standalone folder — select it (toggle highlight)
-        onSelectCategory(cat.id)
+        // Standalone folder — toggle expand/collapse, like clicking the chevron
+        if (canExpand) toggleExpand(cat.id)
       }
     }
 
@@ -292,7 +343,7 @@ export function NotebookList({
             clearDragHighlight()
           }}
           onContextMenu={e => {
-            e.preventDefault()
+            e.preventDefault(); e.stopPropagation()
             setContextMenu({ type: 'category', id: cat.id, x: e.clientX, y: e.clientY })
           }}
         >
@@ -313,7 +364,10 @@ export function NotebookList({
                 : dragOverId === cat.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}
-              style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px' }}
+              style={{
+                paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px',
+                ...(cutItemIds?.has(cat.id) ? { opacity: 0.45 } : {})
+              }}
             >
               <span
                 className={`shrink-0 w-3.5 flex items-center justify-center ${canExpand ? 'cursor-pointer hover:text-[var(--text-primary)]' : ''}`}
@@ -387,13 +441,16 @@ export function NotebookList({
                 }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
-                  e.preventDefault()
+                  e.preventDefault(); e.stopPropagation()
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
-                style={{ paddingLeft: `${(depth + 1) * 16 + 8}px`, paddingRight: '4px' }}
+                style={{
+                  paddingLeft: `${(depth + 1) * 16 + 8}px`, paddingRight: '4px',
+                  ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
+                }}
               >
                 <span className="w-3.5 shrink-0" />
                 <FileIcon ext={p.fileType || ''} size={14} />
@@ -467,6 +524,14 @@ export function NotebookList({
       <div
         ref={treeRef}
         className="flex-1 overflow-y-auto overflow-x-hidden"
+        onContextMenu={e => {
+          // Only fire blank context menu if target is the tree container itself or empty space
+          const target = e.target as HTMLElement
+          if (target === treeRef.current || (target.closest('[data-cat-id]') === null && target.closest('[data-page-id]') === null)) {
+            e.preventDefault()
+            setContextMenu({ type: 'blank', id: '', x: e.clientX, y: e.clientY })
+          }
+        }}
         onDragOver={e => {
           const d = dragRef.current
           if (!d) return
@@ -576,13 +641,16 @@ export function NotebookList({
                 onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1'; dragRef.current = null }}
                 onClick={() => onOpenPage(p.id)}
                 onContextMenu={e => {
-                  e.preventDefault()
+                  e.preventDefault(); e.stopPropagation()
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
                   activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
-                style={{ paddingLeft: '5px', paddingRight: '4px' }}
+                style={{
+                  paddingLeft: '5px', paddingRight: '4px',
+                  ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
+                }}
               >
                 <span className="w-3.5 shrink-0" />
                 <FileIcon ext={p.fileType || ''} size={14} />
@@ -634,16 +702,51 @@ export function NotebookList({
       {contextMenu && (
         <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
           <div
-            className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[160px]"
+            className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[170px]"
             style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 170),
-              top: Math.min(contextMenu.y, window.innerHeight - 120)
+              left: Math.min(contextMenu.x, window.innerWidth - 180),
+              top: Math.min(contextMenu.y, window.innerHeight - 220)
             }}
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
             {contextMenu.type === 'category' && (
               <>
+                {onCopy && (
+                  <button onClick={() => { onCopy([{ type: 'category', id: contextMenu.id }]); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Copy size={14} className="text-[var(--text-muted)]" />复制
+                  </button>
+                )}
+                {onCut && (
+                  <button onClick={() => { onCut([{ type: 'category', id: contextMenu.id }]); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Scissors size={14} className="text-[var(--text-muted)]" />剪切
+                  </button>
+                )}
+                {onPaste && (
+                  <>
+                    <div className="border-t border-[var(--border-color)] my-0.5" />
+                    <button
+                      onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(contextMenu.id); setContextMenu(null) } }}
+                      disabled={!clipboard || clipboard.items.length === 0}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${
+                        clipboard && clipboard.items.length > 0
+                          ? 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                          : 'text-[var(--text-disabled)] cursor-not-allowed'
+                      }`}>
+                      <ClipboardPaste size={14} className={clipboard && clipboard.items.length > 0 ? 'text-[var(--text-muted)]' : 'text-[var(--text-disabled)]'} />粘贴{clipboard && clipboard.items.length > 1 ? ` (${clipboard.items.length})` : ''}
+                    </button>
+                  </>
+                )}
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => {
+                  const cat = categories.find(c => c.id === contextMenu.id)
+                  if (cat) { handleStartRename(cat.id, cat.name); setContextMenu(null) }
+                }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                  <Pencil size={14} className="text-[var(--text-muted)]" />重命名
+                </button>
                 <button
                   onClick={() => {
                     onMoveCategory(contextMenu.id, null)
@@ -665,10 +768,48 @@ export function NotebookList({
                   <FolderInput size={14} className="text-[var(--text-muted)]" />
                   移到目录...
                 </button>
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => {
+                  const cat = categories.find(c => c.id === contextMenu.id)
+                  if (cat) {
+                    if (skipDeleteConfirm) onDeleteNotebook(cat.id)
+                    else setDeleteTarget({ id: cat.id, name: cat.name })
+                  }
+                  setContextMenu(null)
+                }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-left">
+                  <Trash2 size={14} />删除
+                </button>
               </>
             )}
             {contextMenu.type === 'page' && (
               <>
+                {onCopy && (
+                  <button onClick={() => { onCopy([{ type: 'page', id: contextMenu.id }]); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Copy size={14} className="text-[var(--text-muted)]" />复制
+                  </button>
+                )}
+                {onCut && (
+                  <button onClick={() => { onCut([{ type: 'page', id: contextMenu.id }]); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Scissors size={14} className="text-[var(--text-muted)]" />剪切
+                  </button>
+                )}
+                {onExportPage && (
+                  <>
+                    <div className="border-t border-[var(--border-color)] my-0.5" />
+                    <button onClick={() => { onExportPage(contextMenu.id); setContextMenu(null) }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                      <FileOutput size={14} className="text-[var(--text-muted)]" />导出文件...
+                    </button>
+                  </>
+                )}
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => { onOpenPage(contextMenu.id); setContextMenu(null) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                  <Pencil size={14} className="text-[var(--text-muted)]" />重命名
+                </button>
                 <button
                   onClick={() => {
                     onDropOnLooseArea(contextMenu.id)
@@ -689,6 +830,34 @@ export function NotebookList({
                 >
                   <FolderInput size={14} className="text-[var(--text-muted)]" />
                   移到目录...
+                </button>
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                {onDeletePage && (
+                  <button onClick={() => { onDeletePage(contextMenu.id); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors text-left">
+                    <Trash2 size={14} />删除
+                  </button>
+                )}
+              </>
+            )}
+            {contextMenu.type === 'blank' && (
+              <>
+                {onPaste && (
+                  <button
+                    onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(null); setContextMenu(null) } }}
+                    disabled={!clipboard || clipboard.items.length === 0}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${
+                      clipboard && clipboard.items.length > 0
+                        ? 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                        : 'text-[var(--text-disabled)] cursor-not-allowed'
+                    }`}>
+                    <ClipboardPaste size={14} className={clipboard && clipboard.items.length > 0 ? 'text-[var(--text-muted)]' : 'text-[var(--text-disabled)]'} />粘贴{clipboard && clipboard.items.length > 1 ? ` (${clipboard.items.length})` : ''}
+                  </button>
+                )}
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <button onClick={() => { setContextMenu(null); onImport() }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                  <Download size={14} className="text-[var(--text-muted)]" />导入文件...
                 </button>
               </>
             )}

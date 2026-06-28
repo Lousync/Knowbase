@@ -371,6 +371,15 @@ export function runMigrations(): void {
     }
     db.run("INSERT INTO _migrations (name) VALUES ('018_repair_category_dates')")
   }
+
+  // 019 — normalize file_type: lowercase, strip leading dot
+  if (!applied.has('019_normalize_file_type')) {
+    // Update rows where file_type starts with '.'
+    db.run("UPDATE knowledge_pages SET file_type = LOWER(SUBSTR(file_type, 2)) WHERE file_type LIKE '.%'")
+    // Update rows where file_type has uppercase letters
+    db.run("UPDATE knowledge_pages SET file_type = LOWER(file_type) WHERE file_type != LOWER(file_type)")
+    db.run("INSERT INTO _migrations (name) VALUES ('019_normalize_file_type')")
+  }
 }
 
 /**

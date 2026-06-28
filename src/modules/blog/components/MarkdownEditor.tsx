@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting } from '../../../lib/ipc'
+import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting, openExternal } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { useSettings } from '../../../lib/SettingsContext'
@@ -280,7 +280,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         {showPreview ? (
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">
-              <MarkdownPreview content={contentMd} />
+              <MarkdownPreview content={contentMd} onLinkClick={href => openExternal(href)} />
             </div>
           </div>
         ) : (

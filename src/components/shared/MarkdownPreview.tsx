@@ -17,10 +17,29 @@ interface Props {
   content: string
   /** Called when a [[wiki link]] is clicked. If omitted, wiki links render as plain text. */
   onWikiLink?: (title: string) => void
+  /** Called when a standard markdown link [text](href) is clicked. Default: open in browser/system. */
+  onLinkClick?: (href: string) => void
 }
 
-/** Unified markdown preview component. Replaces the old markdown-it + dangerouslySetInnerHTML pipeline. */
-export function MarkdownPreview({ content, onWikiLink }: Props) {
+/** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
+export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault()
+    if (onLinkClick) {
+      onLinkClick(href)
+    } else {
+      // Default: use window.open → intercepted by Electron's setWindowOpenHandler
+      if (/^https?:\/\//i.test(href) || /^file:\/\//i.test(href)) {
+        window.open(href, '_blank')
+      } else {
+        // Relative/absolute file path → open with system app
+        if (window.api) {
+          window.api.openExternal(href)
+        }
+      }
+    }
+  }
+
   return (
     <div className="prose-content">
       <ReactMarkdown
@@ -34,7 +53,19 @@ export function MarkdownPreview({ content, onWikiLink }: Props) {
           ol({ children }) {
             return <ol className="list-decimal pl-6 my-1.5">{children}</ol>
           },
-          // Custom code block renderer — add language label
+          // Custom link handler — intercept all <a> clicks to avoid Electron navigation blocks
+          a({ href, children, ...props }) {
+            return (
+              <a
+                href={href}
+                {...props}
+                className="text-[var(--accent)] hover:underline cursor-pointer"
+                onClick={e => href ? handleLinkClick(e, href) : undefined}
+              >
+                {children}
+              </a>
+            )
+          },
           code({ className, children, node, ...props }) {
             const match = /language-(\w+)/.exec(className || '')
             const lang = match ? match[1] : ''

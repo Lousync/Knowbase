@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree } from 'lucide-react'
+import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
-import type { KnowledgePage, KnowledgeCategory } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
+import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
@@ -23,9 +23,10 @@ interface Props {
   onFileTypeChange?: (fileType: string) => void
   onContentChange?: (content: string) => void
   onToggleOutline?: () => void
+  onTagsChange?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -37,11 +38,21 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
+  // Tags
+  const [allTags, setAllTags] = useState<KnowledgeTag[]>([])
+  const [entryTags, setEntryTags] = useState<KnowledgeTag[]>([])
+  const [newTagName, setNewTagName] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
+  // Wiki link disambiguation: when multiple pages share the same title
+  const [wikiPicker, setWikiPicker] = useState<{ title: string; candidates: KnowledgePage[] } | null>(null)
+  const [showBacklinks, setShowBacklinks] = useState(true)
+  const MAX_TAGS = 5
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   const contentRef = useRef(content)
   const titleRef = useRef(title)
   const pageRef = useRef(page)
   const fileTypeRef = useRef(fileType)
+  const tagsRef = useRef<KnowledgeTag[]>([])
   const monacoRef = useRef<typeof Monaco | null>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const showDeleteConfirmRef = useRef(showDeleteConfirm)
@@ -56,6 +67,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => { titleRef.current = title }, [title])
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { fileTypeRef.current = fileType }, [fileType])
+  useEffect(() => { tagsRef.current = entryTags }, [entryTags])
   useEffect(() => { showDeleteConfirmRef.current = showDeleteConfirm }, [showDeleteConfirm])
   useEffect(() => { showLangMenuRef.current = showLangMenu }, [showLangMenu])
   useEffect(() => { isCodeFileRef.current = isCodeFile }, [isCodeFile])
@@ -70,10 +82,12 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
-        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
+        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); setEntryTags(p.tags || []); window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
       }),
-      getKnowledgeBacklinks(pageId).then(setBacklinks)
+      getKnowledgeBacklinks(pageId).then(setBacklinks),
+      getKnowledgeTags().then(setAllTags)
     ])
+    setShowBacklinks(true)  // reset when switching pages
   }, [pageId])
 
   useEffect(() => {
@@ -86,7 +100,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     if (!pageRef.current) return
     try {
       const links = parseWikiLinks(c)
-      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current })
+      await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current, tags: tagsRef.current.map(tag => tag.id) })
       await updateKnowledgeLinks(pageRef.current.id, links)
       setSaving(false)
     } catch (e) { console.error(e) }
@@ -221,6 +235,29 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     } catch (e) { console.error(e) }
   }
 
+  const handleAddTag = async () => {
+    const name = newTagName.trim()
+    if (!name) { setShowTagInput(false); return }
+    if (entryTags.length >= MAX_TAGS) { setShowTagInput(false); setNewTagName(''); return }
+    let tag = allTags.find(t => t.name === name)
+    if (!tag) {
+      try {
+        tag = await createKnowledgeTag(name)
+        setAllTags(prev => [...prev, tag!])
+      } catch (e) { console.error(e); return }
+    }
+    if (!entryTags.find(t => t.id === tag!.id)) {
+      setEntryTags(prev => [...prev, tag!])
+    }
+    setNewTagName(''); setShowTagInput(false)
+    onTagsChange?.()
+  }
+
+  const handleRemoveTag = (tagId: string) => {
+    setEntryTags(prev => prev.filter(t => t.id !== tagId))
+    onTagsChange?.()
+  }
+
   if (!page) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
@@ -233,6 +270,35 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     let current = categories.find(c => c.id === catId)
     while (current) { parts.unshift(current.name); current = categories.find(c => c.id === current!.parentId) }
     return parts.join(' > ')
+  }
+
+  // Build a breadcrumb path for a page from its category chain
+  const getCategoryChain = (p: KnowledgePage): string | null => {
+    if (!p.categoryId) return null
+    const chain: string[] = []
+    let currentId: string | null = p.categoryId
+    const visited = new Set<string>()
+    while (currentId) {
+      if (visited.has(currentId)) break; visited.add(currentId)
+      const cat = categories.find(c => c.id === currentId)
+      if (cat) { chain.unshift(cat.name); currentId = cat.parentId }
+      else break
+    }
+    return chain.length > 0 ? chain.join(' / ') : null
+  }
+
+  // Resolve a title to knowledge base pages. If >1 match, show picker. If 0, return false.
+  const resolveInternalLink = (title: string): boolean => {
+    const matches = allPages.filter(p => p.title === title)
+    if (matches.length === 1) {
+      onNavigate(matches[0].id)
+      return true
+    }
+    if (matches.length > 1) {
+      setWikiPicker({ title, candidates: matches })
+      return true
+    }
+    return false
   }
 
   return (
@@ -297,6 +363,45 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
         </div>
 
+        {/* Tag bar */}
+        <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto">
+          {entryTags.map(t => (
+            <span key={t.id}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
+              style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
+            >
+              {t.name}
+              <button onClick={() => handleRemoveTag(t.id)}
+                className="hover:text-[var(--danger)] transition-colors"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+          {entryTags.length < MAX_TAGS && (
+            showTagInput ? (
+              <input
+                autoFocus
+                value={newTagName}
+                onChange={e => setNewTagName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); if (e.key === 'Escape') { setShowTagInput(false); setNewTagName('') } }}
+                onBlur={handleAddTag}
+                placeholder="标签名..."
+                className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
+              />
+            ) : (
+              <button onClick={() => setShowTagInput(true)}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded border border-dashed border-[var(--border-color)] transition-colors"
+              >
+                <Plus size={10} />标签
+              </button>
+            )
+          )}
+          {entryTags.length > 0 && (
+            <span className="text-[10px] text-[var(--text-disabled)] ml-1">{entryTags.length}/{MAX_TAGS}</span>
+          )}
+        </div>
+
         {/* Content */}
         {isPdfFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
@@ -324,7 +429,30 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>
-            <MarkdownPreview content={content} />
+            <MarkdownPreview
+              content={content}
+              onWikiLink={title => {
+                resolveInternalLink(title)
+              }}
+              onLinkClick={href => {
+                // If it's a web URL, open in browser directly
+                if (/^https?:\/\//i.test(href)) { openExternal(href); return }
+                // Try to resolve as a knowledge base page by extracting the title from the path
+                const basename = href.replace(/^.*[/\\]/, '')
+                const titleFromPath = basename.replace(/\.[^.]+$/, '')
+                // Collect all matches, prioritized by href exact match first
+                let matches = allPages.filter(p => p.title === href)
+                if (matches.length === 0) matches = allPages.filter(p => p.title === basename)
+                if (matches.length === 0) matches = allPages.filter(p => p.title === titleFromPath)
+                if (matches.length === 1) {
+                  onNavigate(matches[0].id)
+                } else if (matches.length > 1) {
+                  setWikiPicker({ title: titleFromPath || basename, candidates: matches })
+                } else {
+                  openExternal(href)
+                }
+              }}
+            />
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
@@ -376,6 +504,63 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         )}
       </div>
 
+      {/* Wiki disambiguation picker */}
+      {wikiPicker && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50" onClick={() => setWikiPicker(null)}>
+          <div
+            className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl flex flex-col"
+            style={{ width: '420px', maxHeight: '400px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-color)]">
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                多处匹配 &mdash; 选择跳转到
+              </span>
+              <button onClick={() => setWikiPicker(null)} className="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden py-1">
+              <p className="px-4 py-1.5 text-[11px] text-[var(--text-muted)]">
+                标题 "<span className="text-[var(--text-primary)] font-medium">{wikiPicker.title}</span>" 匹配到 {wikiPicker.candidates.length} 个页面：
+              </p>
+              {wikiPicker.candidates.map(p => {
+                // Show breadcrumb: derive category chain from allPages
+                const catChain = getCategoryChain(p, allPages)
+                // Format createdAt e.g. "2026-06-15 14:30"
+                const ts = p.createdAt ? new Date(p.createdAt) : null
+                const dateStr = ts && !isNaN(ts.getTime())
+                  ? ts.getFullYear() + '-' +
+                    String(ts.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(ts.getDate()).padStart(2, '0') + ' ' +
+                    String(ts.getHours()).padStart(2, '0') + ':' +
+                    String(ts.getMinutes()).padStart(2, '0')
+                  : null
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => { onNavigate(p.id); setWikiPicker(null) }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors group"
+                  >
+                    <FileText size={15} className="shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)]" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[13px] text-[var(--text-primary)] truncate block">{p.title}</span>
+                      {catChain && (
+                        <span className="text-[10px] text-[var(--text-muted)] truncate block">{catChain}</span>
+                      )}
+                      {dateStr && (
+                        <span className="text-[9px] text-[var(--text-muted)] block mt-0.5">创建于 {dateStr}</span>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] group-hover:bg-[var(--accent)]/10">{p.fileType || 'md'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete confirm dialog */}
       {page && (
         <ConfirmDialog
@@ -394,19 +579,39 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         />
       )}
 
-      {/* Right: Backlinks */}
+      {/* Right: Backlinks — collapsible, only visible when page has backlinks */}
       {backlinks.length > 0 && (
-        <div className="w-48 shrink-0 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col">
-          <div className="px-3 py-2 border-b border-[var(--border-color)]">
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">反向链接 · {backlinks.length}</span>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {backlinks.map(bl => (
-              <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)]">
-                <span className="text-[12px] text-[var(--text-primary)] truncate block">{bl.title || '无标题'}</span>
+        <div className={`bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col transition-all duration-200 ${showBacklinks ? 'w-48' : 'w-6'}`}>
+          {showBacklinks ? (
+            <>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">反向链接 · {backlinks.length}</span>
+                <button
+                  onClick={() => setShowBacklinks(false)}
+                  className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  title="折叠反向链接面板"
+                >
+                  <ChevronRight size={13} />
+                </button>
               </div>
-            ))}
-          </div>
+              <div className="flex-1 overflow-y-auto">
+                {backlinks.map(bl => (
+                  <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)]">
+                    <span className="text-[12px] text-[var(--text-primary)] truncate block">{bl.title || '无标题'}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            // Collapsed strip — blue edge on hover, click to expand
+            <div
+              className="flex-1 cursor-col-resize hover:bg-[var(--accent)]/20 flex items-center justify-center group"
+              onClick={() => setShowBacklinks(true)}
+              title="展开反向链接面板"
+            >
+              <ChevronLeft size={12} className="text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
+            </div>
+          )}
         </div>
       )}
     </div>

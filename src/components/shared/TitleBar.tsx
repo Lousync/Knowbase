@@ -19,10 +19,15 @@ export function TitleBar() {
 
   return (
     <div
-      className="flex items-center justify-between h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
+      className="relative flex items-center justify-between h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
       {/* drag region spacer */}
       <div className="flex-1" />
+
+      {/* VS Code 风格居中搜索框 — absolute centering */}
+      <div className="absolute left-1/2 -translate-x-1/2 no-drag" style={{ width: 'min(100% - 180px, 560px)' }}>
+        <div id="titlebar-search" />
+      </div>
 
       {/* 窗口控制按钮 */}
       <div className="flex h-full no-drag">

@@ -32,7 +32,7 @@ import phpSvg from '../assets/php.svg?raw'
 import luaSvg from '../assets/lua.svg?raw'
 
 export const FILE_ICONS: Record<string, string> = {
-  '': defaultSvg,
+  '': mdSvg,   // empty = Markdown (manually created pages)
   md: mdSvg,
   txt: txtSvg,
   pdf: pdfSvg,
@@ -64,5 +64,6 @@ export const FILE_ICONS: Record<string, string> = {
 }
 
 export function getFileIcon(ext: string): string {
-  return FILE_ICONS[ext] || defaultSvg
+  const key = ext.replace(/^\./, '').toLowerCase()
+  return FILE_ICONS[key] || defaultSvg
 }

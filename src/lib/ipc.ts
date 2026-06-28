@@ -85,6 +85,8 @@ export const getKnowledgeStarredPages = () => a().getKnowledgeStarredPages()
 export const moveKnowledgePage = (id: string, direction: 'up' | 'down') => a().moveKnowledgePage(id, direction)
 export const reorderKnowledgePage = (id: string, targetIndex: number) => a().reorderKnowledgePage(id, targetIndex)
 export const moveKnowledgeCategory = (id: string, direction: 'up' | 'down') => a().moveKnowledgeCategory(id, direction)
+export const duplicateKnowledgePage = (data: { pageId: string; targetCategoryId?: string | null }) => a().duplicateKnowledgePage(data)
+export const duplicateKnowledgeCategory = (data: { categoryId: string; targetParentId?: string | null }) => a().duplicateKnowledgeCategory(data)
 
 // export
 export const exportAllBlogData = () => a().exportAllBlogData()
