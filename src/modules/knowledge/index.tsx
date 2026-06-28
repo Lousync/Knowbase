@@ -44,7 +44,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const selectedChapterIdRef = useRef(selectedChapterId)
   useEffect(() => { openPageIdsRef.current = openPageIds }, [openPageIds])
   useEffect(() => { activePageIdRef.current = activePageId }, [activePageId])
-  useEffect(() => { setLiveContent('') }, [activePageId])  // reset live outline when switching pages
+  useEffect(() => {
+    setLiveContent('')  // reset live outline when switching pages
+    if (!activePageId) {
+      // No active page → ensure outline is closed and sidebars visible
+      setShowOutline(false)
+      setShowCategoryPanel(true)
+    }
+  }, [activePageId])
   useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
 
@@ -245,7 +252,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     setOpenPageIds(nextIds)
     setOpenPageInfos(prev => { const next = { ...prev }; delete next[pageId]; return next })
     if (activePageIdRef.current === pageId) {
-      if (nextIds.length === 0) setActivePageId(null)
+      if (nextIds.length === 0) {
+        setActivePageId(null)
+        // All tabs closed — restore sidebars if outline was open
+        setShowOutline(false)
+        setShowCategoryPanel(true)
+      }
       else { const newIdx = Math.min(idx, nextIds.length - 1); setActivePageId(nextIds[newIdx]) }
     }
   }, [])
