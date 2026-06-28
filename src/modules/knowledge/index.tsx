@@ -620,7 +620,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             <PageEditor
               pageId={activePageId}
               categories={categories}
-              allPages={[...allLoosePages, ...chapterPages]}
+              allPages={allPages}
               zoom={zoom}
               onBack={handleBackToList}
               onDeleted={() => handlePageDeleted(activePageId)}
