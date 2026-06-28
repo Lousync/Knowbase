@@ -44,27 +44,31 @@ function resolveImageSrc(src: string | undefined, imageBaseDir?: string): string
 
 /** Unified markdown preview component. Links + images resolved for local filesystem. */
 export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick }: Props) {
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    e.preventDefault()
-    if (onLinkClick) {
-      onLinkClick(href)
-    } else {
-      if (/^https?:\/\//i.test(href) || /^file:\/\//i.test(href)) {
-        window.open(href, '_blank')
-      } else {
-        if (window.api) window.api.openExternal(href)
-      }
-    }
-  }
-
   // Pre-process image paths in content BEFORE react-markdown renders them.
-  // This avoids all component-override/closure timing issues.
   const processedContent = React.useMemo(() => {
-    return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+    if (!content) return content
+    let found = 0
+    const result = content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
+      found++
+      if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:') || src.startsWith('file:///')) {
+        return match  // already absolute, leave as-is
+      }
       const resolved = resolveImageSrc(src, imageBaseDir)
+      console.log(`[MarkdownPreview] image #${found}: "${src}" → "${resolved}"  (baseDir: ${imageBaseDir || 'NONE'})`)
       return `![${alt}](${resolved})`
     })
+    if (found > 0) console.log(`[MarkdownPreview] processed ${found} images, baseDir=${imageBaseDir || 'NONE'}`)
+    return result
   }, [content, imageBaseDir])
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault()
+    if (onLinkClick) onLinkClick(href)
+    else {
+      if (/^https?:\/\//i.test(href) || /^file:\/\//i.test(href)) window.open(href, '_blank')
+      else if (window.api) window.api.openExternal(href)
+    }
+  }
 
   return (
     <div className="prose-content">
@@ -155,7 +159,7 @@ export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick
           },
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   )
