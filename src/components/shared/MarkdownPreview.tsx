@@ -15,57 +15,28 @@ function headingId(text: string): string {
 
 interface Props {
   content: string
-  /** Base directory for resolving relative image paths (e.g., data directory) */
-  imageBaseDir?: string
-  /** Called when a [[wiki link]] is clicked. */
+  /** Called when a [[wiki link]] is clicked. If omitted, wiki links render as plain text. */
   onWikiLink?: (title: string) => void
-  /** Called when a standard markdown link [text](href) is clicked. */
+  /** Called when a standard markdown link [text](href) is clicked. Default: open in browser/system. */
   onLinkClick?: (href: string) => void
 }
 
-/** Convert markdown image src to local-file:// URL. This custom protocol bypasses CSP entirely. */
-function resolveImageSrc(src: string | undefined, imageBaseDir?: string): string {
-  if (!src) return ''
-  if (/^https?:\/\//i.test(src) || /^data:/i.test(src)) return src
-  if (/^local-file:\/\//i.test(src)) return src
-  // Absolute Windows path e.g. C:\Users\...
-  if (/^[a-zA-Z]:[/\\]/.test(src)) {
-    return 'local-file:///' + src.replace(/\\/g, '/')
-  }
-  // Relative path → resolve against imageBaseDir
-  if (imageBaseDir && !src.startsWith('/')) {
-    const cleaned = src.replace(/\\/g, '/').replace(/^\.\//, '')
-    const base = imageBaseDir.replace(/\\/g, '/').replace(/\/$/, '')
-    return 'local-file:///' + base + '/' + cleaned
-  }
-  return src
-}
-
-/** Unified markdown preview component. Links + images resolved for local filesystem. */
-export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick }: Props) {
-  // Pre-process image paths in content BEFORE react-markdown renders them.
-  const processedContent = React.useMemo(() => {
-    if (!content) return content
-    let found = 0
-    const result = content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
-      found++
-      if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:') || src.startsWith('file:///')) {
-        return match  // already absolute, leave as-is
-      }
-      const resolved = resolveImageSrc(src, imageBaseDir)
-      console.log(`[MarkdownPreview] image #${found}: "${src}" → "${resolved}"  (baseDir: ${imageBaseDir || 'NONE'})`)
-      return `![${alt}](${resolved})`
-    })
-    if (found > 0) console.log(`[MarkdownPreview] processed ${found} images, baseDir=${imageBaseDir || 'NONE'}`)
-    return result
-  }, [content, imageBaseDir])
-
+/** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
+export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
-    if (onLinkClick) onLinkClick(href)
-    else {
-      if (/^https?:\/\//i.test(href) || /^file:\/\//i.test(href)) window.open(href, '_blank')
-      else if (window.api) window.api.openExternal(href)
+    if (onLinkClick) {
+      onLinkClick(href)
+    } else {
+      // Default: use window.open → intercepted by Electron's setWindowOpenHandler
+      if (/^https?:\/\//i.test(href) || /^file:\/\//i.test(href)) {
+        window.open(href, '_blank')
+      } else {
+        // Relative/absolute file path → open with system app
+        if (window.api) {
+          window.api.openExternal(href)
+        }
+      }
     }
   }
 
@@ -93,17 +64,6 @@ export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick
               >
                 {children}
               </a>
-            )
-          },
-          // Custom image handler — pass through (paths already resolved in processedContent)
-          img({ src, alt, ...props }) {
-            return (
-              <img
-                src={src || ''}
-                alt={alt || ''}
-                className="max-w-full h-auto rounded my-2"
-                style={{ maxHeight: '500px', objectFit: 'contain' }}
-              />
             )
           },
           code({ className, children, node, ...props }) {
@@ -158,7 +118,7 @@ export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick
           },
         }}
       >
-        {processedContent}
+        {content}
       </ReactMarkdown>
     </div>
   )
