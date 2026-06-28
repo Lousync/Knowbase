@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol, net } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
@@ -51,7 +51,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: false
     }
   })
 
@@ -157,8 +158,20 @@ function registerWindowHandlers(): void {
   })
 }
 
+// ===== 自定义协议：local-file:// 用于本地文件图片加载 =====
+// Bypasses Chromium cross-origin restrictions when page is loaded from localhost in dev mode.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'local-file', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true } }
+])
+
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
+  // Register custom protocol handler for local file access
+  // Allows <img src="local-file://C:/path/to/image.png"> to load any local file
+  protocol.handle('local-file', (request) => {
+    const filePath = decodeURIComponent(request.url.replace('local-file:///', '').replace(/\//g, (m, i) => i === 0 ? m : '\\'))
+    return net.fetch('file:///' + filePath.replace(/\\/g, '/'), { bypassCustomProtocolHandlers: true })
+  })
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()
 
