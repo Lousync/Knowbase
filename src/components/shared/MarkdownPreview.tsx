@@ -15,27 +15,43 @@ function headingId(text: string): string {
 
 interface Props {
   content: string
-  /** Called when a [[wiki link]] is clicked. If omitted, wiki links render as plain text. */
+  /** Base directory for resolving relative image paths (e.g., data directory) */
+  imageBaseDir?: string
+  /** Called when a [[wiki link]] is clicked. */
   onWikiLink?: (title: string) => void
-  /** Called when a standard markdown link [text](href) is clicked. Default: open in browser/system. */
+  /** Called when a standard markdown link [text](href) is clicked. */
   onLinkClick?: (href: string) => void
 }
 
-/** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
-export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
+/** Convert a markdown image src to a loadable file:// URL */
+function resolveImageSrc(src: string | undefined, imageBaseDir?: string): string {
+  if (!src) return ''
+  // External URLs and data URIs pass through
+  if (/^https?:\/\//i.test(src) || /^data:/i.test(src) || /^file:\/\//i.test(src)) return src
+  // Absolute Windows path → file:// URI
+  if (/^[a-zA-Z]:[/\\]/.test(src)) {
+    return 'file:///' + src.replace(/\\/g, '/').replace(/^([a-zA-Z]):/, '$1:')
+  }
+  // Relative path → resolve against imageBaseDir
+  if (imageBaseDir && !src.startsWith('/')) {
+    const cleaned = src.replace(/\\/g, '/').replace(/^\.\//, '')
+    const base = imageBaseDir.replace(/\\/g, '/').replace(/\/$/, '')
+    return 'file:///' + base + '/' + cleaned
+  }
+  return src
+}
+
+/** Unified markdown preview component. Links + images resolved for local filesystem. */
+export function MarkdownPreview({ content, imageBaseDir, onWikiLink, onLinkClick }: Props) {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
     if (onLinkClick) {
       onLinkClick(href)
     } else {
-      // Default: use window.open → intercepted by Electron's setWindowOpenHandler
       if (/^https?:\/\//i.test(href) || /^file:\/\//i.test(href)) {
         window.open(href, '_blank')
       } else {
-        // Relative/absolute file path → open with system app
-        if (window.api) {
-          window.api.openExternal(href)
-        }
+        if (window.api) window.api.openExternal(href)
       }
     }
   }
@@ -64,6 +80,19 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
               >
                 {children}
               </a>
+            )
+          },
+          // Custom image handler — resolve local paths to file:// URLs
+          img({ src, alt, ...props }) {
+            const resolved = resolveImageSrc(src, imageBaseDir)
+            return (
+              <img
+                src={resolved}
+                alt={alt || ''}
+                {...props}
+                className="max-w-full h-auto rounded my-2"
+                style={{ maxHeight: '500px', objectFit: 'contain' }}
+              />
             )
           },
           code({ className, children, node, ...props }) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting, openExternal } from '../../../lib/ipc'
+import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting, getDbPath, openExternal } from '../../../lib/ipc'
 import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { useSettings } from '../../../lib/SettingsContext'
@@ -43,6 +43,11 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [entryStates, setEntryStates] = useState<string>('')
   const [newTagName, setNewTagName] = useState('')
   const [showTagInput, setShowTagInput] = useState(false)
+  const [dataDir, setDataDir] = useState('')
+
+  useEffect(() => {
+    getDbPath().then(p => setDataDir(p.replace(/[/\\][^/\\]+$/, ''))).catch(() => {})
+  }, [])
 
   const tagsRef = useRef<Tag[]>([])
   const statesRef = useRef('')
@@ -280,7 +285,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         {showPreview ? (
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">
-              <MarkdownPreview content={contentMd} onLinkClick={href => openExternal(href)} />
+              <MarkdownPreview content={contentMd} imageBaseDir={dataDir} onLinkClick={href => openExternal(href)} />
             </div>
           </div>
         ) : (

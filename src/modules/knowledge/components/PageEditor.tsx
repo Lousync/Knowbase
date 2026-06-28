@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal } from '../../../lib/ipc'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, getDbPath, openExternal } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
@@ -65,9 +65,12 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => { isPdfFileRef.current = isPdfFile }, [isPdfFile])
 
   const [attachmentsPath, setAttachmentsPath] = useState('')
+  const [dataDir, setDataDir] = useState('')
 
   useEffect(() => {
     getAttachmentsPath().then(setAttachmentsPath).catch(() => {})
+    // Derive data dir from db path: {userData}/data/knowledge.db → {userData}/data/
+    getDbPath().then(p => setDataDir(p.replace(/[/\\][^/\\]+$/, ''))).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -359,6 +362,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>
             <MarkdownPreview
               content={content}
+              imageBaseDir={dataDir}
               onWikiLink={title => {
                 resolveInternalLink(title)
               }}
