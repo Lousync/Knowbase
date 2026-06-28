@@ -179,6 +179,7 @@ app.whenReady().then(async () => {
   registerUserHandlers()
   registerToolboxHandlers()
   registerAIHandlers()
+
   createWindow()
 
   app.on('activate', () => {

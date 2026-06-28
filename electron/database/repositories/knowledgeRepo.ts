@@ -444,6 +444,77 @@ export function registerKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:deleteTag', (_e, id: string) => {
     run('DELETE FROM knowledge_tags WHERE id = ?', [id])
   })
+
+  // ===== Duplicate =====
+  // 深拷贝页面
+  ipcMain.handle('knowledge:duplicatePage', (_e, data: { pageId: string; targetCategoryId?: string | null }) => {
+    const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [data.pageId])
+    if (rows.length === 0) return null
+    const src = rows[0]
+    const newId = randomUUID()
+    const now = new Date().toISOString()
+    const targetCat = data.targetCategoryId !== undefined ? data.targetCategoryId : src.category_id
+    const maxOrder = queryAll<{ m: number }>(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
+      [targetCat]
+    )
+    run(
+      `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, is_starred, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [newId, src.title + ' (副本)', src.content_md, src.content_html || '', targetCat, maxOrder[0]?.m ?? 0, (src as any).file_type || src.file_type || '', now, now]
+    )
+    const newRows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [newId])
+    return mapPage(newRows[0])
+  })
+
+  // 深拷贝分类（含子树和页面）
+  ipcMain.handle('knowledge:duplicateCategory', (_e, data: { categoryId: string; targetParentId?: string | null }) => {
+    const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [data.categoryId])[0]
+    if (!cat) return null
+
+    const targetParent = data.targetParentId !== undefined ? data.targetParentId : cat.parent_id
+    const newRootId = randomUUID()
+
+    // Recursively duplicate categories
+    const dupCategory = (oldId: string, newParentId: string | null) => {
+      const oldCat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [oldId])[0]
+      if (!oldCat) return
+      const newId = randomUUID()
+      const maxOrder = queryAll<{ m: number }>(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
+        [newParentId]
+      )
+      run(
+        'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+        [newId, oldCat.name + ' (副本)', newParentId, maxOrder[0]?.m ?? 0, oldCat.category_type]
+      )
+      // Duplicate pages under this category
+      const pages = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE category_id = ? ORDER BY sort_order', [oldId])
+      for (const p of pages) {
+        const newPageId = randomUUID()
+        const now = new Date().toISOString()
+        run(
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, is_starred, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+          [newPageId, p.title, p.content_md, p.content_html || '', newId, p.sort_order, (p as any).file_type || p.file_type || '', now, now]
+        )
+      }
+      // Recurse into children
+      const children = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE parent_id = ? ORDER BY sort_order', [oldId])
+      for (const ch of children) {
+        dupCategory(ch.id, newId)
+      }
+    }
+
+    dupCategory(data.categoryId, targetParent)
+
+    const newCat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [newRootId])[0]
+    return {
+      id: newCat.id, name: newCat.name, parentId: newCat.parent_id,
+      sortOrder: newCat.sort_order,
+      categoryType: (newCat.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder',
+    }
+  })
 }
 
 function camelToSnake(s: string): string {
