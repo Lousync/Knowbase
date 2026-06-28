@@ -453,6 +453,15 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               {wikiPicker.candidates.map(p => {
                 // Show breadcrumb: derive category chain from allPages
                 const catChain = getCategoryChain(p, allPages)
+                // Format createdAt e.g. "2026-06-15 14:30"
+                const ts = p.createdAt ? new Date(p.createdAt) : null
+                const dateStr = ts && !isNaN(ts.getTime())
+                  ? ts.getFullYear() + '-' +
+                    String(ts.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(ts.getDate()).padStart(2, '0') + ' ' +
+                    String(ts.getHours()).padStart(2, '0') + ':' +
+                    String(ts.getMinutes()).padStart(2, '0')
+                  : null
                 return (
                   <button
                     key={p.id}
@@ -464,6 +473,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                       <span className="text-[13px] text-[var(--text-primary)] truncate block">{p.title}</span>
                       {catChain && (
                         <span className="text-[10px] text-[var(--text-muted)] truncate block">{catChain}</span>
+                      )}
+                      {dateStr && (
+                        <span className="text-[9px] text-[var(--text-muted)] block mt-0.5">创建于 {dateStr}</span>
                       )}
                     </div>
                     <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] group-hover:bg-[var(--accent)]/10">{p.fileType || 'md'}</span>
