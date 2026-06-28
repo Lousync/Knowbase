@@ -23,20 +23,22 @@ interface Props {
   onLinkClick?: (href: string) => void
 }
 
-/** Convert a markdown image src to a loadable file:// URL */
+/** Convert a markdown image src to a loadable local-file:// URL (bypasses CSP) */
 function resolveImageSrc(src: string | undefined, imageBaseDir?: string): string {
   if (!src) return ''
   // External URLs and data URIs pass through
-  if (/^https?:\/\//i.test(src) || /^data:/i.test(src) || /^file:\/\//i.test(src)) return src
-  // Absolute Windows path → file:// URI
+  if (/^https?:\/\//i.test(src) || /^data:/i.test(src)) return src
+  // Already local-file:// → pass through
+  if (/^local-file:\/\//i.test(src)) return src
+  // Absolute Windows path e.g. C:\Users\... → local-file:///C:/Users/...
   if (/^[a-zA-Z]:[/\\]/.test(src)) {
-    return 'file:///' + src.replace(/\\/g, '/').replace(/^([a-zA-Z]):/, '$1:')
+    return 'local-file:///' + src.replace(/\\/g, '/')
   }
   // Relative path → resolve against imageBaseDir
   if (imageBaseDir && !src.startsWith('/')) {
     const cleaned = src.replace(/\\/g, '/').replace(/^\.\//, '')
     const base = imageBaseDir.replace(/\\/g, '/').replace(/\/$/, '')
-    return 'file:///' + base + '/' + cleaned
+    return 'local-file:///' + base + '/' + cleaned
   }
   return src
 }

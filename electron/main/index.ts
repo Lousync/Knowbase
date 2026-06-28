@@ -167,10 +167,16 @@ protocol.registerSchemesAsPrivileged([
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
   // Register custom protocol handler for local file access
-  // Allows <img src="local-file://C:/path/to/image.png"> to load any local file
+  // <img src="local-file:///C:/path/file.png"> → load the file from disk
   protocol.handle('local-file', (request) => {
-    const filePath = decodeURIComponent(request.url.replace('local-file:///', '').replace(/\//g, (m, i) => i === 0 ? m : '\\'))
-    return net.fetch('file:///' + filePath.replace(/\\/g, '/'), { bypassCustomProtocolHandlers: true })
+    let filePath = request.url.replace('local-file:///', '')
+    // Decode percent-encoded characters (e.g. %20 → space, Chinese chars)
+    try { filePath = decodeURIComponent(filePath) } catch {}
+    // Normalize: use forward slashes, strip leading slash if just a drive letter path
+    filePath = filePath.replace(/\\/g, '/')
+    // Convert to absolute Windows path → file:// URI
+    const fileUrl = 'file:///' + filePath
+    return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true })
   })
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()
