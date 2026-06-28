@@ -101,8 +101,16 @@ export function NotebookList({
   useEffect(() => {
     const style = document.createElement('style')
     style.textContent = `
-      .drag-over-highlight { outline: 2px solid var(--accent) !important; outline-offset: -2px !important; background-color: var(--accent-alpha-10, rgba(0,122,204,0.08)) !important; }
-      .drag-over-loose { background-color: var(--accent-alpha-10, rgba(0,122,204,0.08)) !important; outline: 2px dashed var(--accent) !important; }
+      .drag-over-highlight {
+        background-color: rgba(0,122,204,0.15) !important;
+        border-radius: 4px !important;
+      }
+      .drag-over-loose {
+        background-color: rgba(0,122,204,0.10) !important;
+        outline: 2px dashed var(--accent) !important;
+        outline-offset: -2px !important;
+        border-radius: 4px !important;
+      }
     `
     document.head.appendChild(style)
     return () => { document.head.removeChild(style) }
