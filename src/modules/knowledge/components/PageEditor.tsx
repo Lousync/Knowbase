@@ -24,9 +24,10 @@ interface Props {
   onContentChange?: (content: string) => void
   onToggleOutline?: () => void
   onTagsChange?: () => void
+  onMarkDirty?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange, onMarkDirty }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -408,7 +409,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <input
               className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
-              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
+              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value); onMarkDirty?.() }}
               placeholder="PDF 文档名称"
             />
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
@@ -459,14 +460,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <input
               className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
-              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
+              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value); onMarkDirty?.() }}
               placeholder="页面标题"
             />
             <div className="flex-1 min-h-0">
               <Editor
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
-                onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c) }}
+                onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c); onMarkDirty?.() }}
                 theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}

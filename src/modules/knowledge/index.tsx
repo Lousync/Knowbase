@@ -52,6 +52,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   // ---- 剪贴板 ----
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
 
+  // ---- 预览标签页（VS Code 风格） ----
+  const [dirtyPageIds, setDirtyPageIds] = useState<Set<string>>(new Set())
+  const dirtyPageIdsRef = useRef(dirtyPageIds)
+  useEffect(() => { dirtyPageIdsRef.current = dirtyPageIds }, [dirtyPageIds])
+
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
   const selectedCategoryIdRef = useRef(selectedCategoryId)
@@ -248,17 +253,43 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }
 
-  // --- tab management ---
+  // --- tab management (VS Code preview mode) ---
   const handleOpenPage = useCallback(async (pageId: string) => {
     let info = [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
-    // Fallback: fetch from DB to get correct fileType (especially for imported files)
     if (!info || !info.fileType) {
       try { info = await getKnowledgePageById(pageId) ?? undefined } catch {}
     }
     if (info) {
       setOpenPageInfos(prev => ({ ...prev, [pageId]: { title: info!.title, fileType: info!.fileType || '' } }))
     }
-    setOpenPageIds(prev => prev.includes(pageId) ? prev : [...prev, pageId])
+
+    const currentIds = openPageIdsRef.current
+    const activeId = activePageIdRef.current
+
+    // If already open, just switch to it
+    if (currentIds.includes(pageId)) {
+      setActivePageId(pageId)
+      return
+    }
+
+    // VS Code-style preview: if current tab is not dirty, replace it (single preview slot)
+    const dirty = dirtyPageIdsRef.current
+    const replaceCurrent = activeId && !dirty.has(activeId)
+
+    if (replaceCurrent) {
+      // Replace the non-dirty preview tab
+      setOpenPageIds([pageId])
+      setOpenPageInfos(prev => {
+        const next = { ...prev }
+        delete next[activeId]
+        next[pageId] = { title: info?.title ?? '', fileType: info?.fileType ?? '' }
+        return next
+      })
+    } else {
+      // Append as a new tab (dirty tab stays, or explicitly opened)
+      setOpenPageIds(prev => [...prev, pageId])
+    }
+
     setActivePageId(pageId)
   }, [allLoosePages, chapterPages, starredPages])
 
@@ -269,6 +300,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     const nextIds = currentIds.filter(id => id !== pageId)
     setOpenPageIds(nextIds)
     setOpenPageInfos(prev => { const next = { ...prev }; delete next[pageId]; return next })
+    setDirtyPageIds(prev => { const next = new Set(prev); next.delete(pageId); return next })
     if (activePageIdRef.current === pageId) {
       if (nextIds.length === 0) {
         setActivePageId(null)
@@ -304,6 +336,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleRefresh = () => { refreshAllPages(); refreshChapterPages(); refreshStarred(); refreshTags() }
   const handleSearchRefresh = useCallback(() => { refreshAllPages(); refreshTags() }, [refreshAllPages, refreshTags])
+
+  const handleMarkDirty = useCallback((pageId?: string) => {
+    const pid = pageId || activePageIdRef.current
+    if (!pid) return
+    setDirtyPageIds(prev => {
+      if (prev.has(pid)) return prev
+      const next = new Set(prev)
+      next.add(pid)
+      return next
+    })
+  }, [])
 
   const handleTitleChange = useCallback((title: string) => {
     if (!activePageIdRef.current) return
@@ -816,6 +859,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             openPageIds={openPageIds}
             activePageId={activePageId}
             openPageInfos={openPageInfos}
+            dirtyPageIds={dirtyPageIds}
             onSelectTab={handleOpenPage}
             onCloseTab={handleCloseTab}
             onReorder={handleReorderTabs}
@@ -835,6 +879,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onContentChange={setLiveContent}
               onToggleOutline={handleToggleOutline}
               onTagsChange={handleSearchRefresh}
+              onMarkDirty={handleMarkDirty}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">

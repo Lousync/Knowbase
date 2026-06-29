@@ -12,12 +12,13 @@ interface PageTabBarProps {
   openPageIds: string[]
   activePageId: string | null
   openPageInfos: Record<string, PageInfo>
+  dirtyPageIds?: Set<string>
   onSelectTab: (pageId: string) => void
   onCloseTab: (pageId: string) => void
   onReorder: (newOrder: string[]) => void
 }
 
-export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectTab, onCloseTab, onReorder }: PageTabBarProps) {
+export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPageIds, onSelectTab, onCloseTab, onReorder }: PageTabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const handleDragStart = useCallback((e: React.DragEvent, pageId: string) => {
@@ -91,6 +92,7 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectT
         const title = info?.title || ''
         const isActive = pageId === activePageId
         const isDragged = pageId === draggedId
+        const isPreview = dirtyPageIds ? !dirtyPageIds.has(pageId) : false
         const fileType = info?.fileType || ''
 
         return (
@@ -115,7 +117,7 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, onSelectT
             `}
           >
             <FileIcon ext={fileType} size={14} />
-            <span className="truncate max-w-[140px]">{title || '加载中...'}</span>
+            <span className={`truncate max-w-[140px] ${isPreview ? 'italic' : ''}`}>{title || '加载中...'}</span>
             {(() => { const fi = getFileTypeInfo(fileType); return <span className="shrink-0 text-[8px] px-1 rounded font-medium" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
             <button
               onClick={e => { e.stopPropagation(); onCloseTab(pageId) }}
