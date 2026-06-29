@@ -66,9 +66,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   useEffect(() => {
     setLiveContent('')  // reset live outline when switching pages
     if (!activePageId) {
-      // No active page → ensure outline is closed and sidebars visible
+      // No active page → close outline, keep sidebar state unchanged
       setShowOutline(false)
-      setShowCategoryPanel(true)
     }
   }, [activePageId])
   useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
@@ -304,9 +303,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     if (activePageIdRef.current === pageId) {
       if (nextIds.length === 0) {
         setActivePageId(null)
-        // All tabs closed — restore sidebars if outline was open
+        // All tabs closed — just close outline, keep sidebar state unchanged
         setShowOutline(false)
-        setShowCategoryPanel(true)
       }
       else { const newIdx = Math.min(idx, nextIds.length - 1); setActivePageId(nextIds[newIdx]) }
     }
