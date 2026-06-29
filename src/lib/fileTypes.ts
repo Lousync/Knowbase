@@ -39,6 +39,7 @@ const INFO: Record<string, FileTypeInfo> = {
   'rb': { ext: 'rb', label: 'Ruby',       badge: 'RB',   icon: 'code',     color: '#cc342d',              placeholder: '开始写 Ruby 代码...',             monacoLang: 'ruby' },
   'php':{ ext: 'php',label: 'PHP',        badge: 'PHP',  icon: 'code',     color: '#777bb3',              placeholder: '开始写 PHP 代码...',              monacoLang: 'php' },
   'lua':{ ext: 'lua',label: 'Lua',        badge: 'LUA',  icon: 'code',     color: '#000080',              placeholder: '开始写 Lua 代码...',              monacoLang: 'lua' },
+  'xmind':{ext:'xmind',label:'XMind 思维导图',badge:'XMind',icon: 'file', color: '#f86a5c',             placeholder: 'XMind 思维导图 — 外部应用打开',  monacoLang: 'plaintext' },
 }
 
 export function getFileTypeInfo(ext: string): FileTypeInfo {
@@ -64,4 +65,5 @@ export const FILE_LANG_OPTIONS = [
   { ext: 'sql',  label: 'SQL' },
   { ext: 'xml',  label: 'XML' },
   { ext: 'yaml', label: 'YAML' },
+  { ext: 'xmind', label: 'XMind 思维导图' },
 ]

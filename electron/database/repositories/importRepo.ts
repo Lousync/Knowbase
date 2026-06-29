@@ -23,6 +23,7 @@ function extToFileType(ext: string): string {
     'yaml': 'yaml', 'yml': 'yaml', 'sql': 'sql',
     'r': 'r', 'rb': 'rb', 'php': 'php', 'swift': 'swift', 'kt': 'kt',
     'lua': 'lua', 'ini': 'ini', 'cfg': 'ini', 'toml': 'toml',
+    'xmind': 'xmind',
   }
   return mapping[extLower] || extLower
 }
@@ -72,7 +73,7 @@ export function registerImportHandlers(): void {
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '文本/代码/PDF文件', extensions: [...TEXT_EXTS, 'pdf'] },
+        { name: '文本/代码/PDF/XMind文件', extensions: [...TEXT_EXTS, 'pdf', 'xmind'] },
       ],
       title: '导入文件到知识库'
     })
@@ -82,8 +83,8 @@ export function registerImportHandlers(): void {
   ipcMain.handle('import:readFiles', async (_e, paths: string[]) => {
     return paths.map(p => {
       const ext = extname(p).slice(1).toLowerCase()
-      if (ext === 'pdf') {
-        return { path: p, baseName: fileNameBase(p), content: '', fileType: 'pdf', error: 'PDF files are imported via import:importPdf' }
+      if (ext === 'pdf' || ext === 'xmind') {
+        return { path: p, baseName: fileNameBase(p), content: '', fileType: ext, error: `${ext.toUpperCase()} files are imported via import:import${ext.charAt(0).toUpperCase() + ext.slice(1)}File` }
       }
       try {
         const content = readFileSync(p, 'utf-8')
@@ -122,6 +123,32 @@ export function registerImportHandlers(): void {
     }
   })
 
+  // ===== Generic binary import (XMind etc., drag-drop) =====
+  ipcMain.handle('import:importBinary', async (_e, base64: string, fileName: string, fileType: string) => {
+    try {
+      const id = randomUUID()
+      const ext = fileType.toLowerCase()
+      const storeName = `${id}.${ext}`
+      const storePath = join(getAttachmentsDir(), storeName)
+      const buf = Buffer.from(base64, 'base64')
+      writeFileSync(storePath, buf)
+
+      const now = new Date().toISOString()
+      const db = getDatabase()
+      const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
+      const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
+      db.run(
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, fileName.replace(new RegExp(`\\.${ext}$`, 'i'), ''), storeName, '', null, sortOrder, ext, now, now]
+      )
+      saveToDisk()
+      return { id, title: fileName.replace(new RegExp(`\\.${ext}$`, 'i'), ''), fileType: ext }
+    } catch (e: any) {
+      return { error: String(e) }
+    }
+  })
+
   // ===== PDF import from file path (dialog) =====
   ipcMain.handle('import:importPdfFile', async (_e, filePath: string) => {
     try {
@@ -142,6 +169,32 @@ export function registerImportHandlers(): void {
       )
       saveToDisk()
       return { id, title, fileType: 'pdf' }
+    } catch (e: any) {
+      return { error: String(e) }
+    }
+  })
+
+  // ===== Generic binary file import (XMind etc.) =====
+  ipcMain.handle('import:importBinaryFile', async (_e, filePath: string, fileType: string) => {
+    try {
+      const ext = fileType.toLowerCase()
+      const id = randomUUID()
+      const storeName = `${id}.${ext}`
+      const storePath = join(getAttachmentsDir(), storeName)
+      copyFileSync(filePath, storePath)
+
+      const now = new Date().toISOString()
+      const db = getDatabase()
+      const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
+      const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
+      const title = basename(filePath).replace(new RegExp(`\\.${ext}$`, 'i'), '')
+      db.run(
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, title, storeName, '', null, sortOrder, ext, now, now]
+      )
+      saveToDisk()
+      return { id, title, fileType: ext }
     } catch (e: any) {
       return { error: String(e) }
     }

@@ -7,7 +7,7 @@ import {
   searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages,
   moveKnowledgePage, moveKnowledgeCategory,
   updateKnowledgePage, toggleKnowledgeStar,
-  showImportOpenDialog, readImportFiles, importPdf, importPdfFile,
+  showImportOpenDialog, readImportFiles, importPdf, importPdfFile, importBinaryFile,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
   getKnowledgeTags
@@ -52,6 +52,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   // ---- 剪贴板 ----
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
 
+  // ---- 预览标签页（VS Code 风格） ----
+  const [dirtyPageIds, setDirtyPageIds] = useState<Set<string>>(new Set())
+  const dirtyPageIdsRef = useRef(dirtyPageIds)
+  useEffect(() => { dirtyPageIdsRef.current = dirtyPageIds }, [dirtyPageIds])
+
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
   const selectedCategoryIdRef = useRef(selectedCategoryId)
@@ -61,9 +66,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   useEffect(() => {
     setLiveContent('')  // reset live outline when switching pages
     if (!activePageId) {
-      // No active page → ensure outline is closed and sidebars visible
+      // No active page → close outline, keep sidebar state unchanged
       setShowOutline(false)
-      setShowCategoryPanel(true)
     }
   }, [activePageId])
   useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
@@ -201,9 +205,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const paths: string[] = await showImportOpenDialog()
       if (!paths || paths.length === 0) return
 
-      // Separate PDF files from text files
-      const pdfPaths = paths.filter(p => p.toLowerCase().endsWith('.pdf'))
-      const textPaths = paths.filter(p => !p.toLowerCase().endsWith('.pdf'))
+      // Separate binary (PDF/XMind) from text files
+      const binaryPaths = paths.filter(p => p.toLowerCase().endsWith('.pdf') || p.toLowerCase().endsWith('.xmind'))
+      const textPaths = paths.filter(p => !binaryPaths.includes(p))
 
       // Import text files
       if (textPaths.length > 0) {
@@ -215,12 +219,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         }
       }
 
-      // Import PDF files
-      for (const pdfPath of pdfPaths) {
-        const result = await importPdfFile(pdfPath)
-        if (result.error) {
-          console.error('PDF import failed:', result.error)
-        }
+      // Import binary files
+      for (const bp of binaryPaths) {
+        const ext = bp.toLowerCase().split('.').pop() || ''
+        const result = ext === 'pdf' ? await importPdfFile(bp) : await importBinaryFile(bp, ext)
+        if (result.error) console.error(`${ext} import failed:`, result.error)
       }
 
       if (selectedChapterId) refreshChapterPages()
@@ -239,26 +242,54 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }
 
-  const handleDropImportPdf = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
+  const handleDropImportBinary = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
     try {
       for (const f of files) {
-        await importPdf(f.base64, f.fileName)
+        const ext = f.fileName.toLowerCase().split('.').pop() || ''
+        if (ext === 'pdf') await importPdf(f.base64, f.fileName)
+        else await importBinary(f.base64, f.fileName, ext)
       }
       refreshAllPages()
     } catch (e) { console.error(e) }
   }
 
-  // --- tab management ---
+  // --- tab management (VS Code preview mode) ---
   const handleOpenPage = useCallback(async (pageId: string) => {
     let info = [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === pageId)
-    // Fallback: fetch from DB to get correct fileType (especially for imported files)
     if (!info || !info.fileType) {
       try { info = await getKnowledgePageById(pageId) ?? undefined } catch {}
     }
     if (info) {
       setOpenPageInfos(prev => ({ ...prev, [pageId]: { title: info!.title, fileType: info!.fileType || '' } }))
     }
-    setOpenPageIds(prev => prev.includes(pageId) ? prev : [...prev, pageId])
+
+    const currentIds = openPageIdsRef.current
+    const activeId = activePageIdRef.current
+
+    // If already open, just switch to it
+    if (currentIds.includes(pageId)) {
+      setActivePageId(pageId)
+      return
+    }
+
+    // VS Code-style preview: if current tab is not dirty, replace it (single preview slot)
+    const dirty = dirtyPageIdsRef.current
+    const replaceCurrent = activeId && !dirty.has(activeId)
+
+    if (replaceCurrent) {
+      // Replace the non-dirty preview tab
+      setOpenPageIds([pageId])
+      setOpenPageInfos(prev => {
+        const next = { ...prev }
+        delete next[activeId]
+        next[pageId] = { title: info?.title ?? '', fileType: info?.fileType ?? '' }
+        return next
+      })
+    } else {
+      // Append as a new tab (dirty tab stays, or explicitly opened)
+      setOpenPageIds(prev => [...prev, pageId])
+    }
+
     setActivePageId(pageId)
   }, [allLoosePages, chapterPages, starredPages])
 
@@ -269,12 +300,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     const nextIds = currentIds.filter(id => id !== pageId)
     setOpenPageIds(nextIds)
     setOpenPageInfos(prev => { const next = { ...prev }; delete next[pageId]; return next })
+    setDirtyPageIds(prev => { const next = new Set(prev); next.delete(pageId); return next })
     if (activePageIdRef.current === pageId) {
       if (nextIds.length === 0) {
         setActivePageId(null)
-        // All tabs closed — restore sidebars if outline was open
+        // All tabs closed — just close outline, keep sidebar state unchanged
         setShowOutline(false)
-        setShowCategoryPanel(true)
       }
       else { const newIdx = Math.min(idx, nextIds.length - 1); setActivePageId(nextIds[newIdx]) }
     }
@@ -304,6 +335,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleRefresh = () => { refreshAllPages(); refreshChapterPages(); refreshStarred(); refreshTags() }
   const handleSearchRefresh = useCallback(() => { refreshAllPages(); refreshTags() }, [refreshAllPages, refreshTags])
+
+  const handleMarkDirty = useCallback((pageId?: string) => {
+    const pid = pageId || activePageIdRef.current
+    if (!pid) return
+    setDirtyPageIds(prev => {
+      if (prev.has(pid)) return prev
+      const next = new Set(prev)
+      next.add(pid)
+      return next
+    })
+  }, [])
 
   const handleTitleChange = useCallback((title: string) => {
     if (!activePageIdRef.current) return
@@ -719,7 +761,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const panelsVisible = sidebarOpen && !showOutline
 
   return (
-    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="h-full">
+    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
         {/* L1: NotebookList */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
@@ -816,6 +858,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             openPageIds={openPageIds}
             activePageId={activePageId}
             openPageInfos={openPageInfos}
+            dirtyPageIds={dirtyPageIds}
             onSelectTab={handleOpenPage}
             onCloseTab={handleCloseTab}
             onReorder={handleReorderTabs}
@@ -835,6 +878,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onContentChange={setLiveContent}
               onToggleOutline={handleToggleOutline}
               onTagsChange={handleSearchRefresh}
+              onMarkDirty={handleMarkDirty}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">

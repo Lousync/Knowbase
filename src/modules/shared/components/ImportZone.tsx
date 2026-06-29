@@ -20,7 +20,7 @@ interface Props {
   className?: string
 }
 
-const ALLOWED_EXT = ['.md', '.txt', '.json', '.cpp', '.c', '.h', '.hpp', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.java', '.rs', '.go', '.sh', '.bat', '.xml', '.yaml', '.yml', '.sql', '.pdf']
+const ALLOWED_EXT = ['.md', '.txt', '.json', '.cpp', '.c', '.h', '.hpp', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.java', '.rs', '.go', '.sh', '.bat', '.xml', '.yaml', '.yml', '.sql', '.pdf', '.xmind']
 
 function extToFileType(ext: string): string {
   return ext.replace('.', '').toLowerCase()
@@ -89,13 +89,14 @@ export function ImportZone({ onImport, onImportPdf, children, className }: Props
     if (!fileList || fileList.length === 0) return
 
     const allFiles = Array.from(fileList)
+    const isBinary = (name: string) => name.endsWith('.pdf') || name.endsWith('.xmind')
     const textOnly = allFiles.filter(f => {
       const name = f.name.toLowerCase()
-      return !name.endsWith('.pdf') && ALLOWED_EXT.some(ext => name.endsWith(ext))
+      return !isBinary(name) && ALLOWED_EXT.some(ext => name.endsWith(ext))
     })
-    const pdfOnly = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'))
+    const binaryOnly = allFiles.filter(f => isBinary(f.name.toLowerCase()))
 
-    if (textOnly.length === 0 && pdfOnly.length === 0) return
+    if (textOnly.length === 0 && binaryOnly.length === 0) return
 
     const promises: Promise<void>[] = []
 
@@ -123,9 +124,9 @@ export function ImportZone({ onImport, onImportPdf, children, className }: Props
       )
     }
 
-    // PDF files: read as base64
-    if (pdfOnly.length > 0 && onImportPdf) {
-      const pdfReaders = pdfOnly.map(f => {
+    // Binary files (PDF/XMind): read as base64
+    if (binaryOnly.length > 0 && onImportPdf) {
+      const binaryReaders = binaryOnly.map(f => {
         return new Promise<ImportPdfFile>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => {
@@ -145,7 +146,7 @@ export function ImportZone({ onImport, onImportPdf, children, className }: Props
         })
       })
       promises.push(
-        Promise.all(pdfReaders).then(files => onImportPdf(files))
+        Promise.all(binaryReaders).then(files => onImportPdf(files))
       )
     }
 

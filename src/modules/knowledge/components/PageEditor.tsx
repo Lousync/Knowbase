@@ -24,9 +24,10 @@ interface Props {
   onContentChange?: (content: string) => void
   onToggleOutline?: () => void
   onTagsChange?: () => void
+  onMarkDirty?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange, onMarkDirty }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -60,8 +61,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const isCodeFileRef = useRef(false)
   const isPdfFileRef = useRef(false)
 
-  const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt'
-  const isPdfFile = fileType === 'pdf'
+  const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt' && fileType !== 'pdf' && fileType !== 'xmind'
+  const isPdfFile = fileType === 'pdf' || fileType === 'xmind'
+  const isXmindFile = fileType === 'xmind'
 
   useEffect(() => { contentRef.current = content }, [content])
   useEffect(() => { titleRef.current = title }, [title])
@@ -408,21 +410,21 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <input
               className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
-              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
-              placeholder="PDF 文档名称"
+              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value); onMarkDirty?.() }}
+              placeholder={isXmindFile ? 'XMind 思维导图名称' : 'PDF 文档名称'}
             />
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
               <FileText size={64} className="opacity-20" />
-              <p className="text-sm">PDF 文件已导入到本地附件目录</p>
+              <p className="text-sm">{isXmindFile ? 'XMind 思维导图 — 使用 XMind 软件打开编辑' : 'PDF 文件已导入到本地附件目录'}</p>
               <button
                 onClick={() => {
-                  const pdfPath = `${attachmentsPath}\\${page.contentMd}`
-                  openExternal(pdfPath)
+                  const filePath = `${attachmentsPath}\\${page.contentMd}`
+                  openExternal(filePath)
                 }}
                 className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
               >
                 <ExternalLink size={15} />
-                使用系统阅读器打开
+                {isXmindFile ? '使用 XMind 打开' : '使用系统阅读器打开'}
               </button>
             </div>
           </div>
@@ -459,14 +461,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <input
               className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
               value={title}
-              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
+              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value); onMarkDirty?.() }}
               placeholder="页面标题"
             />
             <div className="flex-1 min-h-0">
               <Editor
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
-                onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c) }}
+                onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c); onMarkDirty?.() }}
                 theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
