@@ -532,12 +532,21 @@ export function NotebookList({
         ref={treeRef}
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onContextMenu={e => {
-          // Only fire blank context menu if target is the tree container itself or empty space
           const target = e.target as HTMLElement
-          if (target === treeRef.current || (target.closest('[data-cat-id]') === null && target.closest('[data-page-id]') === null)) {
-            e.preventDefault()
-            setContextMenu({ type: 'blank', id: '', x: e.clientX, y: e.clientY })
+          // Rows have their own context menu with stopPropagation — we only get here for blank space
+          // Walk up to find the nearest ancestor category for context
+          let contextCatId: string | null = null
+          const treeEl = treeRef.current
+          if (treeEl) {
+            let el: HTMLElement | null = target
+            while (el && el !== treeEl) {
+              const catEl = el.closest('[data-cat-id]') as HTMLElement | null
+              if (catEl) { contextCatId = catEl.dataset.catId!; break }
+              el = el.parentElement
+            }
           }
+          e.preventDefault()
+          setContextMenu({ type: 'blank', id: contextCatId || '', x: e.clientX, y: e.clientY })
         }}
         onDragOver={e => {
           const d = dragRef.current
@@ -849,6 +858,66 @@ export function NotebookList({
             )}
             {contextMenu.type === 'blank' && (
               <>
+                {/* Context info */}
+                {(() => {
+                  const ctxCat = contextMenu.id ? categories.find(c => c.id === contextMenu.id) : null
+                  const isRoot = !ctxCat
+                  const isNotebook = ctxCat?.categoryType === 'notebook'
+                  const isChapter = ctxCat?.categoryType === 'folder' && categories.find(c => c.id === ctxCat.parentId)?.categoryType === 'notebook'
+                  const insideNotebook = isNotebook || isChapter
+
+                  const btn = (disabled: boolean) =>
+                    disabled ? 'text-[var(--text-disabled)] cursor-not-allowed' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                  const iconCls = (disabled: boolean) => disabled ? 'text-[var(--text-disabled)]' : 'text-[var(--text-muted)]'
+
+                  const handleCreatePage = () => {
+                    if (isRoot) {
+                      setContextMenu(null); onCreateLoosePage()
+                    } else if (!insideNotebook && ctxCat) {
+                      setContextMenu(null); onCreatePageUnder(ctxCat.id)
+                    }
+                  }
+                  const handleCreateFolder = () => {
+                    if (isRoot || (!insideNotebook && ctxCat)) {
+                      setContextMenu(null)
+                      setCreateParentId(ctxCat?.id ?? null)
+                      setCreateMode('folder')
+                      setNewName('')
+                    } else if (insideNotebook && ctxCat) {
+                      // Create chapter under notebook
+                      setContextMenu(null)
+                      const notebookId = isChapter ? (ctxCat.parentId || '') : ctxCat.id
+                      if (notebookId && onCreateChapterUnderNotebook) {
+                        onCreateChapterUnderNotebook(notebookId)
+                      }
+                    }
+                  }
+                  const handleCreateNotebook = () => {
+                    if (insideNotebook) return
+                    setContextMenu(null)
+                    setCreateParentId(null)
+                    setCreateMode('notebook')
+                    setNewName('')
+                  }
+
+                  return (
+                    <>
+                      <button onClick={handleCreatePage} disabled={insideNotebook}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(insideNotebook)}`}>
+                        <FileText size={14} className={iconCls(insideNotebook)} />新建页面
+                      </button>
+                      <button onClick={handleCreateFolder}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(false)}`}>
+                        <Folder size={14} className={iconCls(false)} />新建{insideNotebook ? '章节' : '目录'}
+                      </button>
+                      <button onClick={handleCreateNotebook} disabled={insideNotebook}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(insideNotebook)}`}>
+                        <BookOpen size={14} className={iconCls(insideNotebook)} />新建笔记本
+                      </button>
+                      <div className="border-t border-[var(--border-color)] my-0.5" />
+                    </>
+                  )
+                })()}
                 {onPaste && (
                   <button
                     onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(null); setContextMenu(null) } }}
