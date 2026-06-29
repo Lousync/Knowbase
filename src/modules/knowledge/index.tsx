@@ -8,6 +8,7 @@ import {
   moveKnowledgePage, moveKnowledgeCategory,
   updateKnowledgePage, toggleKnowledgeStar,
   showImportOpenDialog, readImportFiles, importPdf, importPdfFile, importBinaryFile,
+  showFolderDialog, importFolder,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
   getKnowledgeTags
@@ -198,6 +199,24 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const p = await createKnowledgePage({ categoryId: selectedChapterId })
       handleOpenPage(p.id); refreshChapterPages()
     } catch (e) { console.error(e) }
+  }
+
+  const handleImportFolder = async () => {
+    try {
+      const paths: string[] = await showFolderDialog()
+      if (!paths || paths.length === 0) return
+      const catId = selectedChapterId || null
+      for (const folderPath of paths) {
+        const result = await importFolder(folderPath, catId)
+        if (result && 'error' in result) {
+          console.error('Folder import failed:', result.error)
+          showToast({ type: 'error', message: `导入文件夹失败: ${result.error}` })
+        } else if (result) {
+          showToast({ type: 'info', message: `已导入「${result.name}」(${result.fileCount} 文件, ${result.folderCount} 子目录)` })
+        }
+      }
+      refreshCategories(); refreshAllPages()
+    } catch (e) { console.error(e); showToast({ type: 'error', message: '导入文件夹失败' }) }
   }
 
   const handleDialogImport = async () => {
@@ -783,6 +802,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onCreatePageUnder={handleCreatePageUnderCategory}
             onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
             onImport={handleDialogImport}
+            onImportFolder={handleImportFolder}
             onDropOnNotebook={handleDropOnNotebook}
             onDropOnCategory={handleDropOnCategory}
             onDropOnLooseArea={handleDropOnLooseArea}

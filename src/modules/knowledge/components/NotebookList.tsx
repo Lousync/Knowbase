@@ -25,6 +25,7 @@ interface Props {
   onCreateLoosePage: () => void
   onCreatePageUnder: (categoryId: string) => void
   onImport: () => void
+  onImportFolder?: () => void
   onDropOnNotebook: (pageId: string, notebookId: string) => void
   onDropOnCategory: (pageId: string, categoryId: string) => void
   onDropOnLooseArea: (pageId: string) => void
@@ -47,7 +48,7 @@ export function NotebookList({
   categories, allPages, loosePages, starredPages,
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
-  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
+  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport, onImportFolder,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
   onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
   onCopy, onCut, onPaste, onExportPage, onDeletePage, clipboard, cutItemIds,
@@ -520,11 +521,19 @@ export function NotebookList({
           />
         )}
 
-        {/* Import button */}
-        <button onClick={onImport}
-          className="w-full flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-          <Download size={12} />导入文件
-        </button>
+        {/* Import buttons */}
+        <div className="flex gap-0.5">
+          <button onClick={onImport}
+            className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
+            <Download size={12} />导入文件
+          </button>
+          {onImportFolder && (
+            <button onClick={onImportFolder}
+              className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
+              <Folder size={12} />导入文件夹
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ===== Tree ===== */}
@@ -935,6 +944,12 @@ export function NotebookList({
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
                   <Download size={14} className="text-[var(--text-muted)]" />导入文件...
                 </button>
+                {onImportFolder && (
+                  <button onClick={() => { setContextMenu(null); onImportFolder() }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Folder size={14} className="text-[var(--text-muted)]" />导入文件夹...
+                  </button>
+                )}
               </>
             )}
           </div>
