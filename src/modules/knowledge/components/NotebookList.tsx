@@ -252,11 +252,18 @@ export function NotebookList({
 
   // ---- whether a category can accept dropped categories ----
   // Folders accept any category. Notebooks accept folders/chapters but not other notebooks.
+  // Chapters (folders under notebooks) do NOT accept category drops — categories can only
+  // drop into notebooks directly, which auto-creates or uses existing chapters.
   function canAcceptCategory(targetId: string, draggedId: string): boolean {
     const target = categories.find(c => c.id === targetId)
     const dragged = categories.find(c => c.id === draggedId)
     if (!target || !dragged) return false
-    if (target.categoryType === 'folder') return true
+    // Reject: chapters (folders under notebooks) cannot accept category drops
+    if (target.categoryType === 'folder') {
+      const parent = categories.find(c => c.id === target.parentId)
+      if (parent?.categoryType === 'notebook') return false  // this is a chapter
+      return true  // standalone folder
+    }
     if (target.categoryType === 'notebook') {
       if (dragged.categoryType !== 'folder') return false
       return !categories.some(c => c.parentId === draggedId)
