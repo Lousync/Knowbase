@@ -7,7 +7,7 @@ import {
   searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages,
   moveKnowledgePage, moveKnowledgeCategory,
   updateKnowledgePage, toggleKnowledgeStar,
-  showImportOpenDialog, readImportFiles, importPdf, importPdfFile,
+  showImportOpenDialog, readImportFiles, importPdf, importPdfFile, importBinaryFile,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
   getKnowledgeTags
@@ -205,9 +205,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const paths: string[] = await showImportOpenDialog()
       if (!paths || paths.length === 0) return
 
-      // Separate PDF files from text files
-      const pdfPaths = paths.filter(p => p.toLowerCase().endsWith('.pdf'))
-      const textPaths = paths.filter(p => !p.toLowerCase().endsWith('.pdf'))
+      // Separate binary (PDF/XMind) from text files
+      const binaryPaths = paths.filter(p => p.toLowerCase().endsWith('.pdf') || p.toLowerCase().endsWith('.xmind'))
+      const textPaths = paths.filter(p => !binaryPaths.includes(p))
 
       // Import text files
       if (textPaths.length > 0) {
@@ -219,12 +219,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         }
       }
 
-      // Import PDF files
-      for (const pdfPath of pdfPaths) {
-        const result = await importPdfFile(pdfPath)
-        if (result.error) {
-          console.error('PDF import failed:', result.error)
-        }
+      // Import binary files
+      for (const bp of binaryPaths) {
+        const ext = bp.toLowerCase().split('.').pop() || ''
+        const result = ext === 'pdf' ? await importPdfFile(bp) : await importBinaryFile(bp, ext)
+        if (result.error) console.error(`${ext} import failed:`, result.error)
       }
 
       if (selectedChapterId) refreshChapterPages()
@@ -243,10 +242,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }
 
-  const handleDropImportPdf = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
+  const handleDropImportBinary = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
     try {
       for (const f of files) {
-        await importPdf(f.base64, f.fileName)
+        const ext = f.fileName.toLowerCase().split('.').pop() || ''
+        if (ext === 'pdf') await importPdf(f.base64, f.fileName)
+        else await importBinary(f.base64, f.fileName, ext)
       }
       refreshAllPages()
     } catch (e) { console.error(e) }
@@ -760,7 +761,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const panelsVisible = sidebarOpen && !showOutline
 
   return (
-    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportPdf} className="h-full">
+    <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
         {/* L1: NotebookList */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>

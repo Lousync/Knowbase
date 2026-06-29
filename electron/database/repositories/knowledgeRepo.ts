@@ -376,11 +376,11 @@ export function registerKnowledgeHandlers(): void {
       tags
     })
 
-    // 如果是 PDF，清理附件文件
-    if (pageFileType === 'pdf' && page.content_md) {
-      const pdfPath = join(getAttachmentsDir(), page.content_md)
-      if (existsSync(pdfPath)) {
-        try { unlinkSync(pdfPath) } catch { /* file may already be gone */ }
+    // 如果是 PDF / XMind 等附件文件，清理附件
+    if ((pageFileType === 'pdf' || pageFileType === 'xmind') && page.content_md) {
+      const attachPath = join(getAttachmentsDir(), page.content_md)
+      if (existsSync(attachPath)) {
+        try { unlinkSync(attachPath) } catch { /* file may already be gone */ }
       }
     }
 
