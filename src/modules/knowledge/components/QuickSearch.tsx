@@ -193,14 +193,9 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
         onChange={e => { setQuery(e.target.value); if (!open) { onRequestRefresh?.(); setOpen(true) } }}
         onFocus={() => { onRequestRefresh?.(); if (query.trim()) setOpen(true) }}
         onKeyDown={handleKeyDown}
-        placeholder="搜索文件名、笔记本、标签..."
+        placeholder="搜索"
         className="flex-1 bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-disabled)] outline-none border-none py-0.5"
       />
-      {!query && (
-        <span className="shrink-0 text-[10px] text-[var(--text-disabled)] tracking-wide border border-[var(--border-color)] rounded px-1.5 py-px">
-          Ctrl+P
-        </span>
-      )}
     </div>
   )
 
