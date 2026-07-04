@@ -40,6 +40,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const dateRef = useRef(date)
   const isDirtyRef = useRef(false)
   const savedContentRef = useRef('')
+  const skipDirtyRef = useRef(true) // skip first onChange (Monaco mount)
 
   // Tags & States
   const [allTags, setAllTags] = useState<Tag[]>([])
@@ -63,6 +64,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         setContentMd(d.contentMd); setDate(d.date)
         savedContentRef.current = d.contentMd || ''
         isDirtyRef.current = false
+        skipDirtyRef.current = true // skip dirty check until Monaco finishes mounting
+        setTimeout(() => { skipDirtyRef.current = false }, 500) // auto-clear after mount window
         setEntryTags(d.tags || [])
         setEntryStates(d.states || '')
         onContentChange?.(d.contentMd)  // seed outline with existing content
@@ -119,7 +122,11 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     const val = v || ''
     setContentMd(val)
     onContentChange?.(val)
-    if (val !== savedContentRef.current) isDirtyRef.current = true
+    // Within mount window: skip dirty check (Monaco may fire onChange with initial value)
+    // Auto-save still runs — if Monaco normalized line endings, it gets persisted
+    if (!skipDirtyRef.current && val !== savedContentRef.current) {
+      isDirtyRef.current = true
+    }
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => doSave(val, dateRef.current), s.autoSaveDebounceMs)
   }

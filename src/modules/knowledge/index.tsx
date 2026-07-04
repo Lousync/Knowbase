@@ -369,6 +369,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleRefresh = () => { refreshAllPages(); refreshChapterPages(); refreshStarred(); refreshTags() }
   const handleSearchRefresh = useCallback(() => { refreshAllPages(); refreshTags() }, [refreshAllPages, refreshTags])
 
+  const handleClearDirty = useCallback((pageId?: string) => {
+    const pid = pageId || activePageIdRef.current
+    if (!pid) return
+    setDirtyPageIds(prev => {
+      if (!prev.has(pid)) return prev
+      const next = new Set(prev)
+      next.delete(pid)
+      return next
+    })
+  }, [])
+
   const handleMarkDirty = useCallback((pageId?: string) => {
     const pid = pageId || activePageIdRef.current
     if (!pid) return
@@ -913,6 +924,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onToggleOutline={handleToggleOutline}
               onTagsChange={handleSearchRefresh}
               onMarkDirty={handleMarkDirty}
+              onClearDirty={handleClearDirty}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
