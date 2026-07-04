@@ -109,6 +109,8 @@ export const importPdf = (base64: string, fileName: string) => a().importPdf(bas
 export const importPdfFile = (filePath: string) => a().importPdfFile(filePath)
 export const importBinary = (base64: string, fileName: string, fileType: string) => a().importBinary(base64, fileName, fileType)
 export const importBinaryFile = (filePath: string, fileType: string) => a().importBinaryFile(filePath, fileType)
+export const showFolderDialog = () => a().showFolderDialog()
+export const importFolder = (folderPath: string, parentCategoryId: string | null) => a().importFolder(folderPath, parentCategoryId)
 export const openExternal = (filePath: string) => a().openExternal(filePath)
 export const getAttachmentsPath = () => a().getAttachmentsPath()
 export const showImportDataDialog = () => a().showImportDataDialog()

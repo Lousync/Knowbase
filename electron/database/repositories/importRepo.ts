@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync } from 'fs'
+import { readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync, readdirSync, statSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs } from '../connection'
 import { randomUUID } from 'crypto'
@@ -196,6 +196,109 @@ export function registerImportHandlers(): void {
       saveToDisk()
       return { id, title, fileType: ext }
     } catch (e: any) {
+      return { error: String(e) }
+    }
+  })
+
+  // ===== Folder import =====
+  ipcMain.handle('import:showFolderDialog', async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    if (!win) return []
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory'],
+      title: '选择要导入的文件夹'
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
+  // Recursively import a folder as a category tree
+  function importFolderRecursive(folderPath: string, parentCategoryId: string | null): { id: string; name: string; fileCount: number; folderCount: number } | { error: string } {
+    const folderName = basename(folderPath)
+    const db = getDatabase()
+    const now = new Date().toISOString()
+
+    const catId = randomUUID()
+    const parentParam = parentCategoryId || null
+    const maxOrderRes = db.exec(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
+      [parentParam]
+    )
+    const so = (maxOrderRes.length > 0 && maxOrderRes[0].values?.[0]?.[0] as number) ?? 0
+    db.run(
+      'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+      [catId, folderName, parentParam, so, 'folder']
+    )
+
+    const entries = readdirSync(folderPath)
+    const folders: string[] = []
+    const files: string[] = []
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue
+      const full = join(folderPath, entry)
+      try {
+        const s = statSync(full)
+        if (s.isDirectory()) folders.push(entry)
+        else files.push(entry)
+      } catch { /* skip */ }
+    }
+
+    // Process subfolders
+    let totalFolders = 0, totalFiles = 0
+    for (const f of folders) {
+      const skipDirs = ['node_modules', '.git', '__pycache__', '.vscode', '.idea', 'dist', 'build', 'out', '.claude']
+      if (skipDirs.includes(f.toLowerCase())) continue
+      const subPath = join(folderPath, f)
+      const result = importFolderRecursive(subPath, catId)
+      if (!('error' in result)) {
+        totalFolders += 1 + result.folderCount
+        totalFiles += result.fileCount
+      }
+    }
+
+    // Process files
+    let pageOrder = 0
+    for (const f of files) {
+      const ext = extname(f).slice(1).toLowerCase()
+      const filePath = join(folderPath, f)
+      const ft = extToFileType(ext)
+      const isText = TEXT_EXTS.includes(ext)
+      const isBinary = ext === 'pdf' || ext === 'xmind'
+
+      const pageId = randomUUID()
+      const title = f.replace(new RegExp(`\\.${ext}$`, 'i'), '')
+
+      if (isBinary) {
+        const storeName = `${pageId}.${ext}`
+        const storePath = join(getAttachmentsDir(), storeName)
+        copyFileSync(filePath, storePath)
+        db.run(
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [pageId, title, storeName, '', catId, pageOrder, ext, now, now]
+        )
+        pageOrder++; totalFiles++
+      } else if (isText) {
+        try {
+          const content = readFileSync(filePath, 'utf-8')
+          db.run(
+            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [pageId, title, content, '', catId, pageOrder, ft, now, now]
+          )
+          pageOrder++; totalFiles++
+        } catch { /* skip */ }
+      }
+    }
+
+    saveToDisk()
+    return { id: catId, name: folderName, fileCount: totalFiles, folderCount: totalFolders }
+  }
+
+  ipcMain.handle('import:importFolder', async (_e, folderPath: string, parentCategoryId: string | null) => {
+    try {
+      return importFolderRecursive(folderPath, parentCategoryId)
+    } catch (e: any) {
+      console.error('[importFolder] failed:', e)
       return { error: String(e) }
     }
   })

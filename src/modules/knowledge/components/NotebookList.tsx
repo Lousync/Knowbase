@@ -25,6 +25,7 @@ interface Props {
   onCreateLoosePage: () => void
   onCreatePageUnder: (categoryId: string) => void
   onImport: () => void
+  onImportFolder?: () => void
   onDropOnNotebook: (pageId: string, notebookId: string) => void
   onDropOnCategory: (pageId: string, categoryId: string) => void
   onDropOnLooseArea: (pageId: string) => void
@@ -47,7 +48,7 @@ export function NotebookList({
   categories, allPages, loosePages, starredPages,
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
-  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport,
+  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport, onImportFolder,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
   onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
   onCopy, onCut, onPaste, onExportPage, onDeletePage, clipboard, cutItemIds,
@@ -252,11 +253,18 @@ export function NotebookList({
 
   // ---- whether a category can accept dropped categories ----
   // Folders accept any category. Notebooks accept folders/chapters but not other notebooks.
+  // Chapters (folders under notebooks) do NOT accept category drops — categories can only
+  // drop into notebooks directly, which auto-creates or uses existing chapters.
   function canAcceptCategory(targetId: string, draggedId: string): boolean {
     const target = categories.find(c => c.id === targetId)
     const dragged = categories.find(c => c.id === draggedId)
     if (!target || !dragged) return false
-    if (target.categoryType === 'folder') return true
+    // Reject: chapters (folders under notebooks) cannot accept category drops
+    if (target.categoryType === 'folder') {
+      const parent = categories.find(c => c.id === target.parentId)
+      if (parent?.categoryType === 'notebook') return false  // this is a chapter
+      return true  // standalone folder
+    }
     if (target.categoryType === 'notebook') {
       if (dragged.categoryType !== 'folder') return false
       return !categories.some(c => c.parentId === draggedId)
@@ -513,11 +521,19 @@ export function NotebookList({
           />
         )}
 
-        {/* Import button */}
-        <button onClick={onImport}
-          className="w-full flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-          <Download size={12} />导入文件
-        </button>
+        {/* Import buttons */}
+        <div className="flex gap-0.5">
+          <button onClick={onImport}
+            className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
+            <Download size={12} />导入文件
+          </button>
+          {onImportFolder && (
+            <button onClick={onImportFolder}
+              className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
+              <Folder size={12} />导入文件夹
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ===== Tree ===== */}
@@ -525,12 +541,21 @@ export function NotebookList({
         ref={treeRef}
         className="flex-1 overflow-y-auto overflow-x-hidden"
         onContextMenu={e => {
-          // Only fire blank context menu if target is the tree container itself or empty space
           const target = e.target as HTMLElement
-          if (target === treeRef.current || (target.closest('[data-cat-id]') === null && target.closest('[data-page-id]') === null)) {
-            e.preventDefault()
-            setContextMenu({ type: 'blank', id: '', x: e.clientX, y: e.clientY })
+          // Rows have their own context menu with stopPropagation — we only get here for blank space
+          // Walk up to find the nearest ancestor category for context
+          let contextCatId: string | null = null
+          const treeEl = treeRef.current
+          if (treeEl) {
+            let el: HTMLElement | null = target
+            while (el && el !== treeEl) {
+              const catEl = el.closest('[data-cat-id]') as HTMLElement | null
+              if (catEl) { contextCatId = catEl.dataset.catId!; break }
+              el = el.parentElement
+            }
           }
+          e.preventDefault()
+          setContextMenu({ type: 'blank', id: contextCatId || '', x: e.clientX, y: e.clientY })
         }}
         onDragOver={e => {
           const d = dragRef.current
@@ -842,6 +867,66 @@ export function NotebookList({
             )}
             {contextMenu.type === 'blank' && (
               <>
+                {/* Context info */}
+                {(() => {
+                  const ctxCat = contextMenu.id ? categories.find(c => c.id === contextMenu.id) : null
+                  const isRoot = !ctxCat
+                  const isNotebook = ctxCat?.categoryType === 'notebook'
+                  const isChapter = ctxCat?.categoryType === 'folder' && categories.find(c => c.id === ctxCat.parentId)?.categoryType === 'notebook'
+                  const insideNotebook = isNotebook || isChapter
+
+                  const btn = (disabled: boolean) =>
+                    disabled ? 'text-[var(--text-disabled)] cursor-not-allowed' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                  const iconCls = (disabled: boolean) => disabled ? 'text-[var(--text-disabled)]' : 'text-[var(--text-muted)]'
+
+                  const handleCreatePage = () => {
+                    if (isRoot) {
+                      setContextMenu(null); onCreateLoosePage()
+                    } else if (!insideNotebook && ctxCat) {
+                      setContextMenu(null); onCreatePageUnder(ctxCat.id)
+                    }
+                  }
+                  const handleCreateFolder = () => {
+                    if (isRoot || (!insideNotebook && ctxCat)) {
+                      setContextMenu(null)
+                      setCreateParentId(ctxCat?.id ?? null)
+                      setCreateMode('folder')
+                      setNewName('')
+                    } else if (insideNotebook && ctxCat) {
+                      // Create chapter under notebook
+                      setContextMenu(null)
+                      const notebookId = isChapter ? (ctxCat.parentId || '') : ctxCat.id
+                      if (notebookId && onCreateChapterUnderNotebook) {
+                        onCreateChapterUnderNotebook(notebookId)
+                      }
+                    }
+                  }
+                  const handleCreateNotebook = () => {
+                    if (insideNotebook) return
+                    setContextMenu(null)
+                    setCreateParentId(null)
+                    setCreateMode('notebook')
+                    setNewName('')
+                  }
+
+                  return (
+                    <>
+                      <button onClick={handleCreatePage} disabled={insideNotebook}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(insideNotebook)}`}>
+                        <FileText size={14} className={iconCls(insideNotebook)} />新建页面
+                      </button>
+                      <button onClick={handleCreateFolder}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(false)}`}>
+                        <Folder size={14} className={iconCls(false)} />新建{insideNotebook ? '章节' : '目录'}
+                      </button>
+                      <button onClick={handleCreateNotebook} disabled={insideNotebook}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(insideNotebook)}`}>
+                        <BookOpen size={14} className={iconCls(insideNotebook)} />新建笔记本
+                      </button>
+                      <div className="border-t border-[var(--border-color)] my-0.5" />
+                    </>
+                  )
+                })()}
                 {onPaste && (
                   <button
                     onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(null); setContextMenu(null) } }}
@@ -859,6 +944,12 @@ export function NotebookList({
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
                   <Download size={14} className="text-[var(--text-muted)]" />导入文件...
                 </button>
+                {onImportFolder && (
+                  <button onClick={() => { setContextMenu(null); onImportFolder() }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Folder size={14} className="text-[var(--text-muted)]" />导入文件夹...
+                  </button>
+                )}
               </>
             )}
           </div>

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Entry } from '../../../types'
-import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star } from 'lucide-react'
+import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star, List } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
 
 interface SidebarProps {
@@ -9,6 +9,7 @@ interface SidebarProps {
   selectedDate: string | null
   onSelectDate: (date: string | null) => void
   onNewEntry: () => void
+  onShowAll?: () => void
 }
 
 type DayNode = { date: string; hasContent: boolean }
@@ -150,7 +151,7 @@ function computeSearchResults(
   return null
 }
 
-export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, onNewEntry }: SidebarProps) {
+export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, onNewEntry, onShowAll }: SidebarProps) {
   const today = new Date().toISOString().split('T')[0]
   const thisYear = new Date().getFullYear().toString()
   const thisMonth = (new Date().getMonth() + 1).toString().padStart(2, '0')
@@ -239,7 +240,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
       </div>
 
       {/* 今日按钮 */}
-      <div className="px-3 py-3">
+      <div className="px-3 py-3 space-y-1.5">
         <button
           onClick={onNewEntry}
           className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-white text-sm rounded hover:bg-[var(--accent-hover)] transition-colors"
@@ -247,6 +248,20 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
           <Edit3 size={15} />
           {hasToday ? '继续编写' : '今日文章编写'}
         </button>
+        {/* 全部文章入口 */}
+        {onShowAll && (
+          <button
+            onClick={onShowAll}
+            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1 text-[12px] rounded border transition-colors ${
+              !selectedDate
+                ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
+            }`}
+          >
+            <List size={13} />
+            全部文章
+          </button>
+        )}
       </div>
 
       {/* 收藏 */}

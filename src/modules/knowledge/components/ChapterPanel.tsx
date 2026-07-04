@@ -188,17 +188,8 @@ export function ChapterPanel({
           e.dataTransfer.dropEffect = 'move'
 
           const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
-          if (targetChapter) {
-            const chId = targetChapter.dataset.chapterId!
-            if (d.type === 'category') {
-              if (d.id !== chId && !isDescendantOf(d.id, chId)) {
-                setDragOverChId(chId)
-              } else {
-                setDragOverChId(null)
-              }
-            } else {
-              setDragOverChId(chId)
-            }
+          if (targetChapter && d.type === 'page') {
+            setDragOverChId(targetChapter.dataset.chapterId!)
           } else {
             setDragOverChId(null)
           }
@@ -212,13 +203,8 @@ export function ChapterPanel({
           if (!d) return
 
           const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
-          if (targetChapter) {
-            const chId = targetChapter.dataset.chapterId!
-            if (d.type === 'category' && d.id !== chId && !isDescendantOf(d.id, chId)) {
-              onMoveCategory(d.id, chId)
-            } else if (d.type === 'page') {
-              onDropOnChapter(d.id, chId)
-            }
+          if (targetChapter && d.type === 'page') {
+            onDropOnChapter(d.id, targetChapter.dataset.chapterId!)
           }
         }}
       >
@@ -301,14 +287,8 @@ export function ChapterPanel({
 
           if (targetChapter) {
             const chId = targetChapter.dataset.chapterId!
-            if (d.type === 'category') {
-              if (d.id !== chId && !isDescendantOf(d.id, chId)) {
-                setDragOverChId(chId)
-              } else {
-                setDragOverChId(null)
-              }
-            } else {
-              // page drop on chapter is always valid
+            // Only pages can be highlighted on chapter rows; categories go to notebook area
+            if (d.type === 'page') {
               setDragOverChId(chId)
             }
             setDragOverNotebookArea(false)
@@ -349,13 +329,8 @@ export function ChapterPanel({
           const targetChapter = (e.target as HTMLElement).closest('[data-chapter-id]') as HTMLElement | null
           const targetPage = (e.target as HTMLElement).closest('[data-page-id]') as HTMLElement | null
 
-          if (targetChapter) {
-            const chId = targetChapter.dataset.chapterId!
-            if (d.type === 'category' && d.id !== chId && !isDescendantOf(d.id, chId)) {
-              onMoveCategory(d.id, chId)
-            } else if (d.type === 'page') {
-              onDropOnChapter(d.id, chId)
-            }
+          if (targetChapter && d.type === 'page') {
+            onDropOnChapter(d.id, targetChapter.dataset.chapterId!)
             return
           }
 

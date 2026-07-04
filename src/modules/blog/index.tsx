@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Star, ListTree } from 'lucide-react'
+import { Star, ListTree, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Entry, Tag } from '../../types'
-import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal } from '../../lib/ipc'
+import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -20,24 +20,29 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   const { s } = useSettings()
   const [view, setView] = useState<BlogView>('list')
   const [entries, setEntries] = useState<Entry[]>([])
-  const [tags, setTags] = useState<Tag[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showOutline, setShowOutline] = useState(false)
   const [liveContent, setLiveContent] = useState('')
+  const [allTags, setAllTags] = useState<Tag[]>([])
 
   const viewRef = useRef(view)
   const selectedIdRef = useRef(selectedId)
   useEffect(() => { viewRef.current = view }, [view])
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
+  // Month & tag filter
   const today = new Date().toISOString().split('T')[0]
   const thisMonth = today.slice(0, 7)
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)   // null = thisMonth only; string = YYYY-MM filter; 'showAll' = everything
+  const [filterTagId, setFilterTagId] = useState<string | null>(null)        // null = all tags
 
   const loadEntries = useCallback(async () => {
     try {
-      setEntries(await getEntries())
+      const [es, ts] = await Promise.all([getEntries(), getTags()])
+      setEntries(es)
+      setAllTags(ts)
     } catch (e) {
       console.error(e)
     } finally {
@@ -51,6 +56,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     setSelectedId(null)
     setSelectedDate(null)
     setShowOutline(false)
+    setSelectedMonth(null)
+    setFilterTagId(null)
     onSnapOpenSidebar?.()
     loadEntries()
   }, [loadEntries, onSnapOpenSidebar])
@@ -89,9 +96,25 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     }
   }
 
+  const handleShowAll = useCallback(() => {
+    setView('list')
+    setSelectedId(null)
+    setSelectedDate(null)
+    setSelectedMonth('showAll')
+    setFilterTagId(null)
+    setShowOutline(false)
+    onSnapOpenSidebar?.()
+    loadEntries()
+  }, [loadEntries, onSnapOpenSidebar])
+
   const handleSelectDate = async (date: string | null) => {
     setSelectedDate(date)
-    if (!date) return
+    if (!date) {
+      setView('list')
+      setSelectedMonth(null)
+      setFilterTagId(null)
+      return
+    }
     const entry = entries.find(e => e.date === date)
     if (entry) {
       setSelectedId(entry.id)
@@ -139,6 +162,53 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   const starredEntries = entries.filter(e => e.isStarred)
 
+  // ---- month navigation ----
+  const effectiveMonth = selectedMonth === 'showAll' ? null : (selectedMonth || thisMonth)
+  const MONTH_NAMES = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月']
+
+  const monthLabel = effectiveMonth
+    ? `${effectiveMonth.slice(0, 4)}年${MONTH_NAMES[parseInt(effectiveMonth.slice(5, 7)) - 1]}`
+    : '全部文章'
+
+  const navigateMonth = (dir: -1 | 1) => {
+    if (!effectiveMonth) return
+    const [y, m] = effectiveMonth.split('-').map(Number)
+    const d = new Date(y, m - 1 + dir, 1)
+    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    setFilterTagId(null)
+    setSelectedDate(null)
+  }
+
+  // Build tag list from entries in current view
+  const displayedTagCounts = useMemo(() => {
+    const map: Record<string, { tag: Tag; count: number }> = {}
+    for (const t of allTags) map[t.id] = { tag: t, count: 0 }
+    const viewEntries = selectedDate
+      ? entries.filter(e => e.date === selectedDate)
+      : effectiveMonth
+        ? entries.filter(e => e.date.startsWith(effectiveMonth))
+        : entries
+    for (const e of viewEntries) {
+      for (const t of e.tags || []) {
+        if (map[t.id]) map[t.id].count++
+      }
+    }
+    return Object.values(map).filter(x => x.count > 0).sort((a, b) => b.count - a.count)
+  }, [allTags, entries, effectiveMonth, selectedDate])
+
+  // Final filtered entries for display
+  const displayEntries = useMemo(() => {
+    let result = selectedDate
+      ? entries.filter(e => e.date === selectedDate)
+      : effectiveMonth
+        ? entries.filter(e => e.date.startsWith(effectiveMonth))
+        : entries
+    if (filterTagId) {
+      result = result.filter(e => (e.tags || []).some(t => t.id === filterTagId))
+    }
+    return result
+  }, [entries, effectiveMonth, selectedDate, filterTagId])
+
   // Reset liveContent when switching entries
   useEffect(() => { setLiveContent('') }, [selectedId])
 
@@ -181,6 +251,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               selectedDate={selectedDate}
               onSelectDate={handleSelectDate}
               onNewEntry={handleTodayEntry}
+              onShowAll={handleShowAll}
             />
           </div>
         </div>
@@ -197,14 +268,87 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
       <main className="flex-1 flex flex-col overflow-hidden">
         {view === 'list' && (
-          <EntryList
-            entries={selectedDate ? entries.filter(e => e.date === selectedDate) : entries.filter(e => e.date.startsWith(thisMonth))}
-            loading={loading}
-            onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail'); if (entry.date !== today) setLiveContent(entry.contentMd || '') }}
-            onToggleStar={handleToggleStar}
-            onNewEntry={handleTodayEntry}
-            cardSize={s.blogCardSize}
-          />
+          <>
+            {/* Month switcher + tag filter bar */}
+            <div className="flex items-center justify-center px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => navigateMonth(-1)}
+                  disabled={!effectiveMonth}
+                  className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="上个月"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-[13px] font-medium text-[var(--text-primary)] min-w-[120px] text-center select-none">{monthLabel}</span>
+                <button
+                  onClick={() => navigateMonth(1)}
+                  disabled={!effectiveMonth}
+                  className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="下个月"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                {effectiveMonth && (
+                  <button
+                    onClick={() => { setSelectedMonth('showAll'); setSelectedDate(null); setFilterTagId(null) }}
+                    className="ml-2 px-2 py-0.5 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+                  >
+                    全部
+                  </button>
+                )}
+                {selectedMonth === 'showAll' && (
+                  <button
+                    onClick={() => setSelectedMonth(null)}
+                    className="ml-2 px-2 py-0.5 text-[11px] text-[var(--accent)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+                  >
+                    回到本月
+                  </button>
+                )}
+                {filterTagId && (
+                  <button
+                    onClick={() => setFilterTagId(null)}
+                    className="ml-2 flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded hover:bg-[var(--accent)]/20 transition-colors"
+                  >
+                    <X size={10} />清除筛选
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Tag filter chips */}
+            {displayedTagCounts.length > 0 && (
+              <div className="flex items-center gap-1 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)] overflow-x-auto shrink-0">
+                {displayedTagCounts.map(({ tag, count }) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => setFilterTagId(prev => prev === tag.id ? null : tag.id)}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0 transition-colors border ${
+                      filterTagId === tag.id
+                        ? 'border-current'
+                        : 'border-transparent hover:border-current/30'
+                    }`}
+                    style={{
+                      backgroundColor: tag.color + (filterTagId === tag.id ? '30' : '15'),
+                      color: tag.color
+                    }}
+                  >
+                    {tag.name}
+                    <span className="opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <EntryList
+              entries={displayEntries}
+              loading={loading}
+              onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail'); if (entry.date !== today) setLiveContent(entry.contentMd || '') }}
+              onToggleStar={handleToggleStar}
+              onNewEntry={handleTodayEntry}
+              cardSize={s.blogCardSize}
+            />
+          </>
         )}
         {view === 'editor' && selectedId && (
           <MarkdownEditor
