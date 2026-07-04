@@ -197,7 +197,7 @@ export default function App() {
           <main className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-primary)] relative">
             {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
             {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-            {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
+            {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
             {renderTab('export', <ExportModule />)}
             {renderTab('recycle', <RecycleBinModule />)}
             {renderTab('settings', <SettingsModule />)}

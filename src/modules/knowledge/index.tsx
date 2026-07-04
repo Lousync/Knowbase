@@ -29,7 +29,7 @@ import { isEditingInput } from '../../lib/shortcuts'
 interface ClipItem { type: 'category' | 'page'; id: string }
 interface ClipboardData { action: 'copy' | 'cut'; items: ClipItem[] }
 
-export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar }: { sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void }) {
+export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar, isActive = true }: { sidebarOpen?: boolean; zoom?: number; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void; isActive?: boolean }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
   const [allPages, setAllPages] = useState<KnowledgePage[]>([])
   const [chapterPages, setChapterPages] = useState<KnowledgePage[]>([])
@@ -938,14 +938,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           )}
         </div>
       </div>
-      <QuickSearch
-        pages={allPages}
-        categories={categories}
-        tags={allKnowledgeTags}
-        onOpenPage={handleOpenPage}
-        onLocateCategory={handleLocateCategory}
-        onRequestRefresh={handleSearchRefresh}
-      />
+      {isActive && (
+        <QuickSearch
+          pages={allPages}
+          categories={categories}
+          tags={allKnowledgeTags}
+          onOpenPage={handleOpenPage}
+          onLocateCategory={handleLocateCategory}
+          onRequestRefresh={handleSearchRefresh}
+        />
+      )}
 
       {/* Unsaved changes confirm dialog */}
       <ConfirmDialog
