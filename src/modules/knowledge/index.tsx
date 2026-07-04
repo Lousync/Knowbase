@@ -19,6 +19,7 @@ import { ChapterPanel } from './components/ChapterPanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { QuickSearch } from './components/QuickSearch'
+import { ConfirmDialog } from '../../components/shared'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -57,6 +58,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [dirtyPageIds, setDirtyPageIds] = useState<Set<string>>(new Set())
   const dirtyPageIdsRef = useRef(dirtyPageIds)
   useEffect(() => { dirtyPageIdsRef.current = dirtyPageIds }, [dirtyPageIds])
+
+  // ---- 未保存关闭确认 ----
+  const [unsavedClosePageId, setUnsavedClosePageId] = useState<string | null>(null)
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
@@ -313,6 +317,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [allLoosePages, chapterPages, starredPages])
 
   const handleCloseTab = useCallback((pageId: string) => {
+    // Check unsaved changes
+    const dirty = dirtyPageIdsRef.current
+    if (dirty.has(pageId)) {
+      setUnsavedClosePageId(pageId)
+      return
+    }
+    forceCloseTab(pageId)
+  }, [])
+
+  const forceCloseTab = useCallback((pageId: string) => {
     const currentIds = openPageIdsRef.current
     const idx = currentIds.indexOf(pageId)
     if (idx === -1) return
@@ -917,6 +931,20 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         onOpenPage={handleOpenPage}
         onLocateCategory={handleLocateCategory}
         onRequestRefresh={handleSearchRefresh}
+      />
+
+      {/* Unsaved changes confirm dialog */}
+      <ConfirmDialog
+        open={unsavedClosePageId !== null}
+        title="未保存的更改"
+        message="当前页面有未保存的更改，确定要关闭吗？"
+        confirmLabel="关闭"
+        onConfirm={() => {
+          const id = unsavedClosePageId
+          setUnsavedClosePageId(null)
+          if (id) { setDirtyPageIds(prev => { const n = new Set(prev); n.delete(id); return n }); forceCloseTab(id) }
+        }}
+        onCancel={() => setUnsavedClosePageId(null)}
       />
     </ImportZone>
   )

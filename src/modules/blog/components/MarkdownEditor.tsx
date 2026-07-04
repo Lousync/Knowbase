@@ -32,10 +32,14 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [loaded, setLoaded] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
+  const [unsavedAction, setUnsavedAction] = useState<(() => void) | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const contentRef = useRef(contentMd)
   const dateRef = useRef(date)
+  const isDirtyRef = useRef(false)
+  const savedContentRef = useRef('')
 
   // Tags & States
   const [allTags, setAllTags] = useState<Tag[]>([])
@@ -57,6 +61,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       getEntryById(entryId).then(d => {
         if (!d) return
         setContentMd(d.contentMd); setDate(d.date)
+        savedContentRef.current = d.contentMd || ''
+        isDirtyRef.current = false
         setEntryTags(d.tags || [])
         setEntryStates(d.states || '')
         onContentChange?.(d.contentMd)  // seed outline with existing content
@@ -70,6 +76,19 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   useEffect(() => {
     getSetting('skipDeleteConfirm_blog').then(v => { if (v === true) setSkipDeleteConfirm(true) })
   }, [])
+
+  const checkUnsaved = useCallback(() => {
+    if (isDirtyRef.current) {
+      setShowUnsavedConfirm(true)
+      return true
+    }
+    return false
+  }, [])
+
+  const handleCancelWithCheck = useCallback(() => {
+    if (checkUnsaved()) { setUnsavedAction(() => onCancel); return }
+    onCancel()
+  }, [checkUnsaved, onCancel])
 
   const handleDeleteEntry = () => {
     if (skipDeleteConfirm) {
@@ -90,6 +109,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         tags: tagIds,
         states: statesRef.current,
       })
+      isDirtyRef.current = false
+      savedContentRef.current = c
       setLastSaved(new Date())
     } catch (e) { console.error(e) } finally { setSaving(false) }
   }, [entryId])
@@ -98,6 +119,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     const val = v || ''
     setContentMd(val)
     onContentChange?.(val)
+    if (val !== savedContentRef.current) isDirtyRef.current = true
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => doSave(val, dateRef.current), s.autoSaveDebounceMs)
   }
@@ -145,7 +167,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === '/') { e.preventDefault(); setShowPreview(v => !v) }
       if (e.ctrlKey && e.key === 's') { e.preventDefault(); handleSaveAndClose() }
-      if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+      if (e.key === 'Escape') { e.preventDefault(); if (checkUnsaved()) { setUnsavedAction(() => onCancel); return } onCancel() }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -184,7 +206,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       {/* toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onCancel} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+          <button onClick={handleCancelWithCheck} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             <ArrowLeft size={15} /> 返回
           </button>
           <div className="w-px h-4 bg-[var(--input-bg)]" />
@@ -324,6 +346,19 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           />
         )}
       </div>
+
+      {/* Unsaved changes confirm dialog */}
+      <ConfirmDialog
+        open={showUnsavedConfirm}
+        title="未保存的更改"
+        message="当前博文有未保存的更改，确定要离开吗？"
+        confirmLabel="离开"
+        onConfirm={() => {
+          setShowUnsavedConfirm(false)
+          if (unsavedAction) { const a = unsavedAction; setUnsavedAction(null); a() }
+        }}
+        onCancel={() => { setShowUnsavedConfirm(false); setUnsavedAction(null) }}
+      />
 
       {/* Delete confirm dialog */}
       <ConfirmDialog

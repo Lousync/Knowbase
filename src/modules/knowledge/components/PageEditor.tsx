@@ -39,6 +39,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
+  const [unsavedAction, setUnsavedAction] = useState<(() => void) | null>(null)
   // Tags
   const [allTags, setAllTags] = useState<KnowledgeTag[]>([])
   const [entryTags, setEntryTags] = useState<KnowledgeTag[]>([])
@@ -54,6 +56,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const pageRef = useRef(page)
   const fileTypeRef = useRef(fileType)
   const tagsRef = useRef<KnowledgeTag[]>([])
+  const isDirtyRef = useRef(false)
+  const savedContentRef = useRef('')
+  const savedTitleRef = useRef('')
   const monacoRef = useRef<typeof Monaco | null>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const showDeleteConfirmRef = useRef(showDeleteConfirm)
@@ -84,7 +89,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
-        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); setEntryTags(p.tags || []); window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
+        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); setEntryTags(p.tags || []); savedContentRef.current = p.contentMd || ''; savedTitleRef.current = p.title; isDirtyRef.current = false; window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
       }),
       getKnowledgeBacklinks(pageId).then(setBacklinks),
       getKnowledgeTags().then(setAllTags)
@@ -104,33 +109,41 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       const links = parseWikiLinks(c)
       await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current, tags: tagsRef.current.map(tag => tag.id) })
       await updateKnowledgeLinks(pageRef.current.id, links)
+      isDirtyRef.current = false
+      savedContentRef.current = c
+      savedTitleRef.current = t
       setSaving(false)
     } catch (e) { console.error(e) }
   }, [])
 
   useEffect(() => {
     if (!page) return
-    setSaving(true)
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => doSave(title, content), s.autoSaveDebounceMs)
+    // Mark dirty when content/title diverges from saved version
+    if (content !== savedContentRef.current || title !== savedTitleRef.current) {
+      isDirtyRef.current = true
+      setSaving(true)
+      onMarkDirty?.()
+      clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => doSave(title, content), s.autoSaveDebounceMs)
+    }
     return () => clearTimeout(saveTimer.current)
   }, [title, content, page, doSave])
 
   // Keyboard shortcuts: Ctrl+S, Ctrl+/, Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Ctrl+S — save immediately
+      // Ctrl+S — save immediately (always fire, even in Monaco)
       if (e.ctrlKey && e.key === 's') {
-        if (isEditingInput(e)) return
         e.preventDefault()
         clearTimeout(saveTimer.current)
-        doSave(titleRef.current, contentRef.current)
-        setSaving(false)
+        doSave(titleRef.current, contentRef.current).then(() => setSaving(false))
         return
       }
+
+      if (isEditingInput(e)) return
+
       // Ctrl+/ — toggle preview (md/txt only)
       if (e.ctrlKey && e.key === '/') {
-        if (isEditingInput(e)) return
         if (isCodeFileRef.current || isPdfFileRef.current) return
         e.preventDefault()
         setPreview(v => !v)
@@ -144,6 +157,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           return
         }
         e.preventDefault()
+        if (checkUnsaved()) { setUnsavedAction(() => onBack); return }
         onBack()
       }
     }
@@ -260,6 +274,20 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     onTagsChange?.()
   }
 
+  // Check for unsaved changes — returns true if blocked
+  const checkUnsaved = useCallback(() => {
+    if (isDirtyRef.current) {
+      setShowUnsavedConfirm(true)
+      return true
+    }
+    return false
+  }, [])
+
+  const handleBackWithCheck = useCallback(() => {
+    if (checkUnsaved()) { setUnsavedAction(() => onBack); return }
+    onBack()
+  }, [checkUnsaved, onBack])
+
   if (!page) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
@@ -310,7 +338,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
           <div className="flex items-center gap-2.5">
-            <button onClick={onBack} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
+            <button onClick={handleBackWithCheck} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
               <ArrowLeft size={17} /> 返回
             </button>
             <button onClick={handleToggleStar} className={`${page.isStarred ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'} hover:text-[var(--warning)]`}>
@@ -562,6 +590,19 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
         </div>
       )}
+
+      {/* Unsaved changes confirm dialog */}
+      <ConfirmDialog
+        open={showUnsavedConfirm}
+        title="未保存的更改"
+        message="当前页面有未保存的更改，确定要离开吗？"
+        confirmLabel="离开"
+        onConfirm={() => {
+          setShowUnsavedConfirm(false)
+          if (unsavedAction) { const a = unsavedAction; setUnsavedAction(null); a() }
+        }}
+        onCancel={() => { setShowUnsavedConfirm(false); setUnsavedAction(null) }}
+      />
 
       {/* Delete confirm dialog */}
       {page && (
