@@ -346,7 +346,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handlePageDeleted = useCallback(async (id: string) => {
     await deleteKnowledgePage(id)
-    handleCloseTab(id)
+    // 页面已删除，清除脏标记后直接关闭标签页（无需确认未保存）
+    setDirtyPageIds(prev => { const n = new Set(prev); n.delete(id); return n })
+    forceCloseTab(id)
     await refreshAllPages()
     await refreshChapterPages()
     refreshStarred()
@@ -357,7 +359,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const pages = await getKnowledgePages(chId)
       if (pages.length > 0) handleOpenPage(pages[0].id)
     }
-  }, [handleCloseTab])
+  }, [forceCloseTab])
 
   const handleReorderTabs = useCallback((newOrder: string[]) => { setOpenPageIds(newOrder) }, [])
 
