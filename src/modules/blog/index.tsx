@@ -252,6 +252,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               onSelectDate={handleSelectDate}
               onNewEntry={handleTodayEntry}
               onShowAll={handleShowAll}
+              allTags={allTags}
             />
           </div>
         </div>

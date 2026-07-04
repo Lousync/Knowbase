@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Entry } from '../../../types'
-import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star, List } from 'lucide-react'
+import { Entry, Tag } from '../../../types'
+import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star, List, Hash } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
 
 interface SidebarProps {
@@ -10,6 +10,7 @@ interface SidebarProps {
   onSelectDate: (date: string | null) => void
   onNewEntry: () => void
   onShowAll?: () => void
+  allTags?: Tag[]
 }
 
 type DayNode = { date: string; hasContent: boolean }
@@ -151,7 +152,7 @@ function computeSearchResults(
   return null
 }
 
-export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, onNewEntry, onShowAll }: SidebarProps) {
+export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, onNewEntry, onShowAll, allTags }: SidebarProps) {
   const today = new Date().toISOString().split('T')[0]
   const thisYear = new Date().getFullYear().toString()
   const thisMonth = (new Date().getMonth() + 1).toString().padStart(2, '0')
@@ -169,6 +170,31 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
     () => activeSearch ? computeSearchResults(tree, parsed, existingYears, searchQuery.trim()) : null,
     [activeSearch, tree, parsed, existingYears, searchQuery],
   )
+
+  // Tag & title search (non-date queries)
+  const tagSearchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q || !activeSearch) return null
+    // Only do tag/title search for non-date queries (needs at least some non-digit content)
+    if (/^\d+[\/\-]?\d*[\/\-]?\d*$/.test(q)) return null
+
+    // Match by tag name
+    const matchingTags = (allTags || []).filter(t => t.name.toLowerCase().includes(q))
+    // Match by entry title
+    const titleMatches = entries.filter(e => e.title && e.title.toLowerCase().includes(q))
+
+    const tagEntries: { tag: Tag; entries: Entry[] }[] = []
+    for (const tag of matchingTags) {
+      const tagged = entries.filter(e => (e.tags || []).some(t => t.id === tag.id))
+      if (tagged.length > 0) tagEntries.push({ tag, entries: tagged })
+    }
+
+    if (tagEntries.length === 0 && titleMatches.length === 0) return null
+    return { tagEntries, titleMatches }
+  }, [activeSearch, searchQuery, allTags, entries])
+
+  const tagSearchRef = useRef(tagSearchResults)
+  useEffect(() => { tagSearchRef.current = tagSearchResults }, [tagSearchResults])
 
   const effectiveYears = searchResults ? searchResults.years : existingYears
 
@@ -346,9 +372,20 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                 if (target) {
                   setSearchQuery('')
                   handleSelectDateSafe(target)
+                  return
+                }
+                // Fallback: navigate to first tag/title match
+                const tsr = tagSearchRef.current
+                if (tsr) {
+                  setSearchQuery('')
+                  if (tsr.titleMatches.length > 0) {
+                    handleSelectDateSafe(tsr.titleMatches[0].date)
+                  } else if (tsr.tagEntries.length > 0 && tsr.tagEntries[0].entries.length > 0) {
+                    handleSelectDateSafe(tsr.tagEntries[0].entries[0].date)
+                  }
                 }
               }}
-              placeholder="搜索日期 (xxxx/xx/xx)"
+              placeholder="搜索日期 / 标签 / 标题"
               className="w-full pl-7 pr-2 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
             />
           </div>
@@ -357,8 +394,58 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
         {effectiveYears.length === 0 && !activeSearch && (
           <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">暂无文章</p>
         )}
-        {activeSearch && searchResults === null && (
-          <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">未找到匹配的日期</p>
+        {activeSearch && searchResults === null && tagSearchResults === null && (
+          <p className="px-3 py-4 text-[12px] text-[var(--text-muted)] text-center">未找到匹配的日期或标签</p>
+        )}
+
+        {/* Tag & title search results */}
+        {tagSearchResults && (
+          <div className="border-t border-[var(--border-color)] mt-1 pt-1">
+            {/* Title matches */}
+            {tagSearchResults.titleMatches.length > 0 && (
+              <div className="mb-1">
+                <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                  <FileText size={11} />
+                  标题匹配
+                  <span className="text-[var(--text-disabled)] font-normal normal-case">{tagSearchResults.titleMatches.length}</span>
+                </div>
+                {tagSearchResults.titleMatches.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => { setSearchQuery(''); handleSelectDateSafe(e.date) }}
+                    className="w-full flex items-center gap-1.5 pl-6 pr-2 py-0.5 text-[12px] rounded transition-colors text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                  >
+                    <FileText size={11} className="shrink-0 text-[var(--text-muted)]" />
+                    <span className="truncate flex-1">{e.title}</span>
+                    <span className="shrink-0 text-[10px] text-[var(--text-disabled)]">{e.date.slice(-5)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Tag matches */}
+            {tagSearchResults.tagEntries.map(({ tag, entries: tagged }) => (
+              <div key={tag.id} className="mb-1">
+                <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ color: tag.color }}>
+                  <Hash size={11} />
+                  标签: {tag.name}
+                  <span className="font-normal normal-case" style={{ opacity: 0.6 }}>{tagged.length}</span>
+                </div>
+                {tagged.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => { setSearchQuery(''); handleSelectDateSafe(e.date) }}
+                    className="w-full flex items-center gap-1.5 pl-6 pr-2 py-0.5 text-[12px] rounded transition-colors text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                  >
+                    <FileText size={11} className="shrink-0 text-[var(--text-muted)]" />
+                    <span className="truncate flex-1">{e.title}</span>
+                    <span className="shrink-0 text-[10px] text-[var(--text-disabled)]">{e.date.slice(-5)}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
         )}
 
         {effectiveYears.map(year => {
