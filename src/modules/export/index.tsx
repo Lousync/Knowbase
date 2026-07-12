@@ -301,10 +301,11 @@ async function runMarkdownExport(
     const selected = data.passwordVault.entries.filter(e => passwordIds.has(e.id))
     if (selected.length > 0) {
       let md = `# 密码本\n\n> ⚠️ 此文件包含明文密码，请妥善保管！\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n`
-      md += `| 名称 | 用户名 | 密码 | 网址 | 备注 |\n`
-      md += `|------|--------|------|------|------|\n`
+      const esc = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ')
+      md += `| 名称 | 账号 | 用户名 | 密码 | 网址 | 备注 |\n`
+      md += `|------|------|--------|------|------|------|\n`
       for (const e of selected) {
-        md += `| ${e.title} | ${e.username || '-'} | ${e.password} | ${e.url || '-'} | ${e.notes || '-'} |\n`
+        md += `| ${esc(e.title) || '-'} | ${esc(e.account) || '-'} | ${esc(e.username) || '-'} | ${esc(e.password)} | ${esc(e.url) || '-'} | ${esc(e.notes) || '-'} |\n`
       }
       md += `\n共 ${selected.length} 条密码\n`
       files.push({ relPath: 'password-vault/passwords.md', content: md })
@@ -790,10 +791,10 @@ export function ExportModule() {
           </button>
 
           {statusMessage && (
-            <div className={`flex items-center gap-2 text-[12px] px-3 py-1.5 rounded ${
-              status === 'success' ? 'text-[var(--success)] bg-[#1e2a2a]'
-              : status === 'error' ? 'text-[var(--danger)] bg-[#2a1e1e]'
-              : 'text-[var(--accent)] bg-[#1e1e2a]'
+            <div className={`flex items-center gap-2 text-[12px] px-3 py-1.5 rounded border ${
+              status === 'success' ? 'text-[var(--success)] bg-[var(--success)]/10 border-[var(--success)]/30'
+              : status === 'error' ? 'text-[var(--danger)] bg-[var(--danger)]/10 border-[var(--danger)]/30'
+              : 'text-[var(--accent)] bg-[var(--accent)]/10 border-[var(--accent)]/30'
             }`}>
               {statusIcon}
               <span className="truncate max-w-[300px]">{statusMessage}</span>
