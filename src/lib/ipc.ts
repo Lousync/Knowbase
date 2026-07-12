@@ -157,8 +157,8 @@ export const reorderToolboxScripts = (ids: string[]) => a().reorderToolboxScript
 // ===== Password Vault =====
 export const getPasswordEntries = () => a().getPasswordEntries()
 export const getPasswordEntryById = (id: string) => a().getPasswordEntryById(id)
-export const createPasswordEntry = (d: { title?: string; url?: string; username?: string; password?: string; notes?: string }) => a().createPasswordEntry(d)
-export const updatePasswordEntry = (id: string, d: { title?: string; url?: string; username?: string; password?: string; notes?: string; sortOrder?: number }) => a().updatePasswordEntry(id, d)
+export const createPasswordEntry = (d: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }) => a().createPasswordEntry(d)
+export const updatePasswordEntry = (id: string, d: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }) => a().updatePasswordEntry(id, d)
 export const deletePasswordEntry = (id: string) => a().deletePasswordEntry(id)
 
 // ===== AI =====

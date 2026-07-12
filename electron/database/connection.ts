@@ -397,6 +397,11 @@ export function runMigrations(): void {
     `)
     db.run("INSERT INTO _migrations (name) VALUES ('020_password_vault')")
   }
+
+  if (!applied.has('021_password_account')) {
+    try { db.run("ALTER TABLE toolbox_passwords ADD COLUMN account TEXT DEFAULT ''") } catch (_) { /* column may exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('021_password_account')")
+  }
 }
 
 /**

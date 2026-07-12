@@ -27,11 +27,11 @@ export interface UpdateToolboxScriptDTO { name?: string; description?: string; c
 
 // password vault
 export interface PasswordEntry {
-  id: string; title: string; url: string; username: string; password: string; notes: string
+  id: string; title: string; url: string; username: string; account: string; password: string; notes: string
   sortOrder: number; createdAt: string; updatedAt: string
 }
-export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; password?: string; notes?: string }
-export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; password?: string; notes?: string; sortOrder?: number }
+export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }
+export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }
 
 // user
 export interface UserProfile {

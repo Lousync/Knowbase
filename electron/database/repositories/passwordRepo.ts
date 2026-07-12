@@ -5,15 +5,15 @@ import { getDatabase, saveToDisk } from '../connection'
 // ---- types ----
 interface PasswordRow {
   id: string; title: string; url: string | null; username: string | null
-  password: string; notes: string | null
+  account: string | null; password: string; notes: string | null
   sort_order: number; created_at: string; updated_at: string
 }
 
 function rowToPassword(row: PasswordRow) {
   return {
     id: row.id, title: row.title, url: row.url || '',
-    username: row.username || '', password: row.password,
-    notes: row.notes || '',
+    username: row.username || '', account: row.account || '',
+    password: row.password, notes: row.notes || '',
     sortOrder: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at
   }
 }
@@ -50,7 +50,7 @@ export function registerPasswordHandlers(): void {
   })
 
   ipcMain.handle('passwordVault:create', (_e, data: {
-    title?: string; url?: string; username?: string; password?: string; notes?: string
+    title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string
   }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
@@ -59,16 +59,16 @@ export function registerPasswordHandlers(): void {
     )
     const sortOrder = (maxRow[0]?.m ?? -1) + 1
     run(
-      `INSERT INTO toolbox_passwords (id, title, url, username, password, notes, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '', data.url || '', data.username || '', data.password || '', data.notes || '', sortOrder, now, now]
+      `INSERT INTO toolbox_passwords (id, title, url, username, account, password, notes, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.title || '', data.url || '', data.username || '', data.account || '', data.password || '', data.notes || '', sortOrder, now, now]
     )
     const rows = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords WHERE id = ?', [id])
     return rowToPassword(rows[0])
   })
 
   ipcMain.handle('passwordVault:update', (_e, id: string, data: {
-    title?: string; url?: string; username?: string; password?: string; notes?: string; sortOrder?: number
+    title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number
   }) => {
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]

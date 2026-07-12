@@ -17,7 +17,7 @@ interface TodoRow { id: string; title: string; description: string | null; date:
 interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
-interface PasswordRow { id: string; title: string; url: string | null; username: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
+interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -44,7 +44,7 @@ function mapPage(r: PageRow) {
 }
 
 function mapPassword(r: PasswordRow) {
-  return { id: r.id, title: r.title, url: r.url || '', username: r.username || '', password: r.password, notes: r.notes || '', sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
+  return { id: r.id, title: r.title, url: r.url || '', username: r.username || '', account: r.account || '', password: r.password, notes: r.notes || '', sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {
