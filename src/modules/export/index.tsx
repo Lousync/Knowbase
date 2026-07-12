@@ -1,19 +1,19 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2 } from 'lucide-react'
+import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield } from 'lucide-react'
 import {
-  exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData,
+  exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData, exportAllPasswordVaultData,
   showExportSaveDialog, showExportOpenDirDialog, writeExportTextFile, copyDbFile,
   writeMarkdownExport, onMarkdownExportProgress, getSetting,
   getUserExportData, getUserStats, getAllSettings
 } from '../../lib/ipc'
-import type { BlogExportData, ScheduleExportData, KnowledgeExportData, ExportMarkdownProgress } from '../../types'
+import type { BlogExportData, ScheduleExportData, KnowledgeExportData, PasswordVaultExportData, ExportMarkdownProgress } from '../../types'
 import { SETTINGS_DEFAULTS } from '../../lib/settings'
 import { ProgressPanel } from './components/ProgressPanel'
 import { MarkdownItemSelector, SelectableItem } from './components/MarkdownItemSelector'
 
 // ---- types ----
 interface ModuleOption {
-  id: 'blog' | 'schedule' | 'knowledge'
+  id: 'blog' | 'schedule' | 'knowledge' | 'passwordVault'
   label: string
   icon: React.ReactNode
   count: string
@@ -37,6 +37,7 @@ const MODULES: ModuleOption[] = [
   { id: 'blog', label: '博客', icon: <FileText size={16} />, count: '文章 + 标签' },
   { id: 'schedule', label: '日程', icon: <Database size={16} />, count: '待办 + 四象限' },
   { id: 'knowledge', label: '知识库', icon: <FileArchive size={16} />, count: '页面 + 分类 + 链接' },
+  { id: 'passwordVault', label: '密码本', icon: <Shield size={16} />, count: '加密密码条目' },
 ]
 
 const FORMATS: FormatOption[] = [
@@ -102,7 +103,7 @@ interface ExportResult {
 }
 
 async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8'): Promise<ExportResult> {
-  const isAll = moduleIds.has('blog') && moduleIds.has('schedule') && moduleIds.has('knowledge')
+  const isAll = moduleIds.has('blog') && moduleIds.has('schedule') && moduleIds.has('knowledge') && moduleIds.has('passwordVault')
 
   const { filePath } = await showExportSaveDialog({
     defaultName: isAll ? `knowbase-${new Date().toISOString().slice(0, 10)}.json` : 'export.json',
@@ -126,6 +127,7 @@ async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8')
     if (moduleIds.has('blog')) parts.blog = await exportAllBlogData()
     if (moduleIds.has('schedule')) parts.schedule = await exportAllScheduleData()
     if (moduleIds.has('knowledge')) parts.knowledge = await exportAllKnowledgeData()
+    if (moduleIds.has('passwordVault')) parts.passwordVault = await exportAllPasswordVaultData()
     data = { exportVersion: '1.1', exportedAt: new Date().toISOString(), ...parts }
   }
 
@@ -138,7 +140,8 @@ async function runMarkdownExport(
   blogIds: Set<string>,
   knowledgeIds: Set<string>,
   scheduleIds: Set<string>,
-  data: { blog: BlogExportData | null; schedule: ScheduleExportData | null; knowledge: KnowledgeExportData | null },
+  passwordIds: Set<string>,
+  data: { blog: BlogExportData | null; schedule: ScheduleExportData | null; knowledge: KnowledgeExportData | null; passwordVault: PasswordVaultExportData | null },
   encoding: string = 'utf-8'
 ): Promise<ExportResult> {
   const { dirPath } = await showExportOpenDirDialog()
@@ -293,6 +296,21 @@ async function runMarkdownExport(
     }
   }
 
+  // Password Vault → markdown table
+  if (moduleIds.has('passwordVault') && data.passwordVault) {
+    const selected = data.passwordVault.entries.filter(e => passwordIds.has(e.id))
+    if (selected.length > 0) {
+      let md = `# 密码本\n\n> ⚠️ 此文件包含明文密码，请妥善保管！\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n`
+      md += `| 名称 | 用户名 | 密码 | 网址 | 备注 |\n`
+      md += `|------|--------|------|------|------|\n`
+      for (const e of selected) {
+        md += `| ${e.title} | ${e.username || '-'} | ${e.password} | ${e.url || '-'} | ${e.notes || '-'} |\n`
+      }
+      md += `\n共 ${selected.length} 条密码\n`
+      files.push({ relPath: 'password-vault/passwords.md', content: md })
+    }
+  }
+
   const writeResult = await writeMarkdownExport(dirPath, files, encoding)
   return { cancelled: false, dirPath, fileCount: writeResult.fileCount, totalSize: writeResult.totalSize }
 }
@@ -321,11 +339,13 @@ export function ExportModule() {
     blog: BlogExportData | null
     schedule: ScheduleExportData | null
     knowledge: KnowledgeExportData | null
-  }>({ blog: null, schedule: null, knowledge: null })
+    passwordVault: PasswordVaultExportData | null
+  }>({ blog: null, schedule: null, knowledge: null, passwordVault: null })
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedBlogIds, setSelectedBlogIds] = useState<Set<string>>(new Set())
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(new Set())
   const [selectedScheduleIds, setSelectedScheduleIds] = useState<Set<string>>(new Set())
+  const [selectedPasswordIds, setSelectedPasswordIds] = useState<Set<string>>(new Set())
 
   // Progress state
   const [progress, setProgress] = useState<ExportMarkdownProgress | null>(null)
@@ -346,7 +366,8 @@ export function ExportModule() {
       ? (
           (selectedModules.has('blog') && selectedBlogIds.size > 0) ||
           (selectedModules.has('schedule') && selectedScheduleIds.size > 0) ||
-          (selectedModules.has('knowledge') && selectedKnowledgeIds.size > 0)
+          (selectedModules.has('knowledge') && selectedKnowledgeIds.size > 0) ||
+          (selectedModules.has('passwordVault') && selectedPasswordIds.size > 0)
         )
       : selectedModules.size > 0
 
@@ -370,8 +391,9 @@ export function ExportModule() {
     const missingBlog = selectedModules.has('blog') && !markdownData.blog
     const missingSchedule = selectedModules.has('schedule') && !markdownData.schedule
     const missingKnowledge = selectedModules.has('knowledge') && !markdownData.knowledge
+    const missingPwd = selectedModules.has('passwordVault') && !markdownData.passwordVault
 
-    if (!missingBlog && !missingSchedule && !missingKnowledge) return
+    if (!missingBlog && !missingSchedule && !missingKnowledge && !missingPwd) return
 
     setDataLoading(true)
     const tasks: Promise<void>[] = []
@@ -400,17 +422,26 @@ export function ExportModule() {
         })
       )
     }
+    if (missingPwd) {
+      tasks.push(
+        exportAllPasswordVaultData().then(d => {
+          setMarkdownData(prev => ({ ...prev, passwordVault: d }))
+          setSelectedPasswordIds(new Set(d.entries.map(e => e.id)))
+        })
+      )
+    }
 
     Promise.all(tasks).finally(() => setDataLoading(false))
-  }, [format, selectedModules, markdownData.blog, markdownData.schedule, markdownData.knowledge])
+  }, [format, selectedModules, markdownData.blog, markdownData.schedule, markdownData.knowledge, markdownData.passwordVault])
 
   // Clear markdown state when switching away
   useEffect(() => {
     if (format !== 'markdown') {
-      setMarkdownData({ blog: null, schedule: null, knowledge: null })
+      setMarkdownData({ blog: null, schedule: null, knowledge: null, passwordVault: null })
       setSelectedBlogIds(new Set())
       setSelectedKnowledgeIds(new Set())
       setSelectedScheduleIds(new Set())
+      setSelectedPasswordIds(new Set())
       setProgress(null)
     }
   }, [format])
@@ -433,6 +464,12 @@ export function ExportModule() {
   }
   const selectAllSchedule = () => setSelectedScheduleIds(new Set(markdownData.schedule?.todos.map(t => t.id) || []))
   const deselectAllSchedule = () => setSelectedScheduleIds(new Set())
+
+  const togglePasswordVaultItem = (id: string) => {
+    setSelectedPasswordIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  const selectAllPasswordVault = () => setSelectedPasswordIds(new Set(markdownData.passwordVault?.entries.map(e => e.id) || []))
+  const deselectAllPasswordVault = () => setSelectedPasswordIds(new Set())
 
   // ---- Item lists for selector ----
   // Blog: year → month → entries tree
@@ -539,6 +576,12 @@ export function ExportModule() {
     subtitle: `${t.date}  ${t.taskType === 'deadline' ? '截止日' : '计划'}  ${t.status === 'done' ? '已完成' : '待办'}`
   }))
 
+  const passwordVaultSelectableItems: SelectableItem[] = (markdownData.passwordVault?.entries || []).map(e => ({
+    id: e.id,
+    title: e.title || '未命名',
+    subtitle: `${e.username || '无用户名'}${e.url ? ' · ' + e.url : ''}`
+  }))
+
   // ---- Export action ----
   const handleExport = useCallback(async () => {
     if (!canExport) return
@@ -556,7 +599,7 @@ export function ExportModule() {
         const unsub = onMarkdownExportProgress((p) => setProgress(p))
         try {
           result = await runMarkdownExport(
-            selectedModules, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, markdownData, exportEncoding
+            selectedModules, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, selectedPasswordIds, markdownData, exportEncoding
           )
         } finally {
           unsub()
@@ -583,7 +626,7 @@ export function ExportModule() {
       setStatusMessage(`导出成功${detail ? `（${detail}）` : ''}：${dest.slice(-40)}`)
 
       // Add to history
-      const moduleLabel = isSqlite ? '原始数据库' : selectedModules.size === 3 ? '全部模块' : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('+')
+      const moduleLabel = isSqlite ? '原始数据库' : selectedModules.size === MODULES.length ? '全部模块' : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('+')
       setHistory(prev => [{
         date: new Date().toISOString().slice(0, 10),
         modules: moduleLabel,
@@ -693,6 +736,13 @@ export function ExportModule() {
                 onScheduleSelectAll={selectAllSchedule}
                 onScheduleDeselectAll={deselectAllSchedule}
                 scheduleLoading={dataLoading && selectedModules.has('schedule') && !markdownData.schedule}
+
+                passwordVaultItems={passwordVaultSelectableItems}
+                selectedPasswordIds={selectedPasswordIds}
+                onPasswordToggle={togglePasswordVaultItem}
+                onPasswordSelectAll={selectAllPasswordVault}
+                onPasswordDeselectAll={deselectAllPasswordVault}
+                passwordLoading={dataLoading && selectedModules.has('passwordVault') && !markdownData.passwordVault}
 
                 enabledModules={selectedModules}
               />

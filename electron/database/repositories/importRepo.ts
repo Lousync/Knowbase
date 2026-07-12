@@ -423,6 +423,18 @@ export function registerImportHandlers(): void {
           }
         }
       }
+      // --- Password Vault ---
+      if (data.passwordVault) {
+        for (const entry of data.passwordVault.entries || []) {
+          if (exists('toolbox_passwords', entry.id)) { skipped++; continue }
+          db.run(
+            `INSERT INTO toolbox_passwords (id, title, url, username, password, notes, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [entry.id, entry.title, entry.url, entry.username, entry.password, entry.notes, entry.sortOrder, entry.createdAt, entry.updatedAt]
+          )
+          imported++
+        }
+      }
       saveToDisk()
       return { success: true, imported, skipped, message: `成功导入 ${imported} 条记录${skipped > 0 ? `，跳过 ${skipped} 条已有记录` : ''}` }
     } catch (e: any) {

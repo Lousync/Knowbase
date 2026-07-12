@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, FileArchive, Database, Loader2, ChevronRight, ChevronDown, Folder, BookOpen, File } from 'lucide-react'
+import { FileText, FileArchive, Database, Loader2, ChevronRight, ChevronDown, Folder, BookOpen, File, Shield } from 'lucide-react'
 
 // ---- types ----
 export interface SelectableItem {
@@ -32,6 +32,13 @@ interface MarkdownItemSelectorProps {
   onScheduleSelectAll: () => void
   onScheduleDeselectAll: () => void
   scheduleLoading: boolean
+
+  passwordVaultItems: SelectableItem[]
+  selectedPasswordIds: Set<string>
+  onPasswordToggle: (id: string) => void
+  onPasswordSelectAll: () => void
+  onPasswordDeselectAll: () => void
+  passwordLoading: boolean
 
   enabledModules: Set<string>
 }
@@ -204,6 +211,18 @@ export function MarkdownItemSelector(props: MarkdownItemSelectorProps) {
         onDeselectAll={props.onScheduleDeselectAll}
         loading={props.scheduleLoading}
         enabled={props.enabledModules.has('schedule')}
+      />
+
+      <ModuleTreeSectionView
+        icon={<Shield size={14} />}
+        label="密码本"
+        items={props.passwordVaultItems}
+        selectedIds={props.selectedPasswordIds}
+        onToggle={props.onPasswordToggle}
+        onSelectAll={props.onPasswordSelectAll}
+        onDeselectAll={props.onPasswordDeselectAll}
+        loading={props.passwordLoading}
+        enabled={props.enabledModules.has('passwordVault')}
       />
     </div>
   )

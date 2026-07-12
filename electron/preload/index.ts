@@ -112,6 +112,7 @@ const api = {
   exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
   exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
   exportAllKnowledgeData: () => ipcRenderer.invoke('export:getAllKnowledgeData'),
+  exportAllPasswordVaultData: () => ipcRenderer.invoke('export:getAllPasswordVaultData'),
   exportAllData: () => ipcRenderer.invoke('export:getAllData'),
   showExportSaveDialog: (opts: unknown) => ipcRenderer.invoke('export:showSaveDialog', opts),
   showExportOpenDirDialog: () => ipcRenderer.invoke('export:showOpenDirDialog'),

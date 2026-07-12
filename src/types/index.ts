@@ -133,10 +133,12 @@ export interface RecycleBinItem {
 export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Tag[] }
 export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
 export interface KnowledgeExportData { categories: KnowledgeCategory[]; pages: (KnowledgePage & { tags: KnowledgeTag[]; backlinks: string[] })[]; tags: KnowledgeTag[] }
+export interface PasswordVaultExportData { entries: PasswordEntry[] }
 export interface AllExportData {
   exportVersion: string; exportedAt: string
   user?: UserExportData & { settings: Record<string, unknown>; stats: UserStats }
   blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
+  passwordVault?: PasswordVaultExportData
 }
 
 export interface ExportFileResult { filePath: string; size: number }
@@ -239,6 +241,7 @@ export interface ElectronAPI {
   exportAllBlogData: () => Promise<BlogExportData>
   exportAllScheduleData: () => Promise<ScheduleExportData>
   exportAllKnowledgeData: () => Promise<KnowledgeExportData>
+  exportAllPasswordVaultData: () => Promise<PasswordVaultExportData>
   exportAllData: () => Promise<AllExportData>
   showExportSaveDialog: (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => Promise<{ filePath: string | null }>
   showExportOpenDirDialog: () => Promise<{ dirPath: string | null }>

@@ -17,6 +17,7 @@ interface TodoRow { id: string; title: string; description: string | null; date:
 interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
+interface PasswordRow { id: string; title: string; url: string | null; username: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -40,6 +41,10 @@ function mapTodo(r: TodoRow) {
 
 function mapPage(r: PageRow) {
   return { id: r.id, title: r.title, contentMd: r.content_md, contentHtml: r.content_html || '', categoryId: r.category_id, isStarred: !!r.is_starred, sortOrder: r.sort_order, fileType: (r as any).file_type || r.file_type || '', createdAt: r.created_at, updatedAt: r.updated_at }
+}
+
+function mapPassword(r: PasswordRow) {
+  return { id: r.id, title: r.title, url: r.url || '', username: r.username || '', password: r.password, notes: r.notes || '', sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {
@@ -101,6 +106,12 @@ export function registerExportHandlers(): void {
     }
   })
 
+  // ===== Password Vault =====
+  ipcMain.handle('export:getAllPasswordVaultData', () => {
+    const entries = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
+    return { entries: entries.map(mapPassword) }
+  })
+
   // ===== Combined: all three domains =====
   ipcMain.handle('export:getAllData', () => {
     // Blog
@@ -135,8 +146,11 @@ export function registerExportHandlers(): void {
       }
     }
 
+    // Password Vault
+    const pwdEntries = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
+
     return {
-      exportVersion: '1.0',
+      exportVersion: '1.1',
       exportedAt: new Date().toISOString(),
       blog: {
         entries: entries.map(e => ({ ...mapEntry(e), tags: blogTagMap.get(e.id) || [] })),
@@ -150,6 +164,9 @@ export function registerExportHandlers(): void {
         categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' })),
         pages: pages.map(p => ({ ...mapPage(p), tags: [] as TagRow[], backlinks: backlinkMap.get(p.id) || [] })),
         tags: knowledgeTags
+      },
+      passwordVault: {
+        entries: pwdEntries.map(mapPassword)
       }
     }
   })

@@ -92,6 +92,7 @@ export const duplicateKnowledgeCategory = (data: { categoryId: string; targetPar
 export const exportAllBlogData = () => a().exportAllBlogData()
 export const exportAllScheduleData = () => a().exportAllScheduleData()
 export const exportAllKnowledgeData = () => a().exportAllKnowledgeData()
+export const exportAllPasswordVaultData = () => a().exportAllPasswordVaultData()
 export const exportAllData = () => a().exportAllData()
 
 export const showExportSaveDialog = (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => a().showExportSaveDialog(opts)
