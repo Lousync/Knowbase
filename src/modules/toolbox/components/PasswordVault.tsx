@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { ArrowLeft, Search, Eye, EyeOff, Copy, Plus, Trash2, ExternalLink, X, Check } from 'lucide-react'
+import { ArrowLeft, Search, Eye, EyeOff, Copy, Plus, Trash2, ExternalLink, X, Check, Shield, Globe, User, Key, FileText } from 'lucide-react'
 import type { PasswordEntry } from '../../../types'
 import { getPasswordEntries, createPasswordEntry, updatePasswordEntry, deletePasswordEntry, openExternal } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
@@ -93,7 +93,6 @@ export function PasswordVault({ onBack }: Props) {
         url: urlRef.current,
         notes: notesRef.current,
       })
-      // Update local state
       setEntries(prev => prev.map(e => e.id === id
         ? { ...e, title: titleRef.current, username: usernameRef.current, password: passwordRef.current, url: urlRef.current, notes: notesRef.current, updatedAt: new Date().toISOString() }
         : e
@@ -109,7 +108,6 @@ export function PasswordVault({ onBack }: Props) {
 
   // Select entry
   const handleSelect = useCallback((entry: PasswordEntry) => {
-    // Flush pending save for previous selection
     if (saveTimer.current) { clearTimeout(saveTimer.current); doSave() }
     setSelectedId(entry.id)
     setTitle(entry.title)
@@ -144,7 +142,6 @@ export function PasswordVault({ onBack }: Props) {
       if (type === 'user') { setCopiedUser(true); setTimeout(() => setCopiedUser(false), 2000) }
       else {
         setCopiedPass(true); setTimeout(() => setCopiedPass(false), 2000)
-        // Clear clipboard after 30s for security
         if (clipboardTimer.current) clearTimeout(clipboardTimer.current)
         clipboardTimer.current = setTimeout(() => navigator.clipboard.writeText('').catch(() => {}), 30000)
       }
@@ -176,23 +173,230 @@ export function PasswordVault({ onBack }: Props) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => { if (saveTimer.current) { clearTimeout(saveTimer.current); doSave() }; onBack() }}
-            className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
+            className="flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
           >
-            <ArrowLeft size={15} /> 返回
+            <ArrowLeft size={16} /> 返回
           </button>
-          <h2 className="text-[15px] font-medium text-[var(--text-primary)]">🔑 密码本</h2>
+          <div className="w-px h-4 bg-[var(--border-color)]" />
+          <Shield size={17} className="text-[var(--accent)]" />
+          <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">密码本</h2>
+          <span className="text-[11px] text-[var(--text-muted)]">{entries.length} 条</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setShowNewForm(true); setNewTitle(''); setNewUsername(''); setNewPassword(''); setNewUrl(''); setNewNotes('') }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            <Plus size={14} /> 新建条目
-          </button>
+        <button
+          onClick={() => { setShowNewForm(true); setNewTitle(''); setNewUsername(''); setNewPassword(''); setNewUrl(''); setNewNotes('') }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
+        >
+          <Plus size={14} /> 新建
+        </button>
+      </div>
+
+      {/* Content: search + list | detail */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left panel: search + list */}
+        <div className="w-[240px] min-w-[200px] border-r border-[var(--border-color)] bg-[var(--bg-secondary)] flex flex-col">
+          {/* Search bar — integrated into list panel */}
+          <div className="px-3 py-2 shrink-0">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="搜索..."
+                className="w-full pl-7 pr-7 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+            {searchQuery && (
+              <p className="text-[10px] text-[var(--text-muted)] mt-1 px-1">{filtered.length} / {entries.length} 条</p>
+            )}
+          </div>
+
+          {/* Entry list */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-10 text-[12px] text-[var(--text-muted)]">加载中...</div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 px-4">
+                <Shield size={28} className="text-[var(--text-disabled)] mb-3 opacity-30" />
+                <p className="text-[12px] text-[var(--text-muted)] text-center">
+                  {entries.length === 0 ? '暂无密码条目' : '无匹配结果'}
+                </p>
+                {entries.length === 0 && (
+                  <button onClick={() => setShowNewForm(true)} className="mt-3 text-[12px] text-[var(--accent)] hover:underline">添加第一条</button>
+                )}
+              </div>
+            ) : (
+              <div className="py-1">
+                {filtered.map(e => (
+                  <div
+                    key={e.id}
+                    onClick={() => handleSelect(e)}
+                    onContextMenu={e_ => { e_.preventDefault(); setDeleteTarget(e.id) }}
+                    className={`px-3 py-2 cursor-pointer transition-colors border-l-[3px] ${
+                      selectedId === e.id
+                        ? 'bg-[var(--bg-selected)] border-l-[var(--accent)]'
+                        : 'border-l-transparent hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <div className="text-[12px] text-[var(--text-primary)] font-medium truncate">{e.title || '未命名'}</div>
+                    <div className="text-[10px] text-[var(--text-muted)] truncate mt-0.5">
+                      {e.username ? `👤 ${e.username}` : '无用户名'}
+                    </div>
+                    <div className="text-[9px] text-[var(--text-disabled)] font-mono tracking-wider mt-0.5">••••••••</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: detail panel */}
+        <div className="flex-1 overflow-y-auto bg-[var(--bg-primary)]">
+          {selected ? (
+            <div className="px-8 py-6 space-y-5">
+              {/* Save indicator */}
+              <div className="flex items-center justify-end gap-1.5 text-[11px]">
+                <span className={`w-2 h-2 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
+                <span className="text-[var(--text-muted)]">{saving ? '未保存' : '已保存'}</span>
+              </div>
+
+              {/* Title */}
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+                  <Globe size={12} /> 名称
+                </label>
+                <input
+                  value={title}
+                  onChange={e => { setTitle(e.target.value); scheduleSave() }}
+                  placeholder="网站 / 应用名称"
+                  className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[15px] text-[var(--text-primary)] font-semibold outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                />
+              </div>
+
+              {/* Username + Password side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+                    <User size={12} /> 用户名
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      value={username}
+                      onChange={e => { setUsername(e.target.value); scheduleSave() }}
+                      placeholder="用户名 / 邮箱"
+                      className="flex-1 px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                    />
+                    <button
+                      onClick={() => username && handleCopyText(username, 'user')}
+                      disabled={!username}
+                      className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      title="复制用户名"
+                    >
+                      {copiedUser ? <Check size={15} /> : <Copy size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+                    <Key size={12} /> 密码
+                  </label>
+                  <div className="flex gap-1.5">
+                    <div className="flex-1 flex items-center bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md overflow-hidden">
+                      <input
+                        value={showPassword ? password : (password ? '••••••••' : '')}
+                        onChange={e => { setPassword(e.target.value); scheduleSave() }}
+                        readOnly={!showPassword}
+                        onClick={() => { if (!showPassword) { setShowPassword(true); requestAnimationFrame(() => { const inp = document.activeElement as HTMLInputElement; if (inp) { inp.focus(); inp.select() } }) } }}
+                        className={`flex-1 px-3 py-2 bg-transparent text-[13px] text-[var(--text-primary)] outline-none font-mono ${!showPassword ? 'cursor-pointer select-none' : ''}`}
+                        placeholder="密码"
+                      />
+                      <button
+                        onClick={() => setShowPassword(v => !v)}
+                        className="shrink-0 px-2 py-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                        title={showPassword ? '隐藏' : '显示'}
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => password && handleCopyText(password, 'pass')}
+                      disabled={!password}
+                      className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      title="复制密码"
+                    >
+                      {copiedPass ? <Check size={15} /> : <Copy size={15} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* URL */}
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+                  <ExternalLink size={12} /> 网址
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    value={url}
+                    onChange={e => { setUrl(e.target.value); scheduleSave() }}
+                    placeholder="example.com"
+                    className="flex-1 px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                  />
+                  <button
+                    onClick={() => handleOpenUrl(url)}
+                    disabled={!url}
+                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                    title="打开网址"
+                  >
+                    <ExternalLink size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+                  <FileText size={12} /> 备注
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={e => { setNotes(e.target.value); scheduleSave() }}
+                  placeholder="备注信息..."
+                  rows={4}
+                  className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)] resize-none"
+                />
+              </div>
+
+              {/* Meta + Delete */}
+              <div className="pt-4 border-t border-[var(--border-color)]">
+                <div className="text-[10px] text-[var(--text-muted)] space-y-0.5 mb-3">
+                  <p>创建：{selected.createdAt ? fmtDate(new Date(selected.createdAt)) : '—'}</p>
+                  <p>修改：{selected.updatedAt ? fmtDate(new Date(selected.updatedAt)) : '—'}</p>
+                </div>
+                <button
+                  onClick={() => setDeleteTarget(selected.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
+                >
+                  <Trash2 size={14} /> 删除此条目
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] gap-2">
+              <Shield size={40} className="opacity-15 mb-2" />
+              <p className="text-[13px]">选择一个条目查看详情</p>
+              <p className="text-[11px] text-[var(--text-disabled)]">或点击右上角「新建」添加密码</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -205,64 +409,64 @@ export function PasswordVault({ onBack }: Props) {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
-              <span className="text-[13px] font-medium text-[var(--text-primary)]">新建密码条目</span>
-              <button onClick={() => setShowNewForm(false)} className="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              <span className="text-[13px] font-semibold text-[var(--text-primary)]">新建密码条目</span>
+              <button onClick={() => setShowNewForm(false)} className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
                 <X size={16} />
               </button>
             </div>
             <div className="p-4 space-y-3">
               <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">名称 *</label>
+                <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">名称 <span className="text-[var(--danger)]">*</span></label>
                 <input
                   autoFocus
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setShowNewForm(false) }}
-                  placeholder="网站/应用名称"
-                  className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                  placeholder="网站 / 应用名称"
+                  className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] text-[var(--text-secondary)] block mb-1">用户名</label>
+                  <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">用户名</label>
                   <input
                     value={newUsername}
                     onChange={e => setNewUsername(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                    placeholder="用户名/邮箱"
-                    className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                    placeholder="用户名 / 邮箱"
+                    className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-[var(--text-secondary)] block mb-1">密码</label>
+                  <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">密码</label>
                   <input
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
                     placeholder="密码"
-                    className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                    className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">网址</label>
+                <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">网址</label>
                 <input
                   value={newUrl}
                   onChange={e => setNewUrl(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
                   placeholder="example.com"
-                  className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                  className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">备注</label>
+                <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">备注</label>
                 <textarea
                   value={newNotes}
                   onChange={e => setNewNotes(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Escape') setShowNewForm(false) }}
                   placeholder="备注信息..."
                   rows={2}
-                  className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)] resize-none"
+                  className="w-full px-3 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)] resize-none"
                 />
               </div>
             </div>
@@ -282,205 +486,27 @@ export function PasswordVault({ onBack }: Props) {
             style={{ width: '360px' }}
             onClick={e => e.stopPropagation()}
           >
-            <p className="text-[13px] text-[var(--text-primary)] mb-4">确定要删除此密码条目吗？此操作不可撤销。</p>
+            <p className="text-[13px] text-[var(--text-primary)] mb-1 font-medium">确认删除</p>
+            <p className="text-[11px] text-[var(--text-muted)] mb-4">此操作不可撤销，确定要删除此密码条目吗？</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteTarget(null)} className="px-4 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)]">取消</button>
-              <button onClick={() => handleDelete(deleteTarget)} className="px-4 py-1.5 text-[12px] bg-[var(--danger)] text-white rounded hover:bg-[#c62828]">删除</button>
+              <button onClick={() => setDeleteTarget(null)} className="px-4 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)] transition-colors">取消</button>
+              <button onClick={() => handleDelete(deleteTarget)} className="px-4 py-1.5 text-[12px] bg-[var(--danger)] text-white rounded hover:bg-[#c62828] transition-colors">删除</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Search bar */}
-      <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0">
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜索条目名称 / 用户名 / URL..."
-            className="w-full pl-8 pr-16 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
-          />
-          {searchQuery && (
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              <span className="text-[10px] text-[var(--text-muted)]">{filtered.length} 条</span>
-              <button onClick={() => setSearchQuery('')} className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-                <X size={12} />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Entry list */}
-        <div className="w-1/4 min-w-[200px] border-r border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-8 text-[12px] text-[var(--text-muted)]">加载中...</div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-[12px] text-[var(--text-muted)]">
-              <p>{entries.length === 0 ? '暂无密码条目' : '无匹配结果'}</p>
-              {entries.length === 0 && (
-                <button onClick={() => setShowNewForm(true)} className="mt-2 text-[var(--accent)] hover:underline">添加第一条</button>
-              )}
-            </div>
-          ) : (
-            filtered.map(e => (
-              <div
-                key={e.id}
-                onClick={() => handleSelect(e)}
-                onContextMenu={e_ => { e_.preventDefault(); setDeleteTarget(e.id) }}
-                className={`px-3 py-2 cursor-pointer border-b border-[var(--border-color)] transition-colors ${
-                  selectedId === e.id
-                    ? 'bg-[var(--bg-selected)] border-l-[3px] border-l-[var(--accent)]'
-                    : 'border-l-[3px] border-l-transparent hover:bg-[var(--bg-hover)]'
-                }`}
-              >
-                <div className="text-[13px] text-[var(--text-primary)] font-medium truncate">{e.title || '未命名'}</div>
-                <div className="text-[11px] text-[var(--text-muted)] truncate">{e.username || '无用户名'}</div>
-                <div className="text-[10px] text-[var(--text-disabled)] font-mono">••••••••</div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Detail panel */}
-        <div className="flex-1 overflow-y-auto">
-          {selected ? (
-            <div className="max-w-lg px-6 py-5 space-y-4">
-              {/* Save indicator */}
-              <div className="flex items-center justify-end">
-                <span className={`w-2 h-2 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
-                <span className="text-[11px] text-[var(--text-muted)] ml-1.5">{saving ? '未保存' : '已保存'}</span>
-              </div>
-
-              {/* Title */}
-              <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">名称</label>
-                <input
-                  value={title}
-                  onChange={e => { setTitle(e.target.value); scheduleSave() }}
-                  className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[14px] text-[var(--text-primary)] font-medium outline-none focus:border-[var(--accent)]"
-                />
-              </div>
-
-              {/* Username + copy */}
-              <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">用户名</label>
-                <div className="flex gap-2">
-                  <input
-                    value={username}
-                    onChange={e => { setUsername(e.target.value); scheduleSave() }}
-                    className="flex-1 px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
-                  />
-                  <button
-                    onClick={() => username && handleCopyText(username, 'user')}
-                    disabled={!username}
-                    className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    title="复制用户名"
-                  >
-                    {copiedUser ? <Check size={15} className="text-green-500" /> : <Copy size={15} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Password + reveal + copy */}
-              <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">密码</label>
-                <div className="flex gap-2">
-                  <div className="flex-1 flex items-center bg-[var(--input-bg)] border border-[var(--border-color)] rounded">
-                    <input
-                      value={showPassword ? password : (password ? '••••••••' : '')}
-                      onChange={e => { setPassword(e.target.value); scheduleSave() }}
-                      type={showPassword ? 'text' : 'text'}
-                      readOnly={!showPassword}
-                      onClick={() => {
-                        if (!showPassword) {
-                          setShowPassword(true)
-                          // Re-focus to allow editing after reveal
-                          setTimeout(() => {
-                            const inp = document.activeElement as HTMLInputElement
-                            if (inp) { inp.focus(); inp.select() }
-                          }, 0)
-                        }
-                      }}
-                      className={`flex-1 px-3 py-1.5 bg-transparent text-[13px] text-[var(--text-primary)] outline-none font-mono ${!showPassword ? 'cursor-pointer select-none' : ''}`}
-                    />
-                    <button
-                      onClick={() => setShowPassword(v => !v)}
-                      className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                      title={showPassword ? '隐藏密码' : '显示密码'}
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => password && handleCopyText(password, 'pass')}
-                    disabled={!password}
-                    className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    title="复制密码"
-                  >
-                    {copiedPass ? <Check size={15} className="text-green-500" /> : <Copy size={15} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* URL */}
-              <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">网址</label>
-                <div className="flex gap-2">
-                  <input
-                    value={url}
-                    onChange={e => { setUrl(e.target.value); scheduleSave() }}
-                    className="flex-1 px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
-                  />
-                  <button
-                    onClick={() => handleOpenUrl(url)}
-                    disabled={!url}
-                    className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    title="在浏览器中打开"
-                  >
-                    <ExternalLink size={15} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="text-[11px] text-[var(--text-secondary)] block mb-1">备注</label>
-                <textarea
-                  value={notes}
-                  onChange={e => { setNotes(e.target.value); scheduleSave() }}
-                  rows={3}
-                  className="w-full px-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] resize-none"
-                />
-              </div>
-
-              {/* Meta */}
-              <div className="text-[10px] text-[var(--text-disabled)] space-y-0.5 pt-2 border-t border-[var(--border-color)]">
-                <p>创建于：{selected.createdAt ? new Date(selected.createdAt).toLocaleString('zh-CN') : '—'}</p>
-                <p>更新于：{selected.updatedAt ? new Date(selected.updatedAt).toLocaleString('zh-CN') : '—'}</p>
-              </div>
-
-              {/* Delete */}
-              <div className="pt-3 border-t border-[var(--border-color)]">
-                <button
-                  onClick={() => setDeleteTarget(selected.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
-                >
-                  <Trash2 size={14} /> 删除此条目
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-              <p className="text-[13px]">选择一个条目查看详情</p>
-              <p className="text-[11px] mt-1 text-[var(--text-disabled)]">或点击右上角新建条目</p>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   )
+}
+
+function fmtDate(d: Date): string {
+  const now = Date.now()
+  const diff = now - d.getTime()
+  if (diff < 60000) return '刚刚'
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`
+  const today = new Date()
+  if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
