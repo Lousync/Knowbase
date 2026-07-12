@@ -380,6 +380,23 @@ export function runMigrations(): void {
     db.run("UPDATE knowledge_pages SET file_type = LOWER(file_type) WHERE file_type != LOWER(file_type)")
     db.run("INSERT INTO _migrations (name) VALUES ('019_normalize_file_type')")
   }
+
+  if (!applied.has('020_password_vault')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS toolbox_passwords (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL DEFAULT '',
+        url         TEXT DEFAULT '',
+        username    TEXT DEFAULT '',
+        password    TEXT NOT NULL DEFAULT '',
+        notes       TEXT DEFAULT '',
+        sort_order  INTEGER DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('020_password_vault')")
+  }
 }
 
 /**

@@ -132,6 +132,13 @@ const api = {
   deleteToolboxScript: (id: string) => ipcRenderer.invoke('toolbox:deleteScript', id),
   reorderToolboxScripts: (ids: string[]) => ipcRenderer.invoke('toolbox:reorderScripts', ids),
 
+  // password vault
+  getPasswordEntries: () => ipcRenderer.invoke('passwordVault:getAll'),
+  getPasswordEntryById: (id: string) => ipcRenderer.invoke('passwordVault:getById', id),
+  createPasswordEntry: (data: unknown) => ipcRenderer.invoke('passwordVault:create', data),
+  updatePasswordEntry: (id: string, data: unknown) => ipcRenderer.invoke('passwordVault:update', id, data),
+  deletePasswordEntry: (id: string) => ipcRenderer.invoke('passwordVault:delete', id),
+
   // ai
   aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),
 }

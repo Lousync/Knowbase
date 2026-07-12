@@ -153,5 +153,12 @@ export const updateToolboxScript = (id: string, d: { name?: string; description?
 export const deleteToolboxScript = (id: string) => a().deleteToolboxScript(id)
 export const reorderToolboxScripts = (ids: string[]) => a().reorderToolboxScripts(ids)
 
+// ===== Password Vault =====
+export const getPasswordEntries = () => a().getPasswordEntries()
+export const getPasswordEntryById = (id: string) => a().getPasswordEntryById(id)
+export const createPasswordEntry = (d: { title?: string; url?: string; username?: string; password?: string; notes?: string }) => a().createPasswordEntry(d)
+export const updatePasswordEntry = (id: string, d: { title?: string; url?: string; username?: string; password?: string; notes?: string; sortOrder?: number }) => a().updatePasswordEntry(id, d)
+export const deletePasswordEntry = (id: string) => a().deletePasswordEntry(id)
+
 // ===== AI =====
 export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

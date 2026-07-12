@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Key, Braces, Code, Calculator, Clock, Timer, Bot } from 'lucide-react'
+import { Key, Braces, Code, Calculator, Clock, Timer, Bot, Shield } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
+import { PasswordVault } from './components/PasswordVault'
 import { AIChatPanel } from './components/AIChatPanel'
 
 // ---- Tool registry ----
@@ -13,6 +14,13 @@ interface ToolDefinition {
 }
 
 const DATA_TOOLS: ToolDefinition[] = [
+  {
+    id: 'password-vault',
+    name: '密码本',
+    desc: '安全存储、快速搜索、一键复制密码',
+    icon: <Shield size={17} strokeWidth={1.5} />,
+    available: true,
+  },
   {
     id: 'password-generator',
     name: '强密码生成器',
@@ -83,6 +91,8 @@ export function ToolboxModule() {
 
   const renderTool = () => {
     switch (activeTool) {
+      case 'password-vault':
+        return <PasswordVault onBack={() => setActiveTool(null)} />
       case 'password-generator':
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
       case 'ai-chat':

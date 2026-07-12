@@ -11,6 +11,7 @@ import { registerRecycleBinHandlers } from '../database/repositories/recycleBinR
 import { registerImportHandlers } from '../database/repositories/importRepo'
 import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
+import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
 import { registerAIHandlers } from '../ai/aiHandler'
 
 // ===== Settings memory cache =====
@@ -178,6 +179,7 @@ app.whenReady().then(async () => {
   registerImportHandlers()
   registerUserHandlers()
   registerToolboxHandlers()
+  registerPasswordHandlers()
   registerAIHandlers()
 
   createWindow()

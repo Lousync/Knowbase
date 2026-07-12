@@ -25,6 +25,14 @@ export interface ToolboxScript {
 export interface CreateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string }
 export interface UpdateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string; sortOrder?: number }
 
+// password vault
+export interface PasswordEntry {
+  id: string; title: string; url: string; username: string; password: string; notes: string
+  sortOrder: number; createdAt: string; updatedAt: string
+}
+export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; password?: string; notes?: string }
+export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; password?: string; notes?: string; sortOrder?: number }
+
 // user
 export interface UserProfile {
   username: string
@@ -245,6 +253,12 @@ export interface ElectronAPI {
   updateToolboxScript: (id: string, d: UpdateToolboxScriptDTO) => Promise<ToolboxScript>
   deleteToolboxScript: (id: string) => Promise<void>
   reorderToolboxScripts: (ids: string[]) => Promise<void>
+  // password vault
+  getPasswordEntries: () => Promise<PasswordEntry[]>
+  getPasswordEntryById: (id: string) => Promise<PasswordEntry | null>
+  createPasswordEntry: (d: CreatePasswordEntryDTO) => Promise<PasswordEntry>
+  updatePasswordEntry: (id: string, d: UpdatePasswordEntryDTO) => Promise<PasswordEntry>
+  deletePasswordEntry: (id: string) => Promise<void>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
 }
