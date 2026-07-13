@@ -155,6 +155,11 @@ const api = {
     ipcRenderer.on('fillPopup:refresh', handler)
     return () => ipcRenderer.removeListener('fillPopup:refresh', handler)
   },
+  onFillPopupFeedback: (cb: (state: string) => void) => {
+    const handler = (_e: unknown, state: string) => cb(state)
+    ipcRenderer.on('fillPopup:feedback', handler)
+    return () => ipcRenderer.removeListener('fillPopup:feedback', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

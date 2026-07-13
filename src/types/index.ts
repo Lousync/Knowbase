@@ -270,6 +270,7 @@ export interface ElectronAPI {
   fillPopupFill: (data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) => Promise<void>
   fillPopupHide: () => Promise<void>
   onFillPopupRefresh: (cb: () => void) => () => void
+  onFillPopupFeedback: (cb: (state: string) => void) => () => void
 }
 
 declare global { interface Window { api: ElectronAPI } }

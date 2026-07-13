@@ -6,6 +6,19 @@ import { getDatabase } from '../database/connection'
 
 let fillWindow: BrowserWindow | null = null
 
+// --------------- helpers ---------------
+
+function getSettingsValue(key: string, fallback: string): string {
+  try {
+    const sp = join(app.getPath('userData'), 'settings.json')
+    if (existsSync(sp)) {
+      const s = JSON.parse(readFileSync(sp, 'utf-8'))
+      if (s[key] !== undefined) return String(s[key])
+    }
+  } catch { /* */ }
+  return fallback
+}
+
 function getPasswordEntries(): unknown[] {
   const db = getDatabase()
   const stmt = db.prepare('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
@@ -19,71 +32,77 @@ function getPasswordEntries(): unknown[] {
   }))
 }
 
-// --------------- auto-fill via clipboard + hidden PowerShell ---------------
+// --------------- auto-fill: Electron clipboard + PowerShell SendKeys ---------------
 
-function runSendKeys(keys: string): Promise<void> {
+function sendKeys(keys: string): Promise<void> {
   return new Promise((resolve) => {
     const child = spawn('powershell', [
       '-WindowStyle', 'Hidden',
       '-NoProfile',
       '-Command',
-      `Start-Sleep -Milliseconds 500; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${keys}')`
-    ], {
-      windowsHide: true,
-      stdio: 'ignore',
-    })
+      `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${keys}')`
+    ], { windowsHide: true, stdio: 'ignore' })
     child.on('close', resolve)
     child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
   })
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 async function doFill(data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) {
   const saved = clipboard.readText()
+  const account = (data.mode === 'all' && (data.account || data.username))
+    ? (data.account || data.username || '')
+    : ''
 
-  // Hide the popup first so focus returns to target app
-  if (fillWindow) {
+  if (fillWindow && !fillWindow.isDestroyed()) {
+    fillWindow.webContents.send('fillPopup:feedback', 'filling')
+  }
+  await new Promise(r => setTimeout(r, 200))
+
+  if (fillWindow && !fillWindow.isDestroyed()) {
     fillWindow.minimize()
-    fillWindow.setFocusable(false) // prevent stealing focus back
+    fillWindow.setFocusable(false)
     fillWindow.hide()
   }
 
-  // Wait for focus to settle on target application
-  await sleep(500)
+  // Wait for target app to get focus
+  await new Promise(r => setTimeout(r, 350))
 
-  if (data.mode === 'all' && (data.account || data.username)) {
-    const text = data.account || data.username || ''
-    clipboard.writeText(text)
-    await runSendKeys('^v')
-    await sleep(150)
+  if (account) {
+    // Step 1: paste account into clipboard, simulate Ctrl+V
+    clipboard.writeText(account)
+    await sendKeys('^v')
+    await new Promise(r => setTimeout(r, 120))
+
+    // Step 2: switch clipboard to password, simulate Tab → Ctrl+V
     clipboard.writeText(data.password)
-    await runSendKeys('{TAB}')
-    await sleep(100)
-    await runSendKeys('^v')
+    await sendKeys('{TAB}')
+    await new Promise(r => setTimeout(r, 80))
+    await sendKeys('^v')
   } else {
     clipboard.writeText(data.password)
-    await runSendKeys('^v')
+    await sendKeys('^v')
   }
 
-  // Restore clipboard
+  // Restore clipboard after a delay
+  await new Promise(r => setTimeout(r, 500))
   const current = clipboard.readText()
-  if (current === data.password || current === (data.account || data.username || '')) {
-    await sleep(600)
+  if (current === data.password || current === account) {
     clipboard.writeText(saved)
   }
 
-  // Re-enable focusability for next time
-  if (fillWindow) {
+  if (fillWindow && !fillWindow.isDestroyed()) {
     fillWindow.setFocusable(true)
+    fillWindow.webContents.send('fillPopup:feedback', 'done')
   }
 }
 
 // --------------- floating window ---------------
 
 function createFillWindow(): BrowserWindow {
+  // Read theme from settings to match app appearance
+  const theme = getSettingsValue('theme', 'dark')
+  const bgColor = theme === 'light' ? '#ffffff' : '#1e1e1e'
+
   const win = new BrowserWindow({
     width: 340,
     height: 420,
@@ -95,7 +114,7 @@ function createFillWindow(): BrowserWindow {
     maximizable: false,
     minimizable: false,
     transparent: false,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: bgColor,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -109,7 +128,6 @@ function createFillWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/fill-popup' })
   }
 
-  // Hide on blur (user clicked outside)
   win.on('blur', () => {
     if (win && !win.isDestroyed()) win.hide()
   })
@@ -151,12 +169,9 @@ export function initPasswordFiller() {
 
   let shortcutKey = 'Ctrl+Alt+P'
   try {
-    const sp = join(app.getPath('userData'), 'settings.json')
-    if (existsSync(sp)) {
-      const s = JSON.parse(readFileSync(sp, 'utf-8'))
-      if (s.fillPopupShortcut) shortcutKey = s.fillPopupShortcut
-    }
-  } catch { /* use default */ }
+    const s = JSON.parse(readFileSync(join(app.getPath('userData'), 'settings.json'), 'utf-8'))
+    if (s.fillPopupShortcut) shortcutKey = s.fillPopupShortcut
+  } catch { /* */ }
 
   try {
     globalShortcut.register(shortcutKey, () => {

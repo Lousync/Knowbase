@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Search, X, Shield, User, Key, AtSign, ArrowRight } from 'lucide-react'
+import { Search, X, Shield, User, Key, AtSign, ArrowRight, Check, Loader2 } from 'lucide-react'
 import type { PasswordEntry } from '../../../types'
+
+type Feedback = 'idle' | 'filling' | 'done'
 
 export function FillPopup() {
   const [entries, setEntries] = useState<PasswordEntry[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [feedback, setFeedback] = useState<Feedback>('idle')
   const searchRef = useRef<HTMLInputElement>(null)
 
   const loadEntries = useCallback(() => {
@@ -18,12 +21,27 @@ export function FillPopup() {
   }, [])
 
   useEffect(() => {
-    const unsub = window.api.onFillPopupRefresh(() => loadEntries())
+    const unsub = window.api.onFillPopupRefresh(() => {
+      setFeedback('idle')
+      setSelectedId(null)
+      setSearchQuery('')
+      loadEntries()
+    })
     loadEntries()
     return unsub
   }, [loadEntries])
 
-  // Auto-focus search on mount
+  useEffect(() => {
+    const unsub = window.api.onFillPopupFeedback((state: string) => {
+      if (state === 'filling') setFeedback('filling')
+      if (state === 'done') {
+        setFeedback('done')
+        setTimeout(() => window.api.fillPopupHide(), 800)
+      }
+    })
+    return unsub
+  }, [])
+
   useEffect(() => {
     setTimeout(() => searchRef.current?.focus(), 50)
   }, [])
@@ -53,6 +71,7 @@ export function FillPopup() {
       password: selected.password,
       mode,
     })
+    setFeedback('filling')
   }, [selected])
 
   const handleHide = useCallback(() => {
@@ -85,9 +104,27 @@ export function FillPopup() {
     }
   }, [searchQuery, selected, filtered, selectedId, handleHide, handleFill])
 
+  if (feedback === 'filling') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-primary)] gap-3">
+        <Loader2 size={24} className="animate-spin text-[var(--accent)]" />
+        <p className="text-[12px] text-[var(--text-muted)]">正在填充...</p>
+      </div>
+    )
+  }
+
+  if (feedback === 'done') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-primary)] gap-2">
+        <Check size={28} className="text-green-500" />
+        <p className="text-[12px] text-[var(--text-primary)] font-medium">已填充</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden" onKeyDown={handleKeyDown} tabIndex={-1}>
-      {/* Title bar - drag region */}
+      {/* Title bar — drag region */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="flex items-center gap-2">
           <Shield size={14} className="text-[var(--accent)]" />
@@ -110,7 +147,7 @@ export function FillPopup() {
             ref={searchRef}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜索密码条目..."
+            placeholder="搜索..."
             className="w-full pl-7 pr-3 py-1.5 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           />
@@ -163,7 +200,7 @@ export function FillPopup() {
       </div>
 
       {/* Action buttons */}
-      {selected && (
+      {selected && feedback === 'idle' && (
         <div className="flex items-center gap-2 px-3 py-2 border-t border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <div className="flex-1 text-[10px] text-[var(--text-muted)] truncate">
             {selected.title || '未命名'}
