@@ -141,7 +141,7 @@ export function initPasswordFiller() {
   // Global shortcut
 
   // Load custom shortcut from settings or use default
-  let shortcutKey = 'Ctrl+Shift+P'
+  let shortcutKey = 'Ctrl+Alt+P'
   try {
     const sp = join(app.getPath('userData'), 'settings.json')
     if (existsSync(sp)) {
