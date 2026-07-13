@@ -1,11 +1,9 @@
 import { BrowserWindow, globalShortcut, screen, clipboard, app, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
-import { spawn } from 'child_process'
 import { getDatabase } from '../database/connection'
 
 let fillWindow: BrowserWindow | null = null
-let fillInProgress = false // guard against blur during programmatic hide
 
 function getSettingsJSON(): Record<string, unknown> {
   try {
@@ -13,63 +11,6 @@ function getSettingsJSON(): Record<string, unknown> {
     if (existsSync(sp)) return JSON.parse(readFileSync(sp, 'utf-8'))
   } catch { /* */ }
   return {}
-}
-
-// --------------- auto-fill ---------------
-
-function spawnPS(script: string): Promise<void> {
-  return new Promise((resolve) => {
-    const child = spawn('powershell', [
-      '-WindowStyle', 'Hidden', '-NoProfile', '-Command', script
-    ], { windowsHide: true, stdio: 'ignore' })
-    child.on('close', resolve)
-    child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
-  })
-}
-
-async function doFill(data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) {
-  const saved = clipboard.readText()
-  const account = (data.mode === 'all' && (data.account || data.username))
-    ? (data.account || data.username || '')
-    : ''
-
-  // Hide window immediately so focus returns to target app
-  fillInProgress = true
-  if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
-
-  if (account) {
-    // Pre-write account to clipboard, spawn PS that sleeps then types
-    clipboard.writeText(account)
-    const p1 = spawnPS(
-      'Start-Sleep -Milliseconds 250;' +
-      'Add-Type -AssemblyName System.Windows.Forms;' +
-      "[System.Windows.Forms.SendKeys]::SendWait('^v');" +
-      'Start-Sleep -Milliseconds 60;' +
-      "[System.Windows.Forms.SendKeys]::SendWait('{TAB}')"
-    )
-    // While PS is sleeping, immediately swap clipboard to password
-    await new Promise(r => setTimeout(r, 50))
-    clipboard.writeText(data.password)
-    await p1
-    // Type password
-    await spawnPS(
-      'Add-Type -AssemblyName System.Windows.Forms;' +
-      "[System.Windows.Forms.SendKeys]::SendWait('^v')"
-    )
-  } else {
-    clipboard.writeText(data.password)
-    await spawnPS(
-      'Start-Sleep -Milliseconds 250;' +
-      'Add-Type -AssemblyName System.Windows.Forms;' +
-      "[System.Windows.Forms.SendKeys]::SendWait('^v')"
-    )
-  }
-
-  // Restore clipboard
-  await new Promise(r => setTimeout(r, 500))
-  const current = clipboard.readText()
-  if (current === data.password || current === account) clipboard.writeText(saved)
-  fillInProgress = false
 }
 
 // --------------- floating window ---------------
@@ -90,16 +31,14 @@ function createFillWindow(): BrowserWindow {
     },
   })
 
+  // Never steal focus — user stays in their target app
+  win.setAlwaysOnTop(true, 'floating')
+
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/fill-popup`)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
-
-  // Blur = user clicked outside → hide (unless fill is in progress)
-  win.on('blur', () => {
-    if (!fillInProgress && win && !win.isDestroyed()) win.hide()
-  })
 
   return win
 }
@@ -117,8 +56,7 @@ function showFillPopup() {
   if (y + 420 > height) y = cursor.y - 430
 
   fillWindow.setPosition(x, y)
-  fillWindow.show()
-  fillWindow.focus()
+  fillWindow.showInactive() // show but don't steal focus
   fillWindow.webContents.send('fillPopup:refresh')
 }
 
@@ -138,7 +76,12 @@ export function initPasswordFiller() {
     }))
   })
 
-  ipcMain.handle('fillPopup:fill', async (_e, data: any) => { await doFill(data) })
+  // Copy to clipboard
+  ipcMain.handle('fillPopup:copy', (_e, field: string, value: string) => {
+    clipboard.writeText(value)
+    console.log(`[PasswordFiller] copied ${field}`)
+  })
+
   ipcMain.handle('fillPopup:hide', () => {
     if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
   })

@@ -152,17 +152,12 @@ const api = {
   isFillPopup,
   fillPopupTheme: fillTheme,
   fillPopupGetEntries: () => ipcRenderer.invoke('fillPopup:getEntries'),
-  fillPopupFill: (data: unknown) => ipcRenderer.invoke('fillPopup:fill', data),
+  fillPopupCopy: (field: string, value: string) => ipcRenderer.invoke('fillPopup:copy', field, value),
   fillPopupHide: () => ipcRenderer.invoke('fillPopup:hide'),
   onFillPopupRefresh: (cb: () => void) => {
     const handler = () => cb()
     ipcRenderer.on('fillPopup:refresh', handler)
     return () => ipcRenderer.removeListener('fillPopup:refresh', handler)
-  },
-  onFillPopupFeedback: (cb: (state: string) => void) => {
-    const handler = (_e: unknown, state: string) => cb(state)
-    ipcRenderer.on('fillPopup:feedback', handler)
-    return () => ipcRenderer.removeListener('fillPopup:feedback', handler)
   },
 }
 

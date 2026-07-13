@@ -268,10 +268,9 @@ export interface ElectronAPI {
   isFillPopup: boolean
   fillPopupTheme: string
   fillPopupGetEntries: () => Promise<PasswordEntry[]>
-  fillPopupFill: (data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) => Promise<void>
+  fillPopupCopy: (field: string, value: string) => Promise<void>
   fillPopupHide: () => Promise<void>
   onFillPopupRefresh: (cb: () => void) => () => void
-  onFillPopupFeedback: (cb: (state: string) => void) => () => void
 }
 
 declare global { interface Window { api: ElectronAPI } }
