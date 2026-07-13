@@ -13,6 +13,7 @@ import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
 import { registerAIHandlers } from '../ai/aiHandler'
+import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
 // ===== Settings memory cache =====
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -184,6 +185,9 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  // Init password auto-fill popup (global shortcut)
+  initPasswordFiller()
+
   app.on('activate', () => {
     // macOS: 点击 dock 图标时重建窗口
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -203,6 +207,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  destroyPasswordFiller()
   // Flush pending settings writes
   if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
   closeDatabase()

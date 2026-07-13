@@ -264,6 +264,12 @@ export interface ElectronAPI {
   deletePasswordEntry: (id: string) => Promise<void>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
+  // fill popup
+  isFillPopup: boolean
+  fillPopupGetEntries: () => Promise<PasswordEntry[]>
+  fillPopupFill: (data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) => Promise<void>
+  fillPopupHide: () => Promise<void>
+  onFillPopupRefresh: (cb: () => void) => () => void
 }
 
 declare global { interface Window { api: ElectronAPI } }

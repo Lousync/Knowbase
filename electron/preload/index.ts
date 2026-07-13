@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+const isFillPopup = process.argv.includes('--fill-popup-window')
+
 const api = {
   minimize: () => ipcRenderer.invoke('window:minimize'),
   maximize: () => ipcRenderer.invoke('window:maximize'),
@@ -142,6 +144,17 @@ const api = {
 
   // ai
   aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),
+
+  // fill popup
+  isFillPopup,
+  fillPopupGetEntries: () => ipcRenderer.invoke('fillPopup:getEntries'),
+  fillPopupFill: (data: unknown) => ipcRenderer.invoke('fillPopup:fill', data),
+  fillPopupHide: () => ipcRenderer.invoke('fillPopup:hide'),
+  onFillPopupRefresh: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('fillPopup:refresh', handler)
+    return () => ipcRenderer.removeListener('fillPopup:refresh', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
