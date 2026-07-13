@@ -1,7 +1,7 @@
 import { BrowserWindow, globalShortcut, screen, clipboard, app, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
-import { exec } from 'child_process'
+import { spawn } from 'child_process'
 import { getDatabase } from '../database/connection'
 
 let fillWindow: BrowserWindow | null = null
@@ -19,14 +19,21 @@ function getPasswordEntries(): unknown[] {
   }))
 }
 
-// --------------- auto-fill via clipboard + PowerShell SendKeys ---------------
+// --------------- auto-fill via clipboard + hidden PowerShell ---------------
 
-function powershellSendKeys(keys: string): Promise<void> {
+function runSendKeys(keys: string): Promise<void> {
   return new Promise((resolve) => {
-    exec(
-      `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${keys}')"`,
-      (err: Error | null) => { if (err) console.error('[fillPopup] SendKeys error:', err.message); resolve() }
-    )
+    const child = spawn('powershell', [
+      '-WindowStyle', 'Hidden',
+      '-NoProfile',
+      '-Command',
+      `Start-Sleep -Milliseconds 500; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${keys}')`
+    ], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    child.on('close', resolve)
+    child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
   })
 }
 
@@ -38,31 +45,39 @@ async function doFill(data: { account?: string; username?: string; password: str
   const saved = clipboard.readText()
 
   // Hide the popup first so focus returns to target app
-  if (fillWindow) fillWindow.hide()
-
-  // Wait for focus transition
-  await sleep(200)
-
-  if (data.mode === 'all' && (data.account || data.username)) {
-    // Fill account/username
-    const text = data.account || data.username || ''
-    clipboard.writeText(text)
-    await powershellSendKeys('^v') // Ctrl+V
-    await sleep(80)
-    await powershellSendKeys('{TAB}') // Tab to password field
-    await sleep(80)
+  if (fillWindow) {
+    fillWindow.minimize()
+    fillWindow.setFocusable(false) // prevent stealing focus back
+    fillWindow.hide()
   }
 
-  // Fill password
-  clipboard.writeText(data.password)
-  await powershellSendKeys('^v')
-
-  // Restore clipboard after a delay
+  // Wait for focus to settle on target application
   await sleep(500)
-  // Only restore if clipboard still contains our password (user hasn't copied something else)
+
+  if (data.mode === 'all' && (data.account || data.username)) {
+    const text = data.account || data.username || ''
+    clipboard.writeText(text)
+    await runSendKeys('^v')
+    await sleep(150)
+    clipboard.writeText(data.password)
+    await runSendKeys('{TAB}')
+    await sleep(100)
+    await runSendKeys('^v')
+  } else {
+    clipboard.writeText(data.password)
+    await runSendKeys('^v')
+  }
+
+  // Restore clipboard
   const current = clipboard.readText()
-  if (current === data.password) {
+  if (current === data.password || current === (data.account || data.username || '')) {
+    await sleep(600)
     clipboard.writeText(saved)
+  }
+
+  // Re-enable focusability for next time
+  if (fillWindow) {
+    fillWindow.setFocusable(true)
   }
 }
 
@@ -110,7 +125,6 @@ function showFillPopup() {
   const cursor = screen.getCursorScreenPoint()
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
 
-  // Position near cursor, clamped to screen edges
   let x = cursor.x + 10
   let y = cursor.y + 10
   if (x + 340 > width) x = width - 350
@@ -125,22 +139,16 @@ function showFillPopup() {
 // --------------- export ---------------
 
 export function initPasswordFiller() {
-  // IPC: get entries for popup
   ipcMain.handle('fillPopup:getEntries', () => getPasswordEntries())
 
-  // IPC: fill
   ipcMain.handle('fillPopup:fill', async (_e, data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) => {
     await doFill(data)
   })
 
-  // IPC: hide
   ipcMain.handle('fillPopup:hide', () => {
     if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
   })
 
-  // Global shortcut
-
-  // Load custom shortcut from settings or use default
   let shortcutKey = 'Ctrl+Alt+P'
   try {
     const sp = join(app.getPath('userData'), 'settings.json')
