@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Trash2, RotateCcw, X, AlertCircle, FileText, BookOpen, Folder, ChevronRight, ChevronDown, ArrowUpDown, Filter } from 'lucide-react'
+import { Trash2, RotateCcw, X, AlertCircle, FileText, BookOpen, Folder, ChevronRight, ChevronDown, ArrowUpDown, Filter, Shield } from 'lucide-react'
 import type { RecycleBinItem } from '../../types'
 import { getRecycleBinItems, restoreRecycleBinItem, restoreRecycleBinPartial, trashRecycleBinItem, trashRecycleBinPartial, emptyRecycleBin } from '../../lib/ipc'
 
@@ -7,13 +7,15 @@ const MODULE_INFO: Record<string, { label: string; icon: React.ReactNode; badgeC
   blog:          { label: '博客',     icon: <FileText size={12} />,  badgeClass: 'bg-[var(--accent)]/20 text-[var(--accent)]' },
   knowledge:     { label: '知识页面', icon: <BookOpen size={12} />,  badgeClass: 'bg-[var(--success)]/20 text-[var(--success)]' },
   knowledge_category: { label: '知识目录', icon: <Folder size={12} />, badgeClass: 'bg-[var(--warning)]/20 text-[var(--warning)]' },
+  passwordVault: { label: '密码本',   icon: <Shield size={12} />,    badgeClass: 'bg-[var(--danger)]/20 text-[var(--danger)]' },
 }
 
-const FILE_TYPE_OPTIONS = ['md', 'txt', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'json', 'java', 'rs', 'go', 'sh', 'sql', 'xml', 'yaml', 'pdf']
+const FILE_TYPE_OPTIONS = ['md', 'txt', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'json', 'java', 'rs', 'go', 'sh', 'sql', 'xml', 'yaml', 'pdf', 'pwd']
 
 function getItemFileType(item: RecycleBinItem): string {
   if (item.module === 'blog') return 'md'
   if (item.module === 'knowledge') return item.data?.fileType || 'md'
+  if (item.module === 'passwordVault') return 'pwd'
   return 'dir' // knowledge_category
 }
 

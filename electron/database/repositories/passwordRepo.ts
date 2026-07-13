@@ -85,6 +85,16 @@ export function registerPasswordHandlers(): void {
   })
 
   ipcMain.handle('passwordVault:delete', (_e, id: string) => {
+    // Move to recycle bin instead of permanent delete
+    const rows = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords WHERE id = ?', [id])
+    if (rows.length === 0) return
+    const entry = rowToPassword(rows[0])
+    const binId = randomUUID()
+    run(
+      `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [binId, id, 'passwordVault', entry.title || '未命名', JSON.stringify(entry), new Date().toISOString()]
+    )
     run('DELETE FROM toolbox_passwords WHERE id = ?', [id])
   })
 }

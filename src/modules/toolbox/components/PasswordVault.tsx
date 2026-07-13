@@ -176,7 +176,7 @@ export function PasswordVault({ onBack }: Props) {
         setSelectedId(null)
         setTitle(''); setAccount(''); setUsername(''); setPassword(''); setUrl(''); setNotes('')
       }
-      showToast({ type: 'info', message: '已删除' })
+      showToast({ type: 'info', message: '已移至回收站' })
     } catch (e) { console.error(e); showToast({ type: 'error', message: '删除失败' }) }
   }
 

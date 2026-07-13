@@ -168,6 +168,20 @@ export function registerRecycleBinHandlers(): void {
           } catch { /* tag may have been deleted */ }
         }
       }
+    } else if (item.module === 'passwordVault') {
+      // 恢复密码条目
+      const maxRow = queryAll<{ m: number }>(
+        'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_passwords'
+      )
+      run(
+        `INSERT INTO toolbox_passwords (id, title, url, account, username, password, notes, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          record.id, record.title, record.url || '', record.account || '',
+          record.username || '', record.password, record.notes || '',
+          (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
+        ]
+      )
     }
 
     // 从回收站移除

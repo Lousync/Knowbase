@@ -98,6 +98,18 @@ export async function trashItem(binId: string, item: { module: string; title: st
       // Single page / blog entry → write directly
       const data = item.data
       files.push(...writeMarkdownFile(rootDir, data))
+    } else if (item.module === 'passwordVault') {
+      // Password entry → write as markdown table
+      const e = item.data
+      const fileName = safeName(e.title || '密码条目') + '.md'
+      const filePath = join(rootDir, fileName)
+      let md = `# ${e.title || '密码条目'}\n\n`
+      md += `| 名称 | 账号 | 用户名 | 密码 | 网址 | 备注 |\n`
+      md += `|------|------|--------|------|------|------|\n`
+      const esc = (s: string) => (s || '-').replace(/\|/g, '\\|').replace(/\n/g, ' ')
+      md += `| ${esc(e.title)} | ${esc(e.account)} | ${esc(e.username)} | ${esc(e.password)} | ${esc(e.url)} | ${esc(e.notes)} |\n`
+      writeFileSync(filePath, md, 'utf-8')
+      files.push(filePath)
     } else if (item.module === 'knowledge_category') {
       // Category tree → label with category name, write structure
       const catName = item.data?.category?.name || item.title || '知识目录'
@@ -124,6 +136,16 @@ export async function trashAll(items: Array<{ binId: string; module: string; tit
     try {
       if (item.module === 'blog' || item.module === 'knowledge') {
         writeMarkdownFile(rootDir, item.data)
+      } else if (item.module === 'passwordVault') {
+        const e = item.data
+        const fileName = safeName(e.title || '密码条目') + '.md'
+        const filePath = join(rootDir, fileName)
+        let md = `# ${e.title || '密码条目'}\n\n`
+        md += `| 名称 | 账号 | 用户名 | 密码 | 网址 | 备注 |\n`
+        md += `|------|------|--------|------|------|------|\n`
+        const esc = (s: string) => (s || '-').replace(/\|/g, '\\|').replace(/\n/g, ' ')
+        md += `| ${esc(e.title)} | ${esc(e.account)} | ${esc(e.username)} | ${esc(e.password)} | ${esc(e.url)} | ${esc(e.notes)} |\n`
+        writeFileSync(filePath, md, 'utf-8')
       } else if (item.module === 'knowledge_category') {
         const catName = item.data?.category?.name || item.title || '知识目录'
         const catDir = uniqueDir(rootDir, catName)
