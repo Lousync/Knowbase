@@ -14,17 +14,12 @@ import { SettingsModule } from './modules/settings'
 import { HelpModule } from './modules/help'
 import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
-import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
 import { LockScreen } from './components/shared/LockScreen'
 import { ImportModal } from './modules/shared/components/ImportModal'
 
 export default function App() {
-  // Fill popup mode: render standalone popup instead of full app
-  if (window.api.isFillPopup) {
-    return <FillPopup />
-  }
   const [activeTab, setActiveTab] = useState<TabName>('blog')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [encoding, setEncoding] = useState('UTF-8')
