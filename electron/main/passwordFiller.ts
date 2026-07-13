@@ -5,8 +5,7 @@ import { spawn } from 'child_process'
 import { getDatabase } from '../database/connection'
 
 let fillWindow: BrowserWindow | null = null
-
-// --------------- helpers ---------------
+let fillInProgress = false // guard against blur during programmatic hide
 
 function getSettingsJSON(): Record<string, unknown> {
   try {
@@ -16,11 +15,17 @@ function getSettingsJSON(): Record<string, unknown> {
   return {}
 }
 
-function getTheme(): string {
-  return String(getSettingsJSON().theme || 'dark')
-}
+// --------------- auto-fill ---------------
 
-// --------------- auto-fill (single PowerShell spawn with -STA) ---------------
+function spawnPS(script: string): Promise<void> {
+  return new Promise((resolve) => {
+    const child = spawn('powershell', [
+      '-WindowStyle', 'Hidden', '-NoProfile', '-Command', script
+    ], { windowsHide: true, stdio: 'ignore' })
+    child.on('close', resolve)
+    child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
+  })
+}
 
 async function doFill(data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) {
   const saved = clipboard.readText()
@@ -28,68 +33,59 @@ async function doFill(data: { account?: string; username?: string; password: str
     ? (data.account || data.username || '')
     : ''
 
-  // Hide popup immediately
+  // Hide window immediately so focus returns to target app
+  fillInProgress = true
   if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
 
-  // Escape single quotes and SendKeys special chars for PowerShell string
-  const esc = (s: string): string => {
-    return s.replace(/'/g, "''").replace(/[+^%~(){}]/g, '{$&}')
-  }
-
-  // Single PowerShell script: -STA enables clipboard API
-  let script = 'Add-Type -AssemblyName System.Windows.Forms; '
   if (account) {
-    script += `[System.Windows.Forms.Clipboard]::SetText('${esc(account)}'); `
-    script += "[System.Windows.Forms.SendKeys]::SendWait('^v'); "
-    script += 'Start-Sleep -Milliseconds 50; '
-    script += "[System.Windows.Forms.SendKeys]::SendWait('{TAB}'); "
-    script += 'Start-Sleep -Milliseconds 40; '
-    script += `[System.Windows.Forms.Clipboard]::SetText('${esc(data.password)}'); `
-    script += "[System.Windows.Forms.SendKeys]::SendWait('^v')"
+    // Pre-write account to clipboard, spawn PS that sleeps then types
+    clipboard.writeText(account)
+    const p1 = spawnPS(
+      'Start-Sleep -Milliseconds 250;' +
+      'Add-Type -AssemblyName System.Windows.Forms;' +
+      "[System.Windows.Forms.SendKeys]::SendWait('^v');" +
+      'Start-Sleep -Milliseconds 60;' +
+      "[System.Windows.Forms.SendKeys]::SendWait('{TAB}')"
+    )
+    // While PS is sleeping, immediately swap clipboard to password
+    await new Promise(r => setTimeout(r, 50))
+    clipboard.writeText(data.password)
+    await p1
+    // Type password
+    await spawnPS(
+      'Add-Type -AssemblyName System.Windows.Forms;' +
+      "[System.Windows.Forms.SendKeys]::SendWait('^v')"
+    )
   } else {
-    script += `[System.Windows.Forms.Clipboard]::SetText('${esc(data.password)}'); `
-    script += "[System.Windows.Forms.SendKeys]::SendWait('^v')"
+    clipboard.writeText(data.password)
+    await spawnPS(
+      'Start-Sleep -Milliseconds 250;' +
+      'Add-Type -AssemblyName System.Windows.Forms;' +
+      "[System.Windows.Forms.SendKeys]::SendWait('^v')"
+    )
   }
-
-  await new Promise<void>((resolve) => {
-    const child = spawn('powershell', [
-      '-STA',              // STA threading → clipboard API works
-      '-WindowStyle', 'Hidden',
-      '-NoProfile',
-      '-Command', script
-    ], { windowsHide: true, stdio: 'ignore' })
-    child.on('close', resolve)
-    child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
-  })
 
   // Restore clipboard
-  await new Promise(r => setTimeout(r, 400))
+  await new Promise(r => setTimeout(r, 500))
   const current = clipboard.readText()
   if (current === data.password || current === account) clipboard.writeText(saved)
+  fillInProgress = false
 }
 
 // --------------- floating window ---------------
 
 function createFillWindow(): BrowserWindow {
-  const theme = getTheme()
+  const theme = String(getSettingsJSON().theme || 'dark')
   const bgColor = theme === 'light' ? '#f3f3f3' : '#1e1e1e'
 
   const win = new BrowserWindow({
-    width: 340,
-    height: 420,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    show: false,
-    resizable: false,
-    maximizable: false,
-    minimizable: false,
+    width: 340, height: 420,
+    frame: false, alwaysOnTop: true, skipTaskbar: true, show: false,
+    resizable: false, maximizable: false, minimizable: false,
     backgroundColor: bgColor,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true,
-      nodeIntegration: false,
+      sandbox: false, contextIsolation: true, nodeIntegration: false,
       additionalArguments: ['--fill-popup-window', `--theme=${theme}`],
     },
   })
@@ -100,15 +96,9 @@ function createFillWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Use 'alwaysOnTop' blur timer to debounce — single clicks inside shouldn't hide
-  let blurTimer: ReturnType<typeof setTimeout> | null = null
+  // Blur = user clicked outside → hide (unless fill is in progress)
   win.on('blur', () => {
-    blurTimer = setTimeout(() => {
-      if (win && !win.isDestroyed()) win.hide()
-    }, 150) // short delay so internal clicks don't trigger blur-hide
-  })
-  win.on('focus', () => {
-    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null }
+    if (!fillInProgress && win && !win.isDestroyed()) win.hide()
   })
 
   return win
@@ -122,8 +112,7 @@ function showFillPopup() {
   const cursor = screen.getCursorScreenPoint()
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
 
-  let x = cursor.x + 10
-  let y = cursor.y + 10
+  let x = cursor.x + 10, y = cursor.y + 10
   if (x + 340 > width) x = width - 350
   if (y + 420 > height) y = cursor.y - 430
 
@@ -149,16 +138,13 @@ export function initPasswordFiller() {
     }))
   })
 
-  ipcMain.handle('fillPopup:fill', async (_e, data: any) => {
-    await doFill(data)
-  })
-
+  ipcMain.handle('fillPopup:fill', async (_e, data: any) => { await doFill(data) })
   ipcMain.handle('fillPopup:hide', () => {
     if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
   })
 
   const settings = getSettingsJSON()
-  let shortcutKey = (settings.fillPopupShortcut as string) || 'Ctrl+Alt+P'
+  const shortcutKey = (settings.fillPopupShortcut as string) || 'Ctrl+Alt+P'
 
   try {
     globalShortcut.register(shortcutKey, () => {
@@ -176,8 +162,5 @@ export function initPasswordFiller() {
 
 export function destroyPasswordFiller() {
   globalShortcut.unregisterAll()
-  if (fillWindow && !fillWindow.isDestroyed()) {
-    fillWindow.close()
-    fillWindow = null
-  }
+  if (fillWindow && !fillWindow.isDestroyed()) { fillWindow.close(); fillWindow = null }
 }

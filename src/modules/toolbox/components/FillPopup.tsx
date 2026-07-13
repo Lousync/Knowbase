@@ -1,18 +1,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Search, X, Shield, User, Key, AtSign, ArrowRight, Check, Loader2 } from 'lucide-react'
+import { Search, X, Shield, User, Key, AtSign, ArrowRight } from 'lucide-react'
 import type { PasswordEntry } from '../../../types'
 
-type Feedback = 'idle' | 'filling' | 'done'
-
 export function FillPopup() {
-  // Apply theme immediately (preload exposes theme from settings.json)
   document.documentElement.className = `theme-${window.api.fillPopupTheme}`
 
   const [entries, setEntries] = useState<PasswordEntry[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [feedback, setFeedback] = useState<Feedback>('idle')
   const searchRef = useRef<HTMLInputElement>(null)
 
   const loadEntries = useCallback(() => {
@@ -23,16 +19,12 @@ export function FillPopup() {
   }, [])
 
   useEffect(() => {
-    const unsubRefresh = window.api.onFillPopupRefresh(() => {
-      setFeedback('idle'); setSelectedId(null); setSearchQuery(''); loadEntries()
-    })
-    const unsubFeedback = window.api.onFillPopupFeedback((state: string) => {
-      if (state === 'filling') setFeedback('filling')
-      if (state === 'done') { setFeedback('done'); setTimeout(() => window.api.fillPopupHide(), 800) }
+    const unsub = window.api.onFillPopupRefresh(() => {
+      setSelectedId(null); setSearchQuery(''); loadEntries()
     })
     loadEntries()
     setTimeout(() => searchRef.current?.focus(), 50)
-    return () => { unsubRefresh(); unsubFeedback() }
+    return unsub
   }, [loadEntries])
 
   const filtered = useMemo(() => {
@@ -52,7 +44,6 @@ export function FillPopup() {
       account: selected.account, username: selected.username,
       password: selected.password, mode,
     })
-    setFeedback('filling')
   }, [selected])
 
   const handleHide = useCallback(() => window.api.fillPopupHide(), [])
@@ -63,13 +54,6 @@ export function FillPopup() {
     if (e.key === 'ArrowDown') { e.preventDefault(); const idx = filtered.findIndex(en => en.id === selectedId); if (idx < filtered.length - 1) setSelectedId(filtered[idx + 1].id) }
     if (e.key === 'ArrowUp') { e.preventDefault(); const idx = filtered.findIndex(en => en.id === selectedId); if (idx > 0) setSelectedId(filtered[idx - 1].id) }
   }, [searchQuery, selected, filtered, selectedId, handleHide, handleFill])
-
-  if (feedback === 'filling') {
-    return <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-primary)] gap-3"><Loader2 size={24} className="animate-spin text-[var(--accent)]" /><p className="text-[12px] text-[var(--text-muted)]">正在填充...</p></div>
-  }
-  if (feedback === 'done') {
-    return <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-primary)] gap-2"><Check size={28} className="text-green-500" /><p className="text-[12px] text-[var(--text-primary)] font-medium">已填充</p></div>
-  }
 
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden" onKeyDown={handleKeyDown} tabIndex={-1}>
@@ -98,7 +82,7 @@ export function FillPopup() {
           </div>
         ))}</div>}
       </div>
-      {selected && feedback === 'idle' && (
+      {selected && (
         <div className="flex items-center gap-2 px-3 py-2 border-t border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <div className="flex-1 text-[10px] text-[var(--text-muted)] truncate">{selected.title || '未命名'}{selected.account && <span className="ml-1 text-[var(--text-disabled)]">· {selected.account}</span>}</div>
           <button onClick={() => handleFill('passwordOnly')} className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"><Key size={11} /> 密码</button>
