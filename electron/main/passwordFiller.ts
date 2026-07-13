@@ -20,26 +20,7 @@ function getTheme(): string {
   return String(getSettingsJSON().theme || 'dark')
 }
 
-// --------------- auto-fill (single PowerShell spawn) ---------------
-
-function runKeysSequence(keys: string[]): Promise<void> {
-  // Build single PowerShell script: Add-Type; foreach key+wait, SendWait
-  const lines = ['Add-Type -AssemblyName System.Windows.Forms']
-  for (const k of keys) {
-    if (k.startsWith('WAIT:')) {
-      lines.push(`Start-Sleep -Milliseconds ${k.slice(5)}`)
-    } else {
-      lines.push(`[System.Windows.Forms.SendKeys]::SendWait(${JSON.stringify(k)})`)
-    }
-  }
-  return new Promise<void>((resolve) => {
-    const child = spawn('powershell', [
-      '-WindowStyle', 'Hidden', '-NoProfile', '-Command', lines.join('; ')
-    ], { windowsHide: true, stdio: 'ignore' })
-    child.on('close', resolve)
-    child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
-  })
-}
+// --------------- auto-fill (single PowerShell spawn with -STA) ---------------
 
 async function doFill(data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) {
   const saved = clipboard.readText()
@@ -50,36 +31,38 @@ async function doFill(data: { account?: string; username?: string; password: str
   // Hide popup immediately
   if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
 
-  // Pre-set clipboard before spawn so it's ready when SendKeys fires
-  const keys: string[] = []
-  if (account) {
-    clipboard.writeText(account)
-    keys.push('^v', 'WAIT:80', '{TAB}', 'WAIT:50')
-    // We need to switch clipboard between paste calls, but the PS script runs
-    // sequentially. Use a two-phase approach: set password after a brief delay.
-    // Actually: SendKeys runs synchronously (SendWait), so we can write
-    // password to clipboard WHILE the first Ctrl+V is processing.
-    // Better: just do the clipboard switch with a JS microtask.
-  } else {
-    clipboard.writeText(data.password)
-    keys.push('^v') // single sequence
+  // Escape single quotes and SendKeys special chars for PowerShell string
+  const esc = (s: string): string => {
+    return s.replace(/'/g, "''").replace(/[+^%~(){}]/g, '{$&}')
   }
 
-  // For all mode: we need to change clipboard between paste calls.
-  // Use JS timer to swap clipboard after first Ctrl+V fires.
+  // Single PowerShell script: -STA enables clipboard API
+  let script = 'Add-Type -AssemblyName System.Windows.Forms; '
   if (account) {
-    // Phase 1: paste account + Tab
-    keys.length = 0
-    keys.push('^v', 'WAIT:100', '{TAB}')
-    await runKeysSequence(keys)
-    // Phase 2: swap to password + paste
-    clipboard.writeText(data.password)
-    await runKeysSequence(['^v'])
+    script += `[System.Windows.Forms.Clipboard]::SetText('${esc(account)}'); `
+    script += "[System.Windows.Forms.SendKeys]::SendWait('^v'); "
+    script += 'Start-Sleep -Milliseconds 50; '
+    script += "[System.Windows.Forms.SendKeys]::SendWait('{TAB}'); "
+    script += 'Start-Sleep -Milliseconds 40; '
+    script += `[System.Windows.Forms.Clipboard]::SetText('${esc(data.password)}'); `
+    script += "[System.Windows.Forms.SendKeys]::SendWait('^v')"
   } else {
-    await runKeysSequence(keys)
+    script += `[System.Windows.Forms.Clipboard]::SetText('${esc(data.password)}'); `
+    script += "[System.Windows.Forms.SendKeys]::SendWait('^v')"
   }
 
-  // Restore clipboard after a brief delay
+  await new Promise<void>((resolve) => {
+    const child = spawn('powershell', [
+      '-STA',              // STA threading → clipboard API works
+      '-WindowStyle', 'Hidden',
+      '-NoProfile',
+      '-Command', script
+    ], { windowsHide: true, stdio: 'ignore' })
+    child.on('close', resolve)
+    child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
+  })
+
+  // Restore clipboard
   await new Promise(r => setTimeout(r, 400))
   const current = clipboard.readText()
   if (current === data.password || current === account) clipboard.writeText(saved)
