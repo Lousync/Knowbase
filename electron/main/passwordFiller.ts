@@ -6,13 +6,35 @@ import { getDatabase } from '../database/connection'
 
 let fillWindow: BrowserWindow | null = null
 
-// --------------- auto-fill ---------------
+// --------------- helpers ---------------
 
-function sendKeys(keys: string): Promise<void> {
-  return new Promise((resolve) => {
+function getSettingsJSON(): Record<string, unknown> {
+  try {
+    const sp = join(app.getPath('userData'), 'settings.json')
+    if (existsSync(sp)) return JSON.parse(readFileSync(sp, 'utf-8'))
+  } catch { /* */ }
+  return {}
+}
+
+function getTheme(): string {
+  return String(getSettingsJSON().theme || 'dark')
+}
+
+// --------------- auto-fill (single PowerShell spawn) ---------------
+
+function runKeysSequence(keys: string[]): Promise<void> {
+  // Build single PowerShell script: Add-Type; foreach key+wait, SendWait
+  const lines = ['Add-Type -AssemblyName System.Windows.Forms']
+  for (const k of keys) {
+    if (k.startsWith('WAIT:')) {
+      lines.push(`Start-Sleep -Milliseconds ${k.slice(5)}`)
+    } else {
+      lines.push(`[System.Windows.Forms.SendKeys]::SendWait(${JSON.stringify(k)})`)
+    }
+  }
+  return new Promise<void>((resolve) => {
     const child = spawn('powershell', [
-      '-WindowStyle', 'Hidden', '-NoProfile', '-Command',
-      `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${keys}')`
+      '-WindowStyle', 'Hidden', '-NoProfile', '-Command', lines.join('; ')
     ], { windowsHide: true, stdio: 'ignore' })
     child.on('close', resolve)
     child.on('error', (err) => { console.error('[fillPopup] spawn error:', err.message); resolve() })
@@ -25,23 +47,40 @@ async function doFill(data: { account?: string; username?: string; password: str
     ? (data.account || data.username || '')
     : ''
 
+  // Hide popup immediately
   if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
-  await new Promise(r => setTimeout(r, 350))
 
+  // Pre-set clipboard before spawn so it's ready when SendKeys fires
+  const keys: string[] = []
   if (account) {
     clipboard.writeText(account)
-    await sendKeys('^v')
-    await new Promise(r => setTimeout(r, 120))
-    clipboard.writeText(data.password)
-    await sendKeys('{TAB}')
-    await new Promise(r => setTimeout(r, 80))
-    await sendKeys('^v')
+    keys.push('^v', 'WAIT:80', '{TAB}', 'WAIT:50')
+    // We need to switch clipboard between paste calls, but the PS script runs
+    // sequentially. Use a two-phase approach: set password after a brief delay.
+    // Actually: SendKeys runs synchronously (SendWait), so we can write
+    // password to clipboard WHILE the first Ctrl+V is processing.
+    // Better: just do the clipboard switch with a JS microtask.
   } else {
     clipboard.writeText(data.password)
-    await sendKeys('^v')
+    keys.push('^v') // single sequence
   }
 
-  await new Promise(r => setTimeout(r, 500))
+  // For all mode: we need to change clipboard between paste calls.
+  // Use JS timer to swap clipboard after first Ctrl+V fires.
+  if (account) {
+    // Phase 1: paste account + Tab
+    keys.length = 0
+    keys.push('^v', 'WAIT:100', '{TAB}')
+    await runKeysSequence(keys)
+    // Phase 2: swap to password + paste
+    clipboard.writeText(data.password)
+    await runKeysSequence(['^v'])
+  } else {
+    await runKeysSequence(keys)
+  }
+
+  // Restore clipboard after a brief delay
+  await new Promise(r => setTimeout(r, 400))
   const current = clipboard.readText()
   if (current === data.password || current === account) clipboard.writeText(saved)
 }
@@ -49,6 +88,9 @@ async function doFill(data: { account?: string; username?: string; password: str
 // --------------- floating window ---------------
 
 function createFillWindow(): BrowserWindow {
+  const theme = getTheme()
+  const bgColor = theme === 'light' ? '#f3f3f3' : '#1e1e1e'
+
   const win = new BrowserWindow({
     width: 340,
     height: 420,
@@ -59,13 +101,13 @@ function createFillWindow(): BrowserWindow {
     resizable: false,
     maximizable: false,
     minimizable: false,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: bgColor,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: ['--fill-popup-window'],
+      additionalArguments: ['--fill-popup-window', `--theme=${theme}`],
     },
   })
 
@@ -75,8 +117,15 @@ function createFillWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // Use 'alwaysOnTop' blur timer to debounce — single clicks inside shouldn't hide
+  let blurTimer: ReturnType<typeof setTimeout> | null = null
   win.on('blur', () => {
-    if (win && !win.isDestroyed()) win.hide()
+    blurTimer = setTimeout(() => {
+      if (win && !win.isDestroyed()) win.hide()
+    }, 150) // short delay so internal clicks don't trigger blur-hide
+  })
+  win.on('focus', () => {
+    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null }
   })
 
   return win
@@ -125,14 +174,8 @@ export function initPasswordFiller() {
     if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
   })
 
-  let shortcutKey = 'Ctrl+Alt+P'
-  try {
-    const sp = join(app.getPath('userData'), 'settings.json')
-    if (existsSync(sp)) {
-      const s = JSON.parse(readFileSync(sp, 'utf-8'))
-      if (s.fillPopupShortcut) shortcutKey = s.fillPopupShortcut
-    }
-  } catch { /* */ }
+  const settings = getSettingsJSON()
+  let shortcutKey = (settings.fillPopupShortcut as string) || 'Ctrl+Alt+P'
 
   try {
     globalShortcut.register(shortcutKey, () => {

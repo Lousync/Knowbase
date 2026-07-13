@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 const isFillPopup = process.argv.includes('--fill-popup-window')
+const fillTheme = isFillPopup
+  ? (process.argv.find(a => a.startsWith('--theme=')) || '--theme=dark').split('=')[1]
+  : 'dark'
 
 const api = {
   minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -147,6 +150,7 @@ const api = {
 
   // fill popup
   isFillPopup,
+  fillPopupTheme: fillTheme,
   fillPopupGetEntries: () => ipcRenderer.invoke('fillPopup:getEntries'),
   fillPopupFill: (data: unknown) => ipcRenderer.invoke('fillPopup:fill', data),
   fillPopupHide: () => ipcRenderer.invoke('fillPopup:hide'),

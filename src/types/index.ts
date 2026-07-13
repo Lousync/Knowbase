@@ -266,6 +266,7 @@ export interface ElectronAPI {
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
   // fill popup
   isFillPopup: boolean
+  fillPopupTheme: string
   fillPopupGetEntries: () => Promise<PasswordEntry[]>
   fillPopupFill: (data: { account?: string; username?: string; password: string; mode: 'all' | 'passwordOnly' }) => Promise<void>
   fillPopupHide: () => Promise<void>

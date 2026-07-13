@@ -5,6 +5,9 @@ import type { PasswordEntry } from '../../../types'
 type Feedback = 'idle' | 'filling' | 'done'
 
 export function FillPopup() {
+  // Apply theme immediately (preload exposes theme from settings.json)
+  document.documentElement.className = `theme-${window.api.fillPopupTheme}`
+
   const [entries, setEntries] = useState<PasswordEntry[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
