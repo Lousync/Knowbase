@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { ArrowLeft, Plus, Trash2, X, TrendingDown } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, X, TrendingDown, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import type { WeightRecord } from '../../../types'
 import { getWeightRecords, getWeightSeries, createWeightRecord, updateWeightRecord, deleteWeightRecord } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
@@ -7,7 +7,7 @@ import { showToast } from '../../../lib/toast'
 interface Props { onBack: () => void }
 
 const SERIES_COLORS = ['#007acc', '#e74856', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#c026d3', '#ca8a04']
-const POINT_SPACING = 50
+const BASE_POINT_SPACING = 50
 const PADDING = { left: 52, top: 20, right: 24, bottom: 40 }
 
 export function WeightTracker({ onBack }: Props) {
@@ -35,6 +35,12 @@ export function WeightTracker({ onBack }: Props) {
   const [canvasWidth, setCanvasWidth] = useState(600)
   const canvasHeight = 300
 
+  // Zoom state
+  const [xZoom, setXZoom] = useState(1)
+  const [yZoom, setYZoom] = useState(1)
+  const xZoomRef = useRef(xZoom); useEffect(() => { xZoomRef.current = xZoom }, [xZoom])
+  const yZoomRef = useRef(yZoom); useEffect(() => { yZoomRef.current = yZoom }, [yZoom])
+
   // Load data
   const loadData = useCallback(async () => {
     try {
@@ -51,12 +57,11 @@ export function WeightTracker({ onBack }: Props) {
   // Calculate canvas width based on data
   useEffect(() => {
     const containerWidth = containerRef.current?.clientWidth || 600
-    const filtered = records.filter(r => selectedSeries.has(r.series))
-    // Group by date to get unique x positions
-    const allDates = [...new Set(records.map(r => r.date))].sort()
-    const neededWidth = Math.max(containerWidth, allDates.length * POINT_SPACING + PADDING.left + PADDING.right)
+    const allDates = [...new Set(records.filter(r => selectedSeries.has(r.series)).map(r => r.date))].sort()
+    const spacing = BASE_POINT_SPACING * xZoom
+    const neededWidth = Math.max(containerWidth, allDates.length * spacing + PADDING.left + PADDING.right)
     setCanvasWidth(neededWidth)
-  }, [records, selectedSeries])
+  }, [records, selectedSeries, xZoom])
 
   // Draw canvas
   useEffect(() => {
@@ -90,8 +95,16 @@ export function WeightTracker({ onBack }: Props) {
     const yMax = Math.ceil(rawMax + margin)
     const yRange = yMax - yMin || 1
 
-    const getX = (date: string) => PADDING.left + allDates.indexOf(date) * POINT_SPACING
-    const getY = (weight: number) => PADDING.top + (1 - (weight - yMin) / yRange) * (h - PADDING.top - PADDING.bottom)
+    const pointSpacing = BASE_POINT_SPACING * xZoom
+    const yMinScaled = yMin - (yMax - yMin) * (yZoom - 1) * 0.3
+    const yMaxScaled = yMax + (yMax - yMin) * (yZoom - 1) * 0.3
+    const yRangeScaled = yMaxScaled - yMinScaled || 1
+
+    const getX = (date: string) => PADDING.left + allDates.indexOf(date) * pointSpacing
+    const getY = (weight: number) => PADDING.top + (1 - (weight - yMinScaled) / yRangeScaled) * (h - PADDING.top - PADDING.bottom)
+
+    // Y-axis values (grid lines)
+    const ySteps = 5
 
     const isDark = document.documentElement.className.includes('theme-dark') || !document.documentElement.className.includes('theme-light')
     const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
@@ -101,11 +114,10 @@ export function WeightTracker({ onBack }: Props) {
     // Grid + Y-axis labels
     ctx.strokeStyle = gridColor; ctx.lineWidth = 1
     ctx.fillStyle = textColor; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
-    const ySteps = 5
     for (let i = 0; i <= ySteps; i++) {
       const y = PADDING.top + (i / ySteps) * (h - PADDING.top - PADDING.bottom)
       ctx.beginPath(); ctx.moveTo(PADDING.left, y); ctx.lineTo(w - PADDING.right, y); ctx.stroke()
-      const val = yMax - (i / ySteps) * yRange
+      const val = yMaxScaled - (i / ySteps) * yRangeScaled
       const display = unit === 'kg' ? val.toFixed(1) : (val * 2).toFixed(1)
       ctx.fillText(display, PADDING.left - 6, y + 3)
     }
@@ -170,7 +182,29 @@ export function WeightTracker({ onBack }: Props) {
 
     canvas.onmousemove = onMouseMove
     canvas.onmouseleave = onMouseLeave
-  }, [records, selectedSeries, unit, canvasWidth])
+  }, [records, selectedSeries, unit, canvasWidth, xZoom, yZoom])
+
+  // Wheel zoom handler
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const zoomStep = 0.15
+      const clamp = (v: number) => Math.max(0.3, Math.min(4, v))
+      if (e.ctrlKey) {
+        // Ctrl+wheel → zoom Y axis
+        const newY = clamp(yZoomRef.current + (e.deltaY < 0 ? zoomStep : -zoomStep))
+        setYZoom(newY)
+      } else {
+        // Plain wheel → zoom X axis
+        const newX = clamp(xZoomRef.current + (e.deltaY < 0 ? zoomStep : -zoomStep))
+        setXZoom(newX)
+      }
+    }
+    container.addEventListener('wheel', onWheel, { passive: false })
+    return () => container.removeEventListener('wheel', onWheel)
+  }, [])
 
   // Toggle series
   const toggleSeries = (s: string) => {
@@ -256,7 +290,15 @@ export function WeightTracker({ onBack }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-0.5 text-[11px] ml-auto">
-          <span className="text-[var(--text-muted)]">单位:</span>
+          <span className="text-[var(--text-muted)]">缩放:</span>
+          <button onClick={() => { setXZoom(1); setYZoom(1) }}
+            className="px-1 py-0.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+            title="重置缩放">
+            <RotateCcw size={12} />
+          </button>
+          <span className="text-[var(--text-muted)]">X:{xZoom.toFixed(1)}</span>
+          <span className="text-[var(--text-muted)]">Y:{yZoom.toFixed(1)}</span>
+          <span className="text-[var(--text-muted)] ml-1">| 单位:</span>
           <button onClick={() => setUnit('kg')} className={`px-1.5 py-0.5 rounded ${unit === 'kg' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>kg</button>
           <button onClick={() => setUnit('jin')} className={`px-1.5 py-0.5 rounded ${unit === 'jin' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>斤</button>
         </div>
