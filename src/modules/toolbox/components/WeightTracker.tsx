@@ -90,10 +90,18 @@ export function WeightTracker({ onBack }: Props) {
 
     const rawMin = Math.min(...selectedRecords.map(r => r.weight))
     const rawMax = Math.max(...selectedRecords.map(r => r.weight))
-    const margin = Math.max(2, (rawMax - rawMin) * 0.15)
-    const yMin = Math.floor(rawMin - margin)
-    const yMax = Math.ceil(rawMax + margin)
+    const rawRange = rawMax - rawMin || 1
+    // Decide step size: aim for ~8 grid lines
+    const roughStep = rawRange / 8
+    const step = roughStep >= 10 ? Math.ceil(roughStep / 5) * 5
+               : roughStep >= 5 ? Math.ceil(roughStep)
+               : roughStep >= 1 ? Math.ceil(roughStep * 2) / 2
+               : Math.ceil(roughStep * 5) / 5
+    const margin = step * 0.8
+    const yMin = Math.floor((rawMin - margin) / step) * step
+    const yMax = Math.ceil((rawMax + margin) / step) * step
     const yRange = yMax - yMin || 1
+    const ySteps = Math.round(yRange / step)
 
     const pointSpacing = BASE_POINT_SPACING * xZoom
     const yMinScaled = yMin - (yMax - yMin) * (yZoom - 1) * 0.3
@@ -102,9 +110,6 @@ export function WeightTracker({ onBack }: Props) {
 
     const getX = (date: string) => PADDING.left + allDates.indexOf(date) * pointSpacing
     const getY = (weight: number) => PADDING.top + (1 - (weight - yMinScaled) / yRangeScaled) * (h - PADDING.top - PADDING.bottom)
-
-    // Y-axis values (grid lines)
-    const ySteps = 5
 
     const isDark = document.documentElement.className.includes('theme-dark') || !document.documentElement.className.includes('theme-light')
     const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
