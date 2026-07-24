@@ -41,9 +41,8 @@ export function WeightTracker({ onBack }: Props) {
       const [recs, sers] = await Promise.all([getWeightRecords(), getWeightSeries()])
       setRecords(recs)
       setSeriesList(sers.length > 0 ? sers : ['default'])
-      if (sers.length > 0 && selectedSeries.size === 1 && selectedSeries.has('default') && !sers.includes('default')) {
-        setSelectedSeries(new Set([sers[0]]))
-      }
+      // Auto-select all series so multiple lines show at once
+      if (sers.length > 0) setSelectedSeries(new Set(sers))
     } catch (e) { console.error(e) } finally { setLoading(false) }
   }, [])
 
