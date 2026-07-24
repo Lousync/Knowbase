@@ -402,6 +402,22 @@ export function runMigrations(): void {
     try { db.run("ALTER TABLE toolbox_passwords ADD COLUMN account TEXT DEFAULT ''") } catch (_) { /* column may exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('021_password_account')")
   }
+
+  if (!applied.has('022_weight_tracker')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS toolbox_weight_records (
+        id          TEXT PRIMARY KEY,
+        weight      REAL NOT NULL,
+        date        TEXT NOT NULL,
+        series      TEXT NOT NULL DEFAULT 'default',
+        note        TEXT DEFAULT '',
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_weight_date ON toolbox_weight_records(date);
+      CREATE INDEX IF NOT EXISTS idx_weight_series ON toolbox_weight_records(series);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('022_weight_tracker')")
+  }
 }
 
 /**

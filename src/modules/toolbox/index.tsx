@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Key, Braces, Code, Calculator, Clock, Timer, Bot, Shield } from 'lucide-react'
+import { Key, Braces, Code, Calculator, Clock, Timer, Bot, Shield, TrendingDown } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
 import { PasswordVault } from './components/PasswordVault'
+import { WeightTracker } from './components/WeightTracker'
 import { AIChatPanel } from './components/AIChatPanel'
 
 // ---- Tool registry ----
@@ -14,6 +15,13 @@ interface ToolDefinition {
 }
 
 const DATA_TOOLS: ToolDefinition[] = [
+  {
+    id: 'weight-tracker',
+    name: '体重追踪',
+    desc: 'Canvas 折线图记录体重变化，多系列对比，支持横滚',
+    icon: <TrendingDown size={17} strokeWidth={1.5} />,
+    available: true,
+  },
   {
     id: 'password-vault',
     name: '密码本',
@@ -91,6 +99,8 @@ export function ToolboxModule() {
 
   const renderTool = () => {
     switch (activeTool) {
+      case 'weight-tracker':
+        return <WeightTracker onBack={() => setActiveTool(null)} />
       case 'password-vault':
         return <PasswordVault onBack={() => setActiveTool(null)} />
       case 'password-generator':

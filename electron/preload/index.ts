@@ -145,6 +145,13 @@ const api = {
   updatePasswordEntry: (id: string, data: unknown) => ipcRenderer.invoke('passwordVault:update', id, data),
   deletePasswordEntry: (id: string) => ipcRenderer.invoke('passwordVault:delete', id),
 
+  // weight tracker
+  getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
+  getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),
+  createWeightRecord: (data: unknown) => ipcRenderer.invoke('weight:create', data),
+  updateWeightRecord: (id: string, data: unknown) => ipcRenderer.invoke('weight:update', id, data),
+  deleteWeightRecord: (id: string) => ipcRenderer.invoke('weight:delete', id),
+
   // ai
   aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),
 

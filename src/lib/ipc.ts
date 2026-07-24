@@ -161,5 +161,12 @@ export const createPasswordEntry = (d: { title?: string; url?: string; username?
 export const updatePasswordEntry = (id: string, d: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }) => a().updatePasswordEntry(id, d)
 export const deletePasswordEntry = (id: string) => a().deletePasswordEntry(id)
 
+// ===== Weight Tracker =====
+export const getWeightRecords = () => a().getWeightRecords()
+export const getWeightSeries = () => a().getWeightSeries()
+export const createWeightRecord = (d: { weight: number; date: string; series?: string; note?: string }) => a().createWeightRecord(d)
+export const updateWeightRecord = (id: string, d: { weight?: number; date?: string; series?: string; note?: string }) => a().updateWeightRecord(id, d)
+export const deleteWeightRecord = (id: string) => a().deleteWeightRecord(id)
+
 // ===== AI =====
 export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

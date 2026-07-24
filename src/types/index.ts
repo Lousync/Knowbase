@@ -33,6 +33,11 @@ export interface PasswordEntry {
 export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }
 export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }
 
+// weight tracker
+export interface WeightRecord { id: string; weight: number; date: string; series: string; note: string; createdAt: string }
+export interface CreateWeightDTO { weight: number; date: string; series?: string; note?: string }
+export interface UpdateWeightDTO { weight?: number; date?: string; series?: string; note?: string }
+
 // user
 export interface UserProfile {
   username: string
@@ -262,6 +267,12 @@ export interface ElectronAPI {
   createPasswordEntry: (d: CreatePasswordEntryDTO) => Promise<PasswordEntry>
   updatePasswordEntry: (id: string, d: UpdatePasswordEntryDTO) => Promise<PasswordEntry>
   deletePasswordEntry: (id: string) => Promise<void>
+  // weight tracker
+  getWeightRecords: () => Promise<WeightRecord[]>
+  getWeightSeries: () => Promise<string[]>
+  createWeightRecord: (d: CreateWeightDTO) => Promise<WeightRecord>
+  updateWeightRecord: (id: string, d: UpdateWeightDTO) => Promise<WeightRecord>
+  deleteWeightRecord: (id: string) => Promise<void>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
   // fill popup

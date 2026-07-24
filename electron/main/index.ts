@@ -12,6 +12,7 @@ import { registerImportHandlers } from '../database/repositories/importRepo'
 import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
+import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerAIHandlers } from '../ai/aiHandler'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
@@ -181,6 +182,7 @@ app.whenReady().then(async () => {
   registerUserHandlers()
   registerToolboxHandlers()
   registerPasswordHandlers()
+  registerWeightHandlers()
   registerAIHandlers()
 
   createWindow()
