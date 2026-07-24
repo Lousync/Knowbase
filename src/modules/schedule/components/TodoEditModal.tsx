@@ -143,7 +143,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[500px] shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
           <h3 className="text-[14px] font-medium text-[var(--text-primary)]">{initial.title ? '编辑任务' : '新建任务'}</h3>
