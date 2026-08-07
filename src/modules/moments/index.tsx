@@ -3,7 +3,7 @@ import {
   Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check,
   ChevronLeft, ChevronRight, Search, Images, List,
 } from 'lucide-react'
-import { ConfirmDialog, MarkdownPreview } from '../../components/shared'
+import { ConfirmDialog } from '../../components/shared'
 import {
   createMomentsPost,
   deleteMomentsPost,
@@ -112,7 +112,6 @@ export function MomentsModule() {
   const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrls: [], tags: [] })
   const [tagInput, setTagInput] = useState('')
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
-  const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
   const [detailPostId, setDetailPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -405,15 +404,6 @@ export function MomentsModule() {
     }
   }
 
-  const toggleFeedExpanded = (postId: string) => {
-    setExpandedFeedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(postId)) next.delete(postId)
-      else next.add(postId)
-      return next
-    })
-  }
-
   const renderTags = (tags: string[], onClickTag?: (tag: string) => void) => {
     if (!tags || tags.length === 0) return null
     return (
@@ -437,120 +427,66 @@ export function MomentsModule() {
     )
   }
 
-  const renderImageGrid = (post: MomentsPost) => {
-    const images = post.imageDataUrls || []
-    if (images.length === 0) return null
-
-    // 单图：保持原始比例完整展示，不再强制裁切
-    if (images.length === 1) {
-      return (
-        <div className="mt-4">
-          <img
-            src={images[0]}
-            alt="说说图片"
-            onClick={e => { e.stopPropagation(); setLightbox({ images, index: 0 }) }}
-            className="max-w-[320px] max-h-[420px] w-auto h-auto object-contain rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
-            loading="lazy"
-            title="点击放大查看"
-          />
-        </div>
-      )
-    }
-
-    const expanded = expandedFeedIds.has(post.id)
-    const visible = expanded ? images : images.slice(0, GRID_VISIBLE)
-    const overflow = images.length - visible.length
-
-    const layout = images.length <= 4 ? 'grid-cols-2 max-w-[440px]' : 'grid-cols-3 max-w-[480px]'
-
-    return (
-      <div className="mt-4">
-        <div className={`grid ${layout} gap-2`}>
-          {visible.map((img, i) => (
-            <div
-              key={i}
-              onClick={e => { e.stopPropagation(); setLightbox({ images, index: i }) }}
-              className="relative aspect-square overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
-              title="点击放大查看"
-            >
-              <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-            </div>
-          ))}
-          {overflow > 0 && !expanded && (
-            <button
-              onClick={e => { e.stopPropagation(); toggleFeedExpanded(post.id) }}
-              className="relative aspect-square overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)]"
-              title={`展开剩余 ${overflow} 张图片`}
-            >
-              <img src={images[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" loading="lazy" />
-              <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-[20px] font-semibold">
-                +{overflow}
-              </span>
-            </button>
-          )}
-        </div>
-        {expanded && overflow > 0 && (
-          <button onClick={e => { e.stopPropagation(); toggleFeedExpanded(post.id) }} className="mt-2.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-            收起图片
-          </button>
-        )}
-      </div>
-    )
-  }
-
   const renderPost = (post: MomentsPost) => {
     const previewText = post.contentMd || stripHtmlTags(post.contentHtml || '')
+    const images = post.imageDataUrls || []
     return (
       <article
         key={post.id}
         onClick={() => setDetailPostId(post.id)}
-        className="rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)] cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
+        className="flex rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)] cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
         title="查看完整文案"
       >
-        <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] overflow-hidden flex items-center justify-center shrink-0">
-              {avatarDataUrl ? (
-                <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-[13px] font-semibold text-[var(--accent)]">{initials(signature)}</span>
-              )}
+        {images.length > 0 && (
+          <div
+            onClick={e => { e.stopPropagation(); setLightbox({ images, index: 0 }) }}
+            className="relative w-[38%] max-w-[250px] shrink-0 min-h-[176px] bg-[var(--bg-primary)] cursor-zoom-in"
+            title="点击放大查看"
+          >
+            <img src={images[0]} alt="说说图片" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+            {images.length > 1 && (
+              <span className="absolute right-2 bottom-2 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] backdrop-blur">
+                {images.length} 张
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0 px-4 py-3.5 flex flex-col">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-[var(--text-muted)] mt-0.5">
+              <Clock3 size={11} />
+              <span className="truncate">{formatDateTime(post.createdAt)}</span>
+              {post.isPinned && <span className="inline-flex items-center gap-1 text-[var(--accent)]"><Pin size={10} />置顶</span>}
             </div>
-            <div className="min-w-0">
-              <div className="text-[14px] font-semibold text-[var(--text-primary)] truncate">{signature}</div>
-              <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] mt-0.5">
-                <Clock3 size={11} />
-                <span>{formatDateTime(post.createdAt)}</span>
-                {post.isPinned && <span className="inline-flex items-center gap-1 text-[var(--accent)]"><Pin size={10} />置顶</span>}
-              </div>
+
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button onClick={e => { e.stopPropagation(); handleTogglePin(post.id) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.isPinned ? '取消置顶' : '置顶'}>
+                {post.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+              </button>
+              <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
+                <PencilLine size={14} />
+              </button>
+              <button onClick={e => { e.stopPropagation(); setConfirmDeleteId(post.id) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)]" title="删除">
+                <Trash2 size={14} />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            <button onClick={e => { e.stopPropagation(); handleTogglePin(post.id) }} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.isPinned ? '取消置顶' : '置顶'}>
-              {post.isPinned ? <PinOff size={15} /> : <Pin size={15} />}
-            </button>
-            <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
-              <PencilLine size={15} />
-            </button>
-            <button onClick={e => { e.stopPropagation(); setConfirmDeleteId(post.id) }} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)]" title="删除">
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </div>
-
-        <div className="px-4 pb-4">
-          <div className="text-[15px] leading-7 text-[var(--text-primary)]">
+          <div className="flex-1 min-h-0 mt-1.5 text-[14px] leading-6 text-[var(--text-primary)]">
             <ClampedText
               text={plainText(previewText) || previewText}
-              maxLines={5}
+              maxLines={4}
               onExpand={() => setDetailPostId(post.id)}
             />
           </div>
-          {renderTags(post.tags || [], t => setTagQuery(t))}
-          {renderImageGrid(post)}
-          <div className="mt-3 text-[11px] text-[var(--text-muted)] flex items-center gap-2">
-            <span>{post.updatedAt !== post.createdAt ? '已编辑' : '发布'}</span>
+
+          <div className="mt-2">
+            {renderTags(post.tags || [], t => setTagQuery(t))}
+          </div>
+
+          <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+            {post.updatedAt !== post.createdAt ? '已编辑' : '发布'}
           </div>
         </div>
       </article>
@@ -924,7 +860,7 @@ export function MomentsModule() {
             </div>
 
             <div className="shrink-0 px-6 py-2.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)]/60 flex items-center justify-between gap-3">
-              <span className="text-[11px] text-[var(--text-muted)]">支持 Markdown · 图片最多 {MAX_IMAGES} 张</span>
+              <span className="text-[11px] text-[var(--text-muted)]">纯文本文案 · 图片最多 {MAX_IMAGES} 张</span>
               <span className="text-[11px] text-[var(--text-muted)]">{draft.contentMd.trim().length} 字 · {draft.imageDataUrls.length} 图 · {draft.tags.length} 标签</span>
             </div>
           </div>
@@ -974,8 +910,8 @@ export function MomentsModule() {
             <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="px-6 py-5">
                 {renderTags(detailPost.tags || [])}
-                <div className={`text-[15px] leading-8 text-[var(--text-primary)] break-words ${(detailPost.tags || []).length > 0 ? 'mt-3' : ''}`}>
-                  <MarkdownPreview content={detailPost.contentMd || detailPost.contentHtml || ''} />
+                <div className={`text-[15px] leading-8 text-[var(--text-primary)] break-words whitespace-pre-wrap ${(detailPost.tags || []).length > 0 ? 'mt-3' : ''}`}>
+                  {detailPost.contentMd || stripHtmlTags(detailPost.contentHtml || '')}
                 </div>
 
                 {(detailPost.imageDataUrls || []).length > 0 && (
