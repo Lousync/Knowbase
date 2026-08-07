@@ -442,10 +442,11 @@ export function registerImportHandlers(): void {
           const images = Array.isArray(post.imageDataUrls)
             ? post.imageDataUrls
             : (post.imageDataUrl ? [post.imageDataUrl] : [])
+          const tags = Array.isArray(post.tags) ? post.tags.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0) : []
           db.run(
-            `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, is_pinned, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [post.id, post.contentMd || '', post.contentHtml || '', JSON.stringify(images),
+            `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, tags, is_pinned, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [post.id, post.contentMd || '', post.contentHtml || '', JSON.stringify(images), JSON.stringify(tags),
              post.isPinned ? 1 : 0, post.createdAt, post.updatedAt]
           )
           imported++

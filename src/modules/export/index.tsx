@@ -327,6 +327,9 @@ async function runMarkdownExport(
       })
       for (const post of sorted) {
         md += `## ${post.createdAt.slice(0, 19).replace('T', ' ')}${post.isPinned ? ' · 置顶' : ''}\n\n`
+        if (post.tags && post.tags.length > 0) {
+          md += `标签：${post.tags.map(t => `#${t}`).join(' ')}\n\n`
+        }
         for (const img of post.imageDataUrls || []) {
           md += `![说说图片](${img})\n\n`
         }

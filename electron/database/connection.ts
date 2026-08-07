@@ -444,6 +444,12 @@ export function runMigrations(): void {
     } catch { /* backfill failed, keep empty */ }
     db.run("INSERT INTO _migrations (name) VALUES ('025_moments_images')")
   }
+
+  if (!applied.has('026_moments_tags')) {
+    // 说说标签：JSON 数组存放标签名
+    try { db.run("ALTER TABLE moments_posts ADD COLUMN tags TEXT DEFAULT '[]'") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('026_moments_tags')")
+  }
 }
 
 /**

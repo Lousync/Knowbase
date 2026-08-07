@@ -18,7 +18,7 @@ interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
-interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; is_pinned: number; created_at: string; updated_at: string }
+interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; tags: string | null; is_pinned: number; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -57,7 +57,14 @@ function mapMoments(r: MomentsRow) {
     } catch { /* fall through */ }
   }
   if (images.length === 0 && r.image_data_url) images = [r.image_data_url]
-  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
+  let tags: string[] = []
+  if (r.tags) {
+    try {
+      const arr = JSON.parse(r.tags)
+      if (Array.isArray(arr)) tags = arr.filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0)
+    } catch { /* fall through */ }
+  }
+  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, tags, isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {
