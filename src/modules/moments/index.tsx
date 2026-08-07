@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check } from 'lucide-react'
+import { Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ConfirmDialog, MarkdownPreview } from '../../components/shared'
 import {
   createMomentsPost,
@@ -101,6 +101,7 @@ export function MomentsModule() {
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
   const [detailPostId, setDetailPostId] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -140,18 +141,30 @@ export function MomentsModule() {
       .catch(() => setAvatarDataUrl(''))
   }, [loadPosts, reloadProfile])
 
-  // Esc 关闭编辑器 / 详情弹层
+  // Esc 关闭编辑器 / 详情弹层（灯箱打开时让灯箱优先处理）
   useEffect(() => {
     if (!editorOpen && !detailPostId) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !lightbox) {
         setEditorOpen(false)
         setDetailPostId(null)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editorOpen, detailPostId])
+  }, [editorOpen, detailPostId, lightbox])
+
+  // 灯箱：Esc 关闭，左右键切换图片
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null)
+      if (e.key === 'ArrowLeft') setLightbox(l => l ? { ...l, index: (l.index - 1 + l.images.length) % l.images.length } : l)
+      if (e.key === 'ArrowRight') setLightbox(l => l ? { ...l, index: (l.index + 1) % l.images.length } : l)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   const pinnedPosts = useMemo(() => posts.filter(p => p.isPinned), [posts])
   const normalPosts = useMemo(() => posts.filter(p => !p.isPinned), [posts])
@@ -281,7 +294,7 @@ export function MomentsModule() {
     })
   }
 
-  const renderImageGrid = (post: MomentsPost, onOpenDetail: () => void) => {
+  const renderImageGrid = (post: MomentsPost) => {
     const images = post.imageDataUrls || []
     if (images.length === 0) return null
     const expanded = expandedFeedIds.has(post.id)
@@ -296,10 +309,15 @@ export function MomentsModule() {
           : 'grid-cols-3 max-w-[480px]'
 
     return (
-      <div className="mt-4" onClick={onOpenDetail}>
-        <div className={`grid ${layout} gap-2 cursor-zoom-in`}>
+      <div className="mt-4">
+        <div className={`grid ${layout} gap-2`}>
           {visible.map((img, i) => (
-            <div key={i} className={`relative overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] ${images.length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}>
+            <div
+              key={i}
+              onClick={e => { e.stopPropagation(); setLightbox({ images, index: i }) }}
+              className={`relative overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in ${images.length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}
+              title="点击放大查看"
+            >
               <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
             </div>
           ))}
@@ -374,7 +392,7 @@ export function MomentsModule() {
               onExpand={() => setDetailPostId(post.id)}
             />
           </div>
-          {renderImageGrid(post, () => setDetailPostId(post.id))}
+          {renderImageGrid(post)}
           <div className="mt-3 text-[11px] text-[var(--text-muted)] flex items-center gap-2">
             <span>{post.updatedAt !== post.createdAt ? '已编辑' : '发布'}</span>
           </div>
@@ -664,9 +682,14 @@ export function MomentsModule() {
 
                 {(detailPost.imageDataUrls || []).length > 0 && (
                   <div className="mt-5">
-                    <div className={`grid gap-2 ${(detailPost.imageDataUrls || []).length === 1 ? 'grid-cols-1 max-w-[320px]' : 'grid-cols-3 max-w-[480px]'}`}>
+                    <div className={`grid gap-1.5 ${(detailPost.imageDataUrls || []).length === 1 ? 'grid-cols-1 max-w-[240px]' : 'grid-cols-3 max-w-[400px]'}`}>
                       {(detailPost.imageDataUrls || []).map((img, i) => (
-                        <div key={i} className={`relative overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] ${(detailPost.imageDataUrls || []).length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}>
+                        <div
+                          key={i}
+                          onClick={() => setLightbox({ images: detailPost.imageDataUrls || [], index: i })}
+                          className={`relative overflow-hidden rounded-[12px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in ${(detailPost.imageDataUrls || []).length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}
+                          title="点击放大查看"
+                        >
                           <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
                         </div>
                       ))}
@@ -676,6 +699,53 @@ export function MomentsModule() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="absolute inset-0 z-[70] bg-black/90 backdrop-blur-sm flex items-center justify-center select-none"
+          onMouseDown={e => { if (e.target === e.currentTarget) setLightbox(null) }}
+        >
+          {lightbox.images.length > 1 && (
+            <button
+              onClick={() => setLightbox(l => l ? { ...l, index: (l.index - 1 + l.images.length) % l.images.length } : l)}
+              className="absolute left-5 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 text-white hover:bg-white/25 flex items-center justify-center transition-colors"
+              title="上一张"
+            >
+              <ChevronLeft size={22} />
+            </button>
+          )}
+
+          <img
+            src={lightbox.images[lightbox.index]}
+            alt="图片预览"
+            className="max-w-[88%] max-h-[88%] object-contain rounded-lg shadow-2xl"
+          />
+
+          {lightbox.images.length > 1 && (
+            <button
+              onClick={() => setLightbox(l => l ? { ...l, index: (l.index + 1) % l.images.length } : l)}
+              className="absolute right-5 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 text-white hover:bg-white/25 flex items-center justify-center transition-colors"
+              title="下一张"
+            >
+              <ChevronRight size={22} />
+            </button>
+          )}
+
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute right-5 top-5 w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/25 flex items-center justify-center transition-colors"
+            title="关闭"
+          >
+            <X size={18} />
+          </button>
+
+          {lightbox.images.length > 1 && (
+            <span className="absolute bottom-5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/10 text-white text-[12px]">
+              {lightbox.index + 1} / {lightbox.images.length}
+            </span>
+          )}
         </div>
       )}
 
