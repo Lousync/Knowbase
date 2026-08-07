@@ -169,7 +169,7 @@ export function MomentsModule() {
   const pinnedPosts = useMemo(() => posts.filter(p => p.isPinned), [posts])
   const normalPosts = useMemo(() => posts.filter(p => !p.isPinned), [posts])
   const signature = profile?.username?.trim() || '写下此刻'
-  const canSave = !saving && draft.contentMd.trim().length > 0
+  const canSave = !saving && (draft.contentMd.trim().length > 0 || draft.imageDataUrls.length > 0)
   const detailPost = detailPostId ? posts.find(p => p.id === detailPostId) || null : null
 
   const closeEditor = () => {
@@ -242,7 +242,7 @@ export function MomentsModule() {
 
   const handleSave = async () => {
     const trimmed = draft.contentMd.trim()
-    if (!trimmed || saving) return
+    if (saving || (trimmed.length === 0 && draft.imageDataUrls.length === 0)) return
     setSaving(true)
     try {
       const payload = {
@@ -641,7 +641,7 @@ export function MomentsModule() {
           className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) setDetailPostId(null) }}
         >
-          <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
+          <div className="w-full max-w-3xl max-h-[92%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
             <div className="h-[3px] shrink-0 bg-[linear-gradient(90deg,var(--accent),color-mix(in_srgb,var(--accent)_45%,transparent))]" />
 
             <div className="px-5 py-4 flex items-start justify-between gap-3 border-b border-[var(--border-color)]">
@@ -682,7 +682,7 @@ export function MomentsModule() {
 
                 {(detailPost.imageDataUrls || []).length > 0 && (
                   <div className="mt-5">
-                    <div className={`grid gap-1.5 ${(detailPost.imageDataUrls || []).length === 1 ? 'grid-cols-1 max-w-[240px]' : 'grid-cols-3 max-w-[400px]'}`}>
+                    <div className={`grid gap-1 ${(detailPost.imageDataUrls || []).length === 1 ? 'grid-cols-1 max-w-[200px]' : 'grid-cols-3 max-w-[360px]'}`}>
                       {(detailPost.imageDataUrls || []).map((img, i) => (
                         <div
                           key={i}
