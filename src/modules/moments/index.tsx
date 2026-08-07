@@ -112,6 +112,7 @@ export function MomentsModule() {
   const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrls: [], tags: [] })
   const [tagInput, setTagInput] = useState('')
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
+  const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
   const [detailPostId, setDetailPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -404,6 +405,15 @@ export function MomentsModule() {
     }
   }
 
+  const toggleFeedExpanded = (postId: string) => {
+    setExpandedFeedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(postId)) next.delete(postId)
+      else next.add(postId)
+      return next
+    })
+  }
+
   const renderTags = (tags: string[], onClickTag?: (tag: string) => void) => {
     if (!tags || tags.length === 0) return null
     return (
@@ -427,32 +437,76 @@ export function MomentsModule() {
     )
   }
 
+  const renderImageGrid = (post: MomentsPost) => {
+    const images = post.imageDataUrls || []
+    if (images.length === 0) return null
+
+    // 单图：保持原始比例完整展示
+    if (images.length === 1) {
+      return (
+        <div className="mt-3">
+          <img
+            src={images[0]}
+            alt="说说图片"
+            onClick={e => { e.stopPropagation(); setLightbox({ images, index: 0 }) }}
+            className="max-w-[320px] max-h-[420px] w-auto h-auto object-contain rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
+            loading="lazy"
+            title="点击放大查看"
+          />
+        </div>
+      )
+    }
+
+    const expanded = expandedFeedIds.has(post.id)
+    const visible = expanded ? images : images.slice(0, GRID_VISIBLE)
+    const overflow = images.length - visible.length
+    const cols = images.length <= 4 ? 'grid-cols-2 max-w-[440px]' : 'grid-cols-3 max-w-[480px]'
+
+    return (
+      <div className="mt-3">
+        <div className={`grid ${cols} gap-2`}>
+          {visible.map((img, i) => (
+            <div
+              key={i}
+              onClick={e => { e.stopPropagation(); setLightbox({ images, index: i }) }}
+              className="relative aspect-square overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
+              title="点击放大查看"
+            >
+              <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+            </div>
+          ))}
+          {overflow > 0 && !expanded && (
+            <button
+              onClick={e => { e.stopPropagation(); toggleFeedExpanded(post.id) }}
+              className="relative aspect-square overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)]"
+              title={`展开剩余 ${overflow} 张图片`}
+            >
+              <img src={images[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" loading="lazy" />
+              <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-[20px] font-semibold">
+                +{overflow}
+              </span>
+            </button>
+          )}
+        </div>
+        {expanded && overflow > 0 && (
+          <button onClick={e => { e.stopPropagation(); toggleFeedExpanded(post.id) }} className="mt-2.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+            收起图片
+          </button>
+        )}
+      </div>
+    )
+  }
+
   const renderPost = (post: MomentsPost) => {
     const previewText = post.contentMd || stripHtmlTags(post.contentHtml || '')
-    const images = post.imageDataUrls || []
     return (
       <article
         key={post.id}
         onClick={() => setDetailPostId(post.id)}
-        className="flex rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)] cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
+        className="rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)] cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
         title="查看完整文案"
       >
-        {images.length > 0 && (
-          <div
-            onClick={e => { e.stopPropagation(); setLightbox({ images, index: 0 }) }}
-            className="relative w-[38%] max-w-[250px] shrink-0 min-h-[176px] bg-[var(--bg-primary)] cursor-zoom-in"
-            title="点击放大查看"
-          >
-            <img src={images[0]} alt="说说图片" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
-            {images.length > 1 && (
-              <span className="absolute right-2 bottom-2 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] backdrop-blur">
-                {images.length} 张
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 min-w-0 px-4 py-3.5 flex flex-col">
+        <div className="px-4 pt-3.5">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-[var(--text-muted)] mt-0.5">
               <Clock3 size={11} />
@@ -473,7 +527,7 @@ export function MomentsModule() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 mt-1.5 text-[14px] leading-6 text-[var(--text-primary)]">
+          <div className="mt-2 text-[14px] leading-6 text-[var(--text-primary)]">
             <ClampedText
               text={plainText(previewText) || previewText}
               maxLines={4}
@@ -485,7 +539,9 @@ export function MomentsModule() {
             {renderTags(post.tags || [], t => setTagQuery(t))}
           </div>
 
-          <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+          {renderImageGrid(post)}
+
+          <div className="mt-3 pb-3.5 text-[10px] text-[var(--text-muted)]">
             {post.updatedAt !== post.createdAt ? '已编辑' : '发布'}
           </div>
         </div>
