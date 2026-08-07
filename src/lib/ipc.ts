@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsExportData } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsExportData, MomentsAlbum } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -172,6 +172,11 @@ export const createMomentsPost = (d: CreateMomentsPostDTO) => a().createMomentsP
 export const updateMomentsPost = (id: string, d: UpdateMomentsPostDTO) => a().updateMomentsPost(id, d)
 export const deleteMomentsPost = (id: string) => a().deleteMomentsPost(id)
 export const toggleMomentsPin = (id: string) => a().toggleMomentsPin(id)
+export const getMomentsAlbums = (): Promise<MomentsAlbum[]> => a().getMomentsAlbums()
+export const createMomentsAlbum = (name: string) => a().createMomentsAlbum(name)
+export const renameMomentsAlbum = (id: string, name: string) => a().renameMomentsAlbum(id, name)
+export const deleteMomentsAlbum = (id: string) => a().deleteMomentsAlbum(id)
+export const setMomentsPostAlbum = (postId: string, albumId: string) => a().setMomentsPostAlbum(postId, albumId)
 
 // ===== AI =====
 export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

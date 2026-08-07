@@ -1,21 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check,
-  ChevronLeft, ChevronRight, Search, Images, List,
+  ChevronLeft, ChevronRight, Search, Images, List, Tag,
 } from 'lucide-react'
 import { ConfirmDialog } from '../../components/shared'
 import {
   createMomentsPost,
+  createMomentsAlbum,
   deleteMomentsPost,
+  deleteMomentsAlbum,
   getAvatarBase64,
+  getMomentsAlbums,
   getMomentsPosts,
   getUserProfile,
+  renameMomentsAlbum,
   setUserCoverImage,
   setUserUsername,
+  setMomentsPostAlbum,
   toggleMomentsPin,
   updateMomentsPost,
 } from '../../lib/ipc'
-import type { MomentsPost, UserProfile } from '../../types'
+import type { MomentsAlbum, MomentsPost, UserProfile } from '../../types'
 
 type EditorMode = 'create' | 'edit'
 type ViewMode = 'timeline' | 'album'
@@ -103,8 +108,10 @@ function ClampedText({ text, maxLines = 5, onExpand }: { text: string; maxLines?
 
 export function MomentsModule() {
   const [posts, setPosts] = useState<MomentsPost[]>([])
+  const [albums, setAlbums] = useState<MomentsAlbum[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null)
   const [tagQuery, setTagQuery] = useState('')
   const [editorOpen, setEditorOpen] = useState(false)
   const [mode, setMode] = useState<EditorMode>('create')
@@ -116,6 +123,11 @@ export function MomentsModule() {
   const [detailPostId, setDetailPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [albumDeleteConfirm, setAlbumDeleteConfirm] = useState<MomentsAlbum | null>(null)
+  const [albumModal, setAlbumModal] = useState<
+    { mode: 'pick'; postId: string } | { mode: 'create'; postId?: string } | { mode: 'rename'; albumId: string } | null
+  >(null)
+  const [albumNameDraft, setAlbumNameDraft] = useState('')
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [avatarDataUrl, setAvatarDataUrl] = useState('')
@@ -143,6 +155,14 @@ export function MomentsModule() {
     }
   }, [])
 
+  const loadAlbums = useCallback(async () => {
+    try {
+      setAlbums(await getMomentsAlbums())
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
   const reloadProfile = useCallback(async () => {
     try {
       const p = await getUserProfile()
@@ -155,11 +175,12 @@ export function MomentsModule() {
 
   useEffect(() => {
     loadPosts()
+    loadAlbums()
     reloadProfile()
     getAvatarBase64()
       .then(v => { if (typeof v === 'string') setAvatarDataUrl(v) })
       .catch(() => setAvatarDataUrl(''))
-  }, [loadPosts, reloadProfile])
+  }, [loadPosts, loadAlbums, reloadProfile])
 
   // 封面更换后重置滑动状态
   useEffect(() => {
@@ -267,7 +288,11 @@ export function MomentsModule() {
 
   const pinnedPosts = useMemo(() => filteredPosts.filter(p => p.isPinned), [filteredPosts])
   const normalPosts = useMemo(() => filteredPosts.filter(p => !p.isPinned), [filteredPosts])
-  const albumGroups = useMemo(() => filteredPosts.filter(p => (p.imageDataUrls || []).length > 0), [filteredPosts])
+  const albumPosts = useMemo(
+    () => (selectedAlbumId ? filteredPosts.filter(p => p.albumId === selectedAlbumId && (p.imageDataUrls || []).length > 0) : []),
+    [filteredPosts, selectedAlbumId]
+  )
+  const selectedAlbum = selectedAlbumId ? albums.find(a => a.id === selectedAlbumId) || null : null
 
   const closeEditor = () => {
     setEditorOpen(false)
@@ -405,6 +430,52 @@ export function MomentsModule() {
     }
   }
 
+  const openAlbumModal = (m: { mode: 'pick'; postId: string } | { mode: 'create'; postId?: string } | { mode: 'rename'; albumId: string }) => {
+    setAlbumNameDraft('')
+    setAlbumModal(m)
+  }
+
+  const confirmAlbumModal = async () => {
+    const name = albumNameDraft.trim()
+    if (!name || !albumModal) return
+    try {
+      if (albumModal.mode === 'rename') {
+        await renameMomentsAlbum(albumModal.albumId, name)
+      } else {
+        const created = await createMomentsAlbum(name)
+        if (created && albumModal.postId) {
+          await setMomentsPostAlbum(albumModal.postId, created.id)
+          await loadPosts()
+        }
+      }
+      setAlbumModal(null)
+      await loadAlbums()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const assignPostAlbum = async (postId: string, albumId: string) => {
+    try {
+      await setMomentsPostAlbum(postId, albumId)
+      setAlbumModal(null)
+      await Promise.all([loadPosts(), loadAlbums()])
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleDeleteAlbum = async (album: MomentsAlbum) => {
+    try {
+      await deleteMomentsAlbum(album.id)
+      setAlbumDeleteConfirm(null)
+      setSelectedAlbumId(null)
+      await Promise.all([loadPosts(), loadAlbums()])
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const toggleFeedExpanded = (postId: string) => {
     setExpandedFeedIds(prev => {
       const next = new Set(prev)
@@ -524,6 +595,9 @@ export function MomentsModule() {
               <button onClick={e => { e.stopPropagation(); handleTogglePin(post.id) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.isPinned ? '取消置顶' : '置顶'}>
                 {post.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
               </button>
+              <button onClick={e => { e.stopPropagation(); openAlbumModal({ mode: 'pick', postId: post.id }) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.albumId ? '更换相册' : '加入相册'}>
+                <Images size={14} />
+              </button>
               <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
                 <PencilLine size={14} />
               </button>
@@ -545,8 +619,14 @@ export function MomentsModule() {
             {renderTags(post.tags || [], t => setTagQuery(t))}
           </div>
 
-          <div className="mt-2 text-[10px] text-[var(--text-muted)]">
-            {post.updatedAt !== post.createdAt ? '已编辑' : '发布'}
+          <div className="mt-2 text-[10px] text-[var(--text-muted)] flex items-center gap-2 flex-wrap">
+            <span>{post.updatedAt !== post.createdAt ? '已编辑' : '发布'}</span>
+            {post.albumId && albums.find(a => a.id === post.albumId) && (
+              <span className="inline-flex items-center gap-1 text-[var(--text-secondary)]">
+                <Images size={10} />
+                {albums.find(a => a.id === post.albumId)!.name}
+              </span>
+            )}
           </div>
         </div>
       </article>
@@ -733,41 +813,104 @@ export function MomentsModule() {
               <RefreshCw size={14} className="animate-spin" />
               加载中...
             </div>
+          ) : viewMode === 'album' ? (
+            selectedAlbum ? (
+              <div>
+                <div className="flex items-center gap-2.5 mb-4">
+                  <button
+                    onClick={() => setSelectedAlbumId(null)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <ChevronLeft size={14} />
+                    返回
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[16px] font-semibold text-[var(--text-primary)] truncate">{selectedAlbum.name}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{selectedAlbum.photoCount} 张照片</div>
+                  </div>
+                  <button
+                    onClick={() => openAlbumModal({ mode: 'rename', albumId: selectedAlbum.id })}
+                    className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    title="重命名相册"
+                  >
+                    <PencilLine size={15} />
+                  </button>
+                  <button
+                    onClick={() => setAlbumDeleteConfirm(selectedAlbum)}
+                    className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"
+                    title="删除相册"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+
+                {albumPosts.length === 0 ? (
+                  <div className="py-16 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+                    这个相册还没有照片，去说说卡片上点击相册图标把照片加入进来。
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {albumPosts.map(p => (p.imageDataUrls || []).map((img, i) => (
+                      <div
+                        key={`${p.id}-${i}`}
+                        onClick={() => setLightbox({ images: p.imageDataUrls || [], index: i })}
+                        className="aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
+                        title="点击放大查看"
+                      >
+                        <img src={img} alt={`相册照片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                    )))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-[12px] text-[var(--text-secondary)]">共 {albums.length} 个相册</div>
+                  <button
+                    onClick={() => openAlbumModal({ mode: 'create' })}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity"
+                  >
+                    <Plus size={14} />
+                    新建相册
+                  </button>
+                </div>
+
+                {albums.length === 0 ? (
+                  <div className="py-16 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+                    还没有相册。先新建一个，然后去说说卡片上把照片加入相册。
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {albums.map(a => (
+                      <button
+                        key={a.id}
+                        onClick={() => setSelectedAlbumId(a.id)}
+                        className="group rounded-[18px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden text-left hover:border-[var(--text-muted)]/40 transition-colors shadow-[0_8px_22px_rgba(0,0,0,0.16)]"
+                      >
+                        <div className="relative aspect-[4/3] bg-[var(--bg-primary)] overflow-hidden">
+                          {a.cover ? (
+                            <img src={a.cover} alt={a.name} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" loading="lazy" />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(14,165,233,0.25),transparent_45%),linear-gradient(135deg,#111827,#1f2937)]">
+                              <Images size={30} className="text-white/40" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-3 py-2.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)] truncate">{a.name}</div>
+                          <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{a.photoCount} 张照片</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )
           ) : filteredPosts.length === 0 ? (
             <div className="py-20 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
               {tagQuery ? '没有找到包含该标签的说说。' : '还没有说说，先点右下角加号发第一条。'}
             </div>
-          ) : viewMode === 'album' ? (
-            albumGroups.length === 0 ? (
-              <div className="py-20 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
-                相册里还没有图片，发带图的说说后会自动归档到这里。
-              </div>
-            ) : (
-              albumGroups.map(post => (
-                <section key={post.id} className="rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-                      <Clock3 size={12} />
-                      <span>{formatDateTime(post.createdAt)}</span>
-                      {post.isPinned && <span className="inline-flex items-center gap-1 text-[var(--accent)]"><Pin size={10} />置顶</span>}
-                    </div>
-                    <span className="text-[11px] text-[var(--text-muted)]">{post.imageDataUrls.length} 张</span>
-                  </div>
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                    {(post.imageDataUrls || []).map((img, i) => (
-                      <div
-                        key={i}
-                        onClick={() => setLightbox({ images: post.imageDataUrls || [], index: i })}
-                        className="aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
-                        title="点击放大查看"
-                      >
-                        <img src={img} alt={`相册图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))
-            )
           ) : (
             <>
               {pinnedPosts.length > 0 && (
@@ -843,28 +986,36 @@ export function MomentsModule() {
                   className="w-full min-h-[150px] resize-none rounded-2xl border border-[var(--border-color)] bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_92%,var(--bg-secondary))_100%)] px-5 py-4 text-[15px] leading-8 text-[var(--text-primary)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors placeholder:text-[var(--text-disabled)]"
                 />
 
-                <div className="mt-4 flex items-center gap-2 flex-wrap">
-                  {draft.tags.map((tag, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-hover)] border border-[var(--border-color)] text-[12px] text-[var(--accent)]">
-                      #{tag}
-                      <button onClick={() => removeTag(i)} className="text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors" title="移除标签">
-                        <X size={11} />
-                      </button>
-                    </span>
-                  ))}
-                  {draft.tags.length < MAX_TAGS && (
-                    <input
-                      value={tagInput}
-                      onChange={e => setTagInput(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() }
-                        if (e.key === 'Backspace' && !tagInput && draft.tags.length > 0) removeTag(draft.tags.length - 1)
-                      }}
-                      onBlur={addTag}
-                      placeholder={draft.tags.length ? '' : '添加标签，回车确认（最多 5 个）'}
-                      className="flex-1 min-w-[130px] max-w-[240px] bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]"
-                    />
-                  )}
+                <div className="mt-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Tag size={13} className="text-[var(--text-muted)]" />
+                    <span className="text-[12px] text-[var(--text-secondary)]">标签</span>
+                    <span className="text-[11px] text-[var(--text-muted)]">（可选 · 回车确认 · 最多 {MAX_TAGS} 个）</span>
+                    <span className="ml-auto text-[11px] text-[var(--text-muted)]">{draft.tags.length}/{MAX_TAGS}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap rounded-2xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 min-h-[46px] focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all">
+                    {draft.tags.map((tag, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] text-[12px] text-[var(--accent)]">
+                        #{tag}
+                        <button onClick={() => removeTag(i)} className="w-4 h-4 rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors" title="移除标签">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                    {draft.tags.length < MAX_TAGS && (
+                      <input
+                        value={tagInput}
+                        onChange={e => setTagInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() }
+                          if (e.key === 'Backspace' && !tagInput && draft.tags.length > 0) removeTag(draft.tags.length - 1)
+                        }}
+                        onBlur={addTag}
+                        placeholder={draft.tags.length ? '继续添加...' : '输入标签，回车确认'}
+                        className="flex-1 min-w-[120px] bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-5">
@@ -1007,6 +1158,118 @@ export function MomentsModule() {
         </div>
       )}
 
+      {albumModal && (
+        <div
+          className="absolute inset-0 z-[60] bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
+          onMouseDown={e => { if (e.target === e.currentTarget) setAlbumModal(null) }}
+        >
+          <div className="w-full max-w-sm rounded-[22px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_24px_70px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="px-5 h-[52px] flex items-center justify-between border-b border-[var(--border-color)]">
+              <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+                {albumModal.mode === 'rename' ? '重命名相册' : albumModal.mode === 'pick' ? '加入相册' : '新建相册'}
+              </span>
+              <button onClick={() => setAlbumModal(null)} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="关闭">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {albumModal.mode === 'pick' && (
+                <>
+                  {(() => {
+                    const post = posts.find(p => p.id === albumModal.postId)
+                    const currentAlbum = post?.albumId ? albums.find(a => a.id === post.albumId) : null
+                    return currentAlbum ? (
+                      <button
+                        onClick={() => assignPostAlbum(albumModal.postId, '').catch(console.error)}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 mb-1 rounded-xl hover:bg-[var(--bg-hover)] transition-colors text-left text-[13px] text-[var(--danger)]"
+                      >
+                        <X size={15} />
+                        移出相册（{currentAlbum.name}）
+                      </button>
+                    ) : null
+                  })()}
+                  <div className="max-h-56 overflow-y-auto space-y-1 mb-3">
+                    {albums.length === 0 ? (
+                      <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">还没有相册，先新建一个吧。</div>
+                    ) : (
+                      albums.map(a => {
+                        const current = posts.find(p => p.id === albumModal.postId)?.albumId === a.id
+                        return (
+                          <button
+                            key={a.id}
+                            onClick={() => assignPostAlbum(albumModal.postId, a.id).catch(console.error)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[var(--bg-hover)] transition-colors text-left"
+                          >
+                            <span className="w-8 h-8 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0">
+                              {a.cover ? (
+                                <img src={a.cover} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="w-full h-full flex items-center justify-center text-[var(--text-muted)]"><Images size={14} /></span>
+                              )}
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[13px] text-[var(--text-primary)] truncate">{a.name}</span>
+                              <span className="block text-[11px] text-[var(--text-muted)]">{a.photoCount} 张</span>
+                            </span>
+                            {current && <Check size={15} className="text-[var(--accent)] shrink-0" />}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      autoFocus
+                      value={albumNameDraft}
+                      onChange={e => setAlbumNameDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') confirmAlbumModal().catch(console.error) }}
+                      placeholder="新相册名称..."
+                      maxLength={20}
+                      className="flex-1 min-w-0 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                    />
+                    <button
+                      onClick={() => { confirmAlbumModal().catch(console.error) }}
+                      disabled={!albumNameDraft.trim()}
+                      className="px-3.5 py-2 rounded-xl bg-[var(--accent)] text-white text-[13px] disabled:opacity-40 hover:opacity-90 transition-opacity"
+                    >
+                      新建并加入
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {(albumModal.mode === 'create' || albumModal.mode === 'rename') && (
+                <div className="space-y-3">
+                  <input
+                    autoFocus
+                    value={albumNameDraft}
+                    onChange={e => setAlbumNameDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') confirmAlbumModal().catch(console.error) }}
+                    placeholder={albumModal.mode === 'rename' ? '输入新的相册名称' : '输入相册名称，例如：旅行、日常'}
+                    maxLength={20}
+                    className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setAlbumModal(null)} className="px-3.5 py-2 rounded-xl text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+                      取消
+                    </button>
+                    <button
+                      onClick={() => { confirmAlbumModal().catch(console.error) }}
+                      disabled={!albumNameDraft.trim()}
+                      className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-[13px] disabled:opacity-40 hover:opacity-90 transition-opacity"
+                    >
+                      {albumModal.mode === 'rename' ? '保存' : '创建'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {lightbox && (
         <div
           className="absolute inset-0 z-[70] bg-black/90 backdrop-blur-sm flex items-center justify-center select-none"
@@ -1064,6 +1327,16 @@ export function MomentsModule() {
         showCheckbox={false}
         onConfirm={() => { handleDelete().catch(console.error) }}
         onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      <ConfirmDialog
+        open={!!albumDeleteConfirm}
+        title="删除相册"
+        message={`删除相册「${albumDeleteConfirm?.name || ''}」后，其中的说说会保留在时间线，只是不再归入该相册。`}
+        confirmLabel="删除"
+        showCheckbox={false}
+        onConfirm={() => { if (albumDeleteConfirm) handleDeleteAlbum(albumDeleteConfirm).catch(console.error) }}
+        onCancel={() => setAlbumDeleteConfirm(null)}
       />
     </div>
   )

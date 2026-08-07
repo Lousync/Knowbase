@@ -450,6 +450,20 @@ export function runMigrations(): void {
     try { db.run("ALTER TABLE moments_posts ADD COLUMN tags TEXT DEFAULT '[]'") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('026_moments_tags')")
   }
+
+  if (!applied.has('027_moments_albums')) {
+    // 说说相册：独立相册表 + 说说归属相册
+    db.run(`
+      CREATE TABLE IF NOT EXISTS moments_albums (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    try { db.run("ALTER TABLE moments_posts ADD COLUMN album_id TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('027_moments_albums')")
+  }
 }
 
 /**

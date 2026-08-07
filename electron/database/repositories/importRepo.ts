@@ -437,6 +437,14 @@ export function registerImportHandlers(): void {
       }
       // --- Moments ---
       if (data.moments) {
+        for (const album of data.moments.albums || []) {
+          if (exists('moments_albums', album.id)) { skipped++; continue }
+          db.run(
+            'INSERT INTO moments_albums (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            [album.id, album.name, album.createdAt, album.updatedAt]
+          )
+          imported++
+        }
         for (const post of data.moments.posts || []) {
           if (exists('moments_posts', post.id)) { skipped++; continue }
           const images = Array.isArray(post.imageDataUrls)
@@ -444,9 +452,9 @@ export function registerImportHandlers(): void {
             : (post.imageDataUrl ? [post.imageDataUrl] : [])
           const tags = Array.isArray(post.tags) ? post.tags.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0) : []
           db.run(
-            `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, tags, is_pinned, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [post.id, post.contentMd || '', post.contentHtml || '', JSON.stringify(images), JSON.stringify(tags),
+            `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, tags, album_id, is_pinned, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [post.id, post.contentMd || '', post.contentHtml || '', JSON.stringify(images), JSON.stringify(tags), post.albumId || '',
              post.isPinned ? 1 : 0, post.createdAt, post.updatedAt]
           )
           imported++

@@ -40,12 +40,21 @@ export interface MomentsPost {
   contentHtml: string
   imageDataUrls: string[]
   tags: string[]
+  albumId: string
   isPinned: boolean
   createdAt: string
   updatedAt: string
 }
-export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; isPinned?: boolean }
-export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; isPinned?: boolean }
+export interface MomentsAlbum {
+  id: string
+  name: string
+  photoCount: number
+  cover: string
+  createdAt: string
+  updatedAt: string
+}
+export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
+export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
 
 // user
 export interface UserProfile {
@@ -149,7 +158,7 @@ export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Ta
 export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
 export interface KnowledgeExportData { categories: KnowledgeCategory[]; pages: (KnowledgePage & { tags: KnowledgeTag[]; backlinks: string[] })[]; tags: KnowledgeTag[] }
 export interface PasswordVaultExportData { entries: PasswordEntry[] }
-export interface MomentsExportData { posts: MomentsPost[] }
+export interface MomentsExportData { posts: MomentsPost[]; albums: MomentsAlbum[] }
 export interface AllExportData {
   exportVersion: string; exportedAt: string
   user?: UserExportData & { settings: Record<string, unknown>; stats: UserStats }
@@ -288,6 +297,11 @@ export interface ElectronAPI {
   updateMomentsPost: (id: string, d: UpdateMomentsPostDTO) => Promise<MomentsPost>
   deleteMomentsPost: (id: string) => Promise<void>
   toggleMomentsPin: (id: string) => Promise<MomentsPost>
+  getMomentsAlbums: () => Promise<MomentsAlbum[]>
+  createMomentsAlbum: (name: string) => Promise<MomentsAlbum | null>
+  renameMomentsAlbum: (id: string, name: string) => Promise<MomentsAlbum | null>
+  deleteMomentsAlbum: (id: string) => Promise<void>
+  setMomentsPostAlbum: (postId: string, albumId: string) => Promise<MomentsPost | null>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
   // fill popup

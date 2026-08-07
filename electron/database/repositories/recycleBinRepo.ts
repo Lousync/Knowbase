@@ -188,10 +188,10 @@ export function registerRecycleBinHandlers(): void {
         : (record.imageDataUrl ? [record.imageDataUrl] : [])
       const tags = Array.isArray(record.tags) ? record.tags.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0) : []
       run(
-        `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, tags, is_pinned, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, tags, album_id, is_pinned, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          record.id, record.contentMd || '', record.contentHtml || '', JSON.stringify(images), JSON.stringify(tags), record.isPinned ? 1 : 0,
+          record.id, record.contentMd || '', record.contentHtml || '', JSON.stringify(images), JSON.stringify(tags), record.albumId || '', record.isPinned ? 1 : 0,
           record.createdAt, record.updatedAt
         ]
       )
