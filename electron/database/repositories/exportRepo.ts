@@ -18,6 +18,7 @@ interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
+interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; is_pinned: number; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -45,6 +46,10 @@ function mapPage(r: PageRow) {
 
 function mapPassword(r: PasswordRow) {
   return { id: r.id, title: r.title, url: r.url || '', username: r.username || '', account: r.account || '', password: r.password, notes: r.notes || '', sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
+}
+
+function mapMoments(r: MomentsRow) {
+  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrl: r.image_data_url || '', isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {
@@ -112,6 +117,12 @@ export function registerExportHandlers(): void {
     return { entries: entries.map(mapPassword) }
   })
 
+  // ===== Moments =====
+  ipcMain.handle('export:getAllMomentsData', () => {
+    const posts = queryAll<MomentsRow>('SELECT * FROM moments_posts ORDER BY is_pinned DESC, created_at DESC')
+    return { posts: posts.map(mapMoments) }
+  })
+
   // ===== Combined: all three domains =====
   ipcMain.handle('export:getAllData', () => {
     // Blog
@@ -148,6 +159,7 @@ export function registerExportHandlers(): void {
 
     // Password Vault
     const pwdEntries = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
+    const moments = queryAll<MomentsRow>('SELECT * FROM moments_posts ORDER BY is_pinned DESC, created_at DESC')
 
     return {
       exportVersion: '1.1',
@@ -167,6 +179,9 @@ export function registerExportHandlers(): void {
       },
       passwordVault: {
         entries: pwdEntries.map(mapPassword)
+      },
+      moments: {
+        posts: moments.map(mapMoments)
       }
     }
   })

@@ -1,19 +1,20 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield } from 'lucide-react'
+import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles } from 'lucide-react'
 import {
   exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData, exportAllPasswordVaultData,
+  exportAllMomentsData,
   showExportSaveDialog, showExportOpenDirDialog, writeExportTextFile, copyDbFile,
   writeMarkdownExport, onMarkdownExportProgress, getSetting,
   getUserExportData, getUserStats, getAllSettings
 } from '../../lib/ipc'
-import type { BlogExportData, ScheduleExportData, KnowledgeExportData, PasswordVaultExportData, ExportMarkdownProgress } from '../../types'
+import type { BlogExportData, ScheduleExportData, KnowledgeExportData, PasswordVaultExportData, MomentsExportData, ExportMarkdownProgress } from '../../types'
 import { SETTINGS_DEFAULTS } from '../../lib/settings'
 import { ProgressPanel } from './components/ProgressPanel'
 import { MarkdownItemSelector, SelectableItem } from './components/MarkdownItemSelector'
 
 // ---- types ----
 interface ModuleOption {
-  id: 'blog' | 'schedule' | 'knowledge' | 'passwordVault'
+  id: 'blog' | 'schedule' | 'knowledge' | 'passwordVault' | 'moments'
   label: string
   icon: React.ReactNode
   count: string
@@ -38,6 +39,7 @@ const MODULES: ModuleOption[] = [
   { id: 'schedule', label: '日程', icon: <Database size={16} />, count: '待办 + 四象限' },
   { id: 'knowledge', label: '知识库', icon: <FileArchive size={16} />, count: '页面 + 分类 + 链接' },
   { id: 'passwordVault', label: '密码本', icon: <Shield size={16} />, count: '加密密码条目' },
+  { id: 'moments', label: '说说', icon: <Sparkles size={16} />, count: '本地时间线 + 置顶' },
 ]
 
 const FORMATS: FormatOption[] = [
@@ -103,7 +105,7 @@ interface ExportResult {
 }
 
 async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8'): Promise<ExportResult> {
-  const isAll = moduleIds.has('blog') && moduleIds.has('schedule') && moduleIds.has('knowledge') && moduleIds.has('passwordVault')
+  const isAll = moduleIds.has('blog') && moduleIds.has('schedule') && moduleIds.has('knowledge') && moduleIds.has('passwordVault') && moduleIds.has('moments')
 
   const { filePath } = await showExportSaveDialog({
     defaultName: isAll ? `knowbase-${new Date().toISOString().slice(0, 10)}.json` : 'export.json',
@@ -128,6 +130,7 @@ async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8')
     if (moduleIds.has('schedule')) parts.schedule = await exportAllScheduleData()
     if (moduleIds.has('knowledge')) parts.knowledge = await exportAllKnowledgeData()
     if (moduleIds.has('passwordVault')) parts.passwordVault = await exportAllPasswordVaultData()
+    if (moduleIds.has('moments')) parts.moments = await exportAllMomentsData()
     data = { exportVersion: '1.1', exportedAt: new Date().toISOString(), ...parts }
   }
 
@@ -141,7 +144,8 @@ async function runMarkdownExport(
   knowledgeIds: Set<string>,
   scheduleIds: Set<string>,
   passwordIds: Set<string>,
-  data: { blog: BlogExportData | null; schedule: ScheduleExportData | null; knowledge: KnowledgeExportData | null; passwordVault: PasswordVaultExportData | null },
+  momentsIds: Set<string>,
+  data: { blog: BlogExportData | null; schedule: ScheduleExportData | null; knowledge: KnowledgeExportData | null; passwordVault: PasswordVaultExportData | null; moments: MomentsExportData | null },
   encoding: string = 'utf-8'
 ): Promise<ExportResult> {
   const { dirPath } = await showExportOpenDirDialog()
@@ -312,6 +316,25 @@ async function runMarkdownExport(
     }
   }
 
+  // Moments → markdown timeline
+  if (moduleIds.has('moments') && data.moments) {
+    const moments = data.moments.posts.filter(p => momentsIds.has(p.id))
+    if (moments.length > 0) {
+      let md = `# 说说\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n`
+      const sorted = [...moments].sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+      for (const post of sorted) {
+        md += `## ${post.createdAt.slice(0, 19).replace('T', ' ')}${post.isPinned ? ' · 置顶' : ''}\n\n`
+        if (post.imageDataUrl) md += `![说说图片](${post.imageDataUrl})\n\n`
+        md += `${post.contentMd || post.contentHtml || ''}\n\n`
+      }
+      md += `共 ${moments.length} 条说说\n`
+      files.push({ relPath: 'moments/timeline.md', content: md })
+    }
+  }
+
   const writeResult = await writeMarkdownExport(dirPath, files, encoding)
   return { cancelled: false, dirPath, fileCount: writeResult.fileCount, totalSize: writeResult.totalSize }
 }
@@ -329,7 +352,7 @@ async function runSqliteExport(): Promise<ExportResult> {
 
 // ---- Component ----
 export function ExportModule() {
-  const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set(['blog', 'schedule', 'knowledge']))
+  const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set(['blog', 'schedule', 'knowledge', 'moments']))
   const [format, setFormat] = useState<string>('json')
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [statusMessage, setStatusMessage] = useState('')
@@ -341,12 +364,14 @@ export function ExportModule() {
     schedule: ScheduleExportData | null
     knowledge: KnowledgeExportData | null
     passwordVault: PasswordVaultExportData | null
-  }>({ blog: null, schedule: null, knowledge: null, passwordVault: null })
+    moments: MomentsExportData | null
+  }>({ blog: null, schedule: null, knowledge: null, passwordVault: null, moments: null })
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedBlogIds, setSelectedBlogIds] = useState<Set<string>>(new Set())
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(new Set())
   const [selectedScheduleIds, setSelectedScheduleIds] = useState<Set<string>>(new Set())
   const [selectedPasswordIds, setSelectedPasswordIds] = useState<Set<string>>(new Set())
+  const [selectedMomentsIds, setSelectedMomentsIds] = useState<Set<string>>(new Set())
 
   // Progress state
   const [progress, setProgress] = useState<ExportMarkdownProgress | null>(null)
@@ -368,7 +393,8 @@ export function ExportModule() {
           (selectedModules.has('blog') && selectedBlogIds.size > 0) ||
           (selectedModules.has('schedule') && selectedScheduleIds.size > 0) ||
           (selectedModules.has('knowledge') && selectedKnowledgeIds.size > 0) ||
-          (selectedModules.has('passwordVault') && selectedPasswordIds.size > 0)
+          (selectedModules.has('passwordVault') && selectedPasswordIds.size > 0) ||
+          (selectedModules.has('moments') && selectedMomentsIds.size > 0)
         )
       : selectedModules.size > 0
 
@@ -393,8 +419,9 @@ export function ExportModule() {
     const missingSchedule = selectedModules.has('schedule') && !markdownData.schedule
     const missingKnowledge = selectedModules.has('knowledge') && !markdownData.knowledge
     const missingPwd = selectedModules.has('passwordVault') && !markdownData.passwordVault
+    const missingMoments = selectedModules.has('moments') && !markdownData.moments
 
-    if (!missingBlog && !missingSchedule && !missingKnowledge && !missingPwd) return
+    if (!missingBlog && !missingSchedule && !missingKnowledge && !missingPwd && !missingMoments) return
 
     setDataLoading(true)
     const tasks: Promise<void>[] = []
@@ -431,18 +458,27 @@ export function ExportModule() {
         })
       )
     }
+    if (missingMoments) {
+      tasks.push(
+        exportAllMomentsData().then(d => {
+          setMarkdownData(prev => ({ ...prev, moments: d }))
+          setSelectedMomentsIds(new Set(d.posts.map(p => p.id)))
+        })
+      )
+    }
 
     Promise.all(tasks).finally(() => setDataLoading(false))
-  }, [format, selectedModules, markdownData.blog, markdownData.schedule, markdownData.knowledge, markdownData.passwordVault])
+  }, [format, selectedModules, markdownData.blog, markdownData.schedule, markdownData.knowledge, markdownData.passwordVault, markdownData.moments])
 
   // Clear markdown state when switching away
   useEffect(() => {
     if (format !== 'markdown') {
-      setMarkdownData({ blog: null, schedule: null, knowledge: null, passwordVault: null })
+      setMarkdownData({ blog: null, schedule: null, knowledge: null, passwordVault: null, moments: null })
       setSelectedBlogIds(new Set())
       setSelectedKnowledgeIds(new Set())
       setSelectedScheduleIds(new Set())
       setSelectedPasswordIds(new Set())
+      setSelectedMomentsIds(new Set())
       setProgress(null)
     }
   }, [format])
@@ -471,6 +507,12 @@ export function ExportModule() {
   }
   const selectAllPasswordVault = () => setSelectedPasswordIds(new Set(markdownData.passwordVault?.entries.map(e => e.id) || []))
   const deselectAllPasswordVault = () => setSelectedPasswordIds(new Set())
+
+  const toggleMomentsItem = (id: string) => {
+    setSelectedMomentsIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  const selectAllMoments = () => setSelectedMomentsIds(new Set(markdownData.moments?.posts.map(p => p.id) || []))
+  const deselectAllMoments = () => setSelectedMomentsIds(new Set())
 
   // ---- Item lists for selector ----
   // Blog: year → month → entries tree
@@ -583,6 +625,12 @@ export function ExportModule() {
     subtitle: `${e.username || '无用户名'}${e.url ? ' · ' + e.url : ''}`
   }))
 
+  const momentsSelectableItems: SelectableItem[] = (markdownData.moments?.posts || []).map(p => ({
+    id: p.id,
+    title: p.contentMd.slice(0, 24).replace(/\s+/g, ' ') || '无标题说说',
+    subtitle: `${p.createdAt.slice(0, 16).replace('T', ' ')}${p.isPinned ? ' · 置顶' : ''}`
+  }))
+
   // ---- Export action ----
   const handleExport = useCallback(async () => {
     if (!canExport) return
@@ -600,7 +648,7 @@ export function ExportModule() {
         const unsub = onMarkdownExportProgress((p) => setProgress(p))
         try {
           result = await runMarkdownExport(
-            selectedModules, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, selectedPasswordIds, markdownData, exportEncoding
+            selectedModules, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, selectedPasswordIds, selectedMomentsIds, markdownData, exportEncoding
           )
         } finally {
           unsub()
@@ -642,7 +690,7 @@ export function ExportModule() {
       setStatusMessage(`导出失败：${e instanceof Error ? e.message : String(e)}`)
       setProgress(null)
     }
-  }, [selectedModules, format, canExport, isSqlite, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, markdownData, exportEncoding])
+  }, [selectedModules, format, canExport, isSqlite, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, selectedPasswordIds, selectedMomentsIds, markdownData, exportEncoding])
 
   const statusIcon = status === 'loading' ? <Loader2 size={16} className="animate-spin" />
     : status === 'success' ? <Check size={16} />
@@ -744,6 +792,13 @@ export function ExportModule() {
                 onPasswordSelectAll={selectAllPasswordVault}
                 onPasswordDeselectAll={deselectAllPasswordVault}
                 passwordLoading={dataLoading && selectedModules.has('passwordVault') && !markdownData.passwordVault}
+
+                momentsItems={momentsSelectableItems}
+                selectedMomentsIds={selectedMomentsIds}
+                onMomentsToggle={toggleMomentsItem}
+                onMomentsSelectAll={selectAllMoments}
+                onMomentsDeselectAll={deselectAllMoments}
+                momentsLoading={dataLoading && selectedModules.has('moments') && !markdownData.moments}
 
                 enabledModules={selectedModules}
               />

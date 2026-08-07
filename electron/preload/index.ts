@@ -118,6 +118,7 @@ const api = {
   exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
   exportAllKnowledgeData: () => ipcRenderer.invoke('export:getAllKnowledgeData'),
   exportAllPasswordVaultData: () => ipcRenderer.invoke('export:getAllPasswordVaultData'),
+  exportAllMomentsData: () => ipcRenderer.invoke('export:getAllMomentsData'),
   exportAllData: () => ipcRenderer.invoke('export:getAllData'),
   showExportSaveDialog: (opts: unknown) => ipcRenderer.invoke('export:showSaveDialog', opts),
   showExportOpenDirDialog: () => ipcRenderer.invoke('export:showOpenDirDialog'),
@@ -144,6 +145,14 @@ const api = {
   createPasswordEntry: (data: unknown) => ipcRenderer.invoke('passwordVault:create', data),
   updatePasswordEntry: (id: string, data: unknown) => ipcRenderer.invoke('passwordVault:update', id, data),
   deletePasswordEntry: (id: string) => ipcRenderer.invoke('passwordVault:delete', id),
+
+  // moments
+  getMomentsPosts: () => ipcRenderer.invoke('moments:getAll'),
+  getMomentsPostById: (id: string) => ipcRenderer.invoke('moments:getById', id),
+  createMomentsPost: (data: unknown) => ipcRenderer.invoke('moments:create', data),
+  updateMomentsPost: (id: string, data: unknown) => ipcRenderer.invoke('moments:update', id, data),
+  deleteMomentsPost: (id: string) => ipcRenderer.invoke('moments:delete', id),
+  toggleMomentsPin: (id: string) => ipcRenderer.invoke('moments:togglePin', id),
 
   // ai
   aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),

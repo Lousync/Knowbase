@@ -8,6 +8,7 @@ import { isEditingInput } from './lib/shortcuts'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
+import { MomentsModule } from './modules/moments'
 import { ExportModule } from './modules/export'
 import { RecycleBinModule } from './modules/recycle'
 import { SettingsModule } from './modules/settings'
@@ -40,7 +41,7 @@ export default function App() {
     if (!loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
-      const all = ['blog','schedule','knowledge','toolbox','export','recycle','help'] as const
+      const all = ['blog','schedule','knowledge','moments','toolbox','export','recycle','help'] as const
       if (all.includes(s.startupTab as any) && !hidden.includes(s.startupTab)) {
         setActiveTab(s.startupTab as TabName)
         return
@@ -203,6 +204,7 @@ export default function App() {
             {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
             {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
             {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
+            {renderTab('moments', <MomentsModule />)}
             {renderTab('export', <ExportModule />)}
             {renderTab('recycle', <RecycleBinModule />)}
             {renderTab('settings', <SettingsModule />)}

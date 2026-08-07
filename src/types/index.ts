@@ -10,7 +10,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'export' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'export' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox'
 
 // ai
 export interface AIChatMessage { role: 'system' | 'user' | 'assistant'; content: string }
@@ -32,6 +32,19 @@ export interface PasswordEntry {
 }
 export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }
 export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }
+
+// moments
+export interface MomentsPost {
+  id: string
+  contentMd: string
+  contentHtml: string
+  imageDataUrl: string
+  isPinned: boolean
+  createdAt: string
+  updatedAt: string
+}
+export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrl?: string; isPinned?: boolean }
+export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrl?: string; isPinned?: boolean }
 
 // user
 export interface UserProfile {
@@ -123,7 +136,7 @@ export interface ImportFileResult {
 export interface RecycleBinItem {
   id: string
   originalId: string
-  module: 'blog' | 'knowledge' | 'knowledge_category'
+  module: 'blog' | 'knowledge' | 'knowledge_category' | 'passwordVault' | 'moments'
   title: string
   data: any
   deletedAt: string
@@ -134,11 +147,13 @@ export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Ta
 export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
 export interface KnowledgeExportData { categories: KnowledgeCategory[]; pages: (KnowledgePage & { tags: KnowledgeTag[]; backlinks: string[] })[]; tags: KnowledgeTag[] }
 export interface PasswordVaultExportData { entries: PasswordEntry[] }
+export interface MomentsExportData { posts: MomentsPost[] }
 export interface AllExportData {
   exportVersion: string; exportedAt: string
   user?: UserExportData & { settings: Record<string, unknown>; stats: UserStats }
   blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
   passwordVault?: PasswordVaultExportData
+  moments?: MomentsExportData
 }
 
 export interface ExportFileResult { filePath: string; size: number }
@@ -242,6 +257,7 @@ export interface ElectronAPI {
   exportAllScheduleData: () => Promise<ScheduleExportData>
   exportAllKnowledgeData: () => Promise<KnowledgeExportData>
   exportAllPasswordVaultData: () => Promise<PasswordVaultExportData>
+  exportAllMomentsData: () => Promise<MomentsExportData>
   exportAllData: () => Promise<AllExportData>
   showExportSaveDialog: (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => Promise<{ filePath: string | null }>
   showExportOpenDirDialog: () => Promise<{ dirPath: string | null }>
@@ -262,6 +278,13 @@ export interface ElectronAPI {
   createPasswordEntry: (d: CreatePasswordEntryDTO) => Promise<PasswordEntry>
   updatePasswordEntry: (id: string, d: UpdatePasswordEntryDTO) => Promise<PasswordEntry>
   deletePasswordEntry: (id: string) => Promise<void>
+  // moments
+  getMomentsPosts: () => Promise<MomentsPost[]>
+  getMomentsPostById: (id: string) => Promise<MomentsPost | null>
+  createMomentsPost: (d: CreateMomentsPostDTO) => Promise<MomentsPost>
+  updateMomentsPost: (id: string, d: UpdateMomentsPostDTO) => Promise<MomentsPost>
+  deleteMomentsPost: (id: string) => Promise<void>
+  toggleMomentsPin: (id: string) => Promise<MomentsPost>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
   // fill popup

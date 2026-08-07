@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Trash2, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User, Wrench, Download } from 'lucide-react'
+import { FileText, Calendar, BookOpen, Upload, Trash2, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User, Wrench, Download, MessageCircleMore } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 
@@ -9,6 +9,7 @@ const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.R
   { id: 'blog',      label: '博客',   icon: s => <FileText size={s} strokeWidth={1.5} /> },
   { id: 'schedule',  label: '日程',   icon: s => <Calendar size={s} strokeWidth={1.5} /> },
   { id: 'knowledge', label: '知识库', icon: s => <BookOpen size={s} strokeWidth={1.5} /> },
+  { id: 'moments', label: '说说', icon: s => <MessageCircleMore size={s} strokeWidth={1.5} /> },
   { id: 'toolbox',   label: '工具箱', icon: s => <Wrench size={s} strokeWidth={1.5} /> },
   { id: 'export',    label: '导出',   icon: s => <Upload size={s} strokeWidth={1.5} /> },
   { id: 'recycle',   label: '回收站', icon: s => <Trash2 size={s} strokeWidth={1.5} /> },

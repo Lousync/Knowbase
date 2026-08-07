@@ -182,6 +182,15 @@ export function registerRecycleBinHandlers(): void {
           (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
         ]
       )
+    } else if (item.module === 'moments') {
+      run(
+        `INSERT INTO moments_posts (id, content_md, content_html, image_data_url, is_pinned, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          record.id, record.contentMd || '', record.contentHtml || '', record.imageDataUrl || '', record.isPinned ? 1 : 0,
+          record.createdAt, record.updatedAt
+        ]
+      )
     }
 
     // 从回收站移除

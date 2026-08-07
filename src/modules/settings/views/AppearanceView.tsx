@@ -1,4 +1,4 @@
-import { Sun, Moon, FileText, Calendar, BookOpen, Wrench } from 'lucide-react'
+import { Sun, Moon, FileText, Calendar, BookOpen, Wrench, MessageCircleMore } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
 
@@ -56,6 +56,7 @@ export function AppearanceView() {
               { id: 'blog', label: '博客', icon: <FileText size={16} /> },
               { id: 'schedule', label: '日程', icon: <Calendar size={16} /> },
               { id: 'knowledge', label: '知识库', icon: <BookOpen size={16} /> },
+              { id: 'moments', label: '说说', icon: <MessageCircleMore size={16} /> },
               { id: 'toolbox', label: '工具箱', icon: <Wrench size={16} /> },
             ]
             return TABS.map(tab => (

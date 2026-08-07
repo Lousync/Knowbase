@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsExportData } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -160,6 +160,17 @@ export const getPasswordEntryById = (id: string) => a().getPasswordEntryById(id)
 export const createPasswordEntry = (d: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }) => a().createPasswordEntry(d)
 export const updatePasswordEntry = (id: string, d: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }) => a().updatePasswordEntry(id, d)
 export const deletePasswordEntry = (id: string) => a().deletePasswordEntry(id)
+
+// export moments
+export const exportAllMomentsData = () => a().exportAllMomentsData()
+
+// moments
+export const getMomentsPosts = () => a().getMomentsPosts()
+export const getMomentsPostById = (id: string) => a().getMomentsPostById(id)
+export const createMomentsPost = (d: CreateMomentsPostDTO) => a().createMomentsPost(d)
+export const updateMomentsPost = (id: string, d: UpdateMomentsPostDTO) => a().updateMomentsPost(id, d)
+export const deleteMomentsPost = (id: string) => a().deleteMomentsPost(id)
+export const toggleMomentsPin = (id: string) => a().toggleMomentsPin(id)
 
 // ===== AI =====
 export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

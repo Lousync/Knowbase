@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, FileArchive, Database, Loader2, ChevronRight, ChevronDown, Folder, BookOpen, File, Shield } from 'lucide-react'
+import { FileText, FileArchive, Database, Loader2, ChevronRight, ChevronDown, Folder, BookOpen, File, Shield, Sparkles } from 'lucide-react'
 
 // ---- types ----
 export interface SelectableItem {
@@ -39,6 +39,13 @@ interface MarkdownItemSelectorProps {
   onPasswordSelectAll: () => void
   onPasswordDeselectAll: () => void
   passwordLoading: boolean
+
+  momentsItems: SelectableItem[]
+  selectedMomentsIds: Set<string>
+  onMomentsToggle: (id: string) => void
+  onMomentsSelectAll: () => void
+  onMomentsDeselectAll: () => void
+  momentsLoading: boolean
 
   enabledModules: Set<string>
 }
@@ -223,6 +230,18 @@ export function MarkdownItemSelector(props: MarkdownItemSelectorProps) {
         onDeselectAll={props.onPasswordDeselectAll}
         loading={props.passwordLoading}
         enabled={props.enabledModules.has('passwordVault')}
+      />
+
+      <ModuleTreeSectionView
+        icon={<Sparkles size={14} />}
+        label="说说"
+        items={props.momentsItems}
+        selectedIds={props.selectedMomentsIds}
+        onToggle={props.onMomentsToggle}
+        onSelectAll={props.onMomentsSelectAll}
+        onDeselectAll={props.onMomentsDeselectAll}
+        loading={props.momentsLoading}
+        enabled={props.enabledModules.has('moments')}
       />
     </div>
   )

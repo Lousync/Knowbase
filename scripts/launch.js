@@ -11,9 +11,13 @@ const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 
 if (mode === 'dev') {
-  const child = spawn('npx', ['electron-vite', 'dev'], {
-    env, cwd: path.join(__dirname, '..'), stdio: 'inherit', shell: true
-  })
+  const child = process.platform === 'win32'
+    ? spawn('cmd.exe', ['/c', 'npx', 'electron-vite', 'dev'], {
+        env, cwd: path.join(__dirname, '..'), stdio: 'inherit', shell: false
+      })
+    : spawn('npx', ['electron-vite', 'dev'], {
+        env, cwd: path.join(__dirname, '..'), stdio: 'inherit', shell: false
+      })
   child.on('close', code => process.exit(code || 0))
 } else {
   const electron = path.join(__dirname, '..', 'node_modules/electron/dist/electron.exe')

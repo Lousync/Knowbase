@@ -12,6 +12,7 @@ import { registerImportHandlers } from '../database/repositories/importRepo'
 import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
+import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
 import { registerAIHandlers } from '../ai/aiHandler'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
@@ -40,6 +41,7 @@ if (!gotLock) {
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
+  console.log('[Window] ELECTRON_RENDERER_URL =', process.env.ELECTRON_RENDERER_URL || '(empty)')
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -66,6 +68,18 @@ function createWindow(): void {
     if (url.startsWith('file://')) return { action: 'allow' }
     shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('[Window] did-fail-load:', { errorCode, errorDescription, validatedURL })
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Window] render-process-gone:', details)
+  })
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      console.error('[Renderer]', message, `(${sourceId}:${line})`)
+    }
   })
 
   // 加载页面
@@ -126,7 +140,7 @@ function registerWindowHandlers(): void {
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
         'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags',
-        'recycle_bin', 'user_profile', 'toolbox_scripts',
+        'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts',
       ]
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
@@ -181,6 +195,7 @@ app.whenReady().then(async () => {
   registerUserHandlers()
   registerToolboxHandlers()
   registerPasswordHandlers()
+  registerMomentsHandlers()
   registerAIHandlers()
 
   createWindow()

@@ -435,6 +435,19 @@ export function registerImportHandlers(): void {
           imported++
         }
       }
+      // --- Moments ---
+      if (data.moments) {
+        for (const post of data.moments.posts || []) {
+          if (exists('moments_posts', post.id)) { skipped++; continue }
+          db.run(
+            `INSERT INTO moments_posts (id, content_md, content_html, image_data_url, is_pinned, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [post.id, post.contentMd || '', post.contentHtml || '', post.imageDataUrl || '',
+             post.isPinned ? 1 : 0, post.createdAt, post.updatedAt]
+          )
+          imported++
+        }
+      }
       saveToDisk()
       return { success: true, imported, skipped, message: `成功导入 ${imported} 条记录${skipped > 0 ? `，跳过 ${skipped} 条已有记录` : ''}` }
     } catch (e: any) {
