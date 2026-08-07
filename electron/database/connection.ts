@@ -464,6 +464,12 @@ export function runMigrations(): void {
     try { db.run("ALTER TABLE moments_posts ADD COLUMN album_id TEXT DEFAULT ''") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('027_moments_albums')")
   }
+
+  if (!applied.has('028_album_cover')) {
+    // 相册自定义封面：手动设置的封面 data URL，为空时自动取相册第一张照片
+    try { db.run("ALTER TABLE moments_albums ADD COLUMN cover_data_url TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('028_album_cover')")
+  }
 }
 
 /**

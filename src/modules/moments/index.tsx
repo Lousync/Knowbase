@@ -14,6 +14,7 @@ import {
   getMomentsPosts,
   getUserProfile,
   renameMomentsAlbum,
+  setMomentsAlbumCover,
   setUserCoverImage,
   setUserUsername,
   setMomentsPostAlbum,
@@ -476,6 +477,15 @@ export function MomentsModule() {
     }
   }
 
+  const handleSetAlbumCover = async (albumId: string, img: string) => {
+    try {
+      await setMomentsAlbumCover(albumId, img)
+      await loadAlbums()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const toggleFeedExpanded = (postId: string) => {
     setExpandedFeedIds(prev => {
       const next = new Set(prev)
@@ -835,6 +845,15 @@ export function MomentsModule() {
                   >
                     <PencilLine size={15} />
                   </button>
+                  {selectedAlbum.coverDataUrl && (
+                    <button
+                      onClick={() => { handleSetAlbumCover(selectedAlbum.id, '').catch(console.error) }}
+                      className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      title="取消自定义封面（恢复为第一张照片）"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
                   <button
                     onClick={() => setAlbumDeleteConfirm(selectedAlbum)}
                     className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"
@@ -854,10 +873,25 @@ export function MomentsModule() {
                       <div
                         key={`${p.id}-${i}`}
                         onClick={() => setLightbox({ images: p.imageDataUrls || [], index: i })}
-                        className="aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
+                        className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in group"
                         title="点击放大查看"
                       >
                         <img src={img} alt={`相册照片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                        {selectedAlbum.coverDataUrl === img && (
+                          <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] pointer-events-none">
+                            封面
+                          </span>
+                        )}
+                        {selectedAlbum.coverDataUrl !== img && (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, img).catch(console.error) }}
+                            className="absolute inset-x-1.5 bottom-1.5 py-1 rounded-lg bg-black/55 text-white text-[10px] backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="设为封面"
+                          >
+                            <Camera size={11} className="inline mr-1 -mt-0.5" />
+                            设为封面
+                          </button>
+                        )}
                       </div>
                     )))}
                   </div>

@@ -440,8 +440,8 @@ export function registerImportHandlers(): void {
         for (const album of data.moments.albums || []) {
           if (exists('moments_albums', album.id)) { skipped++; continue }
           db.run(
-            'INSERT INTO moments_albums (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-            [album.id, album.name, album.createdAt, album.updatedAt]
+            'INSERT INTO moments_albums (id, name, cover_data_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            [album.id, album.name, album.coverDataUrl || '', album.createdAt, album.updatedAt]
           )
           imported++
         }
