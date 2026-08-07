@@ -30,6 +30,9 @@ const MAX_IMAGES = 12
 const MAX_TAGS = 5
 const GRID_VISIBLE = 8 // 第 9 格用于展示 "+N" 折叠
 const COVER_H = 300 // 封面区固定高度（h-[300px]）
+const COVER_COLLAPSED_H = 104 // 下滑到底时封面的高度
+const SHRINK_RANGE = 260 // 滚动多少像素完成收缩
+const INFO_CARD_H = 76 // 签名卡片原始高度
 
 function formatDateTime(value: string): string {
   return value.replace('T', ' ').slice(0, 16)
@@ -125,7 +128,9 @@ export function MomentsModule() {
   const coverInputRef = useRef<HTMLInputElement>(null)
   const postImageInputRef = useRef<HTMLInputElement>(null)
   const coverContainerRef = useRef<HTMLDivElement>(null)
+  const pageScrollRef = useRef<HTMLDivElement>(null)
   const coverDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; moved: boolean } | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -193,6 +198,13 @@ export function MomentsModule() {
   const detailPost = detailPostId ? posts.find(p => p.id === detailPostId) || null : null
 
   // ---- 封面滑动（微信式拖动查看完整背景） ----
+  const scrollProgress = Math.min(1, Math.max(0, scrollTop / SHRINK_RANGE))
+  const coverCurH = Math.round(COVER_H - scrollProgress * (COVER_H - COVER_COLLAPSED_H))
+  const coverFade = 1 - scrollProgress
+  const infoH = Math.round(INFO_CARD_H * coverFade)
+  const headerPadTop = Math.round(20 * (1 - 0.5 * scrollProgress))
+  const headerPadBottom = Math.round(16 * (1 - 0.5 * scrollProgress))
+
   const coverScale = useMemo(() => {
     if (!coverNatural) return null
     const cw = coverContainerRef.current?.clientWidth || 0
@@ -201,7 +213,7 @@ export function MomentsModule() {
     return { w: Math.round(coverNatural.w * scale), h: Math.round(coverNatural.h * scale), cw }
   }, [coverNatural])
   const coverMaxPanX = coverScale ? Math.max(0, coverScale.w - coverScale.cw) : 0
-  const coverMaxPanY = coverScale ? Math.max(0, coverScale.h - COVER_H) : 0
+  const coverMaxPanY = coverScale ? Math.max(0, coverScale.h - coverCurH) : 0
   const coverCanPan = coverMaxPanX > 0 || coverMaxPanY > 0
   const clampPanX = (v: number) => Math.min(0, Math.max(-coverMaxPanX, v))
   const clampPanY = (v: number) => Math.min(0, Math.max(-coverMaxPanY, v))
@@ -235,6 +247,15 @@ export function MomentsModule() {
     if (d && !d.moved && coverImageDataUrl) {
       setLightbox({ images: [coverImageDataUrl], index: 0 })
     }
+  }
+
+  const handlePageScroll = () => {
+    setScrollTop(pageScrollRef.current?.scrollTop || 0)
+  }
+
+  const switchView = (v: ViewMode) => {
+    setViewMode(v)
+    pageScrollRef.current?.scrollTo({ top: 0 })
   }
 
   // ---- 标签筛选 ----
@@ -538,16 +559,17 @@ export function MomentsModule() {
 
   return (
     <div className="relative flex flex-col h-full bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_84%,#0b1120)_100%)] overflow-hidden">
-      <div className="relative shrink-0 px-5 pt-5 pb-4">
-        <div className="max-w-4xl mx-auto rounded-[28px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-secondary)] shadow-[0_18px_50px_rgba(0,0,0,0.26)]">
-          <div
-            ref={coverContainerRef}
-            onPointerDown={onCoverPointerDown}
-            onPointerMove={onCoverPointerMove}
-            onPointerUp={onCoverPointerUp}
-            className={`relative h-[300px] bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.45),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.26),transparent_30%),linear-gradient(135deg,#111827 0%,#1f2937 44%,#0f172a 100%)] overflow-hidden select-none ${coverImageDataUrl && coverCanPan ? 'cursor-grab active:cursor-grabbing' : ''}`}
-            style={{ touchAction: coverCanPan ? 'none' : undefined }}
-          >
+      <div ref={pageScrollRef} onScroll={handlePageScroll} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="px-5" style={{ paddingTop: headerPadTop, paddingBottom: headerPadBottom }}>
+          <div className="max-w-4xl mx-auto rounded-[28px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-secondary)] shadow-[0_18px_50px_rgba(0,0,0,0.26)]">
+            <div
+              ref={coverContainerRef}
+              onPointerDown={onCoverPointerDown}
+              onPointerMove={onCoverPointerMove}
+              onPointerUp={onCoverPointerUp}
+              className={`relative bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.45),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.26),transparent_30%),linear-gradient(135deg,#111827 0%,#1f2937 44%,#0f172a 100%)] overflow-hidden select-none ${coverImageDataUrl && coverCanPan ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              style={{ height: coverCurH, touchAction: coverCanPan ? 'none' : undefined }}
+            >
             {coverImageDataUrl && (
               coverScale ? (
                 <img
@@ -575,7 +597,7 @@ export function MomentsModule() {
               )
             )}
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.42)_100%)] pointer-events-none" />
-            <div className="absolute left-5 top-5 flex items-center gap-2 text-white/90 text-[12px] tracking-wide uppercase pointer-events-none">
+            <div className="absolute left-5 top-5 flex items-center gap-2 text-white/90 text-[12px] tracking-wide uppercase pointer-events-none" style={{ opacity: 1 - 0.4 * scrollProgress }}>
               <span className="inline-flex w-2 h-2 rounded-full bg-[var(--accent)]" />
               Moments
             </div>
@@ -583,6 +605,7 @@ export function MomentsModule() {
             <button
               onClick={() => coverInputRef.current?.click()}
               className="absolute left-5 bottom-5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/35 text-white text-[12px] backdrop-blur hover:bg-black/55 transition-colors"
+              style={{ opacity: coverFade, pointerEvents: scrollProgress > 0.5 ? 'none' : undefined }}
               title="更换封面背景"
             >
               <Camera size={13} />
@@ -593,6 +616,7 @@ export function MomentsModule() {
               <button
                 onClick={() => { handleRemoveCover().catch(console.error) }}
                 className="absolute right-5 top-5 w-8 h-8 rounded-full bg-black/40 text-white/90 flex items-center justify-center backdrop-blur hover:bg-black/60 transition-colors"
+                style={{ opacity: coverFade, pointerEvents: scrollProgress > 0.5 ? 'none' : undefined }}
                 title="移除封面背景"
               >
                 <X size={14} />
@@ -600,12 +624,15 @@ export function MomentsModule() {
             )}
 
             {coverImageDataUrl && coverCanPan && (
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/30 text-white/85 text-[11px] backdrop-blur pointer-events-none">
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/30 text-white/85 text-[11px] backdrop-blur pointer-events-none" style={{ opacity: coverFade }}>
                 拖动查看完整背景
               </div>
             )}
 
-            <div className="absolute right-5 bottom-5 w-24 h-24 rounded-[26px] border border-white/20 bg-white/10 backdrop-blur-md overflow-hidden shadow-xl pointer-events-none">
+            <div
+              className="absolute right-5 bottom-5 w-24 h-24 rounded-[26px] border border-white/20 bg-white/10 backdrop-blur-md overflow-hidden shadow-xl pointer-events-none"
+              style={{ opacity: coverFade, transform: `scale(${1 - 0.35 * scrollProgress})`, transformOrigin: 'bottom right' }}
+            >
               {avatarDataUrl ? (
                 <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
               ) : (
@@ -614,7 +641,8 @@ export function MomentsModule() {
             </div>
           </div>
 
-          <div className="px-6 pt-5 pb-5 bg-[var(--bg-secondary)]">
+          <div className="bg-[var(--bg-secondary)] overflow-hidden" style={{ height: infoH, opacity: coverFade }}>
+            <div className="h-full flex items-center px-6">
             {editingSignature ? (
               <div className="flex items-center gap-2 min-w-0">
                 <input
@@ -656,12 +684,13 @@ export function MomentsModule() {
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* 搜索 + 视图切换 */}
-      <div className="shrink-0 px-5 pb-3">
+      <div className="sticky top-0 z-30 px-5 pb-3 pt-2 bg-[var(--bg-primary)]/85 backdrop-blur-md">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           <div className="relative">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -684,14 +713,14 @@ export function MomentsModule() {
 
           <div className="flex items-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] p-0.5">
             <button
-              onClick={() => setViewMode('timeline')}
+              onClick={() => switchView('timeline')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] transition-colors ${viewMode === 'timeline' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
             >
               <List size={13} />
               时间线
             </button>
             <button
-              onClick={() => setViewMode('album')}
+              onClick={() => switchView('album')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] transition-colors ${viewMode === 'album' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
             >
               <Images size={13} />
@@ -701,7 +730,7 @@ export function MomentsModule() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-24">
+      <div className="px-5 pb-24">
         <div className="max-w-4xl mx-auto space-y-5">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-[12px] text-[var(--text-muted)] gap-2">
@@ -758,6 +787,7 @@ export function MomentsModule() {
             </>
           )}
         </div>
+      </div>
       </div>
 
       <button
