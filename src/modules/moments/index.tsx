@@ -140,6 +140,7 @@ export function MomentsModule() {
   const [signatureDraft, setSignatureDraft] = useState('')
   const coverInputRef = useRef<HTMLInputElement>(null)
   const postImageInputRef = useRef<HTMLInputElement>(null)
+  const albumPhotoInputRef = useRef<HTMLInputElement>(null)
   const coverContainerRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
   const coverDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; moved: boolean } | null>(null)
@@ -365,6 +366,17 @@ export function MomentsModule() {
     await setUserCoverImage(dataUrl)
     setCoverImageDataUrl(dataUrl)
     input.value = ''
+  }
+
+  const handlePickAlbumPhotos = async () => {
+    const input = albumPhotoInputRef.current
+    if (!input?.files?.length || !selectedAlbumId) return
+    const files = Array.from(input.files).slice(0, MAX_IMAGES)
+    if (files.length === 0) return
+    const urls = await Promise.all(files.map(readFileAsDataUrl))
+    await createMomentsPost({ contentMd: '', contentHtml: '', imageDataUrls: urls, albumId: selectedAlbumId, isPinned: false })
+    input.value = ''
+    await Promise.all([loadPosts(), loadAlbums()])
   }
 
   const handleRemoveCover = async () => {
@@ -839,6 +851,14 @@ export function MomentsModule() {
                     <div className="text-[11px] text-[var(--text-muted)]">{selectedAlbum.photoCount} 张照片</div>
                   </div>
                   <button
+                    onClick={() => albumPhotoInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity"
+                    title="直接添加照片到相册"
+                  >
+                    <ImagePlus size={14} />
+                    添加照片
+                  </button>
+                  <button
                     onClick={() => openAlbumModal({ mode: 'rename', albumId: selectedAlbum.id })}
                     className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                     title="重命名相册"
@@ -894,6 +914,14 @@ export function MomentsModule() {
                         )}
                       </div>
                     )))}
+                    <button
+                      onClick={() => albumPhotoInputRef.current?.click()}
+                      className="aspect-square rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                      title="添加照片"
+                    >
+                      <ImagePlus size={22} />
+                      <span className="text-[11px]">添加照片</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -1352,6 +1380,7 @@ export function MomentsModule() {
       )}
 
       <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={() => { handlePickCover().catch(console.error) }} />
+      <input ref={albumPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={() => { handlePickAlbumPhotos().catch(console.error) }} />
 
       <ConfirmDialog
         open={!!confirmDeleteId}
