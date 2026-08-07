@@ -29,7 +29,7 @@ type Draft = {
 const MAX_IMAGES = 12
 const MAX_TAGS = 5
 const GRID_VISIBLE = 8 // 第 9 格用于展示 "+N" 折叠
-const COVER_H = 224 // 封面区固定高度（h-56）
+const COVER_H = 300 // 封面区固定高度（h-[300px]）
 
 function formatDateTime(value: string): string {
   return value.replace('T', ' ').slice(0, 16)
@@ -118,13 +118,14 @@ export function MomentsModule() {
   const [avatarDataUrl, setAvatarDataUrl] = useState('')
   const [coverImageDataUrl, setCoverImageDataUrl] = useState('')
   const [coverNatural, setCoverNatural] = useState<{ w: number; h: number } | null>(null)
-  const [coverPan, setCoverPan] = useState(0)
+  const [coverPanX, setCoverPanX] = useState(0)
+  const [coverPanY, setCoverPanY] = useState(0)
   const [editingSignature, setEditingSignature] = useState(false)
   const [signatureDraft, setSignatureDraft] = useState('')
   const coverInputRef = useRef<HTMLInputElement>(null)
   const postImageInputRef = useRef<HTMLInputElement>(null)
   const coverContainerRef = useRef<HTMLDivElement>(null)
-  const coverDragRef = useRef<{ startY: number; startPan: number; moved: boolean } | null>(null)
+  const coverDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; moved: boolean } | null>(null)
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -157,7 +158,8 @@ export function MomentsModule() {
 
   // 封面更换后重置滑动状态
   useEffect(() => {
-    setCoverPan(0)
+    setCoverPanX(0)
+    setCoverPanY(0)
     setCoverNatural(null)
   }, [coverImageDataUrl])
 
@@ -196,23 +198,36 @@ export function MomentsModule() {
     const cw = coverContainerRef.current?.clientWidth || 0
     if (!cw) return null
     const scale = Math.max(cw / coverNatural.w, COVER_H / coverNatural.h)
-    return { w: Math.round(coverNatural.w * scale), h: Math.round(coverNatural.h * scale) }
+    return { w: Math.round(coverNatural.w * scale), h: Math.round(coverNatural.h * scale), cw }
   }, [coverNatural])
-  const coverMaxPan = coverScale ? Math.max(0, coverScale.h - COVER_H) : 0
-  const clampPan = (v: number) => Math.min(0, Math.max(-coverMaxPan, v))
+  const coverMaxPanX = coverScale ? Math.max(0, coverScale.w - coverScale.cw) : 0
+  const coverMaxPanY = coverScale ? Math.max(0, coverScale.h - COVER_H) : 0
+  const coverCanPan = coverMaxPanX > 0 || coverMaxPanY > 0
+  const clampPanX = (v: number) => Math.min(0, Math.max(-coverMaxPanX, v))
+  const clampPanY = (v: number) => Math.min(0, Math.max(-coverMaxPanY, v))
+
+  // 封面加载完成后，把初始视野居中，尽量多展示照片内容
+  useEffect(() => {
+    if (!coverScale) return
+    setCoverPanX(-coverMaxPanX / 2)
+    setCoverPanY(-coverMaxPanY / 2)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverScale])
 
   const onCoverPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!coverImageDataUrl || coverMaxPan <= 0) return
+    if (!coverImageDataUrl || !coverCanPan) return
     if ((e.target as HTMLElement).closest('button')) return
-    coverDragRef.current = { startY: e.clientY, startPan: coverPan, moved: false }
+    coverDragRef.current = { startX: e.clientX, startY: e.clientY, startPanX: coverPanX, startPanY: coverPanY, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onCoverPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = coverDragRef.current
     if (!d) return
+    const dx = e.clientX - d.startX
     const dy = e.clientY - d.startY
-    if (Math.abs(dy) > 3) d.moved = true
-    setCoverPan(clampPan(d.startPan + dy))
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true
+    setCoverPanX(clampPanX(d.startPanX + dx))
+    setCoverPanY(clampPanY(d.startPanY + dy))
   }
   const onCoverPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = coverDragRef.current
@@ -530,8 +545,8 @@ export function MomentsModule() {
             onPointerDown={onCoverPointerDown}
             onPointerMove={onCoverPointerMove}
             onPointerUp={onCoverPointerUp}
-            className={`relative h-56 bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.45),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.26),transparent_30%),linear-gradient(135deg,#111827 0%,#1f2937 44%,#0f172a 100%)] overflow-hidden select-none ${coverImageDataUrl && coverMaxPan > 0 ? 'cursor-grab active:cursor-grabbing' : ''}`}
-            style={{ touchAction: coverMaxPan > 0 ? 'none' : undefined }}
+            className={`relative h-[300px] bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.45),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.26),transparent_30%),linear-gradient(135deg,#111827 0%,#1f2937 44%,#0f172a 100%)] overflow-hidden select-none ${coverImageDataUrl && coverCanPan ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            style={{ touchAction: coverCanPan ? 'none' : undefined }}
           >
             {coverImageDataUrl && (
               coverScale ? (
@@ -543,7 +558,7 @@ export function MomentsModule() {
                     setCoverNatural({ w: el.naturalWidth, h: el.naturalHeight })
                   }}
                   className="absolute top-0 left-1/2 max-w-none pointer-events-none"
-                  style={{ width: coverScale.w, height: coverScale.h, transform: `translate(-50%, ${coverPan}px)`, objectFit: 'cover' }}
+                  style={{ width: coverScale.w, height: coverScale.h, transform: `translate(calc(-50% + ${coverPanX}px), ${coverPanY}px)`, objectFit: 'cover' }}
                   draggable={false}
                 />
               ) : (
@@ -554,7 +569,7 @@ export function MomentsModule() {
                     const el = e.currentTarget
                     setCoverNatural({ w: el.naturalWidth, h: el.naturalHeight })
                   }}
-                  className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                  className="absolute top-0 left-0 h-full w-full object-cover pointer-events-none"
                   draggable={false}
                 />
               )
@@ -584,7 +599,7 @@ export function MomentsModule() {
               </button>
             )}
 
-            {coverImageDataUrl && coverMaxPan > 0 && (
+            {coverImageDataUrl && coverCanPan && (
               <div className="absolute bottom-5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/30 text-white/85 text-[11px] backdrop-blur pointer-events-none">
                 拖动查看完整背景
               </div>
