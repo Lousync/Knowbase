@@ -47,6 +47,50 @@ function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
+/** 把 Markdown 转成适合时间线预览的纯文本 */
+function plainText(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, ' [代码块] ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' [图片] ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_`>~]/g, '')
+    .replace(/^\s*[-+*]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/[|:]/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** 主页折叠文案：超过 maxLines 时截断并显示「全文」 */
+function ClampedText({ text, maxLines = 5, onExpand }: { text: string; maxLines?: number; onExpand: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    setOverflowing(el.scrollHeight > el.clientHeight + 1)
+  }, [text])
+
+  return (
+    <div>
+      <div
+        ref={ref}
+        className="overflow-hidden whitespace-pre-wrap break-words"
+        style={{ display: '-webkit-box', WebkitLineClamp: maxLines, WebkitBoxOrient: 'vertical' }}
+      >
+        {text}
+      </div>
+      {overflowing && (
+        <button onClick={onExpand} className="mt-1.5 text-[13px] text-[var(--accent)] hover:underline">
+          全文
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function MomentsModule() {
   const [posts, setPosts] = useState<MomentsPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +100,7 @@ export function MomentsModule() {
   const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrls: [] })
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
+  const [detailPostId, setDetailPostId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -95,20 +140,24 @@ export function MomentsModule() {
       .catch(() => setAvatarDataUrl(''))
   }, [loadPosts, reloadProfile])
 
-  // Esc 关闭编辑器
+  // Esc 关闭编辑器 / 详情弹层
   useEffect(() => {
-    if (!editorOpen) return
+    if (!editorOpen && !detailPostId) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setEditorOpen(false)
+      if (e.key === 'Escape') {
+        setEditorOpen(false)
+        setDetailPostId(null)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editorOpen])
+  }, [editorOpen, detailPostId])
 
   const pinnedPosts = useMemo(() => posts.filter(p => p.isPinned), [posts])
   const normalPosts = useMemo(() => posts.filter(p => !p.isPinned), [posts])
   const signature = profile?.username?.trim() || '写下此刻'
   const canSave = !saving && draft.contentMd.trim().length > 0
+  const detailPost = detailPostId ? posts.find(p => p.id === detailPostId) || null : null
 
   const closeEditor = () => {
     setEditorOpen(false)
@@ -232,7 +281,7 @@ export function MomentsModule() {
     })
   }
 
-  const renderImageGrid = (post: MomentsPost) => {
+  const renderImageGrid = (post: MomentsPost, onOpenDetail: () => void) => {
     const images = post.imageDataUrls || []
     if (images.length === 0) return null
     const expanded = expandedFeedIds.has(post.id)
@@ -247,8 +296,8 @@ export function MomentsModule() {
           : 'grid-cols-3 max-w-[480px]'
 
     return (
-      <div className="mt-4">
-        <div className={`grid ${layout} gap-2`}>
+      <div className="mt-4" onClick={onOpenDetail}>
+        <div className={`grid ${layout} gap-2 cursor-zoom-in`}>
           {visible.map((img, i) => (
             <div key={i} className={`relative overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] ${images.length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}>
               <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
@@ -256,7 +305,7 @@ export function MomentsModule() {
           ))}
           {overflow > 0 && !expanded && (
             <button
-              onClick={() => toggleFeedExpanded(post.id)}
+              onClick={e => { e.stopPropagation(); toggleFeedExpanded(post.id) }}
               className="relative aspect-square overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)]"
               title={`展开剩余 ${overflow} 张图片`}
             >
@@ -268,7 +317,7 @@ export function MomentsModule() {
           )}
         </div>
         {expanded && overflow > 0 && (
-          <button onClick={() => toggleFeedExpanded(post.id)} className="mt-2.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+          <button onClick={e => { e.stopPropagation(); toggleFeedExpanded(post.id) }} className="mt-2.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             收起图片
           </button>
         )}
@@ -279,7 +328,12 @@ export function MomentsModule() {
   const renderPost = (post: MomentsPost) => {
     const previewText = post.contentMd || stripHtmlTags(post.contentHtml || '')
     return (
-      <article key={post.id} className="rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
+      <article
+        key={post.id}
+        onClick={() => setDetailPostId(post.id)}
+        className="rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)] cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
+        title="查看完整文案"
+      >
         <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-11 h-11 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] overflow-hidden flex items-center justify-center shrink-0">
@@ -300,23 +354,27 @@ export function MomentsModule() {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            <button onClick={() => handleTogglePin(post.id)} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.isPinned ? '取消置顶' : '置顶'}>
+            <button onClick={e => { e.stopPropagation(); handleTogglePin(post.id) }} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.isPinned ? '取消置顶' : '置顶'}>
               {post.isPinned ? <PinOff size={15} /> : <Pin size={15} />}
             </button>
-            <button onClick={() => openEdit(post)} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
+            <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
               <PencilLine size={15} />
             </button>
-            <button onClick={() => setConfirmDeleteId(post.id)} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)]" title="删除">
+            <button onClick={e => { e.stopPropagation(); setConfirmDeleteId(post.id) }} className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)]" title="删除">
               <Trash2 size={15} />
             </button>
           </div>
         </div>
 
         <div className="px-4 pb-4">
-          <div className="text-[15px] leading-7 text-[var(--text-primary)] break-words whitespace-pre-wrap">
-            <MarkdownPreview content={previewText} />
+          <div className="text-[15px] leading-7 text-[var(--text-primary)]">
+            <ClampedText
+              text={plainText(previewText) || previewText}
+              maxLines={5}
+              onExpand={() => setDetailPostId(post.id)}
+            />
           </div>
-          {renderImageGrid(post)}
+          {renderImageGrid(post, () => setDetailPostId(post.id))}
           <div className="mt-3 text-[11px] text-[var(--text-muted)] flex items-center gap-2">
             <span>{post.updatedAt !== post.createdAt ? '已编辑' : '发布'}</span>
           </div>
@@ -557,6 +615,67 @@ export function MomentsModule() {
           </div>
 
           <input ref={postImageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={() => { handlePickImages().catch(console.error) }} />
+        </div>
+      )}
+
+      {detailPost && (
+        <div
+          className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
+          onMouseDown={e => { if (e.target === e.currentTarget) setDetailPostId(null) }}
+        >
+          <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="h-[3px] shrink-0 bg-[linear-gradient(90deg,var(--accent),color-mix(in_srgb,var(--accent)_45%,transparent))]" />
+
+            <div className="px-5 py-4 flex items-start justify-between gap-3 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] overflow-hidden flex items-center justify-center shrink-0">
+                  {avatarDataUrl ? (
+                    <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[13px] font-semibold text-[var(--accent)]">{initials(signature)}</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[14px] font-semibold text-[var(--text-primary)] truncate">
+                    {signature}
+                    {detailPost.isPinned && <span className="inline-flex items-center gap-1 text-[var(--accent)] text-[11px]"><Pin size={10} />置顶</span>}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] mt-0.5">
+                    <Clock3 size={11} />
+                    <span>{formatDateTime(detailPost.createdAt)}</span>
+                    {detailPost.updatedAt !== detailPost.createdAt && <span>· 已编辑</span>}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setDetailPostId(null)}
+                className="w-8 h-8 shrink-0 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                title="关闭"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="px-6 py-5">
+                <div className="text-[15px] leading-8 text-[var(--text-primary)] break-words">
+                  <MarkdownPreview content={detailPost.contentMd || detailPost.contentHtml || ''} />
+                </div>
+
+                {(detailPost.imageDataUrls || []).length > 0 && (
+                  <div className="mt-5">
+                    <div className={`grid gap-2 ${(detailPost.imageDataUrls || []).length === 1 ? 'grid-cols-1 max-w-[320px]' : 'grid-cols-3 max-w-[480px]'}`}>
+                      {(detailPost.imageDataUrls || []).map((img, i) => (
+                        <div key={i} className={`relative overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] ${(detailPost.imageDataUrls || []).length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}>
+                          <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
