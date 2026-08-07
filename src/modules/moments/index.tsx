@@ -18,8 +18,11 @@ type EditorMode = 'create' | 'edit'
 
 type Draft = {
   contentMd: string
-  imageDataUrl: string
+  imageDataUrls: string[]
 }
+
+const MAX_IMAGES = 12
+const GRID_VISIBLE = 8 // 第 9 格用于展示 "+N" 折叠
 
 function formatDateTime(value: string): string {
   return value.replace('T', ' ').slice(0, 16)
@@ -50,7 +53,9 @@ export function MomentsModule() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [mode, setMode] = useState<EditorMode>('create')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrl: '' })
+  const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrls: [] })
+  const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
+  const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -90,32 +95,59 @@ export function MomentsModule() {
       .catch(() => setAvatarDataUrl(''))
   }, [loadPosts, reloadProfile])
 
+  // Esc 关闭编辑器
+  useEffect(() => {
+    if (!editorOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEditorOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editorOpen])
+
   const pinnedPosts = useMemo(() => posts.filter(p => p.isPinned), [posts])
   const normalPosts = useMemo(() => posts.filter(p => !p.isPinned), [posts])
   const signature = profile?.username?.trim() || '写下此刻'
   const canSave = !saving && draft.contentMd.trim().length > 0
 
+  const closeEditor = () => {
+    setEditorOpen(false)
+    setEditingId(null)
+    setEditorImagesExpanded(false)
+  }
+
   const openCreate = () => {
     setMode('create')
     setEditingId(null)
-    setDraft({ contentMd: '', imageDataUrl: '' })
+    setDraft({ contentMd: '', imageDataUrls: [] })
+    setEditorImagesExpanded(false)
     setEditorOpen(true)
   }
 
   const openEdit = (post: MomentsPost) => {
     setMode('edit')
     setEditingId(post.id)
-    setDraft({ contentMd: post.contentMd || '', imageDataUrl: post.imageDataUrl || '' })
+    setDraft({ contentMd: post.contentMd || '', imageDataUrls: post.imageDataUrls || [] })
+    setEditorImagesExpanded(false)
     setEditorOpen(true)
   }
 
-  const handlePickImage = async () => {
+  const handlePickImages = async () => {
     const input = postImageInputRef.current
     if (!input?.files?.length) return
-    const file = input.files[0]
-    const dataUrl = await readFileAsDataUrl(file)
-    setDraft(prev => ({ ...prev, imageDataUrl: dataUrl }))
+    const room = MAX_IMAGES - draft.imageDataUrls.length
+    const files = Array.from(input.files).slice(0, room)
+    if (files.length === 0) return
+    const urls = await Promise.all(files.map(readFileAsDataUrl))
+    setDraft(prev => ({ ...prev, imageDataUrls: [...prev.imageDataUrls, ...urls] }))
     input.value = ''
+  }
+
+  const removeImage = (index: number) => {
+    setDraft(prev => ({
+      ...prev,
+      imageDataUrls: prev.imageDataUrls.filter((_, i) => i !== index),
+    }))
   }
 
   const handlePickCover = async () => {
@@ -154,16 +186,15 @@ export function MomentsModule() {
       const payload = {
         contentMd: trimmed,
         contentHtml: '',
-        imageDataUrl: draft.imageDataUrl,
+        imageDataUrls: draft.imageDataUrls,
       }
       if (mode === 'create') {
         await createMomentsPost({ ...payload, isPinned: false })
       } else if (editingId) {
         await updateMomentsPost(editingId, payload)
       }
-      setEditorOpen(false)
-      setEditingId(null)
-      setDraft({ contentMd: '', imageDataUrl: '' })
+      closeEditor()
+      setDraft({ contentMd: '', imageDataUrls: [] })
       await loadPosts()
     } catch (err) {
       console.error(err)
@@ -190,6 +221,59 @@ export function MomentsModule() {
     } catch (err) {
       console.error(err)
     }
+  }
+
+  const toggleFeedExpanded = (postId: string) => {
+    setExpandedFeedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(postId)) next.delete(postId)
+      else next.add(postId)
+      return next
+    })
+  }
+
+  const renderImageGrid = (post: MomentsPost) => {
+    const images = post.imageDataUrls || []
+    if (images.length === 0) return null
+    const expanded = expandedFeedIds.has(post.id)
+    const visible = expanded ? images : images.slice(0, GRID_VISIBLE)
+    const overflow = images.length - visible.length
+
+    const layout =
+      images.length === 1
+        ? 'grid-cols-1 max-w-[320px]'
+        : images.length <= 4
+          ? 'grid-cols-2 max-w-[440px]'
+          : 'grid-cols-3 max-w-[480px]'
+
+    return (
+      <div className="mt-4">
+        <div className={`grid ${layout} gap-2`}>
+          {visible.map((img, i) => (
+            <div key={i} className={`relative overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)] ${images.length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}>
+              <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+            </div>
+          ))}
+          {overflow > 0 && !expanded && (
+            <button
+              onClick={() => toggleFeedExpanded(post.id)}
+              className="relative aspect-square overflow-hidden rounded-[14px] border border-[var(--border-color)] bg-[var(--bg-primary)]"
+              title={`展开剩余 ${overflow} 张图片`}
+            >
+              <img src={images[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" loading="lazy" />
+              <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-[20px] font-semibold">
+                +{overflow}
+              </span>
+            </button>
+          )}
+        </div>
+        {expanded && overflow > 0 && (
+          <button onClick={() => toggleFeedExpanded(post.id)} className="mt-2.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+            收起图片
+          </button>
+        )}
+      </div>
+    )
   }
 
   const renderPost = (post: MomentsPost) => {
@@ -229,20 +313,12 @@ export function MomentsModule() {
         </div>
 
         <div className="px-4 pb-4">
-          <div className={`grid gap-4 ${post.imageDataUrl ? 'grid-cols-[96px_minmax(0,1fr)]' : 'grid-cols-1'}`}>
-            {post.imageDataUrl && (
-              <div className="rounded-[18px] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] aspect-[4/5]">
-                <img src={post.imageDataUrl} alt="说说图片" className="w-full h-full object-cover" />
-              </div>
-            )}
-            <div className="min-w-0 flex flex-col justify-between">
-              <div className="text-[15px] leading-7 text-[var(--text-primary)] break-words whitespace-pre-wrap">
-                <MarkdownPreview content={previewText} />
-              </div>
-              <div className="mt-3 text-[11px] text-[var(--text-muted)] flex items-center gap-2">
-                <span>{post.updatedAt !== post.createdAt ? '已编辑' : '发布'}</span>
-              </div>
-            </div>
+          <div className="text-[15px] leading-7 text-[var(--text-primary)] break-words whitespace-pre-wrap">
+            <MarkdownPreview content={previewText} />
+          </div>
+          {renderImageGrid(post)}
+          <div className="mt-3 text-[11px] text-[var(--text-muted)] flex items-center gap-2">
+            <span>{post.updatedAt !== post.createdAt ? '已编辑' : '发布'}</span>
           </div>
         </div>
       </article>
@@ -374,72 +450,113 @@ export function MomentsModule() {
       </button>
 
       {editorOpen && (
-        <div className="fixed inset-0 z-50 bg-[var(--bg-primary)] flex flex-col">
-          <div className="h-[52px] shrink-0 flex items-center justify-between px-5 border-b border-[var(--border-color)]">
-            <button onClick={() => setEditorOpen(false)} className="text-[15px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
-              取消
-            </button>
-            <span className="text-[15px] font-semibold text-[var(--text-primary)]">{mode === 'create' ? '发表新说说' : '编辑说说'}</span>
-            <button
-              onClick={handleSave}
-              disabled={!canSave}
-              className="px-5 py-1.5 rounded-full bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
-            >
-              {saving ? '发表中...' : '发表'}
-            </button>
-          </div>
+        <div
+          className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
+          onMouseDown={e => { if (e.target === e.currentTarget) closeEditor() }}
+        >
+          <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="h-[3px] shrink-0 bg-[linear-gradient(90deg,var(--accent),color-mix(in_srgb,var(--accent)_45%,transparent))]" />
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="max-w-2xl mx-auto px-6 pt-6 pb-16">
-              <div className="flex items-center gap-3 pb-5">
-                <div className="w-11 h-11 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-                  {avatarDataUrl ? (
-                    <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[14px] font-semibold text-[var(--accent)]">{initials(signature)}</div>
+            <div className="px-5 h-[56px] shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border-color)]">
+              <button
+                onClick={closeEditor}
+                className="px-2 py-1.5 rounded-lg text-[15px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                取消
+              </button>
+              <span className="text-[15px] font-semibold text-[var(--text-primary)]">{mode === 'create' ? '发表新说说' : '编辑说说'}</span>
+              <button
+                onClick={handleSave}
+                disabled={!canSave}
+                className="px-5 py-1.5 rounded-full bg-gradient-to-r from-[var(--accent)] to-[color-mix(in_srgb,var(--accent)_80%,#0ea5e9)] text-white text-[14px] font-medium shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-all"
+              >
+                {saving ? '发表中...' : '发表'}
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="max-w-xl mx-auto px-6 pt-6 pb-8">
+                <div className="flex items-center gap-3 pb-5">
+                  <div className="w-11 h-11 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 shadow-sm">
+                    {avatarDataUrl ? (
+                      <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[14px] font-semibold text-[var(--accent)]">{initials(signature)}</div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{signature}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">发到我的时间线</div>
+                  </div>
+                </div>
+
+                <textarea
+                  autoFocus
+                  value={draft.contentMd}
+                  onChange={e => setDraft(prev => ({ ...prev, contentMd: e.target.value }))}
+                  placeholder="这一刻的想法..."
+                  className="w-full min-h-[170px] resize-none rounded-2xl border border-[var(--border-color)] bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_92%,var(--bg-secondary))_100%)] px-5 py-4 text-[15px] leading-8 text-[var(--text-primary)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors placeholder:text-[var(--text-disabled)]"
+                />
+
+                <div className="mt-5">
+                  <div className="grid grid-cols-3 gap-2.5 w-[264px]">
+                    {draft.imageDataUrls.slice(0, editorImagesExpanded ? draft.imageDataUrls.length : GRID_VISIBLE).map((img, i) => (
+                      <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm group">
+                        <img src={img} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => removeImage(i)}
+                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-black/65 text-white flex items-center justify-center hover:bg-black/85 transition-colors opacity-0 group-hover:opacity-100"
+                          title="移除图片"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+
+                    {!editorImagesExpanded && draft.imageDataUrls.length > GRID_VISIBLE && (
+                      <button
+                        onClick={() => setEditorImagesExpanded(true)}
+                        className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm"
+                        title="展开全部图片"
+                      >
+                        <img src={draft.imageDataUrls[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" />
+                        <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-[18px] font-semibold">
+                          +{draft.imageDataUrls.length - GRID_VISIBLE}
+                        </span>
+                      </button>
+                    )}
+
+                    {draft.imageDataUrls.length < MAX_IMAGES && (editorImagesExpanded || draft.imageDataUrls.length <= GRID_VISIBLE) && (
+                      <button
+                        onClick={() => postImageInputRef.current?.click()}
+                        className="aspect-square rounded-2xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/40 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        title="添加图片"
+                      >
+                        <ImagePlus size={22} />
+                        <span className="text-[11px]">添加图片</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {editorImagesExpanded && (
+                    <button
+                      onClick={() => setEditorImagesExpanded(false)}
+                      className="mt-3 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                      收起图片
+                    </button>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{signature}</div>
-                  <div className="text-[11px] text-[var(--text-muted)]">发到我的时间线</div>
-                </div>
               </div>
+            </div>
 
-              <textarea
-                autoFocus
-                value={draft.contentMd}
-                onChange={e => setDraft(prev => ({ ...prev, contentMd: e.target.value }))}
-                placeholder="这一刻的想法..."
-                className="w-full min-h-[160px] resize-none bg-transparent text-[16px] leading-8 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]"
-              />
-
-              <div className="grid grid-cols-3 gap-2.5 mt-2 w-[264px]">
-                {draft.imageDataUrl ? (
-                  <div className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                    <img src={draft.imageDataUrl} alt="图片" className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => setDraft(prev => ({ ...prev, imageDataUrl: '' }))}
-                      className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-black/65 text-white flex items-center justify-center hover:bg-black/85 transition-colors"
-                      title="移除图片"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => postImageInputRef.current?.click()}
-                    className="aspect-square rounded-2xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/40 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                    title="添加图片"
-                  >
-                    <ImagePlus size={22} />
-                    <span className="text-[11px]">添加图片</span>
-                  </button>
-                )}
-              </div>
+            <div className="shrink-0 px-6 py-2.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)]/60 flex items-center justify-between gap-3">
+              <span className="text-[11px] text-[var(--text-muted)]">支持 Markdown · 图片最多 {MAX_IMAGES} 张</span>
+              <span className="text-[11px] text-[var(--text-muted)]">{draft.contentMd.trim().length} 字 · {draft.imageDataUrls.length} 图</span>
             </div>
           </div>
 
-          <input ref={postImageInputRef} type="file" accept="image/*" className="hidden" onChange={() => { handlePickImage().catch(console.error) }} />
+          <input ref={postImageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={() => { handlePickImages().catch(console.error) }} />
         </div>
       )}
 

@@ -18,7 +18,7 @@ interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
-interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; is_pinned: number; created_at: string; updated_at: string }
+interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; is_pinned: number; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -49,7 +49,15 @@ function mapPassword(r: PasswordRow) {
 }
 
 function mapMoments(r: MomentsRow) {
-  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrl: r.image_data_url || '', isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
+  let images: string[] = []
+  if (r.images_data_urls) {
+    try {
+      const arr = JSON.parse(r.images_data_urls)
+      if (Array.isArray(arr)) images = arr.filter((v: unknown): v is string => typeof v === 'string' && v.length > 0)
+    } catch { /* fall through */ }
+  }
+  if (images.length === 0 && r.image_data_url) images = [r.image_data_url]
+  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {

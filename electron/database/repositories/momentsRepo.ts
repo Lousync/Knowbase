@@ -7,9 +7,21 @@ interface MomentsRow {
   content_md: string
   content_html: string | null
   image_data_url: string | null
+  images_data_urls: string | null
   is_pinned: number
   created_at: string
   updated_at: string
+}
+
+function parseImages(row: MomentsRow): string[] {
+  if (row.images_data_urls) {
+    try {
+      const arr = JSON.parse(row.images_data_urls)
+      if (Array.isArray(arr)) return arr.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    } catch { /* fall through */ }
+  }
+  if (row.image_data_url) return [row.image_data_url]
+  return []
 }
 
 function rowToMoments(row: MomentsRow) {
@@ -17,7 +29,7 @@ function rowToMoments(row: MomentsRow) {
     id: row.id,
     contentMd: row.content_md,
     contentHtml: row.content_html || '',
-    imageDataUrl: row.image_data_url || '',
+    imageDataUrls: parseImages(row),
     isPinned: row.is_pinned === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -54,25 +66,34 @@ export function registerMomentsHandlers(): void {
     return rows.length > 0 ? rowToMoments(rows[0]) : null
   })
 
-  ipcMain.handle('moments:create', (_e, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; isPinned?: boolean }) => {
+  ipcMain.handle('moments:create', (_e, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; isPinned?: boolean }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
+    const images = Array.isArray(data.imageDataUrls) ? data.imageDataUrls : (data.imageDataUrl ? [data.imageDataUrl] : [])
     run(
-      `INSERT INTO moments_posts (id, content_md, content_html, image_data_url, is_pinned, created_at, updated_at)
+      `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, is_pinned, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.contentMd || '', data.contentHtml || '', data.imageDataUrl || '', data.isPinned ? 1 : 0, now, now]
+      [id, data.contentMd || '', data.contentHtml || '', JSON.stringify(images), data.isPinned ? 1 : 0, now, now]
     )
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
     return rowToMoments(rows[0])
   })
 
-  ipcMain.handle('moments:update', (_e, id: string, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; isPinned?: boolean }) => {
+  ipcMain.handle('moments:update', (_e, id: string, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; isPinned?: boolean }) => {
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
     for (const [k, v] of Object.entries(data)) {
       if (v !== undefined) {
-        sets.push(`${camelToSnake(k)} = ?`)
-        params.push(k === 'isPinned' ? (v ? 1 : 0) : v)
+        if (k === 'imageDataUrls') {
+          sets.push('images_data_urls = ?')
+          params.push(JSON.stringify(v))
+        } else if (k === 'imageDataUrl') {
+          sets.push('images_data_urls = ?')
+          params.push(JSON.stringify(v ? [v] : []))
+        } else {
+          sets.push(`${camelToSnake(k)} = ?`)
+          params.push(k === 'isPinned' ? (v ? 1 : 0) : v)
+        }
       }
     }
     params.push(id)

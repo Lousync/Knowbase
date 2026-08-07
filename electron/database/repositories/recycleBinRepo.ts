@@ -183,11 +183,14 @@ export function registerRecycleBinHandlers(): void {
         ]
       )
     } else if (item.module === 'moments') {
+      const images = Array.isArray(record.imageDataUrls)
+        ? record.imageDataUrls
+        : (record.imageDataUrl ? [record.imageDataUrl] : [])
       run(
-        `INSERT INTO moments_posts (id, content_md, content_html, image_data_url, is_pinned, created_at, updated_at)
+        `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, is_pinned, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
-          record.id, record.contentMd || '', record.contentHtml || '', record.imageDataUrl || '', record.isPinned ? 1 : 0,
+          record.id, record.contentMd || '', record.contentHtml || '', JSON.stringify(images), record.isPinned ? 1 : 0,
           record.createdAt, record.updatedAt
         ]
       )

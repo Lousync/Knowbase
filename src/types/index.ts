@@ -38,13 +38,13 @@ export interface MomentsPost {
   id: string
   contentMd: string
   contentHtml: string
-  imageDataUrl: string
+  imageDataUrls: string[]
   isPinned: boolean
   createdAt: string
   updatedAt: string
 }
-export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrl?: string; isPinned?: boolean }
-export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrl?: string; isPinned?: boolean }
+export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; isPinned?: boolean }
+export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; isPinned?: boolean }
 
 // user
 export interface UserProfile {
