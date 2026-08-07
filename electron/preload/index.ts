@@ -100,6 +100,7 @@ const api = {
   // user
   getUserProfile: () => ipcRenderer.invoke('user:getProfile'),
   setUserUsername: (username: string) => ipcRenderer.invoke('user:setUsername', username),
+  setUserCoverImage: (dataUrl: string) => ipcRenderer.invoke('user:setCoverImage', dataUrl),
   setUserPassword: (password: string) => ipcRenderer.invoke('user:setPassword', password),
   verifyUserPassword: (password: string) => ipcRenderer.invoke('user:verifyPassword', password),
   verifyImportPassword: (password: string, storedHash: string) => ipcRenderer.invoke('user:verifyImportPassword', password, storedHash),

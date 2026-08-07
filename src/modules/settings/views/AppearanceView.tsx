@@ -1,6 +1,7 @@
-import { Sun, Moon, FileText, Calendar, BookOpen, Wrench, MessageCircleMore } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon } from '../../../components/shared/ModuleIcons'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={24} />,
@@ -53,11 +54,11 @@ export function AppearanceView() {
         <div className="grid grid-cols-3 gap-2 max-w-sm">
           {(function () {
             const TABS: { id: string; label: string; icon: React.ReactNode }[] = [
-              { id: 'blog', label: '博客', icon: <FileText size={16} /> },
-              { id: 'schedule', label: '日程', icon: <Calendar size={16} /> },
-              { id: 'knowledge', label: '知识库', icon: <BookOpen size={16} /> },
-              { id: 'moments', label: '说说', icon: <MessageCircleMore size={16} /> },
-              { id: 'toolbox', label: '工具箱', icon: <Wrench size={16} /> },
+              { id: 'blog', label: '博客', icon: <BlogIcon size={16} /> },
+              { id: 'schedule', label: '日程', icon: <ScheduleIcon size={16} /> },
+              { id: 'knowledge', label: '知识库', icon: <KnowledgeIcon size={16} /> },
+              { id: 'moments', label: '说说', icon: <MomentsIcon size={16} /> },
+              { id: 'toolbox', label: '工具箱', icon: <ToolboxIcon size={16} /> },
             ]
             return TABS.map(tab => (
               <button

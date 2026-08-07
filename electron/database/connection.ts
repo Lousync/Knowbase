@@ -424,6 +424,12 @@ export function runMigrations(): void {
     try { db.run("ALTER TABLE moments_posts ADD COLUMN image_data_url TEXT DEFAULT ''") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('023_moments_image')")
   }
+
+  if (!applied.has('024_cover_image')) {
+    // 说说主页封面背景（base64 data URL，随用户资料一起持久化）
+    try { db.run("ALTER TABLE user_profile ADD COLUMN cover_image_data_url TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('024_cover_image')")
+  }
 }
 
 /**

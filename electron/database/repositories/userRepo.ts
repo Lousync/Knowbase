@@ -9,6 +9,7 @@ interface UserProfileRow {
   id: string
   username: string
   avatar_path: string
+  cover_image_data_url: string
   password_hash: string
   created_at: string
   updated_at: string
@@ -82,10 +83,18 @@ export function registerUserHandlers(): void {
     return {
       username: row.username,
       avatarPath: row.avatar_path,
+      coverImageDataUrl: row.cover_image_data_url || '',
       hasPassword: row.password_hash !== '',
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
+  })
+
+  // ===== Set cover image (base64 data URL) =====
+  ipcMain.handle('user:setCoverImage', (_e, dataUrl: string) => {
+    const now = new Date().toISOString()
+    run("UPDATE user_profile SET cover_image_data_url = ?, updated_at = ? WHERE id = 'default'", [dataUrl || '', now])
+    return { success: true }
   })
 
   // ===== Update username =====

@@ -1,19 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { FileText, Calendar, BookOpen, Upload, Trash2, Settings, Palette, ChevronRight, ChevronDown, Check, HelpCircle, User, Wrench, Download, MessageCircleMore } from 'lucide-react'
+import { Palette, ChevronRight, ChevronDown, Check, Download } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, ExportIcon, RecycleIcon, HelpIcon, UserIcon, SettingsIcon } from './ModuleIcons'
 
 /** All draggable module tabs (excluding user/settings) */
 const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.ReactNode }[] = [
-  { id: 'blog',      label: '博客',   icon: s => <FileText size={s} strokeWidth={1.5} /> },
-  { id: 'schedule',  label: '日程',   icon: s => <Calendar size={s} strokeWidth={1.5} /> },
-  { id: 'knowledge', label: '知识库', icon: s => <BookOpen size={s} strokeWidth={1.5} /> },
-  { id: 'moments', label: '说说', icon: s => <MessageCircleMore size={s} strokeWidth={1.5} /> },
-  { id: 'toolbox',   label: '工具箱', icon: s => <Wrench size={s} strokeWidth={1.5} /> },
-  { id: 'export',    label: '导出',   icon: s => <Upload size={s} strokeWidth={1.5} /> },
-  { id: 'recycle',   label: '回收站', icon: s => <Trash2 size={s} strokeWidth={1.5} /> },
-  { id: 'help',      label: '帮助',   icon: s => <HelpCircle size={s} strokeWidth={1.5} /> },
+  { id: 'blog',      label: '博客',   icon: s => <BlogIcon size={s} /> },
+  { id: 'schedule',  label: '日程',   icon: s => <ScheduleIcon size={s} /> },
+  { id: 'knowledge', label: '知识库', icon: s => <KnowledgeIcon size={s} /> },
+  { id: 'moments',   label: '说说',   icon: s => <MomentsIcon size={s} /> },
+  { id: 'toolbox',   label: '工具箱', icon: s => <ToolboxIcon size={s} /> },
+  { id: 'export',    label: '导出',   icon: s => <ExportIcon size={s} /> },
+  { id: 'recycle',   label: '回收站', icon: s => <RecycleIcon size={s} /> },
+  { id: 'help',      label: '帮助',   icon: s => <HelpIcon size={s} /> },
 ]
 
 const THEME_CHOICES = [
@@ -142,14 +143,18 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
             }}
             title={`${mod.label}${dragId && dragId !== tabId ? ' — 拖放到此处排序' : ''}`}
             className={`
-              w-14 h-14 flex items-center justify-center relative transition-colors
-              ${isActive ? 'text-[var(--accent)]' : dragId === tabId ? 'text-[var(--accent)]/50' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}
+              w-14 h-14 flex items-center justify-center relative rounded-2xl transition-all duration-150
+              ${isActive
+                ? 'text-[var(--accent)] bg-[var(--bg-hover)]/80 shadow-[inset_0_0_0_1px_var(--border-color)]'
+                : dragId === tabId
+                  ? 'text-[var(--accent)]/50'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/50'}
             `}
           >
             {isActive && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-[var(--accent)] rounded-r" />
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-9 bg-[var(--accent)] rounded-r-full" />
             )}
-            {mod.icon(28)}
+            {mod.icon(26)}
           </button>
         )
       })}
@@ -158,15 +163,17 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
       <div className="mt-auto">
         <button
           onClick={() => onChange('user')}
-          className={`w-14 h-14 flex items-center justify-center relative transition-colors ${
-            active === 'user' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+          className={`w-14 h-14 flex items-center justify-center relative rounded-2xl transition-all duration-150 ${
+            active === 'user'
+              ? 'text-[var(--accent)] bg-[var(--bg-hover)]/80 shadow-[inset_0_0_0_1px_var(--border-color)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/50'
           }`}
           title="用户"
         >
           {active === 'user' && (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 bg-[var(--accent)] rounded-r" />
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-9 bg-[var(--accent)] rounded-r-full" />
           )}
-          <User size={28} strokeWidth={1.5} />
+          <UserIcon size={26} />
         </button>
       </div>
 
@@ -174,12 +181,14 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => { setMenuOpen(v => !v); setThemeExpanded(false) }}
-          className={`w-14 h-14 flex items-center justify-center relative transition-colors ${
-            active === 'settings' ? 'text-[var(--accent)]' : menuOpen ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+          className={`w-14 h-14 flex items-center justify-center relative rounded-2xl transition-all duration-150 ${
+            active === 'settings' || menuOpen
+              ? 'text-[var(--accent)] bg-[var(--bg-hover)]/80 shadow-[inset_0_0_0_1px_var(--border-color)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/50'
           }`}
           title="设置与主题"
         >
-          <Settings size={28} strokeWidth={1.5} />
+          <SettingsIcon size={26} />
         </button>
 
         {menuOpen && (
@@ -214,13 +223,13 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
 
             <button onClick={() => { onChange('settings'); setMenuOpen(false) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-              <Settings size={15} className="text-[var(--text-muted)]" />
+              <SettingsIcon size={15} className="text-[var(--text-muted)]" />
               设置
             </button>
 
             <button onClick={() => { onChange('help'); setMenuOpen(false) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-              <HelpCircle size={15} className="text-[var(--text-muted)]" />
+              <HelpIcon size={15} className="text-[var(--text-muted)]" />
               帮助
             </button>
 
