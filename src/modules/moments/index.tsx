@@ -432,6 +432,27 @@ export function MomentsModule() {
     }
   }
 
+  const handleDeleteAlbumPhoto = async (item: { postId: string; indexInPost: number }) => {
+    try {
+      const post = posts.find(p => p.id === item.postId)
+      if (!post) return
+      const images = (post.imageDataUrls || []).filter((_, i) => i !== item.indexInPost)
+      // 删除的是相册封面引用时，清掉封面设置（自动回退到第一张）
+      if (selectedAlbum && selectedAlbum.coverPostId === item.postId && selectedAlbum.coverIndex === item.indexInPost) {
+        await setMomentsAlbumCover(selectedAlbum.id, '', 0)
+      }
+      if (images.length === 0 && !(post.contentMd || '').trim()) {
+        // 纯照片说说删掉最后一张图 → 整条进回收站
+        await deleteMomentsPost(post.id)
+      } else {
+        await updateMomentsPost(post.id, { imageDataUrls: images })
+      }
+      await Promise.all([loadPosts(), loadAlbums()])
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const toggleFeedExpanded = (postId: string) => {
     setExpandedFeedIds(prev => {
       const next = new Set(prev)
@@ -762,6 +783,13 @@ export function MomentsModule() {
                             封面
                           </span>
                         )}
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteAlbumPhoto({ postId: item.postId, indexInPost: item.indexInPost }).catch(console.error) }}
+                          className="absolute right-1.5 top-1.5 w-6 h-6 rounded-full bg-black/55 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/80 backdrop-blur transition-opacity"
+                          title="删除这张照片"
+                        >
+                          <Trash2 size={12} />
+                        </button>
                         {!(selectedAlbum.coverPostId === item.postId && selectedAlbum.coverIndex === item.indexInPost) && (
                           <button
                             onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, item.postId, item.indexInPost).catch(console.error) }}
@@ -851,13 +879,15 @@ export function MomentsModule() {
       </div>
       </div>
 
-      <button
-        onClick={openCreate}
-        className="fixed right-6 bottom-6 z-40 w-16 h-16 rounded-full bg-[var(--accent)] text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] hover:bg-[var(--accent-hover)] transition-all flex items-center justify-center"
-        title="新建说说"
-      >
-        <Plus size={28} strokeWidth={2.2} />
-      </button>
+      {viewMode === 'timeline' && (
+        <button
+          onClick={openCreate}
+          className="fixed right-6 bottom-6 z-40 w-16 h-16 rounded-full bg-[var(--accent)] text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] hover:bg-[var(--accent-hover)] transition-all flex items-center justify-center"
+          title="新建说说"
+        >
+          <Plus size={28} strokeWidth={2.2} />
+        </button>
+      )}
 
       {editorOpen && (
         <div
