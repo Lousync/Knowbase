@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check,
-  ChevronLeft, ChevronRight, Search, Images, List, Tag,
+  ChevronLeft, ChevronRight, Search, Images, List,
 } from 'lucide-react'
 import { ConfirmDialog } from '../../components/shared'
 import {
@@ -34,6 +34,14 @@ type Draft = {
 const MAX_IMAGES = 12
 const MAX_TAGS = 5
 const GRID_VISIBLE = 8 // 第 9 格用于展示 "+N" 折叠
+const TAG_PALETTE = ['#38bdf8', '#34d399', '#f472b6', '#fbbf24', '#a78bfa', '#fb7185', '#22d3ee', '#f97316']
+
+/** 按标签名稳定分配颜色（与每日博客的彩色标签风格一致） */
+function tagColor(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return TAG_PALETTE[h % TAG_PALETTE.length]
+}
 
 function formatDateTime(value: string): string {
   return value.replace('T', ' ').slice(0, 16)
@@ -114,6 +122,7 @@ export function MomentsModule() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrls: [], tags: [] })
   const [tagInput, setTagInput] = useState('')
+  const [tagInputVisible, setTagInputVisible] = useState(false)
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
   const [detailPostId, setDetailPostId] = useState<string | null>(null)
@@ -230,6 +239,7 @@ export function MomentsModule() {
     setEditingId(null)
     setDraft({ contentMd: '', imageDataUrls: [], tags: [] })
     setTagInput('')
+    setTagInputVisible(false)
     setEditorImagesExpanded(false)
     setEditorOpen(true)
   }
@@ -243,13 +253,17 @@ export function MomentsModule() {
       tags: post.tags || [],
     })
     setTagInput('')
+    setTagInputVisible(false)
     setEditorImagesExpanded(false)
     setEditorOpen(true)
   }
 
   const addTag = () => {
     const raw = tagInput.trim()
-    if (!raw) return
+    if (!raw) {
+      setTagInputVisible(false)
+      return
+    }
     const normalized = raw.startsWith('#') ? raw.slice(1) : raw
     setDraft(prev => {
       const exists = (prev.tags || []).some(t => t.toLowerCase() === normalized.toLowerCase())
@@ -257,6 +271,7 @@ export function MomentsModule() {
       return { ...prev, tags: [...prev.tags, normalized] }
     })
     setTagInput('')
+    setTagInputVisible(false)
   }
 
   const removeTag = (index: number) => {
@@ -882,49 +897,44 @@ export function MomentsModule() {
                   className="w-full min-h-[150px] resize-none rounded-2xl border border-[var(--border-color)] bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_92%,var(--bg-secondary))_100%)] px-5 py-4 text-[15px] leading-8 text-[var(--text-primary)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors placeholder:text-[var(--text-disabled)]"
                 />
 
-                <div className="mt-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Tag size={13} className="text-[var(--text-muted)]" />
-                    <span className="text-[12px] text-[var(--text-secondary)]">标签</span>
-                    <span className="text-[11px] text-[var(--text-muted)]">（可选 · 最多 {MAX_TAGS} 个）</span>
-                    <span className="ml-auto text-[11px] text-[var(--text-muted)]">{draft.tags.length}/{MAX_TAGS}</span>
-                  </div>
-
-                  {draft.tags.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                    {draft.tags.map((tag, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] text-[12px] text-[var(--accent)]">
-                        #{tag}
-                        <button onClick={() => removeTag(i)} className="w-4 h-4 rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors" title="移除标签">
-                          <X size={10} />
-                        </button>
-                      </span>
-                    ))}
-                    </div>
-                  )}
-
-                  {draft.tags.length < MAX_TAGS && (
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all">
-                        <input
-                          value={tagInput}
-                          onChange={e => setTagInput(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() }
-                            if (e.key === 'Backspace' && !tagInput && draft.tags.length > 0) removeTag(draft.tags.length - 1)
-                          }}
-                          placeholder="输入标签，回车或点「添加」"
-                          className="flex-1 min-w-0 bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]"
-                        />
-                      </div>
-                      <button
-                        onClick={addTag}
-                        disabled={!tagInput.trim()}
-                        className="px-3.5 py-2 rounded-xl border border-[var(--border-color)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-40 transition-colors"
-                      >
-                        添加
+                <div className="mt-4 flex items-center gap-1.5 flex-wrap">
+                  {draft.tags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
+                      style={{ backgroundColor: tagColor(tag) + '20', color: tagColor(tag), border: `1px solid ${tagColor(tag)}40` }}
+                    >
+                      {tag}
+                      <button onClick={() => removeTag(i)} className="hover:text-[var(--danger)] transition-colors" title="移除标签">
+                        <X size={10} />
                       </button>
-                    </div>
+                    </span>
+                  ))}
+                  {draft.tags.length < MAX_TAGS && (
+                    tagInputVisible ? (
+                      <input
+                        autoFocus
+                        value={tagInput}
+                        onChange={e => setTagInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); addTag() }
+                          if (e.key === 'Escape') { setTagInputVisible(false); setTagInput('') }
+                        }}
+                        onBlur={addTag}
+                        placeholder="标签名..."
+                        className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setTagInputVisible(true)}
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded border border-dashed border-[var(--border-color)] transition-colors"
+                      >
+                        <Plus size={10} />标签
+                      </button>
+                    )
+                  )}
+                  {draft.tags.length > 0 && (
+                    <span className="text-[10px] text-[var(--text-disabled)] ml-1">{draft.tags.length}/{MAX_TAGS}</span>
                   )}
                 </div>
 
