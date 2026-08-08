@@ -50,7 +50,8 @@ export interface MomentsAlbum {
   name: string
   photoCount: number
   cover: string
-  coverDataUrl: string
+  coverPostId: string
+  coverIndex: number
   createdAt: string
   updatedAt: string
 }
@@ -301,7 +302,7 @@ export interface ElectronAPI {
   renameMomentsAlbum: (id: string, name: string) => Promise<MomentsAlbum | null>
   deleteMomentsAlbum: (id: string) => Promise<void>
   setMomentsPostAlbum: (postId: string, albumId: string) => Promise<MomentsPost | null>
-  setMomentsAlbumCover: (albumId: string, dataUrl: string) => Promise<MomentsAlbum | null>
+  setMomentsAlbumCover: (albumId: string, postId: string, index: number) => Promise<MomentsAlbum | null>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
   // fill popup

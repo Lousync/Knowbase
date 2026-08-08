@@ -19,6 +19,8 @@ interface AlbumRow {
   id: string
   name: string
   cover_data_url: string | null
+  cover_post_id: string | null
+  cover_index: number | null
   created_at: string
   updated_at: string
 }
@@ -158,7 +160,14 @@ export function registerMomentsHandlers(): void {
     const albums = queryAll<AlbumRow>('SELECT * FROM moments_albums ORDER BY created_at DESC')
     const posts = queryAll<MomentsRow>("SELECT * FROM moments_posts WHERE album_id IS NOT NULL AND album_id != ''")
     return albums.map(a => {
-      let cover = a.cover_data_url || ''
+      // 封面优先取引用的照片（post + 序号），照片始终属于相册
+      let cover = ''
+      const refPost = a.cover_post_id ? posts.find(p => p.id === a.cover_post_id) : null
+      if (refPost) {
+        const refImgs = parseImages(refPost)
+        const refIdx = a.cover_index || 0
+        if (refImgs[refIdx]) cover = refImgs[refIdx]
+      }
       let photoCount = 0
       for (const p of posts) {
         if (p.album_id !== a.id) continue
@@ -166,7 +175,16 @@ export function registerMomentsHandlers(): void {
         photoCount += imgs.length
         if (!cover && imgs.length > 0) cover = imgs[0]
       }
-      return { id: a.id, name: a.name, photoCount, cover, coverDataUrl: a.cover_data_url || '', createdAt: a.created_at, updatedAt: a.updated_at }
+      return {
+        id: a.id,
+        name: a.name,
+        photoCount,
+        cover,
+        coverPostId: a.cover_post_id || '',
+        coverIndex: a.cover_index || 0,
+        createdAt: a.created_at,
+        updatedAt: a.updated_at,
+      }
     })
   })
 
@@ -176,7 +194,7 @@ export function registerMomentsHandlers(): void {
     const id = randomUUID()
     const now = new Date().toISOString()
     run('INSERT INTO moments_albums (id, name, cover_data_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, trimmed, '', now, now])
-    return { id, name: trimmed, photoCount: 0, cover: '', coverDataUrl: '', createdAt: now, updatedAt: now }
+    return { id, name: trimmed, photoCount: 0, cover: '', coverPostId: '', coverIndex: 0, createdAt: now, updatedAt: now }
   })
 
   ipcMain.handle('moments:renameAlbum', (_e, id: string, name: string) => {
@@ -185,7 +203,7 @@ export function registerMomentsHandlers(): void {
     run('UPDATE moments_albums SET name = ?, updated_at = ? WHERE id = ?', [trimmed, new Date().toISOString(), id])
     const rows = queryAll<AlbumRow>('SELECT * FROM moments_albums WHERE id = ?', [id])
     if (rows.length === 0) return null
-    return { id: rows[0].id, name: rows[0].name, photoCount: 0, cover: '', coverDataUrl: rows[0].cover_data_url || '', createdAt: rows[0].created_at, updatedAt: rows[0].updated_at }
+    return { id: rows[0].id, name: rows[0].name, photoCount: 0, cover: '', coverPostId: rows[0].cover_post_id || '', coverIndex: rows[0].cover_index || 0, createdAt: rows[0].created_at, updatedAt: rows[0].updated_at }
   })
 
   ipcMain.handle('moments:deleteAlbum', (_e, id: string) => {
@@ -199,10 +217,10 @@ export function registerMomentsHandlers(): void {
     return rows.length > 0 ? rowToMoments(rows[0]) : null
   })
 
-  ipcMain.handle('moments:setAlbumCover', (_e, albumId: string, dataUrl: string) => {
-    run('UPDATE moments_albums SET cover_data_url = ?, updated_at = ? WHERE id = ?', [dataUrl || '', new Date().toISOString(), albumId])
+  ipcMain.handle('moments:setAlbumCover', (_e, albumId: string, postId: string, index: number) => {
+    run('UPDATE moments_albums SET cover_post_id = ?, cover_index = ?, updated_at = ? WHERE id = ?', [postId || '', index || 0, new Date().toISOString(), albumId])
     const rows = queryAll<AlbumRow>('SELECT * FROM moments_albums WHERE id = ?', [albumId])
     if (rows.length === 0) return null
-    return { id: rows[0].id, name: rows[0].name, photoCount: 0, cover: '', coverDataUrl: rows[0].cover_data_url || '', createdAt: rows[0].created_at, updatedAt: rows[0].updated_at }
+    return { id: rows[0].id, name: rows[0].name, photoCount: 0, cover: '', coverPostId: rows[0].cover_post_id || '', coverIndex: rows[0].cover_index || 0, createdAt: rows[0].created_at, updatedAt: rows[0].updated_at }
   })
 }

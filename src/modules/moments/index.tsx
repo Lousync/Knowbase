@@ -397,9 +397,9 @@ export function MomentsModule() {
     }
   }
 
-  const handleSetAlbumCover = async (albumId: string, img: string) => {
+  const handleSetAlbumCover = async (albumId: string, postId: string, index: number) => {
     try {
-      await setMomentsAlbumCover(albumId, img)
+      await setMomentsAlbumCover(albumId, postId, index)
       await loadAlbums()
     } catch (err) {
       console.error(err)
@@ -699,9 +699,9 @@ export function MomentsModule() {
                   >
                     <PencilLine size={15} />
                   </button>
-                  {selectedAlbum.coverDataUrl && (
+                  {selectedAlbum.coverPostId && (
                     <button
-                      onClick={() => { handleSetAlbumCover(selectedAlbum.id, '').catch(console.error) }}
+                      onClick={() => { handleSetAlbumCover(selectedAlbum.id, '', 0).catch(console.error) }}
                       className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                       title="取消自定义封面（恢复为第一张照片）"
                     >
@@ -731,14 +731,14 @@ export function MomentsModule() {
                         title="点击放大查看"
                       >
                         <img src={img} alt={`相册照片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-                        {selectedAlbum.coverDataUrl === img && (
+                        {selectedAlbum.coverPostId === p.id && selectedAlbum.coverIndex === i && (
                           <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] pointer-events-none">
                             封面
                           </span>
                         )}
-                        {selectedAlbum.coverDataUrl !== img && (
+                        {!(selectedAlbum.coverPostId === p.id && selectedAlbum.coverIndex === i) && (
                           <button
-                            onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, img).catch(console.error) }}
+                            onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, p.id, i).catch(console.error) }}
                             className="absolute inset-x-1.5 bottom-1.5 py-1 rounded-lg bg-black/55 text-white text-[10px] backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
                             title="设为封面"
                           >
@@ -886,10 +886,12 @@ export function MomentsModule() {
                   <div className="flex items-center gap-1.5 mb-2">
                     <Tag size={13} className="text-[var(--text-muted)]" />
                     <span className="text-[12px] text-[var(--text-secondary)]">标签</span>
-                    <span className="text-[11px] text-[var(--text-muted)]">（可选 · 回车确认 · 最多 {MAX_TAGS} 个）</span>
+                    <span className="text-[11px] text-[var(--text-muted)]">（可选 · 最多 {MAX_TAGS} 个）</span>
                     <span className="ml-auto text-[11px] text-[var(--text-muted)]">{draft.tags.length}/{MAX_TAGS}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap rounded-2xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 min-h-[46px] focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all">
+
+                  {draft.tags.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap mb-2">
                     {draft.tags.map((tag, i) => (
                       <span key={i} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] text-[12px] text-[var(--accent)]">
                         #{tag}
@@ -898,20 +900,32 @@ export function MomentsModule() {
                         </button>
                       </span>
                     ))}
-                    {draft.tags.length < MAX_TAGS && (
-                      <input
-                        value={tagInput}
-                        onChange={e => setTagInput(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() }
-                          if (e.key === 'Backspace' && !tagInput && draft.tags.length > 0) removeTag(draft.tags.length - 1)
-                        }}
-                        onBlur={addTag}
-                        placeholder={draft.tags.length ? '继续添加...' : '输入标签，回车确认'}
-                        className="flex-1 min-w-[120px] bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]"
-                      />
-                    )}
-                  </div>
+                    </div>
+                  )}
+
+                  {draft.tags.length < MAX_TAGS && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all">
+                        <input
+                          value={tagInput}
+                          onChange={e => setTagInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() }
+                            if (e.key === 'Backspace' && !tagInput && draft.tags.length > 0) removeTag(draft.tags.length - 1)
+                          }}
+                          placeholder="输入标签，回车或点「添加」"
+                          className="flex-1 min-w-0 bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]"
+                        />
+                      </div>
+                      <button
+                        onClick={addTag}
+                        disabled={!tagInput.trim()}
+                        className="px-3.5 py-2 rounded-xl border border-[var(--border-color)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-40 transition-colors"
+                      >
+                        添加
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5">

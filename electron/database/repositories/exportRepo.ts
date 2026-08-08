@@ -19,7 +19,7 @@ interface CategoryRow { id: string; name: string; parent_id: string | null; sort
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
 interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; tags: string | null; album_id: string | null; is_pinned: number; created_at: string; updated_at: string }
-interface AlbumRow { id: string; name: string; cover_data_url: string | null; created_at: string; updated_at: string }
+interface AlbumRow { id: string; name: string; cover_data_url: string | null; cover_post_id: string | null; cover_index: number | null; created_at: string; updated_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -69,7 +69,7 @@ function mapMoments(r: MomentsRow) {
 }
 
 function mapAlbum(r: AlbumRow) {
-  return { id: r.id, name: r.name, photoCount: 0, cover: '', coverDataUrl: r.cover_data_url || '', createdAt: r.created_at, updatedAt: r.updated_at }
+  return { id: r.id, name: r.name, photoCount: 0, cover: '', coverPostId: r.cover_post_id || '', coverIndex: r.cover_index || 0, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 export function registerExportHandlers(): void {

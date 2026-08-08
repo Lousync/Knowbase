@@ -176,7 +176,7 @@ export const createMomentsAlbum = (name: string) => a().createMomentsAlbum(name)
 export const renameMomentsAlbum = (id: string, name: string) => a().renameMomentsAlbum(id, name)
 export const deleteMomentsAlbum = (id: string) => a().deleteMomentsAlbum(id)
 export const setMomentsPostAlbum = (postId: string, albumId: string) => a().setMomentsPostAlbum(postId, albumId)
-export const setMomentsAlbumCover = (albumId: string, dataUrl: string) => a().setMomentsAlbumCover(albumId, dataUrl)
+export const setMomentsAlbumCover = (albumId: string, postId: string, index: number) => a().setMomentsAlbumCover(albumId, postId, index)
 
 // ===== AI =====
 export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

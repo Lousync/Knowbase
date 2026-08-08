@@ -158,7 +158,7 @@ const api = {
   renameMomentsAlbum: (id: string, name: string) => ipcRenderer.invoke('moments:renameAlbum', id, name),
   deleteMomentsAlbum: (id: string) => ipcRenderer.invoke('moments:deleteAlbum', id),
   setMomentsPostAlbum: (postId: string, albumId: string) => ipcRenderer.invoke('moments:setPostAlbum', postId, albumId),
-  setMomentsAlbumCover: (albumId: string, dataUrl: string) => ipcRenderer.invoke('moments:setAlbumCover', albumId, dataUrl),
+  setMomentsAlbumCover: (albumId: string, postId: string, index: number) => ipcRenderer.invoke('moments:setAlbumCover', albumId, postId, index),
 
   // ai
   aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),
