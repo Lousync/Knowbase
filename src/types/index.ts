@@ -61,7 +61,6 @@ export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string
 export interface UserProfile {
   username: string
   avatarPath: string
-  coverImageDataUrl: string
   hasPassword: boolean
   createdAt: string
   updatedAt: string
@@ -253,7 +252,6 @@ export interface ElectronAPI {
   // user
   getUserProfile: () => Promise<UserProfile | null>
   setUserUsername: (username: string) => Promise<{ success: boolean }>
-  setUserCoverImage: (dataUrl: string) => Promise<{ success: boolean }>
   setUserPassword: (password: string) => Promise<{ success: boolean }>
   verifyUserPassword: (password: string) => Promise<boolean>
   verifyImportPassword: (password: string, storedHash: string) => Promise<boolean>

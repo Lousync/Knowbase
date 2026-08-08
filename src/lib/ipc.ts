@@ -133,7 +133,6 @@ export const purgeExpiredRecycleBinItems = () => a().purgeExpiredRecycleBinItems
 // ===== User =====
 export const getUserProfile = (): Promise<UserProfile | null> => a().getUserProfile()
 export const setUserUsername = (username: string) => a().setUserUsername(username)
-export const setUserCoverImage = (dataUrl: string) => a().setUserCoverImage(dataUrl)
 export const setUserPassword = (password: string) => a().setUserPassword(password)
 export const verifyUserPassword = (password: string): Promise<boolean> => a().verifyUserPassword(password)
 export const verifyImportPassword = (password: string, storedHash: string): Promise<boolean> => a().verifyImportPassword(password, storedHash)

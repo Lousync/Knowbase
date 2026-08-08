@@ -15,7 +15,6 @@ import {
   getUserProfile,
   renameMomentsAlbum,
   setMomentsAlbumCover,
-  setUserCoverImage,
   setUserUsername,
   setMomentsPostAlbum,
   toggleMomentsPin,
@@ -35,10 +34,6 @@ type Draft = {
 const MAX_IMAGES = 12
 const MAX_TAGS = 5
 const GRID_VISIBLE = 8 // 第 9 格用于展示 "+N" 折叠
-const COVER_H = 300 // 封面区固定高度（h-[300px]）
-const COVER_COLLAPSED_H = 104 // 下滑到底时封面的高度
-const SHRINK_RANGE = 260 // 滚动多少像素完成收缩
-const INFO_CARD_H = 76 // 签名卡片原始高度
 
 function formatDateTime(value: string): string {
   return value.replace('T', ' ').slice(0, 16)
@@ -132,19 +127,11 @@ export function MomentsModule() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [avatarDataUrl, setAvatarDataUrl] = useState('')
-  const [coverImageDataUrl, setCoverImageDataUrl] = useState('')
-  const [coverNatural, setCoverNatural] = useState<{ w: number; h: number } | null>(null)
-  const [coverPanX, setCoverPanX] = useState(0)
-  const [coverPanY, setCoverPanY] = useState(0)
   const [editingSignature, setEditingSignature] = useState(false)
   const [signatureDraft, setSignatureDraft] = useState('')
-  const coverInputRef = useRef<HTMLInputElement>(null)
   const postImageInputRef = useRef<HTMLInputElement>(null)
   const albumPhotoInputRef = useRef<HTMLInputElement>(null)
-  const coverContainerRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
-  const coverDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; moved: boolean } | null>(null)
-  const [scrollTop, setScrollTop] = useState(0)
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -169,7 +156,6 @@ export function MomentsModule() {
     try {
       const p = await getUserProfile()
       setProfile(p)
-      setCoverImageDataUrl(p?.coverImageDataUrl || '')
     } catch {
       setProfile(null)
     }
@@ -183,13 +169,6 @@ export function MomentsModule() {
       .then(v => { if (typeof v === 'string') setAvatarDataUrl(v) })
       .catch(() => setAvatarDataUrl(''))
   }, [loadPosts, loadAlbums, reloadProfile])
-
-  // 封面更换后重置滑动状态
-  useEffect(() => {
-    setCoverPanX(0)
-    setCoverPanY(0)
-    setCoverNatural(null)
-  }, [coverImageDataUrl])
 
   // Esc 关闭编辑器 / 详情弹层（灯箱打开时让灯箱优先处理）
   useEffect(() => {
@@ -219,62 +198,6 @@ export function MomentsModule() {
   const signature = profile?.username?.trim() || '写下此刻'
   const canSave = !saving && (draft.contentMd.trim().length > 0 || draft.imageDataUrls.length > 0)
   const detailPost = detailPostId ? posts.find(p => p.id === detailPostId) || null : null
-
-  // ---- 封面滑动（微信式拖动查看完整背景） ----
-  const scrollProgress = Math.min(1, Math.max(0, scrollTop / SHRINK_RANGE))
-  const coverCurH = Math.round(COVER_H - scrollProgress * (COVER_H - COVER_COLLAPSED_H))
-  const coverFade = 1 - scrollProgress
-  const infoH = Math.round(INFO_CARD_H * coverFade)
-  const headerPadTop = Math.round(20 * (1 - 0.5 * scrollProgress))
-  const headerPadBottom = Math.round(16 * (1 - 0.5 * scrollProgress))
-
-  const coverScale = useMemo(() => {
-    if (!coverNatural) return null
-    const cw = coverContainerRef.current?.clientWidth || 0
-    if (!cw) return null
-    const scale = Math.max(cw / coverNatural.w, COVER_H / coverNatural.h)
-    return { w: Math.round(coverNatural.w * scale), h: Math.round(coverNatural.h * scale), cw }
-  }, [coverNatural])
-  const coverMaxPanX = coverScale ? Math.max(0, coverScale.w - coverScale.cw) : 0
-  const coverMaxPanY = coverScale ? Math.max(0, coverScale.h - coverCurH) : 0
-  const coverCanPan = coverMaxPanX > 0 || coverMaxPanY > 0
-  const clampPanX = (v: number) => Math.min(0, Math.max(-coverMaxPanX, v))
-  const clampPanY = (v: number) => Math.min(0, Math.max(-coverMaxPanY, v))
-
-  // 封面加载完成后，把初始视野居中，尽量多展示照片内容
-  useEffect(() => {
-    if (!coverScale) return
-    setCoverPanX(-coverMaxPanX / 2)
-    setCoverPanY(-coverMaxPanY / 2)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coverScale])
-
-  const onCoverPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!coverImageDataUrl || !coverCanPan) return
-    if ((e.target as HTMLElement).closest('button')) return
-    coverDragRef.current = { startX: e.clientX, startY: e.clientY, startPanX: coverPanX, startPanY: coverPanY, moved: false }
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }
-  const onCoverPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = coverDragRef.current
-    if (!d) return
-    const dx = e.clientX - d.startX
-    const dy = e.clientY - d.startY
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true
-    setCoverPanX(clampPanX(d.startPanX + dx))
-    setCoverPanY(clampPanY(d.startPanY + dy))
-  }
-  const onCoverPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = coverDragRef.current
-    coverDragRef.current = null
-    if (d && !d.moved && coverImageDataUrl) {
-      setLightbox({ images: [coverImageDataUrl], index: 0 })
-    }
-  }
-
-  const handlePageScroll = () => {
-    setScrollTop(pageScrollRef.current?.scrollTop || 0)
-  }
 
   const switchView = (v: ViewMode) => {
     setViewMode(v)
@@ -358,16 +281,6 @@ export function MomentsModule() {
     }))
   }
 
-  const handlePickCover = async () => {
-    const input = coverInputRef.current
-    if (!input?.files?.length) return
-    const file = input.files[0]
-    const dataUrl = await readFileAsDataUrl(file)
-    await setUserCoverImage(dataUrl)
-    setCoverImageDataUrl(dataUrl)
-    input.value = ''
-  }
-
   const handlePickAlbumPhotos = async () => {
     const input = albumPhotoInputRef.current
     if (!input?.files?.length || !selectedAlbumId) return
@@ -377,11 +290,6 @@ export function MomentsModule() {
     await createMomentsPost({ contentMd: '', contentHtml: '', imageDataUrls: urls, albumId: selectedAlbumId, isPinned: false })
     input.value = ''
     await Promise.all([loadPosts(), loadAlbums()])
-  }
-
-  const handleRemoveCover = async () => {
-    await setUserCoverImage('')
-    setCoverImageDataUrl('')
   }
 
   const startEditSignature = () => {
@@ -657,135 +565,61 @@ export function MomentsModule() {
 
   return (
     <div className="relative flex flex-col h-full bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_84%,#0b1120)_100%)] overflow-hidden">
-      <div ref={pageScrollRef} onScroll={handlePageScroll} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="px-5" style={{ paddingTop: headerPadTop, paddingBottom: headerPadBottom }}>
-          <div className="max-w-4xl mx-auto rounded-[28px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-secondary)] shadow-[0_18px_50px_rgba(0,0,0,0.26)]">
-            <div
-              ref={coverContainerRef}
-              onPointerDown={onCoverPointerDown}
-              onPointerMove={onCoverPointerMove}
-              onPointerUp={onCoverPointerUp}
-              className={`relative bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.45),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.26),transparent_30%),linear-gradient(135deg,#111827 0%,#1f2937 44%,#0f172a 100%)] overflow-hidden select-none ${coverImageDataUrl && coverCanPan ? 'cursor-grab active:cursor-grabbing' : ''}`}
-              style={{ height: coverCurH, touchAction: coverCanPan ? 'none' : undefined }}
-            >
-            {coverImageDataUrl && (
-              coverScale ? (
-                <img
-                  src={coverImageDataUrl}
-                  alt="封面背景"
-                  onLoad={e => {
-                    const el = e.currentTarget
-                    setCoverNatural({ w: el.naturalWidth, h: el.naturalHeight })
-                  }}
-                  className="absolute top-0 left-1/2 max-w-none pointer-events-none"
-                  style={{ width: coverScale.w, height: coverScale.h, transform: `translate(calc(-50% + ${coverPanX}px), ${coverPanY}px)`, objectFit: 'cover' }}
-                  draggable={false}
-                />
-              ) : (
-                <img
-                  src={coverImageDataUrl}
-                  alt="封面背景"
-                  onLoad={e => {
-                    const el = e.currentTarget
-                    setCoverNatural({ w: el.naturalWidth, h: el.naturalHeight })
-                  }}
-                  className="absolute top-0 left-0 h-full w-full object-cover pointer-events-none"
-                  draggable={false}
-                />
-              )
-            )}
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.42)_100%)] pointer-events-none" />
-            <div className="absolute left-5 top-5 flex items-center gap-2 text-white/90 text-[12px] tracking-wide uppercase pointer-events-none" style={{ opacity: 1 - 0.4 * scrollProgress }}>
-              <span className="inline-flex w-2 h-2 rounded-full bg-[var(--accent)]" />
-              Moments
-            </div>
-
-            <button
-              onClick={() => coverInputRef.current?.click()}
-              className="absolute left-5 bottom-5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/35 text-white text-[12px] backdrop-blur hover:bg-black/55 transition-colors"
-              style={{ opacity: coverFade, pointerEvents: scrollProgress > 0.5 ? 'none' : undefined }}
-              title="更换封面背景"
-            >
-              <Camera size={13} />
-              更换封面
-            </button>
-
-            {coverImageDataUrl && (
-              <button
-                onClick={() => { handleRemoveCover().catch(console.error) }}
-                className="absolute right-5 top-5 w-8 h-8 rounded-full bg-black/40 text-white/90 flex items-center justify-center backdrop-blur hover:bg-black/60 transition-colors"
-                style={{ opacity: coverFade, pointerEvents: scrollProgress > 0.5 ? 'none' : undefined }}
-                title="移除封面背景"
-              >
-                <X size={14} />
-              </button>
-            )}
-
-            {coverImageDataUrl && coverCanPan && (
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/30 text-white/85 text-[11px] backdrop-blur pointer-events-none" style={{ opacity: coverFade }}>
-                拖动查看完整背景
-              </div>
-            )}
-
-            <div
-              className="absolute right-5 bottom-5 w-24 h-24 rounded-[26px] border border-white/20 bg-white/10 backdrop-blur-md overflow-hidden shadow-xl pointer-events-none"
-              style={{ opacity: coverFade, transform: `scale(${1 - 0.35 * scrollProgress})`, transformOrigin: 'bottom right' }}
-            >
+      <div ref={pageScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="px-5 pt-4 pb-3">
+          <div className="max-w-4xl mx-auto rounded-[24px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_14px_40px_rgba(0,0,0,0.2)] px-5 py-4 flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 shadow-sm">
               {avatarDataUrl ? (
                 <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white text-[20px] font-semibold">{initials(signature)}</div>
+                <div className="w-full h-full flex items-center justify-center text-[18px] font-semibold text-[var(--accent)]">{initials(signature)}</div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              {editingSignature ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    autoFocus
+                    value={signatureDraft}
+                    onChange={e => setSignatureDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveSignature().catch(console.error)
+                      if (e.key === 'Escape') setEditingSignature(false)
+                    }}
+                    maxLength={30}
+                    placeholder="输入签名"
+                    className="min-w-0 flex-1 max-w-sm bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-[16px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                  />
+                  <button
+                    onClick={() => { saveSignature().catch(console.error) }}
+                    className="p-2 rounded-full text-[var(--accent)] hover:bg-[var(--bg-hover)]"
+                    title="保存签名"
+                  >
+                    <Check size={17} />
+                  </button>
+                  <button
+                    onClick={() => setEditingSignature(false)}
+                    className="p-2 rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
+                    title="取消"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[20px] font-semibold text-[var(--text-primary)] truncate">{signature}</span>
+                  <button
+                    onClick={startEditSignature}
+                    className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                    title="修改签名"
+                  >
+                    <PencilLine size={14} />
+                  </button>
+                </div>
               )}
             </div>
           </div>
-
-          <div className="bg-[var(--bg-secondary)] overflow-hidden" style={{ height: infoH, opacity: coverFade }}>
-            <div className="h-full flex items-center px-6">
-            {editingSignature ? (
-              <div className="flex items-center gap-2 min-w-0">
-                <input
-                  autoFocus
-                  value={signatureDraft}
-                  onChange={e => setSignatureDraft(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') saveSignature().catch(console.error)
-                    if (e.key === 'Escape') setEditingSignature(false)
-                  }}
-                  maxLength={30}
-                  placeholder="输入签名"
-                  className="min-w-0 flex-1 max-w-sm bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-[16px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
-                />
-                <button
-                  onClick={() => { saveSignature().catch(console.error) }}
-                  className="p-2 rounded-full text-[var(--accent)] hover:bg-[var(--bg-hover)]"
-                  title="保存签名"
-                >
-                  <Check size={17} />
-                </button>
-                <button
-                  onClick={() => setEditingSignature(false)}
-                  className="p-2 rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
-                  title="取消"
-                >
-                  <X size={17} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[18px] font-semibold text-[var(--text-primary)] truncate">{signature}</span>
-                <button
-                  onClick={startEditSignature}
-                  className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
-                  title="修改签名"
-                >
-                  <PencilLine size={14} />
-                </button>
-              </div>
-            )}
-            </div>
-          </div>
         </div>
-      </div>
 
       {/* 搜索 + 视图切换 */}
       <div className="sticky top-0 z-30 px-5 pb-3 pt-2 bg-[var(--bg-primary)]/85 backdrop-blur-md">
@@ -1379,7 +1213,6 @@ export function MomentsModule() {
         </div>
       )}
 
-      <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={() => { handlePickCover().catch(console.error) }} />
       <input ref={albumPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={() => { handlePickAlbumPhotos().catch(console.error) }} />
 
       <ConfirmDialog
