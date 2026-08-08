@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Entry, Tag } from '../../../types'
 import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star, List, Hash } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
+import { formatEntryDate } from '../../../lib/date'
 
 interface SidebarProps {
   entries: Entry[]
@@ -310,7 +311,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                 }`}
               >
                 <Star size={10} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
-                <span className="truncate flex-1">{e.date.slice(-5)}</span>
+                <span className="truncate flex-1">{formatEntryDate(e.date)}</span>
               </button>
             ))}
           </div>
@@ -417,7 +418,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                   >
                     <FileText size={11} className="shrink-0 text-[var(--text-muted)]" />
                     <span className="truncate flex-1">{e.title}</span>
-                    <span className="shrink-0 text-[10px] text-[var(--text-disabled)]">{e.date.slice(-5)}</span>
+                    <span className="shrink-0 text-[10px] text-[var(--text-disabled)]">{formatEntryDate(e.date)}</span>
                   </button>
                 ))}
               </div>
@@ -440,7 +441,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                   >
                     <FileText size={11} className="shrink-0 text-[var(--text-muted)]" />
                     <span className="truncate flex-1">{e.title}</span>
-                    <span className="shrink-0 text-[10px] text-[var(--text-disabled)]">{e.date.slice(-5)}</span>
+                    <span className="shrink-0 text-[10px] text-[var(--text-disabled)]">{formatEntryDate(e.date)}</span>
                   </button>
                 ))}
               </div>

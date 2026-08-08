@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react'
 import { Entry } from '../../../types'
+import { formatEntryDate, localToday } from '../../../lib/date'
 
 interface EntryCardProps {
   entry: Entry
@@ -15,7 +16,7 @@ const SIZE_MAP = {
 }
 
 export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCardProps) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localToday()
   const isToday = entry.date === today
   const sz = SIZE_MAP[size]
 
@@ -39,7 +40,7 @@ export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCar
 
         {/* Date */}
         <h3 className={`${sz.title} font-medium text-[var(--text-primary)] shrink-0`}>
-          {entry.date.slice(-5)}
+          {formatEntryDate(entry.date)}
         </h3>
 
         {/* States (emojis) */}

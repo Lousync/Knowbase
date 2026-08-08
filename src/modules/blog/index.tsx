@@ -6,6 +6,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
+import { localToday } from '../../lib/date'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { Sidebar } from './components/Sidebar'
@@ -33,7 +34,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
   // Month & tag filter
-  const today = new Date().toISOString().split('T')[0]
+  const today = localToday()
   const thisMonth = today.slice(0, 7)
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)   // null = thisMonth only; string = YYYY-MM filter; 'showAll' = everything
   const [filterTagId, setFilterTagId] = useState<string | null>(null)        // null = all tags

@@ -1,5 +1,6 @@
 import { Entry } from '../../../types'
 import { EntryCard } from '../components/EntryCard'
+import { localToday } from '../../../lib/date'
 import { Plus, FileText } from 'lucide-react'
 
 interface EntryListProps {
@@ -12,7 +13,7 @@ interface EntryListProps {
 }
 
 export function EntryList({ entries, loading, onEntryClick, onToggleStar, onNewEntry, cardSize = 'm' }: EntryListProps) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localToday()
   const hasToday = entries.some(e => e.date === today)
 
   if (loading) {
