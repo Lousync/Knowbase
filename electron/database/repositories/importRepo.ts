@@ -3,12 +3,22 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync, read
 import { basename, extname, join } from 'path'
 import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs } from '../connection'
 import { randomUUID } from 'crypto'
+import { registerAttachment } from './attachmentRepo'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
 
 function fileNameBase(filePath: string): string {
   const ext = extname(filePath).slice(1).toLowerCase()
   return basename(filePath).replace(new RegExp(`\\.${ext}$`, 'i'), '')
+}
+
+function mimeFromExt(ext: string): string {
+  const m: Record<string, string> = {
+    pdf: 'application/pdf', xmind: 'application/octet-stream',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+    md: 'text/markdown', txt: 'text/plain', json: 'application/json',
+  }
+  return m[ext] || 'application/octet-stream'
 }
 
 function extToFileType(ext: string): string {
@@ -106,12 +116,13 @@ export function registerImportHandlers(): void {
 
       const now = new Date().toISOString()
       const db = getDatabase()
+      const attachmentId = registerAttachment({ ownerType: 'knowledge_page', ownerId: id, fileName, relPath: pdfFileName, mime: 'application/pdf', size: buf.length })
       const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
       const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
       db.run(
-        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, fileName.replace(/\.pdf$/i, ''), pdfFileName, '', null, sortOrder, 'pdf', now, now]
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, attachment_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, fileName.replace(/\.pdf$/i, ''), pdfFileName, '', null, sortOrder, 'pdf', attachmentId, now, now]
       )
       saveToDisk()
 
@@ -135,12 +146,13 @@ export function registerImportHandlers(): void {
 
       const now = new Date().toISOString()
       const db = getDatabase()
+      const attachmentId = registerAttachment({ ownerType: 'knowledge_page', ownerId: id, fileName, relPath: storeName, mime: mimeFromExt(ext), size: buf.length })
       const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
       const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
       db.run(
-        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, fileName.replace(new RegExp(`\\.${ext}$`, 'i'), ''), storeName, '', null, sortOrder, ext, now, now]
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, attachment_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, fileName.replace(new RegExp(`\\.${ext}$`, 'i'), ''), storeName, '', null, sortOrder, ext, attachmentId, now, now]
       )
       saveToDisk()
       return { id, title: fileName.replace(new RegExp(`\\.${ext}$`, 'i'), ''), fileType: ext }
@@ -159,13 +171,14 @@ export function registerImportHandlers(): void {
 
       const now = new Date().toISOString()
       const db = getDatabase()
+      const attachmentId = registerAttachment({ ownerType: 'knowledge_page', ownerId: id, fileName: basename(filePath), relPath: pdfFileName, mime: 'application/pdf', size: readFileSync(pdfPath).length })
       const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
       const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
       const title = basename(filePath).replace(/\.pdf$/i, '')
       db.run(
-        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, title, pdfFileName, '', null, sortOrder, 'pdf', now, now]
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, attachment_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, title, pdfFileName, '', null, sortOrder, 'pdf', attachmentId, now, now]
       )
       saveToDisk()
       return { id, title, fileType: 'pdf' }
@@ -185,13 +198,14 @@ export function registerImportHandlers(): void {
 
       const now = new Date().toISOString()
       const db = getDatabase()
+      const attachmentId = registerAttachment({ ownerType: 'knowledge_page', ownerId: id, fileName: basename(filePath), relPath: storeName, mime: mimeFromExt(ext), size: readFileSync(storePath).length })
       const maxOrder = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS NULL')
       const sortOrder = (maxOrder.length > 0 && maxOrder[0].values?.[0]?.[0] as number) ?? 0
       const title = basename(filePath).replace(new RegExp(`\\.${ext}$`, 'i'), '')
       db.run(
-        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, title, storeName, '', null, sortOrder, ext, now, now]
+        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, attachment_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, title, storeName, '', null, sortOrder, ext, attachmentId, now, now]
       )
       saveToDisk()
       return { id, title, fileType: ext }
@@ -271,10 +285,11 @@ export function registerImportHandlers(): void {
         const storeName = `${pageId}.${ext}`
         const storePath = join(getAttachmentsDir(), storeName)
         copyFileSync(filePath, storePath)
+        const attachmentId = registerAttachment({ ownerType: 'knowledge_page', ownerId: pageId, fileName: f, relPath: storeName, mime: mimeFromExt(ext), size: statSync(storePath).size })
         db.run(
-          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [pageId, title, storeName, '', catId, pageOrder, ext, now, now]
+          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, attachment_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [pageId, title, storeName, '', catId, pageOrder, ext, attachmentId, now, now]
         )
         pageOrder++; totalFiles++
       } else if (isText) {

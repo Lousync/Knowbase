@@ -168,6 +168,25 @@ export function deleteAttachments(ids: string[]): void {
   }
 }
 
+/** 注册一条已有文件的附件记录（文件已由调用方落盘） */
+export function registerAttachment(data: {
+  ownerType: string
+  ownerId: string
+  position?: number
+  fileName: string
+  relPath: string
+  mime?: string
+  size?: number
+}): string {
+  const id = randomUUID()
+  run(
+    `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, data.ownerType, data.ownerId, data.position || 0, data.fileName, data.relPath, data.mime || 'application/octet-stream', data.size || 0, new Date().toISOString()]
+  )
+  return id
+}
+
 export function registerAttachmentHandlers(): void {
   // 通道 B：渲染进程传字节（前端选择/拖拽，先预览再上传）
   ipcMain.handle('attachment:uploadMany', (_e, data: {
@@ -238,5 +257,36 @@ export function registerAttachmentHandlers(): void {
 
   ipcMain.handle('attachment:delete', (_e, id: string) => {
     deleteAttachments([id])
+  })
+
+  ipcMain.handle('attachment:getPath', (_e, id: string) => {
+    return getAttachmentFilePath(id)
+  })
+
+  ipcMain.handle('attachment:cleanupOrphans', () => {
+    let removed = 0
+    // 1) 超过 24 小时的未认领上传（owner_id = _pending）
+    const pending = queryAll<AttachmentRow>("SELECT * FROM attachments WHERE owner_id = '_pending'")
+    for (const r of pending) {
+      const age = Date.now() - new Date(r.created_at).getTime()
+      if (age > 24 * 3600 * 1000) {
+        deleteAttachments([r.id])
+        removed++
+      }
+    }
+    // 2) 归属对象已不存在的附件（说说 / 知识页面；头像等固定归属跳过）
+    const momentsIds = new Set(queryAll<{ id: string }>('SELECT id FROM moments_posts').map(r => r.id))
+    const pageIds = new Set(queryAll<{ id: string }>('SELECT id FROM knowledge_pages').map(r => r.id))
+    const rows = queryAll<AttachmentRow>("SELECT * FROM attachments WHERE owner_id != '_pending'")
+    for (const r of rows) {
+      let exists = true
+      if (r.owner_type === 'moments_post') exists = momentsIds.has(r.owner_id)
+      else if (r.owner_type === 'knowledge_page') exists = pageIds.has(r.owner_id)
+      if (!exists) {
+        deleteAttachments([r.id])
+        removed++
+      }
+    }
+    return { removed }
   })
 }

@@ -164,6 +164,8 @@ const api = {
   uploadAttachmentFromPath: (data: unknown) => ipcRenderer.invoke('attachment:uploadFromPath', data),
   getAttachmentsByOwner: (ownerType: string, ownerId: string) => ipcRenderer.invoke('attachment:getByOwner', ownerType, ownerId),
   deleteAttachment: (id: string) => ipcRenderer.invoke('attachment:delete', id),
+  getAttachmentPath: (id: string) => ipcRenderer.invoke('attachment:getPath', id),
+  cleanupOrphanAttachments: () => ipcRenderer.invoke('attachment:cleanupOrphans'),
   // weight tracker
   getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
   getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),

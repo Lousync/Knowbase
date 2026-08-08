@@ -3,10 +3,11 @@ import { randomUUID } from 'crypto'
 import { existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
+import { deleteAttachments } from './attachmentRepo'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
-interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
+interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; attachment_id: string; created_at: string; updated_at: string }
 
 function mapPage(r: PageRow) {
   const raw = ((r as any).file_type || '')
@@ -18,6 +19,7 @@ function mapPage(r: PageRow) {
     isStarred: !!r.is_starred,
     sortOrder: r.sort_order,
     fileType: normalized,
+    attachmentId: r.attachment_id || '',
     createdAt: r.created_at, updatedAt: r.updated_at
   }
 }
@@ -376,8 +378,10 @@ export function registerKnowledgeHandlers(): void {
       tags
     })
 
-    // 如果是 PDF / XMind 等附件文件，清理附件
-    if ((pageFileType === 'pdf' || pageFileType === 'xmind') && page.content_md) {
+    // 如果是 PDF / XMind 等附件文件，清理附件（统一附件表）
+    if (page.attachment_id) {
+      deleteAttachments([page.attachment_id])
+    } else if ((pageFileType === 'pdf' || pageFileType === 'xmind') && page.content_md) {
       const attachPath = join(getAttachmentsDir(), page.content_md)
       if (existsSync(attachPath)) {
         try { unlinkSync(attachPath) } catch { /* file may already be gone */ }

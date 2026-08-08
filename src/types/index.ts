@@ -141,6 +141,7 @@ export interface KnowledgePage {
   id: string; title: string; contentMd: string; contentHtml: string
   categoryId: string | null; isStarred: boolean; sortOrder: number
   fileType: string
+  attachmentId: string
   createdAt: string; updatedAt: string
   tags?: KnowledgeTag[]
   backlinks?: KnowledgePage[]
@@ -324,6 +325,8 @@ export interface ElectronAPI {
   uploadAttachmentFromPath: (data: { ownerType?: string; ownerId?: string; filePath: string }) => Promise<AttachmentMeta | null>
   getAttachmentsByOwner: (ownerType: string, ownerId: string) => Promise<AttachmentMeta[]>
   deleteAttachment: (id: string) => Promise<void>
+  getAttachmentPath: (id: string) => Promise<string | null>
+  cleanupOrphanAttachments: () => Promise<{ removed: number }>
   // weight tracker
   getWeightRecords: () => Promise<WeightRecord[]>
   getWeightSeries: () => Promise<string[]>

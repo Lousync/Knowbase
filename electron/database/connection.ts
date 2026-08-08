@@ -1,7 +1,7 @@
 import initSqlJs, { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js'
 import { app } from 'electron'
-import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { join, basename } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 
 let db: SqlJsDatabase | null = null
@@ -562,6 +562,68 @@ export function runMigrations(): void {
       console.error('[migration 033] backfill failed:', e)
     }
     db.run("INSERT INTO _migrations (name) VALUES ('033_backfill_moments_attachments')")
+  }
+
+  if (!applied.has('034_knowledge_attachment_id')) {
+    try { db.run("ALTER TABLE knowledge_pages ADD COLUMN attachment_id TEXT DEFAULT ''") } catch { /* column may already exist */ }
+    // 回填：把已落盘的知识库附件（PDF/XMind 等）登记进附件表
+    try {
+      const rows = db.exec("SELECT id, title, content_md, file_type FROM knowledge_pages")
+      if (rows.length > 0 && rows[0].values) {
+        for (const r of rows[0].values) {
+          const pageId = r[0] as string
+          const title = (r[1] as string) || ''
+          const contentMd = (r[2] as string) || ''
+          const fileType = (r[3] as string) || ''
+          if (!fileType || fileType === 'md' || fileType === 'txt') continue
+          // content_md 作为附件文件名使用（flat 目录，位于 attachments/ 下）
+          const src = join(getAttachmentsDir(), contentMd)
+          if (!existsSync(src)) continue
+          const ext = fileType.replace(/^\./, '')
+          const mime = ext === 'pdf' ? 'application/pdf' : 'application/octet-stream'
+          const id = randomUUID()
+          db.run(
+            `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
+             VALUES (?, 'knowledge_page', ?, 0, ?, ?, ?, ?, ?)`,
+            [id, pageId, title || contentMd, contentMd, mime, existsSync(src) ? readFileSync(src).length : 0, new Date().toISOString()]
+          )
+          db.run('UPDATE knowledge_pages SET attachment_id = ? WHERE id = ?', [id, pageId])
+        }
+      }
+    } catch (e) {
+      console.error('[migration 034] backfill failed:', e)
+    }
+    db.run("INSERT INTO _migrations (name) VALUES ('034_knowledge_attachment_id')")
+  }
+
+  if (!applied.has('035_avatar_attachment')) {
+    // 头像迁入统一附件体系：文件移到 attachments/user_profile/default/，登记附件表
+    try {
+      const rows = db.exec("SELECT avatar_path FROM user_profile WHERE id = 'default' AND avatar_path IS NOT NULL AND avatar_path != ''")
+      if (rows.length > 0 && rows[0].values) {
+        for (const row of rows[0].values) {
+          const oldRel = row[0] as string
+          const src = join(app.getPath('userData'), oldRel)
+          if (!existsSync(src)) continue
+          const ext = /\.(\w+)$/.exec(oldRel)?.[1] || 'png'
+          const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
+          const id = randomUUID()
+          const dir = join(getAttachmentsDir(), 'user_profile', 'default')
+          mkdirSync(dir, { recursive: true })
+          const rel = join('user_profile', 'default', `avatar_${id}.${ext}`)
+          copyFileSync(src, join(getAttachmentsDir(), rel))
+          db.run("UPDATE user_profile SET avatar_path = ? WHERE id = 'default'", [join('attachments', rel)])
+          db.run(
+            `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
+             VALUES (?, 'user_profile', 'default', 0, ?, ?, ?, ?, ?)`,
+            [id, basename(oldRel), rel, mime, existsSync(src) ? readFileSync(src).length : 0, new Date().toISOString()]
+          )
+        }
+      }
+    } catch (e) {
+      console.error('[migration 035] avatar backfill failed:', e)
+    }
+    db.run("INSERT INTO _migrations (name) VALUES ('035_avatar_attachment')")
   }
 }
 

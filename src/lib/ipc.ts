@@ -182,6 +182,8 @@ export const uploadAttachments = (data: { ownerType?: string; ownerId?: string; 
 export const uploadAttachmentFromPath = (data: { ownerType?: string; ownerId?: string; filePath: string }) => a().uploadAttachmentFromPath(data)
 export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promise<AttachmentMeta[]> => a().getAttachmentsByOwner(ownerType, ownerId)
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
+export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
+export const cleanupOrphanAttachments = () => a().cleanupOrphanAttachments()
 // ===== Weight Tracker =====
 export const getWeightRecords = () => a().getWeightRecords()
 export const getWeightSeries = () => a().getWeightSeries()

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag } from '../../../lib/ipc'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
@@ -447,9 +447,13 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               <FileText size={64} className="opacity-20" />
               <p className="text-sm">{isXmindFile ? 'XMind 思维导图 — 使用 XMind 软件打开编辑' : 'PDF 文件已导入到本地附件目录'}</p>
               <button
-                onClick={() => {
-                  const filePath = `${attachmentsPath}\\${page.contentMd}`
-                  openExternal(filePath)
+                onClick={async () => {
+                  let filePath: string | null = null
+                  if (page.attachmentId) {
+                    filePath = await getAttachmentPath(page.attachmentId)
+                  }
+                  if (!filePath) filePath = `${attachmentsPath}\\${page.contentMd}`
+                  if (filePath) openExternal(filePath)
                 }}
                 className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
               >
