@@ -159,6 +159,11 @@ const api = {
   deleteMomentsAlbum: (id: string) => ipcRenderer.invoke('moments:deleteAlbum', id),
   setMomentsPostAlbum: (postId: string, albumId: string) => ipcRenderer.invoke('moments:setPostAlbum', postId, albumId),
   setMomentsAlbumCover: (albumId: string, postId: string, index: number) => ipcRenderer.invoke('moments:setAlbumCover', albumId, postId, index),
+  // attachments
+  uploadAttachments: (data: unknown) => ipcRenderer.invoke('attachment:uploadMany', data),
+  uploadAttachmentFromPath: (data: unknown) => ipcRenderer.invoke('attachment:uploadFromPath', data),
+  getAttachmentsByOwner: (ownerType: string, ownerId: string) => ipcRenderer.invoke('attachment:getByOwner', ownerType, ownerId),
+  deleteAttachment: (id: string) => ipcRenderer.invoke('attachment:delete', id),
   // weight tracker
   getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
   getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),

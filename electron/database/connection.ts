@@ -493,6 +493,76 @@ export function runMigrations(): void {
     `)
     db.run("INSERT INTO _migrations (name) VALUES ('030_weight_tracker')")
   }
+
+  if (!applied.has('031_attachments')) {
+    // 统一附件子系统：所有模块的文件（说说图片/知识库附件/头像等）统一登记
+    db.run(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id          TEXT PRIMARY KEY,
+        owner_type  TEXT NOT NULL,
+        owner_id    TEXT NOT NULL DEFAULT '',
+        position    INTEGER DEFAULT 0,
+        file_name   TEXT NOT NULL DEFAULT '',
+        file_path   TEXT NOT NULL,
+        thumb_path  TEXT DEFAULT '',
+        mime_type   TEXT DEFAULT '',
+        size_bytes  INTEGER DEFAULT 0,
+        trashed     INTEGER DEFAULT 0,
+        trash_path  TEXT DEFAULT '',
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_att_owner ON attachments(owner_type, owner_id);
+      CREATE INDEX IF NOT EXISTS idx_att_trashed ON attachments(trashed);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('031_attachments')")
+  }
+
+  if (!applied.has('032_moments_attachment_ids')) {
+    // 说说图片改为引用附件表（附件文件落盘，数据库只存元数据引用）
+    try { db.run("ALTER TABLE moments_posts ADD COLUMN attachment_ids TEXT DEFAULT '[]'") } catch { /* column may already exist */ }
+    db.run("INSERT INTO _migrations (name) VALUES ('032_moments_attachment_ids')")
+  }
+
+  if (!applied.has('033_backfill_moments_attachments')) {
+    // 一次性迁移：把历史 base64 图片解码落盘，登记到 attachments 表
+    try {
+      const rows = db.exec("SELECT id, images_data_urls FROM moments_posts WHERE images_data_urls IS NOT NULL AND images_data_urls != ''")
+      if (rows.length > 0 && rows[0].values) {
+        for (const r of rows[0].values) {
+          const postId = r[0] as string
+          let urls: string[] = []
+          try { urls = JSON.parse(r[1] as string) } catch { urls = [] }
+          if (!Array.isArray(urls) || urls.length === 0) continue
+          const ids: string[] = []
+          for (let i = 0; i < urls.length; i++) {
+            const dataUrl = urls[i]
+            if (typeof dataUrl !== 'string' || !dataUrl.includes(',')) continue
+            const [head, b64] = dataUrl.split(',')
+            const mime = /^data:([^;]+)/.exec(head)?.[1] || 'image/png'
+            const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : mime === 'image/gif' ? 'gif' : mime === 'image/bmp' ? 'bmp' : 'png'
+            const id = randomUUID()
+            const relDir = join('moments', postId)
+            const dir = join(getAttachmentsDir(), relDir)
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+            const rel = join(relDir, `${id}.${ext}`)
+            writeFileSync(join(getAttachmentsDir(), rel), Buffer.from(b64, 'base64'))
+            db.run(
+              `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
+               VALUES (?, 'moments_post', ?, ?, ?, ?, ?, ?, ?)`,
+              [id, postId, i, `photo-${i + 1}.${ext}`, rel, mime, Buffer.byteLength(b64, 'base64'), new Date().toISOString()]
+            )
+            ids.push(id)
+          }
+          if (ids.length > 0) {
+            db.run('UPDATE moments_posts SET attachment_ids = ? WHERE id = ?', [JSON.stringify(ids), postId])
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[migration 033] backfill failed:', e)
+    }
+    db.run("INSERT INTO _migrations (name) VALUES ('033_backfill_moments_attachments')")
+  }
 }
 
 /**

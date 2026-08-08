@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsExportData, MomentsAlbum } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsExportData, MomentsAlbum, AttachmentMeta } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -177,6 +177,11 @@ export const renameMomentsAlbum = (id: string, name: string) => a().renameMoment
 export const deleteMomentsAlbum = (id: string) => a().deleteMomentsAlbum(id)
 export const setMomentsPostAlbum = (postId: string, albumId: string) => a().setMomentsPostAlbum(postId, albumId)
 export const setMomentsAlbumCover = (albumId: string, postId: string, index: number) => a().setMomentsAlbumCover(albumId, postId, index)
+// attachments
+export const uploadAttachments = (data: { ownerType?: string; ownerId?: string; files: { name?: string; mime?: string; dataUrl?: string; base64?: string; thumbDataUrl?: string }[] }) => a().uploadAttachments(data)
+export const uploadAttachmentFromPath = (data: { ownerType?: string; ownerId?: string; filePath: string }) => a().uploadAttachmentFromPath(data)
+export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promise<AttachmentMeta[]> => a().getAttachmentsByOwner(ownerType, ownerId)
+export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 // ===== Weight Tracker =====
 export const getWeightRecords = () => a().getWeightRecords()
 export const getWeightSeries = () => a().getWeightSeries()

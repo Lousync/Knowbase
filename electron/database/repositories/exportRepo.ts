@@ -18,7 +18,7 @@ interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; created_at: string; updated_at: string }
 interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
-interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; tags: string | null; album_id: string | null; is_pinned: number; created_at: string; updated_at: string }
+interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; attachment_ids: string | null; tags: string | null; album_id: string | null; is_pinned: number; created_at: string; updated_at: string }
 interface AlbumRow { id: string; name: string; cover_data_url: string | null; cover_post_id: string | null; cover_index: number | null; created_at: string; updated_at: string }
 
 // ---- helpers ----
@@ -65,7 +65,14 @@ function mapMoments(r: MomentsRow) {
       if (Array.isArray(arr)) tags = arr.filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0)
     } catch { /* fall through */ }
   }
-  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, tags, albumId: r.album_id || '', isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
+  let attachmentIds: string[] = []
+  if (r.attachment_ids) {
+    try {
+      const arr = JSON.parse(r.attachment_ids)
+      if (Array.isArray(arr)) attachmentIds = arr.filter((v: unknown): v is string => typeof v === 'string')
+    } catch { /* fall through */ }
+  }
+  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, attachmentIds, attachments: [], tags, albumId: r.album_id || '', isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 function mapAlbum(r: AlbumRow) {

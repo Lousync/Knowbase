@@ -1,0 +1,242 @@
+import { ipcMain, app } from 'electron'
+import { join, basename } from 'path'
+import { mkdirSync, writeFileSync, copyFileSync, existsSync, unlinkSync, renameSync, readFileSync } from 'fs'
+import { randomUUID } from 'crypto'
+import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
+
+interface AttachmentRow {
+  id: string
+  owner_type: string
+  owner_id: string
+  position: number
+  file_name: string
+  file_path: string
+  thumb_path: string
+  mime_type: string
+  size_bytes: number
+  trashed: number
+  trash_path: string
+  created_at: string
+}
+
+const EXT_MAP: Record<string, string> = {
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/bmp': 'bmp',
+  'application/pdf': 'pdf', 'text/plain': 'txt', 'text/markdown': 'md', 'application/json': 'json',
+  'application/octet-stream': 'bin',
+}
+
+function extFor(mime: string, fallbackName: string): string {
+  if (EXT_MAP[mime]) return '.' + EXT_MAP[mime]
+  const m = /\.(\w+)$/.exec(fallbackName || '')
+  return m ? '.' + m[1].toLowerCase() : '.bin'
+}
+
+function mimeFromPath(p: string): string {
+  const ext = (p.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+  const inv: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
+  return inv[ext] || 'application/octet-stream'
+}
+
+function queryAll<T>(sql: string, params: unknown[] = []): T[] {
+  const db = getDatabase()
+  const stmt = db.prepare(sql)
+  if (params.length > 0) stmt.bind(params)
+  const rows: T[] = []
+  while (stmt.step()) rows.push(stmt.getAsObject() as T)
+  stmt.free()
+  return rows
+}
+
+function queryOne<T>(sql: string, params: unknown[] = []): T | null {
+  const rows = queryAll<T>(sql, params)
+  return rows.length > 0 ? rows[0] : null
+}
+
+function run(sql: string, params: unknown[] = []): void {
+  getDatabase().run(sql, params)
+  saveToDisk()
+}
+
+function relFromAttachments(absPath: string): string {
+  return absPath.replace(getAttachmentsDir() + '\\', '').replace(getAttachmentsDir() + '/', '')
+}
+
+function toMeta(r: AttachmentRow) {
+  return {
+    id: r.id,
+    name: r.file_name,
+    url: `attachment://${r.id}/`,
+    thumbUrl: `attachment://${r.id}/?thumb=1`,
+    mime: r.mime_type,
+    size: r.size_bytes,
+    position: r.position,
+  }
+}
+
+export type AttachmentMeta = ReturnType<typeof toMeta>
+
+/** 供 attachment:// 协议解析真实文件路径 */
+export function getAttachmentFilePath(id: string, thumb = false): string | null {
+  const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+  if (!row) return null
+  const p = thumb && row.thumb_path
+    ? join(getAttachmentsDir(), row.thumb_path)
+    : join(getAttachmentsDir(), row.file_path)
+  return existsSync(p) ? p : null
+}
+
+/** 一次查询多个附件的元数据（供说说列表批量组装） */
+export function getAttachmentsForIds(ids: string[]): ReturnType<typeof toMeta>[] {
+  const list = ids.filter(Boolean)
+  if (list.length === 0) return []
+  const placeholders = list.map(() => '?').join(',')
+  const rows = queryAll<AttachmentRow>(`SELECT * FROM attachments WHERE id IN (${placeholders})`, list)
+  const map = new Map(rows.map(r => [r.id, toMeta(r)]))
+  return list.map(id => map.get(id)).filter((x): x is ReturnType<typeof toMeta> => !!x)
+}
+
+/** 认领附件：上传时 owner_id 为空，创建业务记录后归属到具体对象 */
+export function claimAttachments(ids: string[], ownerType: string, ownerId: string): void {
+  ids.forEach((id, i) => {
+    if (!id) return
+    run('UPDATE attachments SET owner_type = ?, owner_id = ?, position = ? WHERE id = ?', [ownerType, ownerId, i, id])
+  })
+}
+
+/** 删除业务记录时，附件文件移入回收区（可恢复） */
+export function trashAttachments(ids: string[], binId: string): void {
+  const trashRoot = join(app.getPath('userData'), 'attachments_trash', binId)
+  mkdirSync(trashRoot, { recursive: true })
+  for (const id of ids) {
+    if (!id) continue
+    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+    if (!row || row.trashed) continue
+    const src = join(getAttachmentsDir(), row.file_path)
+    const dest = join(trashRoot, basename(row.file_path))
+    try {
+      if (existsSync(src)) renameSync(src, dest)
+    } catch {
+      try { if (existsSync(src)) { copyFileSync(src, dest); unlinkSync(src) } } catch { /* keep */ }
+    }
+    let relThumb = ''
+    if (row.thumb_path) {
+      const tsrc = join(getAttachmentsDir(), row.thumb_path)
+      const tdest = join(trashRoot, basename(row.thumb_path))
+      try {
+        if (existsSync(tsrc)) renameSync(tsrc, tdest)
+      } catch {
+        try { if (existsSync(tsrc)) { copyFileSync(tsrc, tdest); unlinkSync(tsrc) } } catch { /* keep */ }
+      }
+      relThumb = join('attachments_trash', binId, basename(row.thumb_path))
+    }
+    run('UPDATE attachments SET trashed = 1, trash_path = ? WHERE id = ?', [join('attachments_trash', binId, basename(row.file_path)), id])
+  }
+}
+
+/** 从回收区恢复附件文件 */
+export function restoreAttachments(ids: string[]): void {
+  for (const id of ids) {
+    if (!id) continue
+    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+    if (!row || !row.trashed || !row.trash_path) continue
+    const src = join(app.getPath('userData'), row.trash_path)
+    const dest = join(getAttachmentsDir(), row.file_path)
+    try {
+      if (existsSync(dest)) unlinkSync(dest)
+      if (existsSync(src)) renameSync(src, dest)
+    } catch {
+      try { if (existsSync(src)) { copyFileSync(src, dest); unlinkSync(src) } } catch { /* keep */ }
+    }
+    run('UPDATE attachments SET trashed = 0, trash_path = ? WHERE id = ?', ['', id])
+  }
+}
+
+/** 彻底删除附件（文件 + 记录） */
+export function deleteAttachments(ids: string[]): void {
+  for (const id of ids) {
+    if (!id) continue
+    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+    if (!row) continue
+    for (const p of [row.file_path, row.thumb_path]) {
+      if (!p) continue
+      try { if (existsSync(join(getAttachmentsDir(), p))) unlinkSync(join(getAttachmentsDir(), p)) } catch { /* ignore */ }
+    }
+    if (row.trashed && row.trash_path) {
+      try { if (existsSync(join(app.getPath('userData'), row.trash_path))) unlinkSync(join(app.getPath('userData'), row.trash_path)) } catch { /* ignore */ }
+    }
+    run('DELETE FROM attachments WHERE id = ?', [id])
+  }
+}
+
+export function registerAttachmentHandlers(): void {
+  // 通道 B：渲染进程传字节（前端选择/拖拽，先预览再上传）
+  ipcMain.handle('attachment:uploadMany', (_e, data: {
+    ownerType?: string
+    ownerId?: string
+    files: { name?: string; mime?: string; dataUrl?: string; base64?: string; thumbDataUrl?: string }[]
+  }) => {
+    const ownerType = data.ownerType || 'misc'
+    const ownerId = data.ownerId || '_pending'
+    const now = new Date().toISOString()
+    const out: ReturnType<typeof toMeta>[] = []
+    for (const f of data.files || []) {
+      const id = randomUUID()
+      const raw = f.dataUrl || ''
+      const mime = f.mime || (/^data:([^;]+)/.exec(raw)?.[1] || 'application/octet-stream')
+      const ext = extFor(mime, f.name || 'file')
+      const dir = join(getAttachmentsDir(), ownerType, ownerId)
+      mkdirSync(dir, { recursive: true })
+      const rel = join(ownerType, ownerId, `${id}${ext}`)
+      const buf = raw.includes(',') ? Buffer.from(raw.split(',')[1] || '', 'base64') : Buffer.from(f.base64 || '', 'base64')
+      writeFileSync(join(getAttachmentsDir(), rel), buf)
+
+      let relThumb = ''
+      if (f.thumbDataUrl && f.thumbDataUrl.includes(',')) {
+        const tdir = join(dir, 'thumbs')
+        mkdirSync(tdir, { recursive: true })
+        relThumb = join(ownerType, ownerId, 'thumbs', `${id}.jpg`)
+        writeFileSync(join(getAttachmentsDir(), relThumb), Buffer.from(f.thumbDataUrl.split(',')[1] || '', 'base64'))
+      }
+
+      run(
+        `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, thumb_path, mime_type, size_bytes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, ownerType, ownerId, out.length, f.name || 'file', rel, relThumb, mime, buf.length, now]
+      )
+      const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])!
+      out.push(toMeta(row))
+    }
+    return out
+  })
+
+  // 通道 A：主进程直接复制本地文件（批量导入/知识库附件）
+  ipcMain.handle('attachment:uploadFromPath', (_e, data: { ownerType?: string; ownerId?: string; filePath: string }) => {
+    if (!data.filePath || !existsSync(data.filePath)) return null
+    const ownerType = data.ownerType || 'misc'
+    const ownerId = data.ownerId || '_pending'
+    const id = randomUUID()
+    const name = basename(data.filePath)
+    const ext = extFor(mimeFromPath(data.filePath), name)
+    const dir = join(getAttachmentsDir(), ownerType, ownerId)
+    mkdirSync(dir, { recursive: true })
+    const rel = join(ownerType, ownerId, `${id}${ext}`)
+    copyFileSync(data.filePath, join(getAttachmentsDir(), rel))
+    const size = existsSync(data.filePath) ? (readFileSync(data.filePath).length) : 0
+    run(
+      `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+      [id, ownerType, ownerId, name, rel, mimeFromPath(data.filePath), size, new Date().toISOString()]
+    )
+    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])!
+    return toMeta(row)
+  })
+
+  ipcMain.handle('attachment:getByOwner', (_e, ownerType: string, ownerId: string) => {
+    const rows = queryAll<AttachmentRow>('SELECT * FROM attachments WHERE owner_type = ? AND owner_id = ? ORDER BY position ASC', [ownerType, ownerId])
+    return rows.map(toMeta)
+  })
+
+  ipcMain.handle('attachment:delete', (_e, id: string) => {
+    deleteAttachments([id])
+  })
+}

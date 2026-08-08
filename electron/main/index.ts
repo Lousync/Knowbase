@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, createReadStream } from 'fs'
+import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
@@ -13,9 +14,15 @@ import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
 import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
+import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/repositories/attachmentRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerAIHandlers } from '../ai/aiHandler'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
+
+// 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+])
 
 // ===== Settings memory cache =====
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -141,7 +148,7 @@ function registerWindowHandlers(): void {
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
         'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags',
-        'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts',
+        'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'attachments',
       ]
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
@@ -179,6 +186,23 @@ app.whenReady().then(async () => {
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()
 
+  protocol.handle('attachment', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const id = url.hostname
+      const thumb = url.searchParams.get('thumb') === '1'
+      const p = getAttachmentFilePath(id, thumb)
+      if (!p) return new Response('Not Found', { status: 404 })
+      const ext = (p.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+      const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
+      return new Response(Readable.toWeb(createReadStream(p)) as unknown as BodyInit, {
+        headers: { 'Content-Type': mimeMap[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' },
+      })
+    } catch {
+      return new Response('Bad Request', { status: 400 })
+    }
+  })
+
   ipcMain.handle('db:getPath', () => getDbPath())
   ipcMain.handle('app:getAttachmentsPath', () => getAttachmentsDir())
   ipcMain.handle('app:openExternal', async (_e, filePath: string) => {
@@ -197,6 +221,7 @@ app.whenReady().then(async () => {
   registerToolboxHandlers()
   registerPasswordHandlers()
   registerMomentsHandlers()
+  registerAttachmentHandlers()
   registerWeightHandlers()
   registerAIHandlers()
 

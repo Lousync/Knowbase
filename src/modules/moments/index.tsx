@@ -18,6 +18,8 @@ import {
   setUserUsername,
   setMomentsPostAlbum,
   toggleMomentsPin,
+  uploadAttachments,
+  deleteAttachment,
   updateMomentsPost,
 } from '../../lib/ipc'
 import type { MomentsAlbum, MomentsPost, UserProfile } from '../../types'
@@ -27,8 +29,18 @@ type ViewMode = 'timeline' | 'album'
 
 type Draft = {
   contentMd: string
-  imageDataUrls: string[]
+  attachments: PendingAtt[]
   tags: string[]
+}
+
+type PendingAtt = {
+  id: string
+  url: string
+  thumbUrl: string
+  name: string
+  mime: string
+  size: number
+  pending: boolean
 }
 
 const MAX_IMAGES = 12
@@ -64,6 +76,43 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error)
     reader.readAsDataURL(file)
   })
+}
+
+/** 生成缩略图（最大边 256px，JPEG） */
+function makeThumb(dataUrl: string, max = 256): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, max / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { resolve(dataUrl); return }
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => reject(new Error('图片解码失败'))
+    img.src = dataUrl
+  })
+}
+
+/** 帖子图片访问：优先附件（文件化），老数据回退 base64 */
+function postImages(post: MomentsPost): { urls: string[]; thumbs: string[] } {
+  if (post.attachments && post.attachments.length > 0) {
+    return {
+      urls: post.attachments.map(a => a.url),
+      thumbs: post.attachments.map(a => a.thumbUrl),
+    }
+  }
+  const legacy = post.imageDataUrls || []
+  return { urls: legacy, thumbs: legacy }
 }
 
 /** 把 Markdown 转成适合时间线预览的纯文本 */
@@ -120,7 +169,7 @@ export function MomentsModule() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [mode, setMode] = useState<EditorMode>('create')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Draft>({ contentMd: '', imageDataUrls: [], tags: [] })
+  const [draft, setDraft] = useState<Draft>({ contentMd: '', attachments: [], tags: [] })
   const [tagInput, setTagInput] = useState('')
   const [tagInputVisible, setTagInputVisible] = useState(false)
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
@@ -205,7 +254,7 @@ export function MomentsModule() {
   }, [lightbox])
 
   const signature = profile?.username?.trim() || '写下此刻'
-  const canSave = !saving && (draft.contentMd.trim().length > 0 || draft.imageDataUrls.length > 0)
+  const canSave = !saving && (draft.contentMd.trim().length > 0 || draft.attachments.length > 0)
   const detailPost = detailPostId ? posts.find(p => p.id === detailPostId) || null : null
 
   const switchView = (v: ViewMode) => {
@@ -223,32 +272,40 @@ export function MomentsModule() {
   const pinnedPosts = useMemo(() => filteredPosts.filter(p => p.isPinned), [filteredPosts])
   const normalPosts = useMemo(() => filteredPosts.filter(p => !p.isPinned), [filteredPosts])
   const albumPosts = useMemo(
-    () => (selectedAlbumId ? filteredPosts.filter(p => p.albumId === selectedAlbumId && (p.imageDataUrls || []).length > 0) : []),
+    () => (selectedAlbumId ? filteredPosts.filter(p => p.albumId === selectedAlbumId && postImages(p).urls.length > 0) : []),
     [filteredPosts, selectedAlbumId]
   )
   // 整个相册的照片平铺列表：跨说说组成一个可连续翻页的序列
   const albumPhotoList = useMemo(() => {
-    const list: { img: string; postId: string; indexInPost: number }[] = []
+    const list: { url: string; thumb: string; postId: string; indexInPost: number }[] = []
     for (const p of albumPosts) {
-      for (let i = 0; i < (p.imageDataUrls || []).length; i++) {
-        list.push({ img: p.imageDataUrls[i], postId: p.id, indexInPost: i })
+      const imgs = postImages(p)
+      for (let i = 0; i < imgs.urls.length; i++) {
+        list.push({ url: imgs.urls[i], thumb: imgs.thumbs[i] || imgs.urls[i], postId: p.id, indexInPost: i })
       }
     }
     return list
   }, [albumPosts])
-  const albumPhotoUrls = useMemo(() => albumPhotoList.map(x => x.img), [albumPhotoList])
+  const albumPhotoUrls = useMemo(() => albumPhotoList.map(x => x.url), [albumPhotoList])
   const selectedAlbum = selectedAlbumId ? albums.find(a => a.id === selectedAlbumId) || null : null
 
-  const closeEditor = () => {
+  const closeEditor = (cleanup = true) => {
+    // 清理未保存的临时附件
+    if (cleanup) {
+      for (const a of draft.attachments) {
+        if (a.pending) deleteAttachment(a.id).catch(console.error)
+      }
+    }
     setEditorOpen(false)
     setEditingId(null)
     setEditorImagesExpanded(false)
+    setDraft({ contentMd: '', attachments: [], tags: [] })
   }
 
   const openCreate = () => {
     setMode('create')
     setEditingId(null)
-    setDraft({ contentMd: '', imageDataUrls: [], tags: [] })
+    setDraft({ contentMd: '', attachments: [], tags: [] })
     setTagInput('')
     setTagInputVisible(false)
     setEditorImagesExpanded(false)
@@ -260,7 +317,7 @@ export function MomentsModule() {
     setEditingId(post.id)
     setDraft({
       contentMd: post.contentMd || '',
-      imageDataUrls: post.imageDataUrls || [],
+      attachments: (post.attachments || []).map(a => ({ ...a, pending: false })),
       tags: post.tags || [],
     })
     setTagInput('')
@@ -292,18 +349,29 @@ export function MomentsModule() {
   const handlePickImages = async () => {
     const input = postImageInputRef.current
     if (!input?.files?.length) return
-    const room = MAX_IMAGES - draft.imageDataUrls.length
+    const room = MAX_IMAGES - draft.attachments.length
     const files = Array.from(input.files).slice(0, room)
     if (files.length === 0) return
-    const urls = await Promise.all(files.map(readFileAsDataUrl))
-    setDraft(prev => ({ ...prev, imageDataUrls: [...prev.imageDataUrls, ...urls] }))
+    const prepared = await Promise.all(files.map(async f => {
+      const dataUrl = await readFileAsDataUrl(f)
+      const thumbDataUrl = await makeThumb(dataUrl)
+      return { name: f.name, mime: f.type || 'image/*', dataUrl, thumbDataUrl }
+    }))
+    const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
+    setDraft(prev => ({
+      ...prev,
+      attachments: [...prev.attachments, ...records.map(r => ({ ...r, pending: true }))],
+    }))
     input.value = ''
   }
 
   const removeImage = (index: number) => {
     setDraft(prev => ({
       ...prev,
-      imageDataUrls: prev.imageDataUrls.filter((_, i) => i !== index),
+      attachments: prev.attachments.filter((_, i) => {
+        if (i === index && prev.attachments[i]?.pending) deleteAttachment(prev.attachments[i].id).catch(console.error)
+        return i !== index
+      }),
     }))
   }
 
@@ -312,8 +380,13 @@ export function MomentsModule() {
     if (!input?.files?.length || !selectedAlbumId) return
     const files = Array.from(input.files).slice(0, MAX_IMAGES)
     if (files.length === 0) return
-    const urls = await Promise.all(files.map(readFileAsDataUrl))
-    await createMomentsPost({ contentMd: '', contentHtml: '', imageDataUrls: urls, albumId: selectedAlbumId, isPinned: false })
+    const prepared = await Promise.all(files.map(async f => {
+      const dataUrl = await readFileAsDataUrl(f)
+      const thumbDataUrl = await makeThumb(dataUrl)
+      return { name: f.name, mime: f.type || 'image/*', dataUrl, thumbDataUrl }
+    }))
+    const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
+    await createMomentsPost({ contentMd: '', contentHtml: '', attachmentIds: records.map(r => r.id), albumId: selectedAlbumId, isPinned: false })
     input.value = ''
     await Promise.all([loadPosts(), loadAlbums()])
   }
@@ -333,13 +406,13 @@ export function MomentsModule() {
 
   const handleSave = async () => {
     const trimmed = draft.contentMd.trim()
-    if (saving || (trimmed.length === 0 && draft.imageDataUrls.length === 0)) return
+    if (saving || (trimmed.length === 0 && draft.attachments.length === 0)) return
     setSaving(true)
     try {
       const payload = {
         contentMd: trimmed,
         contentHtml: '',
-        imageDataUrls: draft.imageDataUrls,
+        attachmentIds: draft.attachments.map(a => a.id),
         tags: draft.tags,
       }
       if (mode === 'create') {
@@ -347,8 +420,8 @@ export function MomentsModule() {
       } else if (editingId) {
         await updateMomentsPost(editingId, payload)
       }
-      closeEditor()
-      setDraft({ contentMd: '', imageDataUrls: [], tags: [] })
+      closeEditor(false)
+      setDraft({ contentMd: '', attachments: [], tags: [] })
       await loadPosts()
     } catch (err) {
       console.error(err)
@@ -436,16 +509,21 @@ export function MomentsModule() {
     try {
       const post = posts.find(p => p.id === item.postId)
       if (!post) return
-      const images = (post.imageDataUrls || []).filter((_, i) => i !== item.indexInPost)
       // 删除的是相册封面引用时，清掉封面设置（自动回退到第一张）
       if (selectedAlbum && selectedAlbum.coverPostId === item.postId && selectedAlbum.coverIndex === item.indexInPost) {
         await setMomentsAlbumCover(selectedAlbum.id, '', 0)
       }
-      if (images.length === 0 && !(post.contentMd || '').trim()) {
+      const isLegacy = (post.attachmentIds || []).length === 0
+      const remainingLegacy = isLegacy ? (post.imageDataUrls || []).filter((_, i) => i !== item.indexInPost) : []
+      const remainingIds = isLegacy ? [] : (post.attachmentIds || []).filter((_, i) => i !== item.indexInPost)
+      const hasText = !!(post.contentMd || '').trim()
+      if (!hasText && (isLegacy ? remainingLegacy.length === 0 : remainingIds.length === 0)) {
         // 纯照片说说删掉最后一张图 → 整条进回收站
         await deleteMomentsPost(post.id)
+      } else if (isLegacy) {
+        await updateMomentsPost(post.id, { imageDataUrls: remainingLegacy })
       } else {
-        await updateMomentsPost(post.id, { imageDataUrls: images })
+        await updateMomentsPost(post.id, { attachmentIds: remainingIds })
       }
       await Promise.all([loadPosts(), loadAlbums()])
     } catch (err) {
@@ -486,24 +564,24 @@ export function MomentsModule() {
   }
 
   const renderCoverGrid = (post: MomentsPost) => {
-    const images = post.imageDataUrls || []
-    if (images.length === 0) return null
+    const { urls, thumbs } = postImages(post)
+    if (urls.length === 0) return null
 
     const expanded = expandedFeedIds.has(post.id)
-    const visible = expanded ? images : images.slice(0, GRID_VISIBLE)
-    const overflow = images.length - visible.length
-    const isSingle = images.length === 1
-    const colsClass = images.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'
+    const visible = expanded ? urls : urls.slice(0, GRID_VISIBLE)
+    const overflow = urls.length - visible.length
+    const isSingle = urls.length === 1
+    const colsClass = urls.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'
 
     // 单图：整块封面展示
     if (isSingle) {
       return (
         <div
-          onClick={e => { e.stopPropagation(); setLightbox({ images, index: 0 }) }}
+          onClick={e => { e.stopPropagation(); setLightbox({ images: urls, index: 0 }) }}
           className="relative w-[38%] max-w-[250px] shrink-0 min-h-[176px] bg-[var(--bg-primary)] cursor-zoom-in"
           title="点击放大查看"
         >
-          <img src={images[0]} alt="说说图片" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+          <img src={thumbs[0] || urls[0]} alt="说说图片" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
         </div>
       )
     }
@@ -511,17 +589,17 @@ export function MomentsModule() {
     return (
       <div className="relative w-[38%] max-w-[250px] shrink-0 bg-[var(--bg-primary)] p-[3px]">
         <span className="absolute right-1.5 top-1.5 z-10 px-1.5 py-0.5 rounded-full bg-black/50 text-white text-[10px] pointer-events-none">
-          {images.length} 张
+          {urls.length} 张
         </span>
         <div className={`grid ${colsClass} gap-[3px]`}>
           {visible.map((img, i) => (
             <div
               key={i}
-              onClick={e => { e.stopPropagation(); setLightbox({ images, index: i }) }}
+              onClick={e => { e.stopPropagation(); setLightbox({ images: urls, index: i }) }}
               className="relative aspect-square overflow-hidden rounded-[9px] bg-[var(--bg-primary)] cursor-zoom-in"
               title="点击放大查看"
             >
-              <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+              <img src={thumbs[i] || img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
             </div>
           ))}
           {overflow > 0 && !expanded && (
@@ -530,7 +608,7 @@ export function MomentsModule() {
               className="relative aspect-square overflow-hidden rounded-[9px] bg-[var(--bg-primary)]"
               title={`展开剩余 ${overflow} 张图片`}
             >
-              <img src={images[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" loading="lazy" />
+              <img src={thumbs[GRID_VISIBLE] || urls[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" loading="lazy" />
               <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-[16px] font-semibold">
                 +{overflow}
               </span>
@@ -777,7 +855,7 @@ export function MomentsModule() {
                         className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in group"
                         title="点击放大查看"
                       >
-                        <img src={item.img} alt={`相册照片 ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                        <img src={item.thumb} alt={`相册照片 ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
                         {selectedAlbum.coverPostId === item.postId && selectedAlbum.coverIndex === item.indexInPost && (
                           <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] pointer-events-none">
                             封面
@@ -899,7 +977,7 @@ export function MomentsModule() {
 
             <div className="px-5 h-[56px] shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border-color)]">
               <button
-                onClick={closeEditor}
+                onClick={() => closeEditor()}
                 className="px-2 py-1.5 rounded-lg text-[15px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
               >
                 取消
@@ -981,9 +1059,9 @@ export function MomentsModule() {
 
                 <div className="mt-5">
                   <div className="grid grid-cols-3 gap-2.5 w-[264px]">
-                    {draft.imageDataUrls.slice(0, editorImagesExpanded ? draft.imageDataUrls.length : GRID_VISIBLE).map((img, i) => (
+                    {draft.attachments.slice(0, editorImagesExpanded ? draft.attachments.length : GRID_VISIBLE).map((att, i) => (
                       <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm group">
-                        <img src={img} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+                        <img src={att.thumbUrl} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
                         <button
                           onClick={() => removeImage(i)}
                           className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-black/65 text-white flex items-center justify-center hover:bg-black/85 transition-colors opacity-0 group-hover:opacity-100"
@@ -994,20 +1072,20 @@ export function MomentsModule() {
                       </div>
                     ))}
 
-                    {!editorImagesExpanded && draft.imageDataUrls.length > GRID_VISIBLE && (
+                    {!editorImagesExpanded && draft.attachments.length > GRID_VISIBLE && (
                       <button
                         onClick={() => setEditorImagesExpanded(true)}
                         className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm"
                         title="展开全部图片"
                       >
-                        <img src={draft.imageDataUrls[GRID_VISIBLE]} alt="" className="w-full h-full object-cover" />
+                        <img src={draft.attachments[GRID_VISIBLE]?.thumbUrl} alt="" className="w-full h-full object-cover" />
                         <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-[18px] font-semibold">
-                          +{draft.imageDataUrls.length - GRID_VISIBLE}
+                          +{draft.attachments.length - GRID_VISIBLE}
                         </span>
                       </button>
                     )}
 
-                    {draft.imageDataUrls.length < MAX_IMAGES && (editorImagesExpanded || draft.imageDataUrls.length <= GRID_VISIBLE) && (
+                    {draft.attachments.length < MAX_IMAGES && (editorImagesExpanded || draft.attachments.length <= GRID_VISIBLE) && (
                       <button
                         onClick={() => postImageInputRef.current?.click()}
                         className="aspect-square rounded-2xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/40 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
@@ -1033,7 +1111,7 @@ export function MomentsModule() {
 
             <div className="shrink-0 px-6 py-2.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)]/60 flex items-center justify-between gap-3">
               <span className="text-[11px] text-[var(--text-muted)]">纯文本文案 · 图片最多 {MAX_IMAGES} 张</span>
-              <span className="text-[11px] text-[var(--text-muted)]">{draft.contentMd.trim().length} 字 · {draft.imageDataUrls.length} 图 · {draft.tags.length} 标签</span>
+              <span className="text-[11px] text-[var(--text-muted)]">{draft.contentMd.trim().length} 字 · {draft.attachments.length} 图 · {draft.tags.length} 标签</span>
             </div>
           </div>
 
@@ -1086,33 +1164,36 @@ export function MomentsModule() {
                   {detailPost.contentMd || stripHtmlTags(detailPost.contentHtml || '')}
                 </div>
 
-                {(detailPost.imageDataUrls || []).length > 0 && (
+                {postImages(detailPost).urls.length > 0 && (() => {
+                  const imgs = postImages(detailPost)
+                  return (
                   <div className="mt-5">
-                    {(detailPost.imageDataUrls || []).length === 1 ? (
+                    {imgs.urls.length === 1 ? (
                       <img
-                        src={detailPost.imageDataUrls[0]}
+                        src={imgs.urls[0]}
                         alt="说说图片"
-                        onClick={() => setLightbox({ images: detailPost.imageDataUrls || [], index: 0 })}
+                        onClick={() => setLightbox({ images: imgs.urls, index: 0 })}
                         className="max-w-[200px] max-h-[320px] w-auto h-auto object-contain rounded-[12px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
                         loading="lazy"
                         title="点击放大查看"
                       />
                     ) : (
                       <div className="grid grid-cols-3 max-w-[360px] gap-1">
-                        {(detailPost.imageDataUrls || []).map((img, i) => (
+                        {imgs.urls.map((img, i) => (
                           <div
                             key={i}
-                            onClick={() => setLightbox({ images: detailPost.imageDataUrls || [], index: i })}
+                            onClick={() => setLightbox({ images: imgs.urls, index: i })}
                             className="relative aspect-square overflow-hidden rounded-[12px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
                             title="点击放大查看"
                           >
-                            <img src={img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                            <img src={imgs.thumbs[i] || img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-                )}
+                  )
+                })()}
               </div>
             </div>
           </div>

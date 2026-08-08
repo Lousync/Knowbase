@@ -34,17 +34,6 @@ export interface CreatePasswordEntryDTO { title?: string; url?: string; username
 export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }
 
 // moments
-export interface MomentsPost {
-  id: string
-  contentMd: string
-  contentHtml: string
-  imageDataUrls: string[]
-  tags: string[]
-  albumId: string
-  isPinned: boolean
-  createdAt: string
-  updatedAt: string
-}
 export interface MomentsAlbum {
   id: string
   name: string
@@ -55,8 +44,31 @@ export interface MomentsAlbum {
   createdAt: string
   updatedAt: string
 }
-export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
-export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
+export interface AttachmentMeta {
+  id: string
+  name: string
+  url: string
+  thumbUrl: string
+  mime: string
+  size: number
+  position: number
+}
+export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
+export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
+
+export interface MomentsPost {
+  id: string
+  contentMd: string
+  contentHtml: string
+  imageDataUrls: string[]
+  attachmentIds: string[]
+  attachments: AttachmentMeta[]
+  tags: string[]
+  albumId: string
+  isPinned: boolean
+  createdAt: string
+  updatedAt: string
+}
 // weight tracker
 export interface WeightRecord { id: string; weight: number; date: string; series: string; note: string; createdAt: string }
 export interface CreateWeightDTO { weight: number; date: string; series?: string; note?: string }
@@ -307,6 +319,11 @@ export interface ElectronAPI {
   deleteMomentsAlbum: (id: string) => Promise<void>
   setMomentsPostAlbum: (postId: string, albumId: string) => Promise<MomentsPost | null>
   setMomentsAlbumCover: (albumId: string, postId: string, index: number) => Promise<MomentsAlbum | null>
+  // attachments
+  uploadAttachments: (data: { ownerType?: string; ownerId?: string; files: { name?: string; mime?: string; dataUrl?: string; base64?: string; thumbDataUrl?: string }[] }) => Promise<AttachmentMeta[]>
+  uploadAttachmentFromPath: (data: { ownerType?: string; ownerId?: string; filePath: string }) => Promise<AttachmentMeta | null>
+  getAttachmentsByOwner: (ownerType: string, ownerId: string) => Promise<AttachmentMeta[]>
+  deleteAttachment: (id: string) => Promise<void>
   // weight tracker
   getWeightRecords: () => Promise<WeightRecord[]>
   getWeightSeries: () => Promise<string[]>

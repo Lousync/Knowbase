@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { getAttachmentsForIds, claimAttachments, trashAttachments, deleteAttachments, AttachmentMeta } from './attachmentRepo'
 
 interface MomentsRow {
   id: string
@@ -10,6 +11,7 @@ interface MomentsRow {
   images_data_urls: string | null
   tags: string | null
   album_id: string | null
+  attachment_ids: string | null
   is_pinned: number
   created_at: string
   updated_at: string
@@ -46,12 +48,29 @@ function parseTags(row: MomentsRow): string[] {
   return []
 }
 
-function rowToMoments(row: MomentsRow) {
+function parseAttachmentIds(row: MomentsRow): string[] {
+  if (row.attachment_ids) {
+    try {
+      const arr = JSON.parse(row.attachment_ids)
+      if (Array.isArray(arr)) return arr.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    } catch { /* fall through */ }
+  }
+  return []
+}
+
+function rowToMoments(row: MomentsRow, attachmentMeta: AttachmentMeta[] = []) {
+  const attachmentIds = parseAttachmentIds(row)
+  const attachments = attachmentIds
+    .map(id => attachmentMeta.find(a => a.id === id))
+    .filter((a): a is AttachmentMeta => !!a)
   return {
     id: row.id,
     contentMd: row.content_md,
     contentHtml: row.content_html || '',
-    imageDataUrls: parseImages(row),
+    // 老数据兼容：没有附件记录时回退旧 base64 字段
+    imageDataUrls: attachmentIds.length === 0 ? parseImages(row) : [],
+    attachmentIds,
+    attachments,
     tags: parseTags(row),
     albumId: row.album_id || '',
     isPinned: row.is_pinned === 1,
@@ -82,35 +101,54 @@ function camelToSnake(s: string): string {
 export function registerMomentsHandlers(): void {
   ipcMain.handle('moments:getAll', () => {
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts ORDER BY is_pinned DESC, created_at DESC')
-    return rows.map(rowToMoments)
+    const allIds = rows.flatMap(r => parseAttachmentIds(r))
+    const meta = getAttachmentsForIds(allIds)
+    return rows.map(r => rowToMoments(r, meta))
   })
 
   ipcMain.handle('moments:getById', (_e, id: string) => {
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
-    return rows.length > 0 ? rowToMoments(rows[0]) : null
+    if (rows.length === 0) return null
+    const meta = getAttachmentsForIds(parseAttachmentIds(rows[0]))
+    return rowToMoments(rows[0], meta)
   })
 
-  ipcMain.handle('moments:create', (_e, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }) => {
+  ipcMain.handle('moments:create', (_e, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
     const images = Array.isArray(data.imageDataUrls) ? data.imageDataUrls : (data.imageDataUrl ? [data.imageDataUrl] : [])
+    const attachmentIds = Array.isArray(data.attachmentIds) ? data.attachmentIds : []
     const tags = Array.isArray(data.tags) ? data.tags.filter(t => t.trim().length > 0) : []
     run(
-      `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, tags, album_id, is_pinned, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.contentMd || '', data.contentHtml || '', JSON.stringify(images), JSON.stringify(tags), data.albumId || '', data.isPinned ? 1 : 0, now, now]
+      `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.contentMd || '', data.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), data.albumId || '', data.isPinned ? 1 : 0, now, now]
     )
+    if (attachmentIds.length > 0) claimAttachments(attachmentIds, 'moments_post', id)
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
-    return rowToMoments(rows[0])
+    return rowToMoments(rows[0], getAttachmentsForIds(attachmentIds))
   })
 
-  ipcMain.handle('moments:update', (_e, id: string, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }) => {
+  ipcMain.handle('moments:update', (_e, id: string, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }) => {
+    const prevRows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
+    if (prevRows.length === 0) return null
+    const prevIds = parseAttachmentIds(prevRows[0])
+    if (Array.isArray(data.attachmentIds)) {
+      const newIds = data.attachmentIds
+      const added = newIds.filter(x => !prevIds.includes(x))
+      const removed = prevIds.filter(x => !newIds.includes(x))
+      if (added.length > 0) claimAttachments(added, 'moments_post', id)
+      if (removed.length > 0) deleteAttachments(removed)
+    }
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
     for (const [k, v] of Object.entries(data)) {
       if (v !== undefined) {
         if (k === 'imageDataUrls') {
           sets.push('images_data_urls = ?')
+          params.push(JSON.stringify(v))
+        } else if (k === 'attachmentIds') {
+          sets.push('attachment_ids = ?')
           params.push(JSON.stringify(v))
         } else if (k === 'imageDataUrl') {
           sets.push('images_data_urls = ?')
@@ -130,7 +168,8 @@ export function registerMomentsHandlers(): void {
     params.push(id)
     run(`UPDATE moments_posts SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
-    return rowToMoments(rows[0])
+    const finalIds = parseAttachmentIds(rows[0])
+    return rowToMoments(rows[0], getAttachmentsForIds(finalIds))
   })
 
   ipcMain.handle('moments:togglePin', (_e, id: string) => {
@@ -139,14 +178,16 @@ export function registerMomentsHandlers(): void {
     const next = rows[0].is_pinned === 1 ? 0 : 1
     run('UPDATE moments_posts SET is_pinned = ?, updated_at = ? WHERE id = ?', [next, new Date().toISOString(), id])
     const updated = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
-    return rowToMoments(updated[0])
+    return rowToMoments(updated[0], getAttachmentsForIds(parseAttachmentIds(updated[0])))
   })
 
   ipcMain.handle('moments:delete', (_e, id: string) => {
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
     if (rows.length === 0) return
-    const row = rowToMoments(rows[0])
+    const attachmentIds = parseAttachmentIds(rows[0])
+    const row = rowToMoments(rows[0], getAttachmentsForIds(attachmentIds))
     const binId = randomUUID()
+    if (attachmentIds.length > 0) trashAttachments(attachmentIds, binId)
     run(
       `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -159,21 +200,35 @@ export function registerMomentsHandlers(): void {
   ipcMain.handle('moments:getAlbums', () => {
     const albums = queryAll<AlbumRow>('SELECT * FROM moments_albums ORDER BY created_at DESC')
     const posts = queryAll<MomentsRow>("SELECT * FROM moments_posts WHERE album_id IS NOT NULL AND album_id != ''")
+    const metaMap = new Map<string, AttachmentMeta[]>()
+    for (const p of posts) {
+      metaMap.set(p.id, getAttachmentsForIds(parseAttachmentIds(p)))
+    }
     return albums.map(a => {
       // 封面优先取引用的照片（post + 序号），照片始终属于相册
       let cover = ''
       const refPost = a.cover_post_id ? posts.find(p => p.id === a.cover_post_id) : null
       if (refPost) {
-        const refImgs = parseImages(refPost)
+        const refMetas = metaMap.get(refPost.id) || []
         const refIdx = a.cover_index || 0
-        if (refImgs[refIdx]) cover = refImgs[refIdx]
+        if (refMetas[refIdx]) cover = refMetas[refIdx].url
+        else if (refMetas.length === 0) {
+          const legacy = parseImages(refPost)
+          if (legacy[refIdx]) cover = legacy[refIdx]
+        }
       }
       let photoCount = 0
       for (const p of posts) {
         if (p.album_id !== a.id) continue
-        const imgs = parseImages(p)
-        photoCount += imgs.length
-        if (!cover && imgs.length > 0) cover = imgs[0]
+        const metas = metaMap.get(p.id) || []
+        photoCount += metas.length || parseImages(p).length
+        if (!cover) {
+          if (metas.length > 0) cover = metas[0].url
+          else {
+            const legacy = parseImages(p)
+            if (legacy.length > 0) cover = legacy[0]
+          }
+        }
       }
       return {
         id: a.id,
