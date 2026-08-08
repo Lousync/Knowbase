@@ -226,6 +226,17 @@ export function MomentsModule() {
     () => (selectedAlbumId ? filteredPosts.filter(p => p.albumId === selectedAlbumId && (p.imageDataUrls || []).length > 0) : []),
     [filteredPosts, selectedAlbumId]
   )
+  // 整个相册的照片平铺列表：跨说说组成一个可连续翻页的序列
+  const albumPhotoList = useMemo(() => {
+    const list: { img: string; postId: string; indexInPost: number }[] = []
+    for (const p of albumPosts) {
+      for (let i = 0; i < (p.imageDataUrls || []).length; i++) {
+        list.push({ img: p.imageDataUrls[i], postId: p.id, indexInPost: i })
+      }
+    }
+    return list
+  }, [albumPosts])
+  const albumPhotoUrls = useMemo(() => albumPhotoList.map(x => x.img), [albumPhotoList])
   const selectedAlbum = selectedAlbumId ? albums.find(a => a.id === selectedAlbumId) || null : null
 
   const closeEditor = () => {
@@ -738,22 +749,22 @@ export function MomentsModule() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                    {albumPosts.map(p => (p.imageDataUrls || []).map((img, i) => (
+                    {albumPhotoList.map((item, idx) => (
                       <div
-                        key={`${p.id}-${i}`}
-                        onClick={() => setLightbox({ images: p.imageDataUrls || [], index: i })}
+                        key={`${item.postId}-${item.indexInPost}`}
+                        onClick={() => setLightbox({ images: albumPhotoUrls, index: idx })}
                         className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in group"
                         title="点击放大查看"
                       >
-                        <img src={img} alt={`相册照片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-                        {selectedAlbum.coverPostId === p.id && selectedAlbum.coverIndex === i && (
+                        <img src={item.img} alt={`相册照片 ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                        {selectedAlbum.coverPostId === item.postId && selectedAlbum.coverIndex === item.indexInPost && (
                           <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] pointer-events-none">
                             封面
                           </span>
                         )}
-                        {!(selectedAlbum.coverPostId === p.id && selectedAlbum.coverIndex === i) && (
+                        {!(selectedAlbum.coverPostId === item.postId && selectedAlbum.coverIndex === item.indexInPost) && (
                           <button
-                            onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, p.id, i).catch(console.error) }}
+                            onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, item.postId, item.indexInPost).catch(console.error) }}
                             className="absolute inset-x-1.5 bottom-1.5 py-1 rounded-lg bg-black/55 text-white text-[10px] backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
                             title="设为封面"
                           >
@@ -762,7 +773,7 @@ export function MomentsModule() {
                           </button>
                         )}
                       </div>
-                    )))}
+                    ))}
                     <button
                       onClick={() => albumPhotoInputRef.current?.click()}
                       className="aspect-square rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
