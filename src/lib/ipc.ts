@@ -177,6 +177,12 @@ export const renameMomentsAlbum = (id: string, name: string) => a().renameMoment
 export const deleteMomentsAlbum = (id: string) => a().deleteMomentsAlbum(id)
 export const setMomentsPostAlbum = (postId: string, albumId: string) => a().setMomentsPostAlbum(postId, albumId)
 export const setMomentsAlbumCover = (albumId: string, postId: string, index: number) => a().setMomentsAlbumCover(albumId, postId, index)
+// ===== Weight Tracker =====
+export const getWeightRecords = () => a().getWeightRecords()
+export const getWeightSeries = () => a().getWeightSeries()
+export const createWeightRecord = (d: { weight: number; date: string; series?: string; note?: string }) => a().createWeightRecord(d)
+export const updateWeightRecord = (id: string, d: { weight?: number; date?: string; series?: string; note?: string }) => a().updateWeightRecord(id, d)
+export const deleteWeightRecord = (id: string) => a().deleteWeightRecord(id)
 
 // ===== AI =====
 export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)

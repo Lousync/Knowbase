@@ -57,6 +57,10 @@ export interface MomentsAlbum {
 }
 export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
 export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
+// weight tracker
+export interface WeightRecord { id: string; weight: number; date: string; series: string; note: string; createdAt: string }
+export interface CreateWeightDTO { weight: number; date: string; series?: string; note?: string }
+export interface UpdateWeightDTO { weight?: number; date?: string; series?: string; note?: string }
 
 // user
 export interface UserProfile {
@@ -303,6 +307,12 @@ export interface ElectronAPI {
   deleteMomentsAlbum: (id: string) => Promise<void>
   setMomentsPostAlbum: (postId: string, albumId: string) => Promise<MomentsPost | null>
   setMomentsAlbumCover: (albumId: string, postId: string, index: number) => Promise<MomentsAlbum | null>
+  // weight tracker
+  getWeightRecords: () => Promise<WeightRecord[]>
+  getWeightSeries: () => Promise<string[]>
+  createWeightRecord: (d: CreateWeightDTO) => Promise<WeightRecord>
+  updateWeightRecord: (id: string, d: UpdateWeightDTO) => Promise<WeightRecord>
+  deleteWeightRecord: (id: string) => Promise<void>
   // ai
   aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
   // fill popup

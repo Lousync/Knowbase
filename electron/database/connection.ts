@@ -477,6 +477,22 @@ export function runMigrations(): void {
     try { db.run("ALTER TABLE moments_albums ADD COLUMN cover_index INTEGER DEFAULT 0") } catch { /* column may already exist */ }
     db.run("INSERT INTO _migrations (name) VALUES ('029_album_cover_ref')")
   }
+
+  if (!applied.has('030_weight_tracker')) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS toolbox_weight_records (
+        id          TEXT PRIMARY KEY,
+        weight      REAL NOT NULL,
+        date        TEXT NOT NULL,
+        series      TEXT NOT NULL DEFAULT 'default',
+        note        TEXT DEFAULT '',
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_weight_date ON toolbox_weight_records(date);
+      CREATE INDEX IF NOT EXISTS idx_weight_series ON toolbox_weight_records(series);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('030_weight_tracker')")
+  }
 }
 
 /**
