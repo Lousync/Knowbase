@@ -166,6 +166,10 @@ const api = {
   deleteAttachment: (id: string) => ipcRenderer.invoke('attachment:delete', id),
   getAttachmentPath: (id: string) => ipcRenderer.invoke('attachment:getPath', id),
   cleanupOrphanAttachments: () => ipcRenderer.invoke('attachment:cleanupOrphans'),
+  exportBackupToDir: (dirPath: string) => ipcRenderer.invoke('export:backupToDir', dirPath),
+  exportBackupToZip: (zipPath: string) => ipcRenderer.invoke('export:backupToZip', zipPath),
+  importBackupPackage: (srcPath: string) => ipcRenderer.invoke('import:importBackupPackage', srcPath),
+  showBackupDialog: () => ipcRenderer.invoke('import:showBackupDialog'),
   // weight tracker
   getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
   getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),

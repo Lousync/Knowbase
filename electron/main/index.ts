@@ -15,6 +15,7 @@ import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
 import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
 import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/repositories/attachmentRepo'
+import { registerBackupHandlers } from '../database/repositories/backupRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerAIHandlers } from '../ai/aiHandler'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
@@ -222,6 +223,7 @@ app.whenReady().then(async () => {
   registerPasswordHandlers()
   registerMomentsHandlers()
   registerAttachmentHandlers()
+  registerBackupHandlers()
   registerWeightHandlers()
   registerAIHandlers()
 

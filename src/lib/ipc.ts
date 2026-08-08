@@ -184,6 +184,10 @@ export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promi
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
 export const cleanupOrphanAttachments = () => a().cleanupOrphanAttachments()
+export const exportBackupToDir = (dirPath: string) => a().exportBackupToDir(dirPath)
+export const exportBackupToZip = (zipPath: string) => a().exportBackupToZip(zipPath)
+export const importBackupPackage = (srcPath: string) => a().importBackupPackage(srcPath)
+export const showBackupDialog = (): Promise<string | null> => a().showBackupDialog()
 // ===== Weight Tracker =====
 export const getWeightRecords = () => a().getWeightRecords()
 export const getWeightSeries = () => a().getWeightSeries()

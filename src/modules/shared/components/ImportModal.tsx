@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User, Image, Settings2 } from 'lucide-react'
-import { showImportDataDialog, readImportFile, executeImport, importDb, previewUserFromDb, verifyImportPassword, restoreUserFromImport, setSettingRaw } from '../../../lib/ipc'
+import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User, Image, Settings2, FolderArchive } from 'lucide-react'
+import { showImportDataDialog, readImportFile, executeImport, importDb, previewUserFromDb, verifyImportPassword, restoreUserFromImport, setSettingRaw, showBackupDialog, importBackupPackage } from '../../../lib/ipc'
 
 // ===== version compat =====
 const CURRENT_VERSION = '1.2'
@@ -197,6 +197,28 @@ export function ImportModal({ onClose }: Props) {
     }
   }
 
+  const handlePickBackup = async () => {
+    const p = await showBackupDialog()
+    if (!p) return
+    reset()
+    setPhase('importing')
+    setResultMsg('正在导入备份包...')
+    try {
+      const r = await importBackupPackage(p)
+      if (r.success) {
+        setResultMsg(r.message)
+        setPhase('done')
+        window.dispatchEvent(new CustomEvent('data-imported'))
+      } else {
+        setError(r.message)
+        setPhase('error')
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setPhase('error')
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-[440px] max-h-[560px] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -235,6 +257,9 @@ export function ImportModal({ onClose }: Props) {
               </div>
               <button onClick={handlePickFile} className="mt-2 flex items-center gap-2 px-5 py-2 text-[13px] bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors">
                 <Upload size={16} />选择文件
+              </button>
+              <button onClick={handlePickBackup} className="flex items-center gap-2 px-5 py-2 text-[13px] border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-hover)] transition-colors">
+                <FolderArchive size={16} />导入备份包（文件夹 / zip）
               </button>
             </div>
           )}

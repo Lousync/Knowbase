@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles } from 'lucide-react'
 import {
   exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData, exportAllPasswordVaultData,
-  exportAllMomentsData,
+  exportAllMomentsData, exportBackupToDir,
   showExportSaveDialog, showExportOpenDirDialog, writeExportTextFile, copyDbFile,
   writeMarkdownExport, onMarkdownExportProgress, getSetting,
   getUserExportData, getUserStats, getAllSettings
@@ -21,7 +21,7 @@ interface ModuleOption {
 }
 
 interface FormatOption {
-  id: 'json' | 'markdown' | 'sqlite'
+  id: 'json' | 'markdown' | 'sqlite' | 'backup'
   label: string
   desc: string
   icon: React.ReactNode
@@ -45,6 +45,7 @@ const MODULES: ModuleOption[] = [
 const FORMATS: FormatOption[] = [
   { id: 'json', label: 'JSON 单文件', desc: '完整保留关联数据，可重新导入', icon: <FileJson size={14} /> },
   { id: 'markdown', label: '文件集导出', desc: '每篇文章/页面按类型导出为对应文件，导出到文件夹', icon: <FileText size={14} /> },
+  { id: 'backup', label: '备份包（含附件）', desc: 'JSON 元数据 + 全部附件到文件夹，可完整还原', icon: <FileArchive size={14} /> },
   { id: 'sqlite', label: 'SQLite 原始文件', desc: '直接复制 knowledge.db', icon: <Database size={14} /> },
 ]
 
@@ -355,6 +356,13 @@ async function runSqliteExport(): Promise<ExportResult> {
   return { cancelled: false, filePath, fileCount: 1, totalSize: copyResult.size }
 }
 
+async function runBackupExport(): Promise<ExportResult> {
+  const { dirPath } = await showExportOpenDirDialog()
+  if (!dirPath) return { cancelled: true }
+  const r = await exportBackupToDir(dirPath)
+  return { cancelled: false, dirPath, fileCount: r.fileCount, totalSize: r.totalSize }
+}
+
 // ---- Component ----
 export function ExportModule() {
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set(['blog', 'schedule', 'knowledge', 'moments']))
@@ -390,8 +398,9 @@ export function ExportModule() {
   }, [])
 
   const isSqlite = format === 'sqlite'
+  const isBackup = format === 'backup'
 
-  const canExport = isSqlite
+  const canExport = isSqlite || isBackup
     ? true
     : format === 'markdown'
       ? (
@@ -649,6 +658,9 @@ export function ExportModule() {
       if (format === 'sqlite') {
         setProgress({ current: 0, total: 1, currentFile: '', phase: '正在复制数据库文件...' })
         result = await runSqliteExport()
+      } else if (format === 'backup') {
+        setProgress({ current: 0, total: 1, currentFile: '', phase: '正在打包元数据与附件...' })
+        result = await runBackupExport()
       } else if (format === 'markdown') {
         const unsub = onMarkdownExportProgress((p) => setProgress(p))
         try {
@@ -680,7 +692,7 @@ export function ExportModule() {
       setStatusMessage(`导出成功${detail ? `（${detail}）` : ''}：${dest.slice(-40)}`)
 
       // Add to history
-      const moduleLabel = isSqlite ? '原始数据库' : selectedModules.size === MODULES.length ? '全部模块' : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('+')
+      const moduleLabel = isBackup ? '备份包（含附件）' : isSqlite ? '原始数据库' : selectedModules.size === MODULES.length ? '全部模块' : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('+')
       setHistory(prev => [{
         date: new Date().toISOString().slice(0, 10),
         modules: moduleLabel,

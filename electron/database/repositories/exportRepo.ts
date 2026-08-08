@@ -79,6 +79,70 @@ function mapAlbum(r: AlbumRow) {
   return { id: r.id, name: r.name, photoCount: 0, cover: '', coverPostId: r.cover_post_id || '', coverIndex: r.cover_index || 0, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
+export function buildAllData() {
+  // Blog
+  const entries = queryAll<EntryRow>('SELECT * FROM entries ORDER BY date DESC')
+  const blogTags = queryAll<TagRow>('SELECT * FROM tags ORDER BY name')
+  const etRows = queryAll<{ entry_id: string; tag_id: string }>('SELECT * FROM entry_tags')
+  const blogTagMap = new Map<string, TagRow[]>()
+  for (const et of etRows) {
+    const t = blogTags.find(tg => tg.id === et.tag_id)
+    if (t) {
+      if (!blogTagMap.has(et.entry_id)) blogTagMap.set(et.entry_id, [])
+      blogTagMap.get(et.entry_id)!.push(t)
+    }
+  }
+
+  // Schedule
+  const todos = queryAll<TodoRow>("SELECT * FROM schedule_todos WHERE status != 'done' AND status != 'cancelled' ORDER BY date DESC, sort_order, created_at")
+  const scheduleTags = queryAll<ScheduleTagRow>('SELECT * FROM schedule_tags ORDER BY name')
+  const sTagMap = new Map(scheduleTags.map(t => [t.id, t]))
+
+  // Knowledge
+  const categories = queryAll<CategoryRow>('SELECT * FROM knowledge_categories ORDER BY sort_order, name')
+  const pages = queryAll<PageRow>('SELECT * FROM knowledge_pages ORDER BY sort_order, updated_at DESC')
+  const knowledgeTags = queryAll<TagRow>('SELECT * FROM knowledge_tags ORDER BY name')
+  const linkRows = queryAll<{ source_page_id: string; target_page_id: string }>('SELECT * FROM knowledge_links')
+  const backlinkMap = new Map<string, string[]>()
+  for (const l of linkRows) {
+    const page = pages.find(p => p.id === l.source_page_id)
+    if (page) {
+      if (!backlinkMap.has(l.target_page_id)) backlinkMap.set(l.target_page_id, [])
+      backlinkMap.get(l.target_page_id)!.push(page.title)
+    }
+  }
+
+  // Password Vault + Moments
+  const pwdEntries = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
+  const moments = queryAll<MomentsRow>('SELECT * FROM moments_posts ORDER BY is_pinned DESC, created_at DESC')
+  const albums = queryAll<AlbumRow>('SELECT * FROM moments_albums ORDER BY created_at DESC')
+
+  return {
+    exportVersion: '1.1',
+    exportedAt: new Date().toISOString(),
+    blog: {
+      entries: entries.map(e => ({ ...mapEntry(e), tags: blogTagMap.get(e.id) || [] })),
+      tags: blogTags
+    },
+    schedule: {
+      todos: todos.map(t => ({ ...mapTodo(t), tag: t.tag_id ? sTagMap.get(t.tag_id) || null : null })),
+      tags: scheduleTags
+    },
+    knowledge: {
+      categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' })),
+      pages: pages.map(p => ({ ...mapPage(p), tags: [] as TagRow[], backlinks: backlinkMap.get(p.id) || [] })),
+      tags: knowledgeTags
+    },
+    passwordVault: {
+      entries: pwdEntries.map(mapPassword)
+    },
+    moments: {
+      posts: moments.map(mapMoments),
+      albums: albums.map(mapAlbum)
+    }
+  }
+}
+
 export function registerExportHandlers(): void {
   // ===== Blog: all entries with tags =====
   ipcMain.handle('export:getAllBlogData', () => {
@@ -151,70 +215,8 @@ export function registerExportHandlers(): void {
     return { posts: posts.map(mapMoments), albums: albums.map(mapAlbum) }
   })
 
-  // ===== Combined: all three domains =====
-  ipcMain.handle('export:getAllData', () => {
-    // Blog
-    const entries = queryAll<EntryRow>('SELECT * FROM entries ORDER BY date DESC')
-    const blogTags = queryAll<TagRow>('SELECT * FROM tags ORDER BY name')
-    const etRows = queryAll<{ entry_id: string; tag_id: string }>('SELECT * FROM entry_tags')
-    const blogTagMap = new Map<string, TagRow[]>()
-    for (const et of etRows) {
-      const t = blogTags.find(tg => tg.id === et.tag_id)
-      if (t) {
-        if (!blogTagMap.has(et.entry_id)) blogTagMap.set(et.entry_id, [])
-        blogTagMap.get(et.entry_id)!.push(t)
-      }
-    }
-
-    // Schedule
-    const todos = queryAll<TodoRow>("SELECT * FROM schedule_todos WHERE status != 'done' AND status != 'cancelled' ORDER BY date DESC, sort_order, created_at")
-    const scheduleTags = queryAll<ScheduleTagRow>('SELECT * FROM schedule_tags ORDER BY name')
-    const sTagMap = new Map(scheduleTags.map(t => [t.id, t]))
-
-    // Knowledge
-    const categories = queryAll<CategoryRow>('SELECT * FROM knowledge_categories ORDER BY sort_order, name')
-    const pages = queryAll<PageRow>('SELECT * FROM knowledge_pages ORDER BY sort_order, updated_at DESC')
-    const knowledgeTags = queryAll<TagRow>('SELECT * FROM knowledge_tags ORDER BY name')
-    const linkRows = queryAll<{ source_page_id: string; target_page_id: string }>('SELECT * FROM knowledge_links')
-    const backlinkMap = new Map<string, string[]>()
-    for (const l of linkRows) {
-      const page = pages.find(p => p.id === l.source_page_id)
-      if (page) {
-        if (!backlinkMap.has(l.target_page_id)) backlinkMap.set(l.target_page_id, [])
-        backlinkMap.get(l.target_page_id)!.push(page.title)
-      }
-    }
-
-    // Password Vault
-    const pwdEntries = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
-    const moments = queryAll<MomentsRow>('SELECT * FROM moments_posts ORDER BY is_pinned DESC, created_at DESC')
-    const albums = queryAll<AlbumRow>('SELECT * FROM moments_albums ORDER BY created_at DESC')
-
-    return {
-      exportVersion: '1.1',
-      exportedAt: new Date().toISOString(),
-      blog: {
-        entries: entries.map(e => ({ ...mapEntry(e), tags: blogTagMap.get(e.id) || [] })),
-        tags: blogTags
-      },
-      schedule: {
-        todos: todos.map(t => ({ ...mapTodo(t), tag: t.tag_id ? sTagMap.get(t.tag_id) || null : null })),
-        tags: scheduleTags
-      },
-      knowledge: {
-        categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' })),
-        pages: pages.map(p => ({ ...mapPage(p), tags: [] as TagRow[], backlinks: backlinkMap.get(p.id) || [] })),
-        tags: knowledgeTags
-      },
-      passwordVault: {
-        entries: pwdEntries.map(mapPassword)
-      },
-      moments: {
-        posts: moments.map(mapMoments),
-        albums: albums.map(mapAlbum)
-      }
-    }
-  })
+  // ===== Combined: all domains =====
+  ipcMain.handle('export:getAllData', () => buildAllData())
 
   // ===== File dialogs =====
   ipcMain.handle('export:showSaveDialog', async (_e, opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => {

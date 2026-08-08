@@ -351,10 +351,13 @@ export function registerImportHandlers(): void {
     }
   })
 
-  ipcMain.handle('import:executeImport', async (_e, data: any) => {
-    const db = getDatabase()
-    let imported = 0, skipped = 0
-    try {
+  ipcMain.handle('import:executeImport', (_e, data: any) => executeImportData(data))
+}
+
+export function executeImportData(data: any): { success: boolean; imported: number; skipped: number; message: string } {
+  const db = getDatabase()
+  let imported = 0, skipped = 0
+  try {
       // --- Blog ---
       if (data.blog) {
         for (const tag of data.blog.tags || []) {
@@ -478,8 +481,7 @@ export function registerImportHandlers(): void {
       }
       saveToDisk()
       return { success: true, imported, skipped, message: `成功导入 ${imported} 条记录${skipped > 0 ? `，跳过 ${skipped} 条已有记录` : ''}` }
-    } catch (e: any) {
-      return { success: false, imported, skipped, message: `导入出错: ${e.message}` }
-    }
-  })
+  } catch (e: any) {
+    return { success: false, imported, skipped, message: `导入出错: ${e.message}` }
+  }
 }

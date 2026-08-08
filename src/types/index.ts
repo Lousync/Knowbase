@@ -327,6 +327,10 @@ export interface ElectronAPI {
   deleteAttachment: (id: string) => Promise<void>
   getAttachmentPath: (id: string) => Promise<string | null>
   cleanupOrphanAttachments: () => Promise<{ removed: number }>
+  exportBackupToDir: (dirPath: string) => Promise<{ dirPath: string; fileCount: number; totalSize: number }>
+  exportBackupToZip: (zipPath: string) => Promise<{ filePath: string; fileCount: number; totalSize: number }>
+  importBackupPackage: (srcPath: string) => Promise<{ success: boolean; imported: number; skipped: number; attachments: number; message: string }>
+  showBackupDialog: () => Promise<string | null>
   // weight tracker
   getWeightRecords: () => Promise<WeightRecord[]>
   getWeightSeries: () => Promise<string[]>
