@@ -22,6 +22,7 @@ import {
   deleteAttachment,
   updateMomentsPost,
 } from '../../lib/ipc'
+import { showToast } from '../../lib/toast'
 import type { MomentsAlbum, MomentsPost, UserProfile } from '../../types'
 
 type EditorMode = 'create' | 'edit'
@@ -101,6 +102,55 @@ function makeThumb(dataUrl: string, max = 256): Promise<string> {
     img.onerror = () => reject(new Error('图片解码失败'))
     img.src = dataUrl
   })
+}
+
+/** 判断是否为 HEIC/HEIF：优先按扩展名/MIME，再按文件头特征兜底 */
+const HEIC_EXT_RE = /\.(heic|heif)$/i
+
+async function detectHeic(file: File): Promise<boolean> {
+  if (/^image\/hei[cf]$/i.test(file.type || '') || HEIC_EXT_RE.test(file.name)) return true
+  try {
+    const { isHeic } = await import('heic-to/csp')
+    return await isHeic(file)
+  } catch {
+    return false
+  }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+/** 用 heic-to（libheif）把 HEIC/HEIF 本地转为 JPEG，Chromium 本身无法解码 HEIC */
+async function convertHeicToJpeg(file: File): Promise<string> {
+  const { heicTo } = await import('heic-to/csp')
+  const jpeg = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.92 })
+  return blobToDataUrl(jpeg)
+}
+
+/** 预处理待上传图片：HEIC 先转 JPEG 并同步文件名/MIME，再生成缩略图 */
+async function prepareImageFile(f: File) {
+  const heic = await detectHeic(f)
+  let dataUrl = await readFileAsDataUrl(f)
+  if (heic) {
+    try {
+      dataUrl = await convertHeicToJpeg(f)
+    } catch {
+      throw new Error(`HEIC 照片「${f.name}」转换失败，请改用 JPEG/PNG 后重试`)
+    }
+  }
+  const thumbDataUrl = await makeThumb(dataUrl)
+  return {
+    name: heic ? f.name.replace(HEIC_EXT_RE, '.jpg') : f.name,
+    mime: heic ? 'image/jpeg' : (f.type || 'image/*'),
+    dataUrl,
+    thumbDataUrl,
+  }
 }
 
 /** 帖子图片访问：优先附件（文件化），老数据回退 base64 */
@@ -352,17 +402,18 @@ export function MomentsModule() {
     const room = MAX_IMAGES - draft.attachments.length
     const files = Array.from(input.files).slice(0, room)
     if (files.length === 0) return
-    const prepared = await Promise.all(files.map(async f => {
-      const dataUrl = await readFileAsDataUrl(f)
-      const thumbDataUrl = await makeThumb(dataUrl)
-      return { name: f.name, mime: f.type || 'image/*', dataUrl, thumbDataUrl }
-    }))
-    const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
-    setDraft(prev => ({
-      ...prev,
-      attachments: [...prev.attachments, ...records.map(r => ({ ...r, pending: true }))],
-    }))
-    input.value = ''
+    try {
+      const prepared = await Promise.all(files.map(prepareImageFile))
+      const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
+      setDraft(prev => ({
+        ...prev,
+        attachments: [...prev.attachments, ...records.map(r => ({ ...r, pending: true }))],
+      }))
+    } catch (err) {
+      showToast({ type: 'error', message: err instanceof Error ? err.message : '图片处理失败，请重试' })
+    } finally {
+      input.value = ''
+    }
   }
 
   const removeImage = (index: number) => {
@@ -380,15 +431,16 @@ export function MomentsModule() {
     if (!input?.files?.length || !selectedAlbumId) return
     const files = Array.from(input.files).slice(0, MAX_IMAGES)
     if (files.length === 0) return
-    const prepared = await Promise.all(files.map(async f => {
-      const dataUrl = await readFileAsDataUrl(f)
-      const thumbDataUrl = await makeThumb(dataUrl)
-      return { name: f.name, mime: f.type || 'image/*', dataUrl, thumbDataUrl }
-    }))
-    const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
-    await createMomentsPost({ contentMd: '', contentHtml: '', attachmentIds: records.map(r => r.id), albumId: selectedAlbumId, isPinned: false })
-    input.value = ''
-    await Promise.all([loadPosts(), loadAlbums()])
+    try {
+      const prepared = await Promise.all(files.map(prepareImageFile))
+      const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
+      await createMomentsPost({ contentMd: '', contentHtml: '', attachmentIds: records.map(r => r.id), albumId: selectedAlbumId, isPinned: false })
+      await Promise.all([loadPosts(), loadAlbums()])
+    } catch (err) {
+      showToast({ type: 'error', message: err instanceof Error ? err.message : '图片处理失败，请重试' })
+    } finally {
+      input.value = ''
+    }
   }
 
   const startEditSignature = () => {
@@ -1115,7 +1167,7 @@ export function MomentsModule() {
             </div>
           </div>
 
-          <input ref={postImageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={() => { handlePickImages().catch(console.error) }} />
+          <input ref={postImageInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={() => { handlePickImages().catch(console.error) }} />
         </div>
       )}
 
@@ -1359,7 +1411,7 @@ export function MomentsModule() {
         </div>
       )}
 
-      <input ref={albumPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={() => { handlePickAlbumPhotos().catch(console.error) }} />
+      <input ref={albumPhotoInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={() => { handlePickAlbumPhotos().catch(console.error) }} />
 
       <ConfirmDialog
         open={!!confirmDeleteId}
