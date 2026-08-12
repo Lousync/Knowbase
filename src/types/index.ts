@@ -190,6 +190,7 @@ export interface ExportMarkdownProgress { current: number; total: number; curren
 export interface ExportMarkdownResult { fileCount: number; totalSize: number; files: { relPath: string; size: number }[] }
 
 export interface ElectronAPI {
+  getPathForFile: (file: File) => string
   minimize: () => Promise<void>
   maximize: () => Promise<void>
   close: () => Promise<void>
@@ -282,18 +283,8 @@ export interface ElectronAPI {
   getUserStats: () => Promise<UserStats>
   getUserExportData: () => Promise<UserExportData | null>
   restoreUserFromImport: (data: UserImportData) => Promise<{ success: boolean }>
-  exportAllBlogData: () => Promise<BlogExportData>
-  exportAllScheduleData: () => Promise<ScheduleExportData>
-  exportAllKnowledgeData: () => Promise<KnowledgeExportData>
-  exportAllPasswordVaultData: () => Promise<PasswordVaultExportData>
-  exportAllMomentsData: () => Promise<MomentsExportData>
-  exportAllData: () => Promise<AllExportData>
   showExportSaveDialog: (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => Promise<{ filePath: string | null }>
-  showExportOpenDirDialog: () => Promise<{ dirPath: string | null }>
   writeExportTextFile: (filePath: string, content: string, encoding?: string) => Promise<ExportFileResult>
-  copyDbFile: (destPath: string) => Promise<ExportFileResult>
-  writeMarkdownExport: (dirPath: string, files: { relPath: string; content: string }[], encoding?: string) => Promise<ExportMarkdownResult>
-  onMarkdownExportProgress: (cb: (p: ExportMarkdownProgress) => void) => () => void
   // toolbox
   getToolboxScripts: () => Promise<ToolboxScript[]>
   getToolboxScriptById: (id: string) => Promise<ToolboxScript | null>
@@ -327,10 +318,8 @@ export interface ElectronAPI {
   deleteAttachment: (id: string) => Promise<void>
   getAttachmentPath: (id: string) => Promise<string | null>
   cleanupOrphanAttachments: () => Promise<{ removed: number }>
-  exportBackupToDir: (dirPath: string) => Promise<{ dirPath: string; fileCount: number; totalSize: number }>
-  exportBackupToZip: (zipPath: string) => Promise<{ filePath: string; fileCount: number; totalSize: number }>
+  exportBackupToZip: (zipPath: string, moduleIds?: string[]) => Promise<{ filePath: string; fileCount: number; totalSize: number }>
   importBackupPackage: (srcPath: string) => Promise<{ success: boolean; imported: number; skipped: number; attachments: number; message: string }>
-  showBackupDialog: () => Promise<string | null>
   // weight tracker
   getWeightRecords: () => Promise<WeightRecord[]>
   getWeightSeries: () => Promise<string[]>

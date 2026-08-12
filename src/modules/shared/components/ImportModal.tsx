@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Upload, FileJson, Database, AlertCircle, AlertTriangle, CheckCircle, Loader2, Lock, User, Image, Settings2, FolderArchive } from 'lucide-react'
-import { showImportDataDialog, readImportFile, executeImport, importDb, previewUserFromDb, verifyImportPassword, restoreUserFromImport, setSettingRaw, showBackupDialog, importBackupPackage } from '../../../lib/ipc'
+import { showImportDataDialog, readImportFile, executeImport, importDb, previewUserFromDb, verifyImportPassword, restoreUserFromImport, setSettingRaw, importBackupPackage } from '../../../lib/ipc'
 
 // ===== version compat =====
-const CURRENT_VERSION = '1.2'
+const CURRENT_VERSION = '2.0'
 const COMPAT_MAP: Record<string, string[]> = {
   '2.0': ['1.0', '1.1', '1.2', '1.3'],
   '1.2': ['1.0', '1.1'],
@@ -36,9 +36,9 @@ function fileExtension(fp: string): string {
 type Phase = 'idle' | 'checking' | 'verify_password' | 'preview_json' | 'preview_db' | 'importing' | 'done' | 'error'
 type FileType = 'json' | 'db'
 
-interface Props { onClose: () => void }
+interface Props { onClose: () => void; initialBackupPath?: string | null }
 
-export function ImportModal({ onClose }: Props) {
+export function ImportModal({ onClose, initialBackupPath }: Props) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState('')
   const [resultMsg, setResultMsg] = useState('')
@@ -96,6 +96,12 @@ export function ImportModal({ onClose }: Props) {
         })
       }
       setPhase('preview_db')
+      return
+    }
+
+    // --- backup package: zip file or folder ---
+    if (ext === 'zip' || ext === '') {
+      await startBackupImport(fp)
       return
     }
 
@@ -197,9 +203,7 @@ export function ImportModal({ onClose }: Props) {
     }
   }
 
-  const handlePickBackup = async () => {
-    const p = await showBackupDialog()
-    if (!p) return
+  const startBackupImport = async (p: string) => {
     reset()
     setPhase('importing')
     setResultMsg('正在导入备份包...')
@@ -218,6 +222,16 @@ export function ImportModal({ onClose }: Props) {
       setPhase('error')
     }
   }
+
+  // Auto-import when a backup zip was dropped onto the app window
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (initialBackupPath && !autoStarted.current) {
+      autoStarted.current = true
+      startBackupImport(initialBackupPath)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialBackupPath])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -240,6 +254,10 @@ export function ImportModal({ onClose }: Props) {
             <div className="flex flex-col items-center py-8 gap-4">
               <div className="flex gap-4">
                 <div className="flex flex-col items-center gap-1 text-[var(--text-muted)]">
+                  <FolderArchive size={40} />
+                  <span className="text-[10px]">备份包</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 text-[var(--text-muted)]">
                   <FileJson size={40} />
                   <span className="text-[10px]">JSON</span>
                 </div>
@@ -249,17 +267,14 @@ export function ImportModal({ onClose }: Props) {
                 </div>
               </div>
               <div className="text-center space-y-1.5">
-                <p className="text-[var(--text-primary)] font-medium">导入数据包</p>
+                <p className="text-[var(--text-primary)] font-medium">导入数据</p>
                 <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
-                  支持 JSON 数据包（合并到当前数据）<br />
-                  或 .db 数据库文件（整体替换）
+                  支持备份包（zip / 文件夹）完整还原<br />
+                  以及旧版 JSON 合并、.db 整体替换
                 </p>
               </div>
               <button onClick={handlePickFile} className="mt-2 flex items-center gap-2 px-5 py-2 text-[13px] bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors">
                 <Upload size={16} />选择文件
-              </button>
-              <button onClick={handlePickBackup} className="flex items-center gap-2 px-5 py-2 text-[13px] border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-hover)] transition-colors">
-                <FolderArchive size={16} />导入备份包（文件夹 / zip）
               </button>
             </div>
           )}

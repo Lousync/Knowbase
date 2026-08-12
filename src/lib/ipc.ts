@@ -1,7 +1,9 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, ExportMarkdownProgress, ExportMarkdownResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsExportData, MomentsAlbum, AttachmentMeta } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
+
+export const getPathForFile = (file: File): string => a().getPathForFile(file)
 
 // ===== Typed settings =====
 
@@ -89,19 +91,8 @@ export const duplicateKnowledgePage = (data: { pageId: string; targetCategoryId?
 export const duplicateKnowledgeCategory = (data: { categoryId: string; targetParentId?: string | null }) => a().duplicateKnowledgeCategory(data)
 
 // export
-export const exportAllBlogData = () => a().exportAllBlogData()
-export const exportAllScheduleData = () => a().exportAllScheduleData()
-export const exportAllKnowledgeData = () => a().exportAllKnowledgeData()
-export const exportAllPasswordVaultData = () => a().exportAllPasswordVaultData()
-export const exportAllData = () => a().exportAllData()
-
 export const showExportSaveDialog = (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => a().showExportSaveDialog(opts)
-export const showExportOpenDirDialog = () => a().showExportOpenDirDialog()
 export const writeExportTextFile = (filePath: string, content: string, encoding?: string): Promise<ExportFileResult> => a().writeExportTextFile(filePath, content, encoding)
-export const copyDbFile = (destPath: string): Promise<ExportFileResult> => a().copyDbFile(destPath)
-export const writeMarkdownExport = (dirPath: string, files: { relPath: string; content: string }[], encoding?: string): Promise<ExportMarkdownResult> => a().writeMarkdownExport(dirPath, files, encoding)
-export const onMarkdownExportProgress = (cb: (p: ExportMarkdownProgress) => void): (() => void) =>
-  a().onMarkdownExportProgress(cb)
 
 // import
 export const showImportOpenDialog = () => a().showImportOpenDialog()
@@ -161,9 +152,6 @@ export const createPasswordEntry = (d: { title?: string; url?: string; username?
 export const updatePasswordEntry = (id: string, d: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }) => a().updatePasswordEntry(id, d)
 export const deletePasswordEntry = (id: string) => a().deletePasswordEntry(id)
 
-// export moments
-export const exportAllMomentsData = () => a().exportAllMomentsData()
-
 // moments
 export const getMomentsPosts = () => a().getMomentsPosts()
 export const getMomentsPostById = (id: string) => a().getMomentsPostById(id)
@@ -184,10 +172,8 @@ export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promi
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
 export const cleanupOrphanAttachments = () => a().cleanupOrphanAttachments()
-export const exportBackupToDir = (dirPath: string) => a().exportBackupToDir(dirPath)
-export const exportBackupToZip = (zipPath: string) => a().exportBackupToZip(zipPath)
+export const exportBackupToZip = (zipPath: string, moduleIds?: string[]) => a().exportBackupToZip(zipPath, moduleIds)
 export const importBackupPackage = (srcPath: string) => a().importBackupPackage(srcPath)
-export const showBackupDialog = (): Promise<string | null> => a().showBackupDialog()
 // ===== Weight Tracker =====
 export const getWeightRecords = () => a().getWeightRecords()
 export const getWeightSeries = () => a().getWeightSeries()

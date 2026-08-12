@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 const isFillPopup = process.argv.includes('--fill-popup-window')
 const fillTheme = isFillPopup
@@ -6,6 +6,7 @@ const fillTheme = isFillPopup
   : 'dark'
 
 const api = {
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   minimize: () => ipcRenderer.invoke('window:minimize'),
   maximize: () => ipcRenderer.invoke('window:maximize'),
   close: () => ipcRenderer.invoke('window:close'),
@@ -114,22 +115,8 @@ const api = {
   restoreUserFromImport: (data: unknown) => ipcRenderer.invoke('user:restoreFromImport', data),
 
   // export
-  exportAllBlogData: () => ipcRenderer.invoke('export:getAllBlogData'),
-  exportAllScheduleData: () => ipcRenderer.invoke('export:getAllScheduleData'),
-  exportAllKnowledgeData: () => ipcRenderer.invoke('export:getAllKnowledgeData'),
-  exportAllPasswordVaultData: () => ipcRenderer.invoke('export:getAllPasswordVaultData'),
-  exportAllMomentsData: () => ipcRenderer.invoke('export:getAllMomentsData'),
-  exportAllData: () => ipcRenderer.invoke('export:getAllData'),
   showExportSaveDialog: (opts: unknown) => ipcRenderer.invoke('export:showSaveDialog', opts),
-  showExportOpenDirDialog: () => ipcRenderer.invoke('export:showOpenDirDialog'),
   writeExportTextFile: (filePath: string, content: string, encoding?: string) => ipcRenderer.invoke('export:writeTextFile', filePath, content, encoding),
-  copyDbFile: (destPath: string) => ipcRenderer.invoke('export:copyDbFile', destPath),
-  writeMarkdownExport: (dirPath: string, files: unknown, encoding?: string) => ipcRenderer.invoke('export:writeMarkdownExport', dirPath, files, encoding),
-  onMarkdownExportProgress: (cb: (p: unknown) => void) => {
-    const handler = (_e: unknown, p: unknown) => cb(p)
-    ipcRenderer.on('export:markdownProgress', handler)
-    return () => ipcRenderer.removeListener('export:markdownProgress', handler)
-  },
 
   // toolbox - scripts CRUD
   getToolboxScripts: () => ipcRenderer.invoke('toolbox:getScripts'),
@@ -166,10 +153,8 @@ const api = {
   deleteAttachment: (id: string) => ipcRenderer.invoke('attachment:delete', id),
   getAttachmentPath: (id: string) => ipcRenderer.invoke('attachment:getPath', id),
   cleanupOrphanAttachments: () => ipcRenderer.invoke('attachment:cleanupOrphans'),
-  exportBackupToDir: (dirPath: string) => ipcRenderer.invoke('export:backupToDir', dirPath),
-  exportBackupToZip: (zipPath: string) => ipcRenderer.invoke('export:backupToZip', zipPath),
+  exportBackupToZip: (zipPath: string, moduleIds?: string[]) => ipcRenderer.invoke('export:backupToZip', zipPath, moduleIds),
   importBackupPackage: (srcPath: string) => ipcRenderer.invoke('import:importBackupPackage', srcPath),
-  showBackupDialog: () => ipcRenderer.invoke('import:showBackupDialog'),
   // weight tracker
   getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
   getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),

@@ -31,6 +31,7 @@ export default function App() {
   const [encoding, setEncoding] = useState('UTF-8')
   const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
@@ -95,9 +96,30 @@ export default function App() {
 
   // Listen for import modal open
   useEffect(() => {
-    const handler = () => setImportModalOpen(true)
+    const handler = () => { setImportBackupPath(null); setImportModalOpen(true) }
     window.addEventListener('open-import-modal', handler)
     return () => window.removeEventListener('open-import-modal', handler)
+  }, [])
+
+  // Drag a backup zip anywhere onto the window → auto-open import and restore it
+  useEffect(() => {
+    const onDrop = (e: DragEvent) => {
+      const files = e.dataTransfer?.files
+      if (!files || files.length === 0) return
+      const zip = Array.from(files).find(f => /\.zip$/i.test(f.name))
+      if (!zip) return
+      e.preventDefault()
+      e.stopPropagation()
+      try {
+        const p = window.api.getPathForFile(zip)
+        if (p) {
+          setImportBackupPath(p)
+          setImportModalOpen(true)
+        }
+      } catch { /* ignore */ }
+    }
+    document.addEventListener('drop', onDrop, true)
+    return () => document.removeEventListener('drop', onDrop, true)
   }, [])
 
   // Listen for lockscreen toggle
@@ -218,7 +240,7 @@ export default function App() {
       </PomodoroProvider>
       <Toast />
       <LockScreen locked={locked} onUnlock={() => setLocked(false)} />
-      {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} />}
+      {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
     </div>
   )
 }

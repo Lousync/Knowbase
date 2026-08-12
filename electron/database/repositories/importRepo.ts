@@ -323,11 +323,11 @@ export function registerImportHandlers(): void {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!win) return []
     const result = await dialog.showOpenDialog(win, {
-      properties: ['openFile'],
+      properties: ['openFile', 'openDirectory'],
       filters: [
-        { name: '支持的数据文件 (.json, .db)', extensions: ['json', 'db'] },
+        { name: '支持的文件（备份包 zip / JSON / 数据库）', extensions: ['zip', 'json', 'db'] },
       ],
-      title: '导入 Knowbase 数据包'
+      title: '导入 Knowbase 数据'
     })
     return result.canceled ? [] : result.filePaths
   })
@@ -415,10 +415,10 @@ export function executeImportData(data: any): { success: boolean; imported: numb
         for (const page of data.knowledge.pages || []) {
           if (exists('knowledge_pages', page.id)) { skipped++; continue }
           db.run(
-            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, attachment_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [page.id, page.title, page.contentMd, page.contentHtml, page.categoryId,
-             page.isStarred ? 1 : 0, page.sortOrder, page.createdAt, page.updatedAt]
+             page.isStarred ? 1 : 0, page.sortOrder, page.fileType || '', page.attachmentId || null, page.createdAt, page.updatedAt]
           )
           for (const tag of page.tags || []) {
             try { db.run('INSERT INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* skip */ }
@@ -475,6 +475,39 @@ export function executeImportData(data: any): { success: boolean; imported: numb
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [post.id, post.contentMd || '', post.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), post.albumId || '',
              post.isPinned ? 1 : 0, post.createdAt, post.updatedAt]
+          )
+          imported++
+        }
+      }
+      // --- Toolbox (scripts + weight records) ---
+      if (data.toolbox) {
+        for (const script of data.toolbox.scripts || []) {
+          if (exists('toolbox_scripts', script.id)) { skipped++; continue }
+          db.run(
+            `INSERT INTO toolbox_scripts (id, name, description, content, language, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [script.id, script.name, script.description || '', script.content || '', script.language || 'plaintext', script.sortOrder || 0, script.createdAt, script.updatedAt]
+          )
+          imported++
+        }
+        for (const rec of data.toolbox.weightRecords || []) {
+          if (exists('toolbox_weight_records', rec.id)) { skipped++; continue }
+          db.run(
+            `INSERT INTO toolbox_weight_records (id, weight, date, series, note, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [rec.id, rec.weight, rec.date, rec.series || 'default', rec.note || '', rec.createdAt]
+          )
+          imported++
+        }
+      }
+      // --- Recycle bin ---
+      if (data.recycleBin) {
+        for (const item of data.recycleBin.items || []) {
+          if (exists('recycle_bin', item.id)) { skipped++; continue }
+          db.run(
+            `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [item.id, item.originalId, item.module, item.title, item.data || '', item.deletedAt || new Date().toISOString()]
           )
           imported++
         }

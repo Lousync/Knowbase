@@ -1,16 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Upload, FileJson, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles } from 'lucide-react'
-import {
-  exportAllData, exportAllBlogData, exportAllScheduleData, exportAllKnowledgeData, exportAllPasswordVaultData,
-  exportAllMomentsData, exportBackupToDir,
-  showExportSaveDialog, showExportOpenDirDialog, writeExportTextFile, copyDbFile,
-  writeMarkdownExport, onMarkdownExportProgress, getSetting,
-  getUserExportData, getUserStats, getAllSettings
-} from '../../lib/ipc'
-import type { BlogExportData, ScheduleExportData, KnowledgeExportData, PasswordVaultExportData, MomentsExportData, ExportMarkdownProgress } from '../../types'
+import { useState, useCallback } from 'react'
+import { Upload, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles } from 'lucide-react'
+import { exportBackupToZip, showExportSaveDialog } from '../../lib/ipc'
 import { SETTINGS_DEFAULTS } from '../../lib/settings'
 import { ProgressPanel } from './components/ProgressPanel'
-import { MarkdownItemSelector, SelectableItem } from './components/MarkdownItemSelector'
 
 // ---- types ----
 interface ModuleOption {
@@ -18,13 +10,6 @@ interface ModuleOption {
   label: string
   icon: React.ReactNode
   count: string
-}
-
-interface FormatOption {
-  id: 'json' | 'markdown' | 'sqlite' | 'backup'
-  label: string
-  desc: string
-  icon: React.ReactNode
 }
 
 interface ExportRecord {
@@ -42,53 +27,9 @@ const MODULES: ModuleOption[] = [
   { id: 'moments', label: '说说', icon: <Sparkles size={16} />, count: '本地时间线 + 置顶' },
 ]
 
-const FORMATS: FormatOption[] = [
-  { id: 'json', label: 'JSON 单文件', desc: '完整保留关联数据，可重新导入', icon: <FileJson size={14} /> },
-  { id: 'markdown', label: '文件集导出', desc: '每篇文章/页面按类型导出为对应文件，导出到文件夹', icon: <FileText size={14} /> },
-  { id: 'backup', label: '备份包（含附件）', desc: 'JSON 元数据 + 全部附件到文件夹，可完整还原', icon: <FileArchive size={14} /> },
-  { id: 'sqlite', label: 'SQLite 原始文件', desc: '直接复制 knowledge.db', icon: <Database size={14} /> },
-]
+const FORMAT_LABEL = '备份包（含附件）'
 
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
-
-// ---- helpers ----
-function sanitizeFilename(s: string): string {
-  return s.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').slice(0, 80) || 'untitled'
-}
-
-/** Build a relative directory path from category hierarchy, for export */
-function buildPagePath(
-  page: { title: string; categoryId?: string | null; fileType?: string },
-  categories: { id: string; name: string; parentId?: string | null }[]
-): string {
-  const parts: string[] = []
-  let catId: string | null | undefined = page.categoryId
-  while (catId) {
-    const cat = categories.find(c => c.id === catId)
-    if (!cat) break
-    parts.unshift(sanitizeFilename(cat.name))
-    catId = cat.parentId
-  }
-  if (parts.length === 0) parts.push('零散文件')
-  const ext = page.fileType || 'md'
-  const fname = sanitizeFilename(page.title || 'untitled')
-  return `knowledge/${parts.join('/')}/${fname}.${ext}`
-}
-
-function toYaml(obj: Record<string, unknown>): string {
-  let y = '---\n'
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === undefined || v === null || v === '') continue
-    if (Array.isArray(v)) {
-      if (v.length === 0) continue
-      y += `${k}:\n${v.map((i: unknown) => `  - ${JSON.stringify(i)}`).join('\n')}\n`
-    } else {
-      y += `${k}: ${JSON.stringify(v)}\n`
-    }
-  }
-  y += '---\n\n'
-  return y
-}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -96,321 +37,28 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-// ---- Export pipeline ----
 interface ExportResult {
   cancelled: boolean
   filePath?: string | null
-  dirPath?: string | null
   fileCount?: number
   totalSize?: number
 }
 
-async function runJsonExport(moduleIds: Set<string>, encoding: string = 'utf-8'): Promise<ExportResult> {
-  const isAll = moduleIds.has('blog') && moduleIds.has('schedule') && moduleIds.has('knowledge') && moduleIds.has('passwordVault') && moduleIds.has('moments')
-
+async function runBackupExport(moduleIds: string[]): Promise<ExportResult> {
   const { filePath } = await showExportSaveDialog({
-    defaultName: isAll ? `knowbase-${new Date().toISOString().slice(0, 10)}.json` : 'export.json',
-    filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    defaultName: `knowbase-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+    filters: [{ name: '备份包 (ZIP)', extensions: ['zip'] }]
   })
   if (!filePath) return { cancelled: true }
-
-  let data: any
-  if (isAll) {
-    data = await exportAllData()
-    // Attach user data + settings to full export
-    const [userData, stats, settings] = await Promise.all([
-      getUserExportData(),
-      getUserStats(),
-      getAllSettings()
-    ])
-    data.exportVersion = '1.1'
-    data.user = { ...userData, settings, stats }
-  } else {
-    const parts: Record<string, unknown> = {}
-    if (moduleIds.has('blog')) parts.blog = await exportAllBlogData()
-    if (moduleIds.has('schedule')) parts.schedule = await exportAllScheduleData()
-    if (moduleIds.has('knowledge')) parts.knowledge = await exportAllKnowledgeData()
-    if (moduleIds.has('passwordVault')) parts.passwordVault = await exportAllPasswordVaultData()
-    if (moduleIds.has('moments')) parts.moments = await exportAllMomentsData()
-    data = { exportVersion: '1.1', exportedAt: new Date().toISOString(), ...parts }
-  }
-
-  const writeResult = await writeExportTextFile(filePath, JSON.stringify(data, null, 2), encoding)
-  return { cancelled: false, filePath, fileCount: 1, totalSize: writeResult.size }
+  const r = await exportBackupToZip(filePath, moduleIds)
+  return { cancelled: false, filePath, fileCount: r.fileCount, totalSize: r.totalSize }
 }
 
-async function runMarkdownExport(
-  moduleIds: Set<string>,
-  blogIds: Set<string>,
-  knowledgeIds: Set<string>,
-  scheduleIds: Set<string>,
-  passwordIds: Set<string>,
-  momentsIds: Set<string>,
-  data: { blog: BlogExportData | null; schedule: ScheduleExportData | null; knowledge: KnowledgeExportData | null; passwordVault: PasswordVaultExportData | null; moments: MomentsExportData | null },
-  encoding: string = 'utf-8'
-): Promise<ExportResult> {
-  const { dirPath } = await showExportOpenDirDialog()
-  if (!dirPath) return { cancelled: true }
-
-  const files: { relPath: string; content: string }[] = []
-
-  // Blog → selected entries
-  if (moduleIds.has('blog') && data.blog) {
-    const { entries, tags } = data.blog
-    const selected = entries.filter(e => blogIds.has(e.id))
-
-    for (const e of selected) {
-      const [y, m] = e.date.split('-')
-      const fname = sanitizeFilename(`${e.date}-${e.title || 'untitled'}`)
-      const relPath = `blog/${y}/${m}/${fname}.md`
-
-      const frontmatter = toYaml({
-        title: e.title,
-        date: e.date,
-        tags: e.tags?.map((t: { name: string }) => t.name) || [],
-        pinned: e.isPinned || undefined
-      })
-      files.push({ relPath, content: frontmatter + e.contentMd })
-    }
-
-    if (selected.length > 0) {
-      const usedTagNames = new Set(selected.flatMap(e => e.tags?.map(t => t.name) || []))
-      const filteredTags = tags.filter(t => usedTagNames.has(t.name))
-      const tagList = filteredTags.map(t => `- **${t.name}**`).join('\n')
-
-      // Group by year → month
-      const grouped = new Map<string, Map<string, typeof selected>>()
-      for (const e of selected) {
-        const [y, m] = e.date.split('-')
-        if (!grouped.has(y)) grouped.set(y, new Map())
-        if (!grouped.get(y)!.has(m)) grouped.get(y)!.set(m, [])
-        grouped.get(y)!.get(m)!.push(e)
-      }
-
-      let blogIndex = `# 博客归档\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n## 标签列表\n${tagList || '(无)'}\n\n## 文章\n\n`
-      const sortedYears = [...grouped.keys()].sort((a, b) => +b - +a)
-      for (const y of sortedYears) {
-        blogIndex += `### ${y}年\n\n`
-        const months = grouped.get(y)!
-        const sortedMonths = [...months.keys()].sort((a, b) => +b - +a)
-        for (const m of sortedMonths) {
-          blogIndex += `#### ${+m}月\n\n`
-          for (const e of months.get(m)!) {
-            const fname = sanitizeFilename(`${e.date}-${e.title || 'untitled'}`)
-            blogIndex += `- **${e.date.slice(8)}日** — [${e.title || '无标题'}](blog/${y}/${m}/${fname}.md)${e.isPinned ? ' 📌' : ''}\n`
-          }
-          blogIndex += '\n'
-        }
-      }
-      blogIndex += `共 ${selected.length} 篇文章\n`
-      files.push({ relPath: 'blog/index.md', content: blogIndex })
-    }
-  }
-
-  // Knowledge → selected pages
-  if (moduleIds.has('knowledge') && data.knowledge) {
-    const { categories, pages: allPages, tags } = data.knowledge
-    const selected = allPages.filter(p => knowledgeIds.has(p.id))
-
-    for (const p of selected) {
-      const cat = categories.find(c => c.id === p.categoryId)
-      const relPath = buildPagePath(p, categories as any)
-
-      const frontmatter = toYaml({
-        title: p.title,
-        category: cat?.name || undefined,
-        starred: p.isStarred || undefined,
-        tags: p.tags?.map((t: { name: string }) => t.name) || [],
-        backlinks: p.backlinks || [],
-        updated: p.updatedAt?.slice(0, 10)
-      })
-      files.push({ relPath, content: frontmatter + p.contentMd })
-    }
-
-    if (selected.length > 0) {
-      const usedTagNames = new Set(selected.flatMap(p => p.tags?.map(t => t.name) || []))
-      const filteredTags = tags.filter(t => usedTagNames.has(t.name))
-
-      // Helper: get display filename for a page (matches buildPagePath)
-      function pageLink(p: typeof selected[0]): string {
-        const fname = sanitizeFilename(p.title || 'untitled')
-        const ext = p.fileType || 'md'
-        return `${fname}.${ext}`
-      }
-
-      // Build directory tree index
-      function renderDirTree(parentId: string | null, depth: number): string {
-        const cats = categories.filter(c => c.parentId === parentId)
-        if (cats.length === 0) return ''
-        let s = ''
-        for (const c of cats) {
-          const dirName = sanitizeFilename(c.name)
-          s += `${'  '.repeat(depth)}- 📁 **${c.name}**\n`
-          const catPages = selected.filter(p => p.categoryId === c.id)
-          for (const p of catPages) {
-            const link = pageLink(p)
-            s += `${'  '.repeat(depth + 1)}- [${p.title || '无标题'}](${dirName}/${link})${p.isStarred ? ' ⭐' : ''}\n`
-          }
-          s += renderDirTree(c.id, depth + 1)
-        }
-        return s
-      }
-
-      let knowledgeIndex = `# 知识库\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n## 目录结构\n\n`
-      knowledgeIndex += renderDirTree(null, 0)
-
-      const uncategorized = selected.filter(p => !p.categoryId)
-      if (uncategorized.length > 0) {
-        knowledgeIndex += `\n## 零散文件\n\n`
-        for (const p of uncategorized) {
-          const link = pageLink(p)
-          knowledgeIndex += `- [${p.title || '无标题'}](零散文件/${link})${p.isStarred ? ' ⭐' : ''}\n`
-        }
-      }
-
-      knowledgeIndex += `\n## 标签\n\n`
-      for (const t of filteredTags) knowledgeIndex += `- **${t.name}**\n`
-      knowledgeIndex += `\n共 ${selected.length} 个页面\n`
-      files.push({ relPath: 'knowledge/index.md', content: knowledgeIndex })
-    }
-  }
-
-  // Schedule → selected todos
-  if (moduleIds.has('schedule') && data.schedule) {
-    const { todos, tags } = data.schedule
-    const selected = todos.filter(t => scheduleIds.has(t.id))
-
-    if (selected.length > 0) {
-      const QUAD_NAMES: Record<number, string> = { 0: '紧急重要', 1: '重要不紧急', 2: '紧急不重要', 3: '不重要不紧急' }
-      let md = `# 日程数据\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n`
-      md += `| 日期 | 标题 | 类型 | 状态 | 四象限 | 标签 | 截止时间 |\n`
-      md += `|------|------|------|------|--------|------|----------|\n`
-      for (const t of selected) {
-        md += `| ${t.date} | ${t.title} | ${t.taskType === 'deadline' ? '截止' : '计划'} | ${t.status === 'done' ? '✅' : '⏳'} | ${QUAD_NAMES[t.quadrant] || t.quadrant} | ${t.tag?.name || '-'} | ${t.time || '-'} |\n`
-      }
-      md += `\n共 ${selected.length} 条待办\n`
-
-      const usedTagNames = new Set(selected.map(t => t.tag?.name).filter(Boolean) as string[])
-      const filteredTags = tags.filter(t => usedTagNames.has(t.name))
-      if (filteredTags.length > 0) {
-        md += `\n## 标签\n\n`
-        for (const t of filteredTags) md += `- **${t.name}**\n`
-      }
-
-      files.push({ relPath: 'schedule/todos.md', content: md })
-    }
-  }
-
-  // Password Vault → markdown table
-  if (moduleIds.has('passwordVault') && data.passwordVault) {
-    const selected = data.passwordVault.entries.filter(e => passwordIds.has(e.id))
-    if (selected.length > 0) {
-      let md = `# 密码本\n\n> ⚠️ 此文件包含明文密码，请妥善保管！\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n`
-      const esc = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ')
-      md += `| 名称 | 账号 | 用户名 | 密码 | 网址 | 备注 |\n`
-      md += `|------|------|--------|------|------|------|\n`
-      for (const e of selected) {
-        md += `| ${esc(e.title) || '-'} | ${esc(e.account) || '-'} | ${esc(e.username) || '-'} | ${esc(e.password)} | ${esc(e.url) || '-'} | ${esc(e.notes) || '-'} |\n`
-      }
-      md += `\n共 ${selected.length} 条密码\n`
-      files.push({ relPath: 'password-vault/passwords.md', content: md })
-    }
-  }
-
-  // Moments → markdown timeline
-  if (moduleIds.has('moments') && data.moments) {
-    const moments = data.moments.posts.filter(p => momentsIds.has(p.id))
-    if (moments.length > 0) {
-      let md = `# 说说\n\n导出时间：${new Date().toISOString().slice(0, 10)}\n\n`
-      const sorted = [...moments].sort((a, b) => {
-        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
-        return b.createdAt.localeCompare(a.createdAt)
-      })
-      for (const post of sorted) {
-        md += `## ${post.createdAt.slice(0, 19).replace('T', ' ')}${post.isPinned ? ' · 置顶' : ''}\n\n`
-        if (post.tags && post.tags.length > 0) {
-          md += `标签：${post.tags.map(t => `#${t}`).join(' ')}\n\n`
-        }
-        for (const img of post.imageDataUrls || []) {
-          md += `![说说图片](${img})\n\n`
-        }
-        md += `${post.contentMd || post.contentHtml || ''}\n\n`
-      }
-      md += `共 ${moments.length} 条说说\n`
-      files.push({ relPath: 'moments/timeline.md', content: md })
-    }
-  }
-
-  const writeResult = await writeMarkdownExport(dirPath, files, encoding)
-  return { cancelled: false, dirPath, fileCount: writeResult.fileCount, totalSize: writeResult.totalSize }
-}
-
-async function runSqliteExport(): Promise<ExportResult> {
-  const { filePath } = await showExportSaveDialog({
-    defaultName: `knowbase-${new Date().toISOString().slice(0, 10)}.db`,
-    filters: [{ name: 'SQLite Database', extensions: ['db'] }]
-  })
-  if (!filePath) return { cancelled: true }
-
-  const copyResult = await copyDbFile(filePath)
-  return { cancelled: false, filePath, fileCount: 1, totalSize: copyResult.size }
-}
-
-async function runBackupExport(): Promise<ExportResult> {
-  const { dirPath } = await showExportOpenDirDialog()
-  if (!dirPath) return { cancelled: true }
-  const r = await exportBackupToDir(dirPath)
-  return { cancelled: false, dirPath, fileCount: r.fileCount, totalSize: r.totalSize }
-}
-
-// ---- Component ----
 export function ExportModule() {
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set(['blog', 'schedule', 'knowledge', 'moments']))
-  const [format, setFormat] = useState<string>('json')
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [statusMessage, setStatusMessage] = useState('')
   const [history, setHistory] = useState<ExportRecord[]>([])
-
-  // Markdown item selection state
-  const [markdownData, setMarkdownData] = useState<{
-    blog: BlogExportData | null
-    schedule: ScheduleExportData | null
-    knowledge: KnowledgeExportData | null
-    passwordVault: PasswordVaultExportData | null
-    moments: MomentsExportData | null
-  }>({ blog: null, schedule: null, knowledge: null, passwordVault: null, moments: null })
-  const [dataLoading, setDataLoading] = useState(false)
-  const [selectedBlogIds, setSelectedBlogIds] = useState<Set<string>>(new Set())
-  const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(new Set())
-  const [selectedScheduleIds, setSelectedScheduleIds] = useState<Set<string>>(new Set())
-  const [selectedPasswordIds, setSelectedPasswordIds] = useState<Set<string>>(new Set())
-  const [selectedMomentsIds, setSelectedMomentsIds] = useState<Set<string>>(new Set())
-
-  // Progress state
-  const [progress, setProgress] = useState<ExportMarkdownProgress | null>(null)
-
-  // Encoding
-  const [exportEncoding, setExportEncoding] = useState('utf-8')
-  useEffect(() => {
-    getSetting('exportEncoding').then(v => {
-      if (typeof v === 'string') setExportEncoding(v)
-    })
-  }, [])
-
-  const isSqlite = format === 'sqlite'
-  const isBackup = format === 'backup'
-
-  const canExport = isSqlite || isBackup
-    ? true
-    : format === 'markdown'
-      ? (
-          (selectedModules.has('blog') && selectedBlogIds.size > 0) ||
-          (selectedModules.has('schedule') && selectedScheduleIds.size > 0) ||
-          (selectedModules.has('knowledge') && selectedKnowledgeIds.size > 0) ||
-          (selectedModules.has('passwordVault') && selectedPasswordIds.size > 0) ||
-          (selectedModules.has('moments') && selectedMomentsIds.size > 0)
-        )
-      : selectedModules.size > 0
 
   const allChecked = selectedModules.size === MODULES.length
 
@@ -420,294 +68,48 @@ export function ExportModule() {
   }
 
   const toggleModule = (id: string) => {
-    const next = new Set(selectedModules)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    setSelectedModules(next)
+    setSelectedModules(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
 
-  // ---- Markdown data fetching ----
-  useEffect(() => {
-    if (format !== 'markdown') return
-
-    const missingBlog = selectedModules.has('blog') && !markdownData.blog
-    const missingSchedule = selectedModules.has('schedule') && !markdownData.schedule
-    const missingKnowledge = selectedModules.has('knowledge') && !markdownData.knowledge
-    const missingPwd = selectedModules.has('passwordVault') && !markdownData.passwordVault
-    const missingMoments = selectedModules.has('moments') && !markdownData.moments
-
-    if (!missingBlog && !missingSchedule && !missingKnowledge && !missingPwd && !missingMoments) return
-
-    setDataLoading(true)
-    const tasks: Promise<void>[] = []
-
-    if (missingBlog) {
-      tasks.push(
-        exportAllBlogData().then(d => {
-          setMarkdownData(prev => ({ ...prev, blog: d }))
-          setSelectedBlogIds(new Set(d.entries.map(e => e.id)))
-        })
-      )
-    }
-    if (missingSchedule) {
-      tasks.push(
-        exportAllScheduleData().then(d => {
-          setMarkdownData(prev => ({ ...prev, schedule: d }))
-          setSelectedScheduleIds(new Set(d.todos.map(t => t.id)))
-        })
-      )
-    }
-    if (missingKnowledge) {
-      tasks.push(
-        exportAllKnowledgeData().then(d => {
-          setMarkdownData(prev => ({ ...prev, knowledge: d }))
-          setSelectedKnowledgeIds(new Set(d.pages.map(p => p.id)))
-        })
-      )
-    }
-    if (missingPwd) {
-      tasks.push(
-        exportAllPasswordVaultData().then(d => {
-          setMarkdownData(prev => ({ ...prev, passwordVault: d }))
-          setSelectedPasswordIds(new Set(d.entries.map(e => e.id)))
-        })
-      )
-    }
-    if (missingMoments) {
-      tasks.push(
-        exportAllMomentsData().then(d => {
-          setMarkdownData(prev => ({ ...prev, moments: d }))
-          setSelectedMomentsIds(new Set(d.posts.map(p => p.id)))
-        })
-      )
-    }
-
-    Promise.all(tasks).finally(() => setDataLoading(false))
-  }, [format, selectedModules, markdownData.blog, markdownData.schedule, markdownData.knowledge, markdownData.passwordVault, markdownData.moments])
-
-  // Clear markdown state when switching away
-  useEffect(() => {
-    if (format !== 'markdown') {
-      setMarkdownData({ blog: null, schedule: null, knowledge: null, passwordVault: null, moments: null })
-      setSelectedBlogIds(new Set())
-      setSelectedKnowledgeIds(new Set())
-      setSelectedScheduleIds(new Set())
-      setSelectedPasswordIds(new Set())
-      setSelectedMomentsIds(new Set())
-      setProgress(null)
-    }
-  }, [format])
-
-  // ---- Item selection helpers ----
-  const toggleBlogItem = (id: string) => {
-    setSelectedBlogIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  const selectAllBlog = () => setSelectedBlogIds(new Set(markdownData.blog?.entries.map(e => e.id) || []))
-  const deselectAllBlog = () => setSelectedBlogIds(new Set())
-
-  const toggleKnowledgeItem = (id: string) => {
-    setSelectedKnowledgeIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  const selectAllKnowledge = () => setSelectedKnowledgeIds(new Set(markdownData.knowledge?.pages.map(p => p.id) || []))
-  const deselectAllKnowledge = () => setSelectedKnowledgeIds(new Set())
-
-  const toggleScheduleItem = (id: string) => {
-    setSelectedScheduleIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  const selectAllSchedule = () => setSelectedScheduleIds(new Set(markdownData.schedule?.todos.map(t => t.id) || []))
-  const deselectAllSchedule = () => setSelectedScheduleIds(new Set())
-
-  const togglePasswordVaultItem = (id: string) => {
-    setSelectedPasswordIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  const selectAllPasswordVault = () => setSelectedPasswordIds(new Set(markdownData.passwordVault?.entries.map(e => e.id) || []))
-  const deselectAllPasswordVault = () => setSelectedPasswordIds(new Set())
-
-  const toggleMomentsItem = (id: string) => {
-    setSelectedMomentsIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  const selectAllMoments = () => setSelectedMomentsIds(new Set(markdownData.moments?.posts.map(p => p.id) || []))
-  const deselectAllMoments = () => setSelectedMomentsIds(new Set())
-
-  // ---- Item lists for selector ----
-  // Blog: year → month → entries tree
-  const blogSelectableItems: SelectableItem[] = (() => {
-    const entries = markdownData.blog?.entries || []
-    const ymap = new Map<string, Map<string, typeof entries>>()
-    for (const e of entries) {
-      const [y, m] = e.date.split('-')
-      if (!ymap.has(y)) ymap.set(y, new Map())
-      if (!ymap.get(y)!.has(m)) ymap.get(y)!.set(m, [])
-      ymap.get(y)!.get(m)!.push(e)
-    }
-    const years = [...ymap.keys()].sort((a, b) => +b - +a)
-    return years.map(y => ({
-      id: `y:${y}`,
-      title: `${y}年`,
-      subtitle: '',
-      isGroup: true,
-      children: [...ymap.get(y)!.keys()].sort((a, b) => +b - +a).map(m => ({
-        id: `ym:${y}-${m}`,
-        title: `${+m}月`,
-        subtitle: '',
-        isGroup: true,
-        children: ymap.get(y)!.get(m)!.map(e => ({
-          id: e.id,
-          title: e.title || '无标题',
-          subtitle: `${e.date.slice(8)}日${e.isPinned ? ' · 📌置顶' : ''}${e.tags?.length ? ' · ' + e.tags.map(t => t.name).join(', ') : ''}`
-        }))
-      }))
-    }))
-  })()
-
-  // Knowledge: notebook → chapter → pages tree
-  const knowledgeSelectableItems: SelectableItem[] = (() => {
-    const pages = markdownData.knowledge?.pages || []
-    const categories = markdownData.knowledge?.categories || []
-
-    // Build children map from categories
-    const childrenMap = new Map<string | null, typeof categories>()
-    for (const c of categories) {
-      const pid = c.parentId || null
-      if (!childrenMap.has(pid)) childrenMap.set(pid, [])
-      childrenMap.get(pid)!.push(c)
-    }
-
-    // Pages by categoryId
-    const pagesByCat = new Map<string | null, typeof pages>()
-    for (const p of pages) {
-      const cid = p.categoryId || null
-      if (!pagesByCat.has(cid)) pagesByCat.set(cid, [])
-      pagesByCat.get(cid)!.push(p)
-    }
-
-    function buildCatTree(parentId: string | null): SelectableItem[] {
-      const cats = childrenMap.get(parentId) || []
-      const result: SelectableItem[] = []
-
-      for (const cat of cats) {
-        const childCats = childrenMap.get(cat.id) || []
-        const catPages = pagesByCat.get(cat.id) || []
-        const children: SelectableItem[] = [
-          ...buildCatTree(cat.id),
-          ...catPages.map(p => ({
-            id: p.id,
-            title: p.title || '无标题',
-            subtitle: (p as any).fileType?.toUpperCase() || 'MD'
-          }))
-        ]
-        result.push({
-          id: cat.id,
-          title: cat.name,
-          subtitle: cat.categoryType === 'notebook' ? '笔记本' : `${childCats.length} 章节 · ${catPages.length} 页`,
-          isGroup: true,
-          children: children.length > 0 ? children : undefined
-        })
-      }
-      return result
-    }
-
-    const tree = buildCatTree(null)
-
-    // Uncategorized pages
-    const loose = pagesByCat.get(null) || []
-    if (loose.length > 0) {
-      tree.push({
-        id: '__loose',
-        title: '零散文件',
-        subtitle: `${loose.length} 页`,
-        isGroup: true,
-        children: loose.map(p => ({
-          id: p.id,
-          title: p.title || '无标题',
-          subtitle: (p as any).fileType?.toUpperCase() || 'MD'
-        }))
-      })
-    }
-
-    return tree
-  })()
-
-  const scheduleSelectableItems: SelectableItem[] = (markdownData.schedule?.todos || []).map(t => ({
-    id: t.id,
-    title: t.title,
-    subtitle: `${t.date}  ${t.taskType === 'deadline' ? '截止日' : '计划'}  ${t.status === 'done' ? '已完成' : '待办'}`
-  }))
-
-  const passwordVaultSelectableItems: SelectableItem[] = (markdownData.passwordVault?.entries || []).map(e => ({
-    id: e.id,
-    title: e.title || '未命名',
-    subtitle: `${e.username || '无用户名'}${e.url ? ' · ' + e.url : ''}`
-  }))
-
-  const momentsSelectableItems: SelectableItem[] = (markdownData.moments?.posts || []).map(p => ({
-    id: p.id,
-    title: p.contentMd.slice(0, 24).replace(/\s+/g, ' ') || '无标题说说',
-    subtitle: `${p.createdAt.slice(0, 16).replace('T', ' ')}${p.isPinned ? ' · 置顶' : ''}`
-  }))
-
-  // ---- Export action ----
   const handleExport = useCallback(async () => {
-    if (!canExport) return
+    if (selectedModules.size === 0 || status === 'loading') return
     setStatus('loading')
-    setStatusMessage('正在导出...')
-    setProgress(null)
-
+    setStatusMessage('正在打包数据与附件...')
     try {
-      let result: ExportResult
-
-      if (format === 'sqlite') {
-        setProgress({ current: 0, total: 1, currentFile: '', phase: '正在复制数据库文件...' })
-        result = await runSqliteExport()
-      } else if (format === 'backup') {
-        setProgress({ current: 0, total: 1, currentFile: '', phase: '正在打包元数据与附件...' })
-        result = await runBackupExport()
-      } else if (format === 'markdown') {
-        const unsub = onMarkdownExportProgress((p) => setProgress(p))
-        try {
-          result = await runMarkdownExport(
-            selectedModules, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, selectedPasswordIds, selectedMomentsIds, markdownData, exportEncoding
-          )
-        } finally {
-          unsub()
-        }
-      } else {
-        setProgress({ current: 0, total: 1, currentFile: '', phase: '正在生成 JSON 文件...' })
-        result = await runJsonExport(selectedModules, exportEncoding)
-      }
-
-      setProgress(null)
-
+      const result = await runBackupExport([...selectedModules])
       if (result.cancelled) {
         setStatus('idle')
         setStatusMessage('')
         return
       }
 
-      const dest = result.filePath || result.dirPath || ''
       const sizeText = result.totalSize != null ? formatFileSize(result.totalSize) : ''
       const countText = result.fileCount != null && result.fileCount > 1 ? `${result.fileCount} 个文件` : ''
       const detail = [countText, sizeText].filter(Boolean).join('，')
 
       setStatus('success')
-      setStatusMessage(`导出成功${detail ? `（${detail}）` : ''}：${dest.slice(-40)}`)
+      setStatusMessage(`导出成功${detail ? `（${detail}）` : ''}：${(result.filePath || '').slice(-40)}`)
 
-      // Add to history
-      const moduleLabel = isBackup ? '备份包（含附件）' : isSqlite ? '原始数据库' : selectedModules.size === MODULES.length ? '全部模块' : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('+')
+      const moduleLabel = selectedModules.size === MODULES.length
+        ? '全部模块'
+        : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('+')
       setHistory(prev => [{
         date: new Date().toISOString().slice(0, 10),
         modules: moduleLabel,
-        format: FORMATS.find(f => f.id === format)?.label || format,
+        format: FORMAT_LABEL,
         success: true
       }, ...prev.slice(0, 9)])
 
-      // Auto-clear success after configurable delay
       setTimeout(() => { setStatus('idle'); setStatusMessage('') }, SETTINGS_DEFAULTS.exportStatusClearMs)
     } catch (e: unknown) {
       setStatus('error')
       setStatusMessage(`导出失败：${e instanceof Error ? e.message : String(e)}`)
-      setProgress(null)
     }
-  }, [selectedModules, format, canExport, isSqlite, selectedBlogIds, selectedKnowledgeIds, selectedScheduleIds, selectedPasswordIds, selectedMomentsIds, markdownData, exportEncoding])
+  }, [selectedModules, status])
 
   const statusIcon = status === 'loading' ? <Loader2 size={16} className="animate-spin" />
     : status === 'success' ? <Check size={16} />
@@ -727,123 +129,47 @@ export function ExportModule() {
 
         {/* Module checkboxes */}
         <div className="px-3 py-3 border-b border-[var(--border-color)]">
-          <label className={`flex items-center gap-2 py-1 text-[12px] cursor-pointer transition-colors ${isSqlite ? 'text-[var(--text-disabled)] cursor-not-allowed' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
-            <input type="checkbox" checked={allChecked && !isSqlite} onChange={toggleAll} disabled={isSqlite} className="accent-[var(--accent)]" />
+          <label className="flex items-center gap-2 py-1 text-[12px] cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+            <input type="checkbox" checked={allChecked} onChange={toggleAll} className="accent-[var(--accent)]" />
             全选
           </label>
           <div className="my-1 border-t border-[var(--bg-tertiary)]" />
           {MODULES.map(m => (
-            <label key={m.id} className={`flex items-center gap-2 py-1.5 text-[12px] cursor-pointer transition-colors ${isSqlite ? 'text-[var(--text-disabled)] cursor-not-allowed' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
-              <input type="checkbox" checked={selectedModules.has(m.id)} onChange={() => toggleModule(m.id)} disabled={isSqlite} className="accent-[var(--accent)]" />
-              <span className={isSqlite ? 'text-[var(--text-disabled)]' : 'text-[var(--text-secondary)]'}>{m.icon}</span>
+            <label key={m.id} className="flex items-center gap-2 py-1.5 text-[12px] cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+              <input type="checkbox" checked={selectedModules.has(m.id)} onChange={() => toggleModule(m.id)} className="accent-[var(--accent)]" />
+              <span className="text-[var(--text-secondary)]">{m.icon}</span>
               <div className="flex flex-col">
-                <span className={isSqlite ? 'text-[var(--text-disabled)]' : 'text-[var(--text-primary)] text-[13px]'}>{m.label}</span>
+                <span className="text-[var(--text-primary)] text-[13px]">{m.label}</span>
                 <span className="text-[10px] text-[var(--text-muted)]">{m.count}</span>
               </div>
             </label>
           ))}
-          {isSqlite && (
-            <p className="text-[10px] text-[var(--text-disabled)] mt-2">SQLite 格式导出完整数据库，无需选择模块</p>
-          )}
-        </div>
-
-        {/* Format radio */}
-        <div className="px-3 py-3">
-          <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">导出格式</div>
-          {FORMATS.map(f => (
-            <label
-              key={f.id}
-              onClick={() => setFormat(f.id)}
-              className={`flex items-start gap-2 py-2 px-2 rounded cursor-pointer transition-colors ${
-                format === f.id ? 'bg-[var(--bg-selected)]' : 'hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                format === f.id ? 'border-[var(--accent)]' : 'border-[#6a6a6a]'
-              }`}>
-                {format === f.id && <div className="w-2 h-2 rounded-full bg-[var(--accent)]" />}
-              </div>
-              <div>
-                <div className="text-[12px] text-[var(--text-primary)] flex items-center gap-1.5">
-                  <span className="text-[var(--text-muted)]">{f.icon}</span>
-                  {f.label}
-                </div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{f.desc}</div>
-              </div>
-            </label>
-          ))}
+          <p className="text-[10px] text-[var(--text-disabled)] mt-3 leading-relaxed">
+            勾选模块后导出该模块全部数据与附件<br />
+            工具箱、体重记录与回收站始终包含在备份内
+          </p>
         </div>
       </div>
 
       {/* Right: Content area */}
       <div className="flex-1 flex flex-col">
         <div className="flex-1 overflow-y-auto">
-          {format === 'markdown' && status !== 'loading' ? (
-            /* Markdown item selector */
-            <div className="px-6 py-4">
-              <MarkdownItemSelector
-                blogItems={blogSelectableItems}
-                selectedBlogIds={selectedBlogIds}
-                onBlogToggle={toggleBlogItem}
-                onBlogSelectAll={selectAllBlog}
-                onBlogDeselectAll={deselectAllBlog}
-                blogLoading={dataLoading && selectedModules.has('blog') && !markdownData.blog}
-
-                knowledgeItems={knowledgeSelectableItems}
-                selectedKnowledgeIds={selectedKnowledgeIds}
-                onKnowledgeToggle={toggleKnowledgeItem}
-                onKnowledgeSelectAll={selectAllKnowledge}
-                onKnowledgeDeselectAll={deselectAllKnowledge}
-                knowledgeLoading={dataLoading && selectedModules.has('knowledge') && !markdownData.knowledge}
-
-                scheduleItems={scheduleSelectableItems}
-                selectedScheduleIds={selectedScheduleIds}
-                onScheduleToggle={toggleScheduleItem}
-                onScheduleSelectAll={selectAllSchedule}
-                onScheduleDeselectAll={deselectAllSchedule}
-                scheduleLoading={dataLoading && selectedModules.has('schedule') && !markdownData.schedule}
-
-                passwordVaultItems={passwordVaultSelectableItems}
-                selectedPasswordIds={selectedPasswordIds}
-                onPasswordToggle={togglePasswordVaultItem}
-                onPasswordSelectAll={selectAllPasswordVault}
-                onPasswordDeselectAll={deselectAllPasswordVault}
-                passwordLoading={dataLoading && selectedModules.has('passwordVault') && !markdownData.passwordVault}
-
-                momentsItems={momentsSelectableItems}
-                selectedMomentsIds={selectedMomentsIds}
-                onMomentsToggle={toggleMomentsItem}
-                onMomentsSelectAll={selectAllMoments}
-                onMomentsDeselectAll={deselectAllMoments}
-                momentsLoading={dataLoading && selectedModules.has('moments') && !markdownData.moments}
-
-                enabledModules={selectedModules}
-              />
-            </div>
-          ) : status === 'loading' ? (
-            /* Progress panel */
+          {status === 'loading' ? (
             <div className="h-full flex flex-col items-center justify-center gap-6 px-8">
-              <ProgressPanel progress={progress} format={format} />
+              <ProgressPanel progress={null} format="backup" />
             </div>
           ) : (
-            /* Default: preview card */
             <div className="h-full flex flex-col items-center justify-center gap-6 px-8">
               <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-6 w-full max-w-sm">
                 <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-3">导出预览</div>
                 <div className="space-y-2 text-[13px]">
                   <div className="flex justify-between">
                     <span className="text-[var(--text-secondary)]">选中模块</span>
-                    <span className="text-[var(--text-primary)]">
-                      {isSqlite ? '数据库完整导出' : `${selectedModules.size} / ${MODULES.length}`}
+                    <span className="text-[var(--text-primary)] text-right max-w-[60%]">
+                      {selectedModules.size === MODULES.length
+                        ? '全部模块'
+                        : MODULES.filter(m => selectedModules.has(m.id)).map(m => m.label).join('、') || '未选择'}
                     </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[var(--text-secondary)]">导出格式</span>
-                    <span className="text-[var(--text-primary)]">{FORMATS.find(f => f.id === format)?.label}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[var(--text-secondary)]">输出方式</span>
-                    <span className="text-[var(--text-primary)]">{format === 'markdown' ? '选择文件夹' : '选择保存位置'}</span>
                   </div>
                 </div>
               </div>
@@ -854,7 +180,7 @@ export function ExportModule() {
         {/* Export button + status (sticky footer area) */}
         <div className="flex flex-col items-center gap-3 py-4 px-8 border-t border-[var(--border-color)]">
           <button
-            disabled={!canExport || status === 'loading'}
+            disabled={selectedModules.size === 0 || status === 'loading'}
             onClick={handleExport}
             className="flex items-center gap-2 px-8 py-3 bg-[var(--accent)] text-white text-[14px] font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >

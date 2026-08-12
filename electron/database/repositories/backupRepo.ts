@@ -1,6 +1,6 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import { join } from 'path'
-import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, statSync } from 'fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'fs'
 import { getAttachmentsDir, getDatabase, saveToDisk } from '../connection'
 import { buildAllData } from './exportRepo'
 import { executeImportData } from './importRepo'
@@ -31,47 +31,32 @@ function queryAll<T>(sql: string, params: unknown[] = []): T[] {
   return rows
 }
 
-function collectAttachments(): AttachmentRow[] {
-  return queryAll<AttachmentRow>('SELECT * FROM attachments WHERE trashed = 0')
+const MODULE_OWNER_TYPES: Record<string, string[]> = {
+  knowledge: ['knowledge_page'],
+  moments: ['moments_post'],
 }
 
-function copyAttachmentFiles(rows: AttachmentRow[], srcDir: string, destDir: string): void {
-  for (const r of rows) {
-    for (const rel of [r.file_path, r.thumb_path]) {
-      if (!rel) continue
-      const src = join(srcDir, rel)
-      if (!existsSync(src)) continue
-      const dest = join(destDir, 'attachments', rel)
-      mkdirSync(join(dest, '..'), { recursive: true })
-      copyFileSync(src, dest)
-    }
+function collectAttachments(moduleIds?: string[]): AttachmentRow[] {
+  if (!moduleIds || moduleIds.length === 0) {
+    return queryAll<AttachmentRow>('SELECT * FROM attachments WHERE trashed = 0')
   }
+  const ownerTypes = new Set<string>(['user_profile'])
+  for (const m of moduleIds) {
+    for (const t of MODULE_OWNER_TYPES[m] || []) ownerTypes.add(t)
+  }
+  if (ownerTypes.size === 0) return []
+  const placeholders = [...ownerTypes].map(() => '?').join(',')
+  return queryAll<AttachmentRow>(
+    `SELECT * FROM attachments WHERE trashed = 0 AND owner_type IN (${placeholders})`,
+    [...ownerTypes]
+  )
 }
 
 export function registerBackupHandlers(): void {
-  // 目录包：export.json + attachments/
-  ipcMain.handle('export:backupToDir', (_e, dirPath: string) => {
-    const data: Record<string, unknown> = buildAllData() as unknown as Record<string, unknown>
-    const rows = collectAttachments()
-    data._attachments = rows
-    mkdirSync(join(dirPath, 'attachments'), { recursive: true })
-    writeFileSync(join(dirPath, 'export.json'), JSON.stringify(data, null, 2))
-    copyAttachmentFiles(rows, getAttachmentsDir(), dirPath)
-    let totalSize = statSync(join(dirPath, 'export.json')).size
-    for (const r of rows) {
-      for (const rel of [r.file_path, r.thumb_path]) {
-        if (!rel) continue
-        const f = join(dirPath, 'attachments', rel)
-        if (existsSync(f)) totalSize += statSync(f).size
-      }
-    }
-    return { dirPath, fileCount: rows.length + 1, totalSize }
-  })
-
   // 单文件 zip：export.json + attachments/ 压缩为一个包
-  ipcMain.handle('export:backupToZip', (_e, zipPath: string) => {
-    const data: Record<string, unknown> = buildAllData() as unknown as Record<string, unknown>
-    const rows = collectAttachments()
+  ipcMain.handle('export:backupToZip', (_e, zipPath: string, moduleIds?: string[]) => {
+    const data: Record<string, unknown> = buildAllData(moduleIds) as unknown as Record<string, unknown>
+    const rows = collectAttachments(moduleIds)
     data._attachments = rows
     const entries: ZipEntry[] = [{ path: 'export.json', data: Buffer.from(JSON.stringify(data, null, 2), 'utf-8') }]
     let totalSize = entries[0].data.length
@@ -93,14 +78,25 @@ export function registerBackupHandlers(): void {
   ipcMain.handle('import:importBackupPackage', (_e, srcPath: string) => {
     const isDir = existsSync(srcPath) && statSync(srcPath).isDirectory()
     let files: Map<string, Buffer> | null = null
+    let zipPrefix = ''
     let jsonBuf: Buffer
     if (isDir) {
       jsonBuf = readFileSync(join(srcPath, 'export.json'))
     } else {
       files = unzipBuffer(readFileSync(srcPath))
-      const j = files.get('export.json')
-      if (!j) throw new Error('备份包中缺少 export.json')
-      jsonBuf = j
+      // 兼容带顶层目录的压缩包（例如用系统压缩工具打包的导出文件夹）
+      let exportEntry: string | null = files.has('export.json') ? 'export.json' : null
+      if (!exportEntry) {
+        for (const p of files.keys()) {
+          if (p.endsWith('/export.json') || p.endsWith('\\export.json')) {
+            exportEntry = p
+            break
+          }
+        }
+      }
+      if (!exportEntry) throw new Error('备份包中缺少 export.json，请选择本应用导出的备份包（zip），或解压后选择包含 export.json 的文件夹')
+      jsonBuf = files.get(exportEntry)!
+      zipPrefix = exportEntry.slice(0, -'export.json'.length).replace(/\\/g, '/')
     }
     const data = JSON.parse(jsonBuf.toString('utf-8')) as Record<string, unknown>
     const readAtt = (rel: string): Buffer | null => {
@@ -108,7 +104,7 @@ export function registerBackupHandlers(): void {
         const p = join(srcPath, 'attachments', rel)
         return existsSync(p) ? readFileSync(p) : null
       }
-      return files?.get(`attachments/${rel.replace(/\\/g, '/')}`) || null
+      return files?.get(`${zipPrefix}attachments/${rel.replace(/\\/g, '/')}`) || null
     }
 
     // 恢复附件文件与记录（幂等）
@@ -140,6 +136,15 @@ export function registerBackupHandlers(): void {
       }
     }
 
+    // 恢复用户资料（用户名 / 锁屏密码 / 头像路径）
+    const u = data.user as { username?: string; avatarPath?: string; passwordHash?: string } | null | undefined
+    if (u && (u.username !== undefined || u.avatarPath !== undefined || u.passwordHash !== undefined)) {
+      db.run(
+        `UPDATE user_profile SET username = ?, password_hash = ?, avatar_path = ?, updated_at = ? WHERE id = 'default'`,
+        [u.username ?? '', u.passwordHash ?? '', u.avatarPath ?? '', new Date().toISOString()]
+      )
+    }
+
     // 业务数据合并导入
     const result = executeImportData(data)
     saveToDisk()
@@ -152,14 +157,4 @@ export function registerBackupHandlers(): void {
     }
   })
 
-  ipcMain.handle('import:showBackupDialog', async () => {
-    const win = BrowserWindow.getFocusedWindow()
-    if (!win) return null
-    const r = await dialog.showOpenDialog(win, {
-      title: '选择备份包（备份文件夹或 .zip）',
-      properties: ['openFile', 'openDirectory'],
-      filters: [{ name: '备份包', extensions: ['zip'] }],
-    })
-    return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
-  })
 }
