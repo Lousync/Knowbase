@@ -16,9 +16,10 @@ interface PageTabBarProps {
   onSelectTab: (pageId: string) => void
   onCloseTab: (pageId: string) => void
   onReorder: (newOrder: string[]) => void
+  rightActions?: React.ReactNode
 }
 
-export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPageIds, onSelectTab, onCloseTab, onReorder }: PageTabBarProps) {
+export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPageIds, onSelectTab, onCloseTab, onReorder, rightActions }: PageTabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const handleDragStart = useCallback((e: React.DragEvent, pageId: string) => {
@@ -86,8 +87,9 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPage
   if (openPageIds.length === 0) return null
 
   return (
-    <div className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] select-none shrink-0 overflow-x-auto">
-      {openPageIds.map(pageId => {
+    <div className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] select-none shrink-0">
+      <div className="flex items-center h-full overflow-x-auto flex-1 min-w-0">
+        {openPageIds.map(pageId => {
         const info = openPageInfos[pageId]
         const title = info?.title || ''
         const isActive = pageId === activePageId
@@ -130,7 +132,13 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPage
             </button>
           </div>
         )
-      })}
+        })}
+      </div>
+      {rightActions && (
+        <div className="flex items-center h-full shrink-0 gap-0.5 pr-1.5 pl-1.5 border-l border-[var(--border-color)]">
+          {rightActions}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath } from '../../../lib/ipc'
@@ -50,6 +51,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   // Wiki link disambiguation: when multiple pages share the same title
   const [wikiPicker, setWikiPicker] = useState<{ title: string; candidates: KnowledgePage[] } | null>(null)
   const [showBacklinks, setShowBacklinks] = useState(true)
+  // Toolbar portals: render the editor toolbar into the tab bar row (merged layer 1 + 2)
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    setToolbarSlot(document.getElementById('editor-toolbar-slot'))
+  }, [])
   const MAX_TAGS = 5
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   const contentRef = useRef(content)
@@ -285,24 +291,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     return false
   }, [])
 
-  const handleBackWithCheck = useCallback(() => {
-    if (checkUnsaved()) { setUnsavedAction(() => onBack); return }
-    onBack()
-  }, [checkUnsaved, onBack])
-
   if (!page) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
     </div>
   )
-
-  const getCategoryPath = (catId: string | null): string => {
-    if (!catId) return '未分类'
-    const parts: string[] = []
-    let current = categories.find(c => c.id === catId)
-    while (current) { parts.unshift(current.name); current = categories.find(c => c.id === current!.parentId) }
-    return parts.join(' > ')
-  }
 
   // Build a breadcrumb path for a page from its category chain
   const getCategoryChain = (p: KnowledgePage): string | null => {
@@ -335,27 +328,22 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Main editing area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <button onClick={handleBackWithCheck} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
-              <ArrowLeft size={17} /> 返回
-            </button>
-            <button onClick={handleToggleStar} className={`${page.isStarred ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'} hover:text-[var(--warning)]`}>
-              <Star size={17} fill={page.isStarred ? '#c5a332' : 'none'} />
-            </button>
-            <span className="text-[11px] text-[var(--text-muted)]">{getCategoryPath(page.categoryId)}</span>
-          </div>
-          <div className="flex items-center gap-2.5">
-            {/* Language switcher — hidden for PDF */}
-            {!isPdfFile && (
+      {/* Toolbar — portaled into the tab bar row (merged layer 1 + 2) */}
+      {toolbarSlot && createPortal(
+        <>
+          <button
+            onClick={handleToggleStar}
+            className={`p-1.5 rounded ${page.isStarred ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'} hover:text-[var(--warning)] transition-colors`}
+            title={page.isStarred ? '取消收藏' : '收藏'}
+          >
+            <Star size={15} fill={page.isStarred ? '#c5a332' : 'none'} />
+          </button>
+          {!isPdfFile && (
             <div className="relative">
               <button onClick={() => setShowLangMenu(v => !v)}
                 className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors"
-                title="切换语言">
-                {FILE_LANG_OPTIONS.find(o => o.ext === fileType)?.label || 'Markdown'}
+                title="切换文件格式">
+                {getFileTypeInfo(fileType).label}
                 <ChevronDown size={11} />
               </button>
               {showLangMenu && (
@@ -376,64 +364,30 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 </div>
               )}
             </div>
-            )}
-            <span className={`w-2.5 h-2.5 rounded-full ${saving ? 'bg-[var(--warning)]' : 'bg-green-500'}`} />
-            <span className="text-[12px] text-[var(--text-secondary)]">{saving ? '未保存' : '已保存'}</span>
-            {!isCodeFile && !isPdfFile && (
+          )}
+          <span
+            className={`w-2.5 h-2.5 rounded-full shrink-0 ${saving ? 'bg-[var(--warning)] animate-pulse' : 'bg-green-500'}`}
+            title={saving ? '保存中…' : '已保存'}
+          />
+          {!isCodeFile && !isPdfFile && (
             <>
-            <button onClick={onToggleOutline} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]" title="大纲视图">
-              <ListTree size={16} />
-            </button>
-            <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
-              {preview ? <Edit3 size={16} /> : <Eye size={16} />}
-            </button>
+              <button onClick={onToggleOutline} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="大纲视图">
+                <ListTree size={15} />
+              </button>
+              <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
+                {preview ? <Edit3 size={15} /> : <Eye size={15} />}
+              </button>
             </>
-            )}
-            <button onClick={handleDelete} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)]" title="删除">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-
-        {/* Tag bar */}
-        <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto">
-          {entryTags.map(t => (
-            <span key={t.id}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
-              style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
-            >
-              {t.name}
-              <button onClick={() => handleRemoveTag(t.id)}
-                className="hover:text-[var(--danger)] transition-colors"
-              >
-                <X size={10} />
-              </button>
-            </span>
-          ))}
-          {entryTags.length < MAX_TAGS && (
-            showTagInput ? (
-              <input
-                autoFocus
-                value={newTagName}
-                onChange={e => setNewTagName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); if (e.key === 'Escape') { setShowTagInput(false); setNewTagName('') } }}
-                onBlur={handleAddTag}
-                placeholder="标签名..."
-                className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
-              />
-            ) : (
-              <button onClick={() => setShowTagInput(true)}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded border border-dashed border-[var(--border-color)] transition-colors"
-              >
-                <Plus size={10} />标签
-              </button>
-            )
           )}
-          {entryTags.length > 0 && (
-            <span className="text-[10px] text-[var(--text-disabled)] ml-1">{entryTags.length}/{MAX_TAGS}</span>
-          )}
-        </div>
+          <button onClick={handleDelete} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)] transition-colors" title="删除">
+            <Trash2 size={15} />
+          </button>
+        </>,
+        toolbarSlot
+      )}
 
+      {/* Main editing area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Content */}
         {isPdfFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
@@ -538,6 +492,45 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             </div>
           </div>
         )}
+
+        {/* Tag bar — bottom metadata strip */}
+        <div className="flex items-center gap-1.5 px-4 py-1.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto">
+            {entryTags.map(t => (
+              <span key={t.id}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
+                style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
+              >
+                {t.name}
+                <button onClick={() => handleRemoveTag(t.id)}
+                  className="hover:text-[var(--danger)] transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+            {entryTags.length < MAX_TAGS && (
+              showTagInput ? (
+                <input
+                  autoFocus
+                  value={newTagName}
+                  onChange={e => setNewTagName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); if (e.key === 'Escape') { setShowTagInput(false); setNewTagName('') } }}
+                  onBlur={handleAddTag}
+                  placeholder="标签名..."
+                  className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
+                />
+              ) : (
+                <button onClick={() => setShowTagInput(true)}
+                  className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded border border-dashed border-[var(--border-color)] transition-colors"
+                >
+                  <Plus size={10} />标签
+                </button>
+              )
+            )}
+            {entryTags.length > 0 && (
+              <span className="text-[10px] text-[var(--text-disabled)] ml-1">{entryTags.length}/{MAX_TAGS}</span>
+            )}
+        </div>
       </div>
 
       {/* Wiki disambiguation picker */}

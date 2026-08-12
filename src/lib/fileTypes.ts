@@ -16,7 +16,7 @@ const INFO: Record<string, FileTypeInfo> = {
   'pdf':{ ext: 'pdf',label: 'PDF',        badge: 'PDF',  icon: 'file',     color: '#e74c3c',               placeholder: 'PDF 阅读器',                      monacoLang: 'plaintext' },
   'cpp':{ ext: 'cpp',label: 'C++',        badge: 'CPP',  icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C++ 代码...',               monacoLang: 'cpp' },
   'c':  { ext: 'c',  label: 'C',          badge: 'C',    icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C 代码...',                 monacoLang: 'c' },
-  'h':  { ext: 'h',  label: 'C Header',   badge: 'H',    icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C 头文件...',               monacoLang: 'c' },
+  'h':  { ext: 'h',  label: 'C/C++ 头文件', badge: 'H',    icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C/C++ 头文件...',           monacoLang: 'c' },
   'hpp':{ ext: 'hpp',label: 'C++ Header', badge: 'HPP',  icon: 'code',     color: 'var(--warning)',        placeholder: '开始写 C++ 头文件...',             monacoLang: 'cpp' },
   'py': { ext: 'py', label: 'Python',     badge: 'PY',   icon: 'code',     color: 'var(--success)',        placeholder: '开始写 Python 代码...',            monacoLang: 'python' },
   'js': { ext: 'js', label: 'JavaScript', badge: 'JS',   icon: 'code',     color: '#f0db4f',              placeholder: '开始写 JavaScript 代码...',       monacoLang: 'javascript' },
@@ -52,6 +52,7 @@ export const FILE_LANG_OPTIONS = [
   { ext: 'txt', label: '纯文本' },
   { ext: 'cpp', label: 'C++' },
   { ext: 'c',   label: 'C' },
+  { ext: 'h',   label: 'C/C++ 头文件' },
   { ext: 'py',  label: 'Python' },
   { ext: 'js',  label: 'JavaScript' },
   { ext: 'ts',  label: 'TypeScript' },
@@ -65,5 +66,4 @@ export const FILE_LANG_OPTIONS = [
   { ext: 'sql',  label: 'SQL' },
   { ext: 'xml',  label: 'XML' },
   { ext: 'yaml', label: 'YAML' },
-  { ext: 'xmind', label: 'XMind 思维导图' },
 ]

@@ -909,6 +909,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             onSelectTab={handleOpenPage}
             onCloseTab={handleCloseTab}
             onReorder={handleReorderTabs}
+            rightActions={<div id="editor-toolbar-slot" className="flex items-center gap-0.5" />}
           />
           {activePageId ? (
             <PageEditor
