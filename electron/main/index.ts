@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream } from 'fs'
 import { Readable } from 'stream'
@@ -206,6 +206,19 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('db:getPath', () => getDbPath())
   ipcMain.handle('app:getAttachmentsPath', () => getAttachmentsDir())
+  // 复制图片到系统剪贴板（path 或 dataUrl），供粘贴到其他程序
+  ipcMain.handle('clipboard:copyImage', (_e, src: { path?: string; dataUrl?: string }) => {
+    try {
+      let img: Electron.NativeImage | null = null
+      if (src?.path && existsSync(src.path)) img = nativeImage.createFromPath(src.path)
+      else if (src?.dataUrl) img = nativeImage.createFromDataURL(src.dataUrl)
+      if (!img || img.isEmpty()) return false
+      clipboard.writeImage(img)
+      return true
+    } catch {
+      return false
+    }
+  })
   ipcMain.handle('app:openExternal', async (_e, filePath: string) => {
     await shell.openPath(filePath)
   })

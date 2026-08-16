@@ -2,6 +2,9 @@ import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import { Copy } from 'lucide-react'
+import { showToast } from '../../lib/toast'
+import { copyImageUrlToClipboard } from '../../lib/ipc'
 
 // Same ID generation as parseHeadings() in OutlinePanel — must match for outline navigation
 function headingId(text: string): string {
@@ -85,6 +88,27 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
               >
                 {children}
               </a>
+            )
+          },
+          // Images: add a hover "copy to clipboard" affordance
+          img({ src, alt, ...props }) {
+            return (
+              <span className="inline-block relative max-w-full align-bottom group/img">
+                <img src={src} alt={alt} {...props} />
+                {src && (
+                  <button
+                    onClick={() => {
+                      void copyImageUrlToClipboard(src).then(ok => {
+                        showToast({ type: ok ? 'info' : 'error', message: ok ? '图片已复制到剪贴板' : '复制失败' })
+                      })
+                    }}
+                    className="absolute top-1.5 right-1.5 p-1 rounded bg-black/55 text-white opacity-0 group-hover/img:opacity-100 hover:bg-black/80 transition-opacity"
+                    title="复制图片"
+                  >
+                    <Copy size={14} />
+                  </button>
+                )}
+              </span>
             )
           },
           code({ className, children, node, ...props }) {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check,
-  ChevronLeft, ChevronRight, Search, Images, List,
+  ChevronLeft, ChevronRight, Search, Images, List, Copy,
 } from 'lucide-react'
 import { ConfirmDialog } from '../../components/shared'
 import {
@@ -21,6 +21,7 @@ import {
   uploadAttachments,
   deleteAttachment,
   updateMomentsPost,
+  copyImageUrlToClipboard,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import type { MomentsAlbum, MomentsPost, UserProfile } from '../../types'
@@ -396,14 +397,13 @@ export function MomentsModule() {
     setDraft(prev => ({ ...prev, tags: prev.tags.filter((_, i) => i !== index) }))
   }
 
-  const handlePickImages = async () => {
-    const input = postImageInputRef.current
-    if (!input?.files?.length) return
+  // 把图片文件加入当前说说草稿（文件选择 + 粘贴两条路径复用）
+  const addImageFiles = async (files: File[]) => {
     const room = MAX_IMAGES - draft.attachments.length
-    const files = Array.from(input.files).slice(0, room)
-    if (files.length === 0) return
+    const picked = files.slice(0, room)
+    if (picked.length === 0) return
     try {
-      const prepared = await Promise.all(files.map(prepareImageFile))
+      const prepared = await Promise.all(picked.map(prepareImageFile))
       const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
       setDraft(prev => ({
         ...prev,
@@ -411,9 +411,31 @@ export function MomentsModule() {
       }))
     } catch (err) {
       showToast({ type: 'error', message: err instanceof Error ? err.message : '图片处理失败，请重试' })
-    } finally {
-      input.value = ''
     }
+  }
+
+  const handlePickImages = async () => {
+    const input = postImageInputRef.current
+    if (!input?.files?.length) return
+    const files = Array.from(input.files)
+    input.value = ''
+    await addImageFiles(files)
+  }
+
+  // 粘贴截图到说说：图片进附件，不进正文文本框
+  const handleEditorPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    const files: File[] = []
+    for (const it of Array.from(items)) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        const f = it.getAsFile()
+        if (f) files.push(f)
+      }
+    }
+    if (files.length === 0) return
+    e.preventDefault()
+    void addImageFiles(files)
   }
 
   const removeImage = (index: number) => {
@@ -1023,6 +1045,7 @@ export function MomentsModule() {
         <div
           className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) closeEditor() }}
+          onPaste={handleEditorPaste}
         >
           <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
             <div className="h-[3px] shrink-0 bg-[linear-gradient(90deg,var(--accent),color-mix(in_srgb,var(--accent)_45%,transparent))]" />
@@ -1394,6 +1417,19 @@ export function MomentsModule() {
               <ChevronRight size={22} />
             </button>
           )}
+
+          <button
+            onClick={() => {
+              void copyImageUrlToClipboard(lightbox.images[lightbox.index]).then(ok => {
+                showToast({ type: ok ? 'info' : 'error', message: ok ? '图片已复制到剪贴板' : '复制失败' })
+              })
+            }}
+            className="absolute right-16 top-5 px-3 h-10 rounded-full bg-white/10 text-white hover:bg-white/25 flex items-center gap-1.5 transition-colors"
+            title="复制图片"
+          >
+            <Copy size={16} />
+            复制
+          </button>
 
           <button
             onClick={() => setLightbox(null)}

@@ -191,6 +191,7 @@ export interface ExportMarkdownResult { fileCount: number; totalSize: number; fi
 
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
+  copyImage: (src: { path?: string; dataUrl?: string }) => Promise<boolean>
   minimize: () => Promise<void>
   maximize: () => Promise<void>
   close: () => Promise<void>

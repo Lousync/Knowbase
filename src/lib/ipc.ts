@@ -4,6 +4,7 @@ import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
 
 export const getPathForFile = (file: File): string => a().getPathForFile(file)
+export const copyImage = (src: { path?: string; dataUrl?: string }): Promise<boolean> => a().copyImage(src)
 
 // ===== Typed settings =====
 
@@ -172,6 +173,19 @@ export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promi
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
 export const cleanupOrphanAttachments = () => a().cleanupOrphanAttachments()
+
+/** 把应用内的图片 URL（attachment:// 或 data:）复制到系统剪贴板 */
+export async function copyImageUrlToClipboard(url: string): Promise<boolean> {
+  if (!url) return false
+  if (url.startsWith('attachment://')) {
+    const m = /attachment:\/\/([^/?#]+)/.exec(url)
+    if (!m) return false
+    const path = await getAttachmentPath(m[1])
+    return path ? copyImage({ path }) : false
+  }
+  if (url.startsWith('data:')) return copyImage({ dataUrl: url })
+  return false
+}
 export const exportBackupToZip = (zipPath: string, moduleIds?: string[]) => a().exportBackupToZip(zipPath, moduleIds)
 export const importBackupPackage = (srcPath: string) => a().importBackupPackage(srcPath)
 // ===== Weight Tracker =====
