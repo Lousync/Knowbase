@@ -210,8 +210,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('clipboard:copyImage', (_e, src: { path?: string; dataUrl?: string }) => {
     try {
       let img: Electron.NativeImage | null = null
-      if (src?.path && existsSync(src.path)) img = nativeImage.createFromPath(src.path)
-      else if (src?.dataUrl) img = nativeImage.createFromDataURL(src.dataUrl)
+      if (src?.dataUrl) {
+        img = nativeImage.createFromDataURL(src.dataUrl)
+      } else if (src?.path && existsSync(src.path)) {
+        // 用 Node fs 读字节再转 data URL：nativeImage.createFromPath 对含中文路径可能失败
+        const buf = readFileSync(src.path)
+        const ext = (src.path.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+        const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' }
+        img = nativeImage.createFromDataURL(`data:${mimeMap[ext] || 'image/png'};base64,${buf.toString('base64')}`)
+      }
       if (!img || img.isEmpty()) return false
       clipboard.writeImage(img)
       return true
