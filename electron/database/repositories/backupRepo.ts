@@ -32,6 +32,7 @@ function queryAll<T>(sql: string, params: unknown[] = []): T[] {
 }
 
 const MODULE_OWNER_TYPES: Record<string, string[]> = {
+  blog: ['blog_entry'],
   knowledge: ['knowledge_page'],
   moments: ['moments_post'],
 }
