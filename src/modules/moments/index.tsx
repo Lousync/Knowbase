@@ -1015,7 +1015,13 @@ export function MomentsModule() {
                         return (
                           <div key={post.id} className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)]">
                             {renderAlbumCardHeader(post, imgs, text, expanded)}
-                            {expanded && <div className="px-3 pb-3">{renderAlbumPhotoGrid(post, imgs)}</div>}
+                            <div className="grid" style={{ gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows 300ms ease-in-out' }}>
+                              <div className="overflow-hidden min-h-0">
+                                <div className="px-3 pb-3" style={{ opacity: expanded ? 1 : 0, transform: expanded ? 'none' : 'translateY(-8px) scale(0.97)', transition: 'opacity 250ms ease-in-out, transform 300ms ease-in-out' }}>
+                                  {renderAlbumPhotoGrid(post, imgs)}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         )
                       })}
@@ -1037,7 +1043,7 @@ export function MomentsModule() {
                         const cover = imgs.thumbs[0] || imgs.urls[0]
                         if (expanded) {
                           return (
-                            <div key={post.id} className="col-span-full rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)]">
+                            <div key={post.id} className="col-span-full rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)] animate-album-unfold">
                               {renderAlbumCardHeader(post, imgs, text, true)}
                               <div className="px-3 pb-3">{renderAlbumPhotoGrid(post, imgs)}</div>
                             </div>

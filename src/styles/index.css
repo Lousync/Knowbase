@@ -214,3 +214,12 @@ input:focus, textarea:focus, select:focus {
 .no-spinner::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .no-spinner { -moz-appearance: textfield; }
 
+/* ===== 相册卡片展开动画 ===== */
+@keyframes album-unfold {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-album-unfold {
+  animation: album-unfold 280ms ease-out;
+}
+
