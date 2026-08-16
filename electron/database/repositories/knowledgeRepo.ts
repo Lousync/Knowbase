@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
-import { deleteAttachments } from './attachmentRepo'
+import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
@@ -390,6 +390,8 @@ export function registerKnowledgeHandlers(): void {
 
     // 插入回收站
     const binId = randomUUID()
+    const inlineAttachmentIds = parseInlineAttachmentIds(page.content_md)
+    if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, binId)
     run(
       `INSERT INTO recycle_bin (id, original_id, module, title, data)
        VALUES (?, ?, 'knowledge', ?, ?)`,

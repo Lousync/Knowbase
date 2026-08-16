@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting, openExternal } from '../../../lib/ipc'
-import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree } from 'lucide-react'
+import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree, ImagePlus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
+import { showToast } from '../../../lib/toast'
+import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { useSettings } from '../../../lib/SettingsContext'
 import { ConfirmDialog } from '../../../components/shared'
 import Editor, { type OnMount } from '@monaco-editor/react'
@@ -36,6 +38,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [unsavedAction, setUnsavedAction] = useState<(() => void) | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+  const entryIdRef = useRef(entryId)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const contentRef = useRef(contentMd)
   const dateRef = useRef(date)
   const isDirtyRef = useRef(false)
@@ -53,6 +57,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const statesRef = useRef('')
 
   useEffect(() => { contentRef.current = contentMd }, [contentMd])
+  useEffect(() => { entryIdRef.current = entryId }, [entryId])
   useEffect(() => { dateRef.current = date }, [date])
   useEffect(() => { tagsRef.current = entryTags }, [entryTags])
   useEffect(() => { statesRef.current = entryStates }, [entryStates])
@@ -79,6 +84,66 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   useEffect(() => {
     getSetting('skipDeleteConfirm_blog').then(v => { if (v === true) setSkipDeleteConfirm(true) })
   }, [])
+
+  // ===== Inline image insertion (paste / drag / toolbar) =====
+  const insertImageFiles = useCallback(async (files: File[]) => {
+    const editor = editorRef.current
+    if (!editor) return
+    for (const f of files) {
+      if (!isImageFile(f)) continue
+      try {
+        const meta = await uploadImageFile(f, IMAGE_OWNER.blog, entryIdRef.current)
+        insertImageAtCursor(editor, meta)
+      } catch {
+        showToast({ type: 'error', message: `图片「${f.name}」插入失败` })
+      }
+    }
+  }, [])
+
+  const handleEditorMount: OnMount = useCallback((editor: Monaco.editor.IStandaloneCodeEditor) => {
+    editorRef.current = editor
+    const dom = editor.getDomNode()
+    if (!dom) return
+
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (const it of Array.from(items)) {
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const f = it.getAsFile()
+          if (f) files.push(f)
+        }
+      }
+      if (files.length === 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      void insertImageFiles(files)
+    }
+
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        e.preventDefault()
+      }
+    }
+
+    const onDrop = (e: DragEvent) => {
+      const files = e.dataTransfer?.files
+      if (!files || files.length === 0) return
+      const imageFiles = Array.from(files).filter(f => isImageFile(f))
+      if (imageFiles.length === 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      const target = editor.getTargetAtClientPoint(e.clientX, e.clientY)
+      if (target?.position) editor.setPosition(target.position)
+      editor.focus()
+      void insertImageFiles(imageFiles)
+    }
+
+    dom.addEventListener('paste', onPaste, true)
+    dom.addEventListener('dragover', onDragOver, true)
+    dom.addEventListener('drop', onDrop, true)
+  }, [insertImageFiles])
 
   const checkUnsaved = useCallback(() => {
     if (isDirtyRef.current) {
@@ -239,6 +304,16 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           <span className="text-[11px] text-[var(--text-muted)] min-w-[60px] text-right">
             {saving ? '保存中...' : lastSaved ? '已保存 ' + fmtTime(lastSaved) : ''}
           </span>
+          {!showPreview && (
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+              title="插入图片"
+            >
+              <ImagePlus size={13} />
+              图片
+            </button>
+          )}
           <button onClick={() => setShowPreview(!showPreview)}
             className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]')}
             title="Ctrl+/">
@@ -317,7 +392,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             language="markdown"
             value={contentMd}
             onChange={handleChange}
-            onMount={(editor) => { editorRef.current = editor }}
+            onMount={handleEditorMount}
             theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
             loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
@@ -353,6 +428,19 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           />
         )}
       </div>
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/heic,image/heif"
+        multiple
+        className="hidden"
+        onChange={e => {
+          const files = Array.from(e.target.files || [])
+          if (files.length > 0) void insertImageFiles(files)
+          e.target.value = ''
+        }}
+      />
 
       {/* Unsaved changes confirm dialog */}
       <ConfirmDialog

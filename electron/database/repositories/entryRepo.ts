@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 
 interface EntryRow {
   id: string
@@ -276,6 +277,8 @@ export function registerEntryHandlers(): void {
 
     // 插入回收站
     const binId = randomUUID()
+    const inlineAttachmentIds = parseInlineAttachmentIds(entry.content_md)
+    if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, binId)
     run(
       `INSERT INTO recycle_bin (id, original_id, module, title, data)
        VALUES (?, ?, 'blog', ?, ?)`,

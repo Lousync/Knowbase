@@ -13,6 +13,26 @@ function headingId(text: string): string {
     .replace(/^-|-$/g, '')
 }
 
+/**
+ * Allow the app's local schemes (attachment://, data:, file:, blob:) alongside
+ * react-markdown's default safe protocols. The default urlTransform would strip
+ * `attachment://id/` to an empty string, breaking inline images.
+ */
+function safeUrlTransform(value: string): string {
+  if (/^(https?|ircs?|mailto|xmpp|attachment|data|file|blob):/i.test(value)) return value
+  const colon = value.indexOf(':')
+  const questionMark = value.indexOf('?')
+  const numberSign = value.indexOf('#')
+  const slash = value.indexOf('/')
+  if (
+    colon === -1 ||
+    (slash !== -1 && colon > slash) ||
+    (questionMark !== -1 && colon > questionMark) ||
+    (numberSign !== -1 && colon > numberSign)
+  ) return value
+  return ''
+}
+
 interface Props {
   content: string
   /** Called when a [[wiki link]] is clicked. If omitted, wiki links render as plain text. */
@@ -45,6 +65,7 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
+        urlTransform={safeUrlTransform}
         components={{
           // Override ul/ol to restore list-style killed by Tailwind reset
           ul({ children }) {

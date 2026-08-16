@@ -75,6 +75,19 @@ function toMeta(r: AttachmentRow) {
 
 export type AttachmentMeta = ReturnType<typeof toMeta>
 
+/** 从 Markdown 正文中提取内联图片引用的附件 ID（attachment://{id}/ 或 ?thumb=1） */
+export function parseInlineAttachmentIds(md: string): string[] {
+  if (!md) return []
+  const re = /attachment:\/\/([^/?#\s"'<>)]+)/g
+  const ids: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(md)) !== null) {
+    const id = m[1]
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
 /** 供 attachment:// 协议解析真实文件路径 */
 export function getAttachmentFilePath(id: string, thumb = false): string | null {
   const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
@@ -277,11 +290,13 @@ export function registerAttachmentHandlers(): void {
     // 2) 归属对象已不存在的附件（说说 / 知识页面；头像等固定归属跳过）
     const momentsIds = new Set(queryAll<{ id: string }>('SELECT id FROM moments_posts').map(r => r.id))
     const pageIds = new Set(queryAll<{ id: string }>('SELECT id FROM knowledge_pages').map(r => r.id))
+    const entryIds = new Set(queryAll<{ id: string }>('SELECT id FROM entries').map(r => r.id))
     const rows = queryAll<AttachmentRow>("SELECT * FROM attachments WHERE owner_id != '_pending'")
     for (const r of rows) {
       let exists = true
       if (r.owner_type === 'moments_post') exists = momentsIds.has(r.owner_id)
       else if (r.owner_type === 'knowledge_page') exists = pageIds.has(r.owner_id)
+      else if (r.owner_type === 'blog_entry') exists = entryIds.has(r.owner_id)
       if (!exists) {
         deleteAttachments([r.id])
         removed++

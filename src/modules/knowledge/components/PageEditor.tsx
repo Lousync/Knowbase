@@ -1,10 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
+import { showToast } from '../../../lib/toast'
+import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { ConfirmDialog } from '../../../components/shared'
@@ -67,6 +69,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const savedTitleRef = useRef('')
   const monacoRef = useRef<typeof Monaco | null>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+  const pageIdRef = useRef(pageId)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const showDeleteConfirmRef = useRef(showDeleteConfirm)
   const showLangMenuRef = useRef(showLangMenu)
   const isCodeFileRef = useRef(false)
@@ -77,6 +81,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const isXmindFile = fileType === 'xmind'
 
   useEffect(() => { contentRef.current = content }, [content])
+  useEffect(() => { pageIdRef.current = pageId }, [pageId])
   useEffect(() => { titleRef.current = title }, [title])
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { fileTypeRef.current = fileType }, [fileType])
@@ -194,6 +199,22 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     return () => window.removeEventListener('outline:go-to-heading', handler)
   }, [preview])
 
+  // ===== Inline image insertion (paste / drag / toolbar) — md/txt only =====
+  const insertImageFiles = useCallback(async (files: File[]) => {
+    if (isCodeFileRef.current || isPdfFileRef.current) return
+    const editor = editorRef.current
+    if (!editor) return
+    for (const f of files) {
+      if (!isImageFile(f)) continue
+      try {
+        const meta = await uploadImageFile(f, IMAGE_OWNER.knowledge, pageIdRef.current)
+        insertImageAtCursor(editor, meta)
+      } catch {
+        showToast({ type: 'error', message: `图片「${f.name}」插入失败` })
+      }
+    }
+  }, [])
+
   // Monaco mount handler — register wiki-link completion provider
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
@@ -238,6 +259,47 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     })
 
     editor.focus()
+
+    // Image paste / drag-drop (md/txt only; gated inside handlers)
+    const dom = editor.getDomNode()
+    if (dom) {
+      const onPaste = (ev: ClipboardEvent) => {
+        if (isCodeFileRef.current || isPdfFileRef.current) return
+        const items = ev.clipboardData?.items
+        if (!items) return
+        const files: File[] = []
+        for (const it of Array.from(items)) {
+          if (it.kind === 'file' && it.type.startsWith('image/')) {
+            const f = it.getAsFile()
+            if (f) files.push(f)
+          }
+        }
+        if (files.length === 0) return
+        ev.preventDefault()
+        ev.stopPropagation()
+        void insertImageFiles(files)
+      }
+      const onDragOver = (ev: DragEvent) => {
+        if (isCodeFileRef.current || isPdfFileRef.current) return
+        if (ev.dataTransfer && Array.from(ev.dataTransfer.types).includes('Files')) ev.preventDefault()
+      }
+      const onDrop = (ev: DragEvent) => {
+        if (isCodeFileRef.current || isPdfFileRef.current) return
+        const files = ev.dataTransfer?.files
+        if (!files || files.length === 0) return
+        const imageFiles = Array.from(files).filter(f => isImageFile(f))
+        if (imageFiles.length === 0) return
+        ev.preventDefault()
+        ev.stopPropagation()
+        const target = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)
+        if (target?.position) editor.setPosition(target.position)
+        editor.focus()
+        void insertImageFiles(imageFiles)
+      }
+      dom.addEventListener('paste', onPaste, true)
+      dom.addEventListener('dragover', onDragOver, true)
+      dom.addEventListener('drop', onDrop, true)
+    }
   }
 
   const handleDelete = async () => {
@@ -370,6 +432,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           />
           {!isCodeFile && !isPdfFile && (
             <>
+              {!preview && (
+                <button onClick={() => imageInputRef.current?.click()} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="插入图片">
+                  <ImagePlus size={15} />
+                </button>
+              )}
               <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
                 {preview ? <Edit3 size={15} /> : <Eye size={15} />}
               </button>
@@ -528,6 +595,19 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             )}
         </div>
       </div>
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/heic,image/heif"
+        multiple
+        className="hidden"
+        onChange={e => {
+          const files = Array.from(e.target.files || [])
+          if (files.length > 0) void insertImageFiles(files)
+          e.target.value = ''
+        }}
+      />
 
       {/* Wiki disambiguation picker */}
       {wikiPicker && (

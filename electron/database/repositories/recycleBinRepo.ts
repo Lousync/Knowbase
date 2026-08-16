@@ -4,7 +4,7 @@ import { join } from 'path'
 import { app } from 'electron'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
-import { restoreAttachments } from './attachmentRepo'
+import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 
 function getSettingsRetentionDays(): number {
   try {
@@ -88,6 +88,8 @@ export function registerRecycleBinHandlers(): void {
           record.isPinned ? 1 : 0, record.wordCount || 0
         ]
       )
+      // 恢复正文内联图片附件
+      restoreAttachments(parseInlineAttachmentIds(record.contentMd || ''))
       // 恢复标签关联
       if (record.tags && Array.isArray(record.tags)) {
         for (const tag of record.tags as TagRow[]) {
@@ -107,6 +109,8 @@ export function registerRecycleBinHandlers(): void {
           record.sortOrder || 0, record.fileType || '', record.createdAt, record.updatedAt
         ]
       )
+      // 恢复正文内联图片附件
+      restoreAttachments(parseInlineAttachmentIds(record.contentMd || ''))
       // 恢复标签关联
       if (record.tags && Array.isArray(record.tags)) {
         for (const tag of record.tags as TagRow[]) {
