@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check,
-  ChevronLeft, ChevronRight, ChevronDown, Search, Images, List, Copy,
+  ChevronLeft, ChevronRight, ChevronDown, Search, Images, List, LayoutGrid, Copy,
 } from 'lucide-react'
 import { ConfirmDialog } from '../../components/shared'
 import {
@@ -226,6 +226,7 @@ export function MomentsModule() {
   const [editorImagesExpanded, setEditorImagesExpanded] = useState(false)
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set())
   const [expandedAlbumPosts, setExpandedAlbumPosts] = useState<Set<string>>(new Set())
+  const [albumLayout, setAlbumLayout] = useState<'list' | 'grid'>('list')
   const [detailPostId, setDetailPostId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -612,6 +613,76 @@ export function MomentsModule() {
     })
   }
 
+  // 相册分组卡片头部（列表 / 网格展开态共用）
+  const renderAlbumCardHeader = (post: MomentsPost, imgs: { urls: string[]; thumbs: string[] }, text: string, expanded: boolean) => {
+    const cover = imgs.thumbs[0] || imgs.urls[0]
+    return (
+      <button
+        onClick={() => toggleAlbumPost(post.id)}
+        className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-[var(--bg-hover)]/50 transition-colors"
+        title={expanded ? '收起' : '展开'}
+      >
+        {cover ? (
+          <img src={cover} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0 border border-[var(--border-color)]" loading="lazy" />
+        ) : (
+          <div className="w-14 h-14 rounded-lg bg-[var(--bg-primary)] shrink-0 border border-[var(--border-color)]" />
+        )}
+        <div className="min-w-0 flex-1">
+          {text ? (
+            <div className={'text-[13px] leading-snug text-[var(--text-primary)] whitespace-pre-wrap break-words ' + (expanded ? '' : 'line-clamp-2')}>
+              {text}
+            </div>
+          ) : (
+            <div className="text-[13px] text-[var(--text-muted)] italic">无文字记录</div>
+          )}
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+            <span>{formatDateTime(post.createdAt)}</span>
+            <span>·</span>
+            <span>{imgs.urls.length} 张照片</span>
+          </div>
+        </div>
+        <ChevronDown size={16} className={'shrink-0 text-[var(--text-muted)] transition-transform duration-200 ' + (expanded ? 'rotate-180' : '')} />
+      </button>
+    )
+  }
+
+  // 相册分组内的照片网格（列表 / 网格展开态共用）
+  const renderAlbumPhotoGrid = (post: MomentsPost, imgs: { urls: string[]; thumbs: string[] }) => (
+    <div className="grid grid-cols-3 gap-2">
+      {imgs.urls.map((u, i) => (
+        <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] group">
+          <img
+            src={imgs.thumbs[i] || u}
+            alt=""
+            className="w-full h-full object-cover cursor-zoom-in"
+            loading="lazy"
+            onClick={() => setLightbox({ images: imgs.urls, index: i })}
+          />
+          {selectedAlbum!.coverPostId === post.id && selectedAlbum!.coverIndex === i && (
+            <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] pointer-events-none">封面</span>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); handleDeleteAlbumPhoto({ postId: post.id, indexInPost: i }).catch(console.error) }}
+            className="absolute right-1.5 top-1.5 w-6 h-6 rounded-full bg-black/55 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/80 backdrop-blur transition-opacity"
+            title="删除这张照片"
+          >
+            <Trash2 size={12} />
+          </button>
+          {!(selectedAlbum!.coverPostId === post.id && selectedAlbum!.coverIndex === i) && (
+            <button
+              onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum!.id, post.id, i).catch(console.error) }}
+              className="absolute inset-x-1.5 bottom-1.5 py-1 rounded-lg bg-black/55 text-white text-[10px] backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
+              title="设为封面"
+            >
+              <Camera size={11} className="inline mr-1 -mt-0.5" />
+              设为封面
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+
   const renderTags = (tags: string[], onClickTag?: (tag: string) => void) => {
     if (!tags || tags.length === 0) return null
     return (
@@ -881,6 +952,22 @@ export function MomentsModule() {
                     <div className="text-[16px] font-semibold text-[var(--text-primary)] truncate">{selectedAlbum.name}</div>
                     <div className="text-[11px] text-[var(--text-muted)]">{selectedAlbum.photoCount} 张照片</div>
                   </div>
+                  <div className="flex items-center rounded-full border border-[var(--border-color)] bg-[var(--bg-primary)] p-0.5">
+                    <button
+                      onClick={() => setAlbumLayout('list')}
+                      className={'p-1.5 rounded-full transition-colors ' + (albumLayout === 'list' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]')}
+                      title="列表排列"
+                    >
+                      <List size={14} />
+                    </button>
+                    <button
+                      onClick={() => setAlbumLayout('grid')}
+                      className={'p-1.5 rounded-full transition-colors ' + (albumLayout === 'grid' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]')}
+                      title="网格排列"
+                    >
+                      <LayoutGrid size={14} />
+                    </button>
+                  </div>
                   <button
                     onClick={() => albumPhotoInputRef.current?.click()}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity"
@@ -919,90 +1006,71 @@ export function MomentsModule() {
                     这个相册还没有照片，去说说卡片上点击相册图标把照片加入进来。
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {albumPosts.map(post => {
-                      const imgs = postImages(post)
-                      const text = (post.contentMd || stripHtmlTags(post.contentHtml || '')).trim()
-                      const expanded = expandedAlbumPosts.has(post.id)
-                      const cover = imgs.thumbs[0] || imgs.urls[0]
-                      return (
-                        <div key={post.id} className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)]">
-                          <button
-                            onClick={() => toggleAlbumPost(post.id)}
-                            className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-[var(--bg-hover)]/50 transition-colors"
-                            title={expanded ? '收起' : '展开'}
-                          >
+                  albumLayout === 'list' ? (
+                    <div className="space-y-3">
+                      {albumPosts.map(post => {
+                        const imgs = postImages(post)
+                        const text = (post.contentMd || stripHtmlTags(post.contentHtml || '')).trim()
+                        const expanded = expandedAlbumPosts.has(post.id)
+                        return (
+                          <div key={post.id} className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)]">
+                            {renderAlbumCardHeader(post, imgs, text, expanded)}
+                            {expanded && <div className="px-3 pb-3">{renderAlbumPhotoGrid(post, imgs)}</div>}
+                          </div>
+                        )
+                      })}
+                      <button
+                        onClick={() => albumPhotoInputRef.current?.click()}
+                        className="w-full py-3 rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex items-center justify-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        title="添加照片"
+                      >
+                        <ImagePlus size={16} />
+                        <span className="text-[12px]">添加照片</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 items-start">
+                      {albumPosts.map(post => {
+                        const imgs = postImages(post)
+                        const text = (post.contentMd || stripHtmlTags(post.contentHtml || '')).trim()
+                        const expanded = expandedAlbumPosts.has(post.id)
+                        const cover = imgs.thumbs[0] || imgs.urls[0]
+                        if (expanded) {
+                          return (
+                            <div key={post.id} className="col-span-full rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)]">
+                              {renderAlbumCardHeader(post, imgs, text, true)}
+                              <div className="px-3 pb-3">{renderAlbumPhotoGrid(post, imgs)}</div>
+                            </div>
+                          )
+                        }
+                        return (
+                          <button key={post.id} onClick={() => toggleAlbumPost(post.id)} className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] group" title="展开">
                             {cover ? (
-                              <img src={cover} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0 border border-[var(--border-color)]" loading="lazy" />
+                              <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                             ) : (
-                              <div className="w-14 h-14 rounded-lg bg-[var(--bg-primary)] shrink-0 border border-[var(--border-color)]" />
+                              <div className="absolute inset-0 flex items-center justify-center text-[var(--text-muted)]"><Images size={22} /></div>
                             )}
-                            <div className="min-w-0 flex-1">
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2 pt-8 pb-1.5 text-left">
                               {text ? (
-                                <div className={'text-[13px] leading-snug text-[var(--text-primary)] whitespace-pre-wrap break-words ' + (expanded ? '' : 'line-clamp-2')}>
-                                  {text}
-                                </div>
+                                <div className="text-[11px] text-white line-clamp-1">{text}</div>
                               ) : (
-                                <div className="text-[13px] text-[var(--text-muted)] italic">无文字记录</div>
+                                <div className="text-[11px] text-white/60 italic">无文字</div>
                               )}
-                              <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
-                                <span>{formatDateTime(post.createdAt)}</span>
-                                <span>·</span>
-                                <span>{imgs.urls.length} 张照片</span>
-                              </div>
+                              <div className="text-[10px] text-white/75">{imgs.urls.length} 张</div>
                             </div>
-                            <ChevronDown size={16} className={'shrink-0 text-[var(--text-muted)] transition-transform duration-200 ' + (expanded ? 'rotate-180' : '')} />
                           </button>
-
-                          {expanded && (
-                            <div className="px-3 pb-3">
-                              <div className="grid grid-cols-3 gap-2">
-                                {imgs.urls.map((u, i) => (
-                                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] group">
-                                    <img
-                                      src={imgs.thumbs[i] || u}
-                                      alt=""
-                                      className="w-full h-full object-cover cursor-zoom-in"
-                                      loading="lazy"
-                                      onClick={() => setLightbox({ images: imgs.urls, index: i })}
-                                    />
-                                    {selectedAlbum.coverPostId === post.id && selectedAlbum.coverIndex === i && (
-                                      <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded-full bg-black/55 text-white text-[10px] pointer-events-none">封面</span>
-                                    )}
-                                    <button
-                                      onClick={e => { e.stopPropagation(); handleDeleteAlbumPhoto({ postId: post.id, indexInPost: i }).catch(console.error) }}
-                                      className="absolute right-1.5 top-1.5 w-6 h-6 rounded-full bg-black/55 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/80 backdrop-blur transition-opacity"
-                                      title="删除这张照片"
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                    {!(selectedAlbum.coverPostId === post.id && selectedAlbum.coverIndex === i) && (
-                                      <button
-                                        onClick={e => { e.stopPropagation(); handleSetAlbumCover(selectedAlbum.id, post.id, i).catch(console.error) }}
-                                        className="absolute inset-x-1.5 bottom-1.5 py-1 rounded-lg bg-black/55 text-white text-[10px] backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title="设为封面"
-                                      >
-                                        <Camera size={11} className="inline mr-1 -mt-0.5" />
-                                        设为封面
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                    <button
-                      onClick={() => albumPhotoInputRef.current?.click()}
-                      className="w-full py-3 rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex items-center justify-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                      title="添加照片"
-                    >
-                      <ImagePlus size={16} />
-                      <span className="text-[12px]">添加照片</span>
-                    </button>
-                  </div>
+                        )
+                      })}
+                      <button
+                        onClick={() => albumPhotoInputRef.current?.click()}
+                        className="aspect-square rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        title="添加照片"
+                      >
+                        <ImagePlus size={22} />
+                        <span className="text-[11px]">添加照片</span>
+                      </button>
+                    </div>
+                  )
                 )}
               </div>
             ) : (
