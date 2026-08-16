@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText } from 'lucide-react'
+import { FileText, Folder, ListTree } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../types'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
@@ -694,22 +694,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     return parseHeadings(md)
   }, [liveContent, activePageForOutline?.contentMd])
 
-  const handleToggleOutline = useCallback(() => {
-    setShowOutline(v => {
-      const next = !v
-      if (next) {
-        // Hide both sidebars when entering outline mode
-        setShowCategoryPanel(false)
-        setShowChapterPanel(false)
-      } else {
-        // Restore sidebars when exiting
-        setShowCategoryPanel(true)
-        if (selectedCategory) setShowChapterPanel(true)
-      }
-      return next
-    })
-  }, [selectedCategory])
-
   // 搜索定位到分类/笔记本（展开树并滚动到目标）
   const handleLocateCategory = useCallback((categoryId: string) => {
     const cat = categories.find(c => c.id === categoryId)
@@ -804,99 +788,123 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     requestAnimationFrame(() => setLocatePageId(pageId))
   }, [allPages, categories])
 
-  const panelsVisible = sidebarOpen && !showOutline
+  const panelsVisible = sidebarOpen
 
   return (
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
-        {/* L1: NotebookList */}
+        {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
-          <NotebookList
-            categories={categories}
-            allPages={allPages}
-            loosePages={allLoosePages}
-            starredPages={starredPages}
-            selectedCategoryId={selectedCategoryId}
-            focusChapterId={focusChapterId}
-            activePageId={activePageId}
-            onSelectCategory={handleSelectCategory}
-            onSelectCategoryChapter={handleSelectCategoryChapter}
-            onCreateNotebook={handleCreateNotebook}
-            onRenameNotebook={handleRenameNotebook}
-            onDeleteNotebook={handleDeleteNotebook}
-            onOpenPage={handleOpenPage}
-            onCreateLoosePage={handleCreateLoosePage}
-            onCreatePageUnder={handleCreatePageUnderCategory}
-            onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
-            onImport={handleDialogImport}
-            onImportFolder={handleImportFolder}
-            onDropOnNotebook={handleDropOnNotebook}
-            onDropOnCategory={handleDropOnCategory}
-            onDropOnLooseArea={handleDropOnLooseArea}
-            onMoveCategory={handleMoveCategory}
-            onSortCategory={handleSortCategory}
-            onSortPage={handleSortPage}
-            locatePageId={locatePageId}
-            locateCategoryId={locateCategoryId}
-            onCopy={handleCopy}
-            onCut={handleCut}
-            onPaste={handlePaste}
-            onExportPage={handleExportPage}
-            onDeletePage={handlePageDeleted}
-            clipboard={clipboard}
-            cutItemIds={cutItemIds}
-          />
-        </ResizablePanel>
+          <div className="flex flex-col h-full">
+            {/* Sidebar tab bar */}
+            <div className="flex items-center gap-1 px-2 pt-1.5 pb-1 border-b border-[var(--border-color)] shrink-0">
+              <button
+                onClick={() => setShowOutline(false)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${!showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+              >
+                <Folder size={13} />文件
+              </button>
+              <button
+                onClick={() => setShowOutline(true)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+              >
+                <ListTree size={13} />大纲
+              </button>
+            </div>
 
-        {/* L2: ChapterPanel — always mounted for slide animation */}
-        <ResizablePanel storageKey="sidebarWidth_knowledgeChapters" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showChapterPanel && !!selectedCategoryId} initialWidth={sidebarWidths.sidebarWidth_knowledgeChapters} onSnapClose={() => setShowChapterPanel(false)} onSnapOpen={selectedCategoryId ? () => setShowChapterPanel(true) : undefined}>
-          {selectedCategory && (
-            <ChapterPanel
-              notebookName={selectedCategory.name}
-              notebookId={selectedCategory.id}
-              chapters={chapters}
-              selectedChapterId={selectedChapterId}
-              focusChapterId={focusChapterId}
-              onSelectChapter={(id) => { setSelectedChapterId(id === selectedChapterId ? null : id); setFocusChapterId(null) }}
-              onCreateChapter={handleCreateChapter}
-              onRenameChapter={handleRenameChapter}
-              onDeleteChapter={handleDeleteChapter}
-              pages={chapterPages}
-              activePageId={activePageId}
-              onOpenPage={handleOpenPage}
-              onCreatePage={handleCreateChapterPage}
-              onImport={handleDialogImport}
-              onDropOnChapter={handleDropOnChapter}
-              onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
-              onToggleStar={handleToggleStar}
-              onSortChapter={handleSortCategory}
-              onLocateInExplorer={handleLocateInExplorer}
-              onSortPage={handleSortPage}
-              onRefreshPages={() => { refreshAllPages(); refreshChapterPages() }}
-              onMoveCategory={handleMoveCategory}
-              allCategories={categories}
-              onMovePageToLoose={handleDropOnLooseArea}
-              onMovePageToNotebook={handleDropOnNotebook}
-              onMovePageToCategory={handleDropOnCategory}
-              onCopy={handleCopy}
-              onCut={handleCut}
-              onExportPage={handleExportPage}
-              onDeletePage={handlePageDeleted}
-              onRenamePage={handleOpenPage}
-              clipboard={clipboard}
-              cutItemIds={cutItemIds}
-            />
-          )}
+            {/* Outline tab — embedded in the sidebar; shows empty state when no headings */}
+            {showOutline ? (
+              <div className="flex-1 min-h-0">
+                <OutlinePanel
+                  pageTitle={activePageForOutline?.title ?? ''}
+                  headings={outlineHeadings}
+                  onBackToFile={() => setShowOutline(false)}
+                  embedded
+                />
+              </div>
+            ) : (
+              <>
+                {/* File tab: tree stays mounted so its expand/collapse state survives drill-in navigation */}
+                <div className={`flex-1 min-h-0 ${showChapterPanel && selectedCategory?.categoryType === 'notebook' ? 'hidden' : ''}`}>
+                  <NotebookList
+                    categories={categories}
+                    allPages={allPages}
+                    loosePages={allLoosePages}
+                    starredPages={starredPages}
+                    selectedCategoryId={selectedCategoryId}
+                    focusChapterId={focusChapterId}
+                    activePageId={activePageId}
+                    onSelectCategory={handleSelectCategory}
+                    onSelectCategoryChapter={handleSelectCategoryChapter}
+                    onCreateNotebook={handleCreateNotebook}
+                    onRenameNotebook={handleRenameNotebook}
+                    onDeleteNotebook={handleDeleteNotebook}
+                    onOpenPage={handleOpenPage}
+                    onCreateLoosePage={handleCreateLoosePage}
+                    onCreatePageUnder={handleCreatePageUnderCategory}
+                    onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
+                    onImport={handleDialogImport}
+                    onImportFolder={handleImportFolder}
+                    onDropOnNotebook={handleDropOnNotebook}
+                    onDropOnCategory={handleDropOnCategory}
+                    onDropOnLooseArea={handleDropOnLooseArea}
+                    onMoveCategory={handleMoveCategory}
+                    onSortCategory={handleSortCategory}
+                    onSortPage={handleSortPage}
+                    locatePageId={locatePageId}
+                    locateCategoryId={locateCategoryId}
+                    onCopy={handleCopy}
+                    onCut={handleCut}
+                    onPaste={handlePaste}
+                    onExportPage={handleExportPage}
+                    onDeletePage={handlePageDeleted}
+                    clipboard={clipboard}
+                    cutItemIds={cutItemIds}
+                  />
+                </div>
+                {showChapterPanel && selectedCategory && selectedCategory.categoryType === 'notebook' && (
+                  <div className="flex-1 min-h-0">
+                    <ChapterPanel
+                      notebookName={selectedCategory.name}
+                      notebookId={selectedCategory.id}
+                      chapters={chapters}
+                      selectedChapterId={selectedChapterId}
+                      focusChapterId={focusChapterId}
+                      onSelectChapter={(id) => { setSelectedChapterId(id === selectedChapterId ? null : id); setFocusChapterId(null) }}
+                      onCreateChapter={handleCreateChapter}
+                      onRenameChapter={handleRenameChapter}
+                      onDeleteChapter={handleDeleteChapter}
+                      pages={chapterPages}
+                      activePageId={activePageId}
+                      onOpenPage={handleOpenPage}
+                      onCreatePage={handleCreateChapterPage}
+                      onImport={handleDialogImport}
+                      onDropOnChapter={handleDropOnChapter}
+                      onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
+                      onToggleStar={handleToggleStar}
+                      onSortChapter={handleSortCategory}
+                      onLocateInExplorer={handleLocateInExplorer}
+                      onSortPage={handleSortPage}
+                      onRefreshPages={() => { refreshAllPages(); refreshChapterPages() }}
+                      onMoveCategory={handleMoveCategory}
+                      allCategories={categories}
+                      onMovePageToLoose={handleDropOnLooseArea}
+                      onMovePageToNotebook={handleDropOnNotebook}
+                      onMovePageToCategory={handleDropOnCategory}
+                      onCopy={handleCopy}
+                      onCut={handleCut}
+                      onExportPage={handleExportPage}
+                      onDeletePage={handlePageDeleted}
+                      onRenamePage={handleOpenPage}
+                      clipboard={clipboard}
+                      cutItemIds={cutItemIds}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </ResizablePanel>
-
-        {/* Outline panel — replaces sidebars when toggled */}
-        {showOutline && activePageForOutline && (
-          <OutlinePanel
-            pageTitle={activePageForOutline.title}
-            headings={outlineHeadings}
-            onBackToFile={handleToggleOutline}
-          />
-        )}
 
         {/* 右侧链接提示（选中章节且无L2面板时显示） */}
         {/* Editor */}
@@ -924,7 +932,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onTitleChange={handleTitleChange}
               onFileTypeChange={handleFileTypeChange}
               onContentChange={setLiveContent}
-              onToggleOutline={handleToggleOutline}
               onTagsChange={handleSearchRefresh}
               onMarkDirty={handleMarkDirty}
               onClearDirty={handleClearDirty}

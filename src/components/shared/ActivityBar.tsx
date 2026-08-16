@@ -3,6 +3,7 @@ import type { TabName } from '../../types'
 import { Palette, ChevronRight, ChevronDown, Check, Download } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
+import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, ExportIcon, RecycleIcon, HelpIcon, UserIcon, SettingsIcon } from './ModuleIcons'
 
 /** All draggable module tabs (excluding user/settings) */
@@ -37,6 +38,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [themeExpanded, setThemeExpanded] = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+  const { menuRef: ctxMenuRef, style: ctxMenuStyle } = useContextMenuPosition(ctxMenu)
   const [dragId, setDragId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
@@ -249,10 +251,8 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
         <div className="fixed inset-0 z-[70]" onClick={() => setCtxMenu(null)}>
           <div
             className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl py-0.5 min-w-[180px]"
-            style={{
-              left: Math.min(ctxMenu.x, window.innerWidth - 190),
-              top: Math.min(ctxMenu.y, window.innerHeight - 320)
-            }}
+            ref={ctxMenuRef}
+            style={ctxMenuStyle}
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >

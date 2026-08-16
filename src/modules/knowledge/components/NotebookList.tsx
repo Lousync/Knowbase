@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, ArrowUpDown, CornerLeftUp, FolderInput, Link2Off, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
+import { Check, FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, CornerLeftUp, FolderInput, Link2Off, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
@@ -7,6 +7,7 @@ import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { CategoryMovePicker } from './CategoryMovePicker'
+import { useContextMenuPosition } from '../../../lib/useContextMenuPosition'
 
 interface Props {
   categories: KnowledgeCategory[]
@@ -59,7 +60,6 @@ export function NotebookList({
     { id: 'created', label: '创建时间' }, { id: 'updated', label: '更新时间' },
   ]
   const [sortMode, setSortMode] = useState<string>('custom')
-  const [sortOpen, setSortOpen] = useState(false)
   const TYPE_ORDER: Record<string, number> = { notebook: 0, folder: 1 }
   function sortCats(list: KnowledgeCategory[]): KnowledgeCategory[] {
     return [...list].sort((a, b) => {
@@ -81,6 +81,7 @@ export function NotebookList({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ type: 'category' | 'page' | 'blank'; id: string; x: number; y: number } | null>(null)
+  const { menuRef: contextMenuRef, style: contextMenuStyle } = useContextMenuPosition(contextMenu)
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [movePickerData, setMovePickerData] = useState<{ type: 'category' | 'page'; id: string } | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)  // visual feedback during drag
@@ -127,15 +128,6 @@ export function NotebookList({
       if (v === true) setSkipDeleteConfirm(true)
     })
   }, [])
-
-  // Sort dropdown dismiss
-  const sortBtnRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!sortOpen) return
-    const onMouseDown = (e: MouseEvent) => { if (sortBtnRef.current && !sortBtnRef.current.contains(e.target as Node)) setSortOpen(false) }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [sortOpen])
 
   // Context menu dismiss (Escape only — backdrop onClick handles outside clicks)
   useEffect(() => {
@@ -478,40 +470,11 @@ export function NotebookList({
 
   return (
     <div className="flex flex-col h-full overflow-y-auto select-none">
-      {/* ===== Top action bar ===== */}
-      <div className="px-2 py-1.5 border-b border-[var(--border-color)] space-y-0.5">
-        <div className="flex items-center justify-between px-0.5 mb-0.5">
-          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">资源管理器</span>
-          <div className="relative" ref={sortBtnRef}>
-            <button onClick={() => setSortOpen(v => !v)} className="flex items-center gap-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="排序方式"><ArrowUpDown size={11} />{sortModes.find(m => m.id === sortMode)?.label}</button>
-            {sortOpen && (<div className="absolute right-0 top-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-md shadow-lg z-40 py-0.5 min-w-[100px]" onMouseDown={e => e.stopPropagation()}>{sortModes.map(m => (<button key={m.id} onClick={() => { setSortMode(m.id); setSortOpen(false) }} className={`w-full text-left px-2 py-1 text-[11px] transition-colors ${sortMode === m.id ? 'text-[var(--accent)] bg-[var(--bg-hover)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}>{m.label}</button>))}</div>)}
-          </div>
-        </div>
-
-        {/* Three create buttons */}
-        <div className="flex gap-0.5">
-          <button
-            onMouseDown={() => { switchingModeRef.current = true }}
-            onClick={() => { setCreateParentId(null); setCreateMode('folder'); setNewName(''); switchingModeRef.current = false }}
-            className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-            <Folder size={12} />目录
-          </button>
-          <button
-            onMouseDown={() => { switchingModeRef.current = true }}
-            onClick={() => { setCreateParentId(null); setCreateMode('notebook'); setNewName(''); switchingModeRef.current = false }}
-            className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-            <BookOpen size={12} />笔记本
-          </button>
-          <button onClick={onCreateLoosePage}
-            className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-            <FileText size={11} />页面
-          </button>
-        </div>
-
-        {/* Inline create input (root-level only) */}
-        {createParentId === null && createMode && (
+      {/* Inline create input (root-level only) — shown when creating via context menu */}
+      {createParentId === null && createMode && (
+        <div className="px-2 py-1.5 border-b border-[var(--border-color)] shrink-0">
           <input
-            className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[12px] outline-none text-[var(--text-primary)] mt-0.5"
+            className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[12px] outline-none text-[var(--text-primary)]"
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onBlur={handleCreate}
@@ -519,22 +482,8 @@ export function NotebookList({
             placeholder={createMode === 'folder' ? '目录名称' : '笔记本名称'}
             autoFocus
           />
-        )}
-
-        {/* Import buttons */}
-        <div className="flex gap-0.5">
-          <button onClick={onImport}
-            className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-            <Download size={12} />导入文件
-          </button>
-          {onImportFolder && (
-            <button onClick={onImportFolder}
-              className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors border border-[var(--border-color)]">
-              <Folder size={12} />导入文件夹
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {/* ===== Tree ===== */}
       <div
@@ -728,10 +677,8 @@ export function NotebookList({
         <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
           <div
             className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[170px]"
-            style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 180),
-              top: Math.min(contextMenu.y, window.innerHeight - 220)
-            }}
+            ref={contextMenuRef}
+            style={contextMenuStyle}
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
@@ -950,6 +897,17 @@ export function NotebookList({
                     <Folder size={14} className="text-[var(--text-muted)]" />导入文件夹...
                   </button>
                 )}
+                <div className="border-t border-[var(--border-color)] my-0.5" />
+                <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-3 py-1.5">排序方式</div>
+                {sortModes.map(m => (
+                  <button key={m.id} onClick={() => { setSortMode(m.id); setContextMenu(null) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <span className="w-4 flex items-center justify-center shrink-0">
+                      {sortMode === m.id && <Check size={12} className="text-[var(--accent)]" />}
+                    </span>
+                    {m.label}
+                  </button>
+                ))}
               </>
             )}
           </div>

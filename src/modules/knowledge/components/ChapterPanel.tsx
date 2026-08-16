@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, FolderSearch, FolderInput, Link2Off, Copy, Scissors, FileOutput } from 'lucide-react'
+import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ArrowLeft, FolderSearch, FolderInput, Link2Off, Copy, Scissors, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting, reorderKnowledgePage } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { CategoryMovePicker } from './CategoryMovePicker'
+import { useContextMenuPosition } from '../../../lib/useContextMenuPosition'
 
 interface Props {
   notebookName: string
@@ -62,6 +63,7 @@ export function ChapterPanel({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(null)
+  const { menuRef: contextMenuRef, style: contextMenuStyle } = useContextMenuPosition(contextMenu)
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [movePickerPageId, setMovePickerPageId] = useState<string | null>(null)
   const [dragOverChId, setDragOverChId] = useState<string | null>(null)
@@ -146,8 +148,8 @@ export function ChapterPanel({
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <button onClick={onCollapse}
             className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-            title="折叠章节面板">
-            <ChevronDown size={20} />
+            title="返回">
+            <ArrowLeft size={18} />
           </button>
           {focusChapter && editingId === focusChapter.id ? (
             <input
@@ -440,10 +442,8 @@ export function ChapterPanel({
         <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
           <div
             className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[170px]"
-            style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 180),
-              top: Math.min(contextMenu.y, window.innerHeight - 220)
-            }}
+            ref={contextMenuRef}
+            style={contextMenuStyle}
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >

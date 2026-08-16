@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, ListTree, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath } from '../../../lib/ipc'
@@ -23,13 +23,12 @@ interface Props {
   onTitleChange?: (title: string) => void
   onFileTypeChange?: (fileType: string) => void
   onContentChange?: (content: string) => void
-  onToggleOutline?: () => void
   onTagsChange?: () => void
   onMarkDirty?: () => void
   onClearDirty?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onToggleOutline, onTagsChange, onMarkDirty, onClearDirty }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onTagsChange, onMarkDirty, onClearDirty }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -371,9 +370,6 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           />
           {!isCodeFile && !isPdfFile && (
             <>
-              <button onClick={onToggleOutline} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="大纲视图">
-                <ListTree size={15} />
-              </button>
               <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
                 {preview ? <Edit3 size={15} /> : <Eye size={15} />}
               </button>

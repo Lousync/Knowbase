@@ -89,6 +89,8 @@ interface OutlinePanelProps {
   pageTitle: string
   headings: HeadingNode[]
   onBackToFile: () => void
+  /** Render inside an existing sidebar panel instead of as a standalone panel */
+  embedded?: boolean
 }
 
 const LEVEL_STYLE: Record<number, string> = {
@@ -132,7 +134,7 @@ function HeadingRow({ node, depth = 0, query = '' }: { node: HeadingNode; depth:
   )
 }
 
-export function OutlinePanel({ pageTitle, headings, onBackToFile }: OutlinePanelProps) {
+export function OutlinePanel({ pageTitle, headings, onBackToFile, embedded = false }: OutlinePanelProps) {
   const [query, setQuery] = useState('')
   const trimmedQuery = query.trim()
   const filtered = useMemo(
@@ -142,21 +144,23 @@ export function OutlinePanel({ pageTitle, headings, onBackToFile }: OutlinePanel
   const matchCount = trimmedQuery ? countNodes(filtered) : headings.length
 
   return (
-    <div className="flex flex-col h-full w-[260px] shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-primary)]">
-      {/* Header — back to file view */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border-color)]">
-        <button
-          onClick={onBackToFile}
-          className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-          title="返回文件视图"
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <div className="min-w-0 flex-1">
-          <span className="text-[12px] font-medium text-[var(--text-primary)] truncate block">{pageTitle || '无标题'}</span>
-          <span className="text-[10px] text-[var(--text-muted)]">{matchCount} 个{trimmedQuery ? '匹配' : '标题'}</span>
+    <div className={`flex flex-col h-full ${embedded ? '' : 'w-[260px] shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-primary)]'}`}>
+      {/* Header — back to file view (only for the standalone panel) */}
+      {!embedded && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border-color)]">
+          <button
+            onClick={onBackToFile}
+            className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+            title="返回文件视图"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <span className="text-[12px] font-medium text-[var(--text-primary)] truncate block">{pageTitle || '无标题'}</span>
+            <span className="text-[10px] text-[var(--text-muted)]">{matchCount} 个{trimmedQuery ? '匹配' : '标题'}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Title search */}
       <div className="px-2 pt-2 pb-1 shrink-0">
@@ -192,10 +196,9 @@ export function OutlinePanel({ pageTitle, headings, onBackToFile }: OutlinePanel
       {/* Heading tree */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-1 py-1">
         {headings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
+          <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
             <FileText size={28} className="mb-2 opacity-25" />
-            <p className="text-[11px]">暂无标题</p>
-            <p className="text-[10px] mt-1 text-[var(--text-disabled)]">在文档中使用 # 标题语法</p>
+            <p className="text-[11px]">大纲内容为空</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
