@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Trash2, RotateCcw, X, AlertCircle, FileText, BookOpen, Folder, ChevronRight, ChevronDown, ArrowUpDown, Filter, Shield } from 'lucide-react'
 import type { RecycleBinItem } from '../../types'
 import { getRecycleBinItems, restoreRecycleBinItem, restoreRecycleBinPartial, trashRecycleBinItem, trashRecycleBinPartial, emptyRecycleBin } from '../../lib/ipc'
@@ -21,7 +21,7 @@ function getItemFileType(item: RecycleBinItem): string {
   return 'dir' // knowledge_category
 }
 
-export function RecycleBinModule() {
+export function RecycleBinModule({ isActive = true }: { isActive?: boolean }) {
   const [items, setItems] = useState<RecycleBinItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -66,6 +66,15 @@ export function RecycleBinModule() {
   }
 
   useEffect(() => { loadItems() }, [])
+
+  // 每次切换到回收站标签时重新加载，避免删除后数据未刷新
+  const prevActive = useRef(isActive)
+  useEffect(() => {
+    if (isActive && !prevActive.current) {
+      loadItems()
+    }
+    prevActive.current = isActive
+  }, [isActive])
 
   useEffect(() => {
     const handler = () => { loadItems() }

@@ -89,6 +89,9 @@ export const SETTINGS = {
   trashExportDir:           { default: '',   desc: '回收站文件导出目录' },
   recycleBinRetentionDays:  { default: 30,   desc: '回收站保留天数' },
 
+  // ---- PDF 阅读 ----
+  pdfReaderMode:   { default: 'builtin',     desc: 'PDF 阅读方式: builtin=内置阅读器, external=本地工具打开' },
+
   // ---- 日程 ----
   scheduleIconSize:  { default: 'm',         desc: '日程图标大小' },
 

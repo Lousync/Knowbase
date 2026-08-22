@@ -9,6 +9,84 @@ import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from '.
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; attachment_id: string; created_at: string; updated_at: string }
 
+type CategoryType = 'notebook' | 'folder' | 'space'
+
+function normalizeCategoryType(raw: string): CategoryType {
+  if (raw === 'notebook' || raw === 'space' || raw === 'folder') return raw
+  return 'folder'
+}
+
+function mapCategory(r: CategoryRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    parentId: r.parent_id,
+    sortOrder: r.sort_order,
+    categoryType: normalizeCategoryType(r.category_type),
+  }
+}
+
+function getCategory(id: string): CategoryRow | undefined {
+  return queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
+}
+
+function hasChildCategories(id: string): boolean {
+  return queryAll<{ id: string }>(
+    'SELECT id FROM knowledge_categories WHERE parent_id = ? LIMIT 1',
+    [id]
+  ).length > 0
+}
+
+function isCategoryDescendant(ancestorId: string, nodeId: string): boolean {
+  const seen = new Set<string>()
+  let currentId: string | null = nodeId
+  while (currentId) {
+    if (seen.has(currentId)) return false
+    seen.add(currentId)
+    if (currentId === ancestorId) return true
+    const current = getCategory(currentId)
+    currentId = current?.parent_id ?? null
+  }
+  return false
+}
+
+function assertCategoryRules(id: string | null, categoryType: CategoryType, parentId: string | null): void {
+  if (parentId === null) {
+    if (categoryType !== 'space') throw new Error('根层级只能创建空间')
+    return
+  }
+
+  const parent = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [parentId])[0]
+  if (!parent) throw new Error('目标分类不存在')
+  if (id && parent.id === id) throw new Error('不能将分类移动到自身')
+
+  if (id && isCategoryDescendant(id, parent.id)) throw new Error('cannot move category into its descendant')
+
+  const parentType = normalizeCategoryType(parent.category_type)
+  const parentOfParent = parent.parent_id ? getCategory(parent.parent_id) : undefined
+  const parentIsChapter = parentType === 'folder' && parentOfParent
+    ? normalizeCategoryType(parentOfParent.category_type) === 'notebook'
+    : false
+
+  if (parentIsChapter) throw new Error('cannot create or move a category under a chapter')
+  if (parentType === 'notebook' && categoryType === 'folder' && id && hasChildCategories(id)) {
+    throw new Error('cannot move a folder with child categories into a notebook')
+  }
+  if (categoryType === 'space') throw new Error('空间只能位于根层级')
+  if (parentType === 'notebook' && categoryType !== 'folder') throw new Error('笔记本下只能创建或移动章节目录')
+  if (categoryType === 'notebook' && parentType === 'notebook') throw new Error('笔记本不能嵌套在另一个笔记本中')
+}
+
+function assertPageContainer(categoryId: string | null): void {
+  if (categoryId === null) return
+  const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [categoryId])[0]
+  if (!cat) throw new Error('目标分类不存在')
+  const categoryType = normalizeCategoryType(cat.category_type)
+  if (categoryType === 'notebook') {
+    throw new Error('页面不能直接放在笔记本下，请选择笔记本内的章节')
+  }
+}
+
 function mapPage(r: PageRow) {
   const raw = ((r as any).file_type || '')
   const normalized = raw.replace(/^\./, '').toLowerCase()
@@ -47,49 +125,51 @@ export function registerKnowledgeHandlers(): void {
     const rows = queryAll<CategoryRow>(
       'SELECT * FROM knowledge_categories ORDER BY sort_order, name'
     )
-    return rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      parentId: r.parent_id,
-      sortOrder: r.sort_order,
-      categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder',
-    }))
+    return rows.map(mapCategory)
   })
 
   // 创建分类
-  ipcMain.handle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }) => {
+  ipcMain.handle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: CategoryType }) => {
     const id = randomUUID()
-    const ct = data.categoryType === 'notebook' ? 'notebook' : 'folder'
+    const ct = normalizeCategoryType(data.categoryType || 'folder')
+    const parentId = data.parentId === undefined ? null : data.parentId
+    assertCategoryRules(null, ct, parentId)
     const maxOrder = queryAll<{ m: number }>(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
-      [data.parentId || null]
+      [parentId]
     )
     run(
       'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
-      [id, data.name, data.parentId || null, maxOrder[0]?.m ?? 0, ct]
+      [id, data.name, parentId, maxOrder[0]?.m ?? 0, ct]
     )
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
-    const r = rows[0]
-    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
+    return mapCategory(rows[0])
   })
 
   // 更新分类（重命名/移动）— 72b2480 兼容逻辑：不引用 updated_at
-  ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }) => {
+  ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: CategoryType }) => {
     console.log(`[knowledge:updateCategory] id=${id} data=`, JSON.stringify(data))
+
+    const current = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
+    if (!current) throw new Error('分类不存在')
+    const effectiveType = data.categoryType === undefined
+      ? normalizeCategoryType(current.category_type)
+      : normalizeCategoryType(data.categoryType)
+    const effectiveParentId = data.parentId === undefined ? current.parent_id : data.parentId
+    assertCategoryRules(id, effectiveType, effectiveParentId)
 
     const sets: string[] = []
     const params: unknown[] = []
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
-    if (data.parentId !== undefined) { sets.push('parent_id = ?'); params.push(data.parentId) }
+    if (data.parentId !== undefined) { sets.push('parent_id = ?'); params.push(effectiveParentId) }
     if (data.sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(data.sortOrder) }
-    if (data.categoryType !== undefined) { sets.push('category_type = ?'); params.push(data.categoryType) }
+    if (data.categoryType !== undefined) { sets.push('category_type = ?'); params.push(effectiveType) }
     // When moving category to a different parent, reset sort_order to append at end
     if (data.parentId !== undefined && data.sortOrder === undefined) {
-      const oldCat = queryAll<CategoryRow>('SELECT parent_id FROM knowledge_categories WHERE id = ?', [id])[0]
-      if (oldCat && oldCat.parent_id !== data.parentId) {
+      if (current.parent_id !== effectiveParentId) {
         const maxOrder = queryAll<{ m: number }>(
           'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
-          [data.parentId]
+          [effectiveParentId]
         )
         sets.push('sort_order = ?')
         params.push(maxOrder[0]?.m ?? 0)
@@ -100,8 +180,7 @@ export function registerKnowledgeHandlers(): void {
       run(`UPDATE knowledge_categories SET ${sets.join(', ')} WHERE id = ?`, params)
     }
     const rows = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])
-    const r = rows[0]
-    return { id: r.id, name: r.name, parentId: r.parent_id, sortOrder: r.sort_order, categoryType: (r.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' }
+    return mapCategory(rows[0])
   })
 
   // 移动分类（上下排序）
@@ -142,7 +221,7 @@ export function registerKnowledgeHandlers(): void {
       return children.map(ch => ({
         category: {
           id: ch.id, name: ch.name, parentId: ch.parent_id,
-          sortOrder: ch.sort_order, categoryType: (ch.category_type === 'notebook' ? 'notebook' : 'folder'),
+          sortOrder: ch.sort_order, categoryType: normalizeCategoryType(ch.category_type),
         },
         pages: queryAll<PageRow>(
           'SELECT * FROM knowledge_pages WHERE category_id = ?', [ch.id]
@@ -169,7 +248,7 @@ export function registerKnowledgeHandlers(): void {
     const snapshot = JSON.stringify({
       category: {
         id: cat.id, name: cat.name, parentId: cat.parent_id,
-        sortOrder: cat.sort_order, categoryType: (cat.category_type === 'notebook' ? 'notebook' : 'folder'),
+        sortOrder: cat.sort_order, categoryType: normalizeCategoryType(cat.category_type),
       },
       children: collectChildren(id),
       pages: directPages,
@@ -251,6 +330,7 @@ export function registerKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:createPage', (_e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
+    assertPageContainer(data.categoryId ?? null)
     const maxOrder = queryAll<{ m: number }>(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
       [data.categoryId || null]
@@ -267,6 +347,7 @@ export function registerKnowledgeHandlers(): void {
 
   // 更新页面
   ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
+    if (data.categoryId !== undefined) assertPageContainer(data.categoryId ?? null)
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
     for (const [k, v] of Object.entries(data)) {
@@ -485,6 +566,7 @@ export function registerKnowledgeHandlers(): void {
     const newId = randomUUID()
     const now = new Date().toISOString()
     const targetCat = data.targetCategoryId !== undefined ? data.targetCategoryId : src.category_id
+    assertPageContainer(targetCat ?? null)
     const maxOrder = queryAll<{ m: number }>(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
       [targetCat]
@@ -504,12 +586,18 @@ export function registerKnowledgeHandlers(): void {
     if (!cat) return null
 
     const targetParent = data.targetParentId !== undefined ? data.targetParentId : cat.parent_id
-    const newRootId = randomUUID()
+    if (normalizeCategoryType(cat.category_type) === 'folder' && targetParent) {
+      const target = getCategory(targetParent)
+      if (target && normalizeCategoryType(target.category_type) === 'notebook' && hasChildCategories(data.categoryId)) {
+        throw new Error('cannot duplicate a folder with child categories into a notebook')
+      }
+    }
+    assertCategoryRules(null, normalizeCategoryType(cat.category_type), targetParent)
 
     // Recursively duplicate categories
-    const dupCategory = (oldId: string, newParentId: string | null) => {
+    const dupCategory = (oldId: string, newParentId: string | null): string | null => {
       const oldCat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [oldId])[0]
-      if (!oldCat) return
+      if (!oldCat) return null
       const newId = randomUUID()
       const maxOrder = queryAll<{ m: number }>(
         'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS ?',
@@ -535,15 +623,17 @@ export function registerKnowledgeHandlers(): void {
       for (const ch of children) {
         dupCategory(ch.id, newId)
       }
+      return newId
     }
 
-    dupCategory(data.categoryId, targetParent)
+    const newRootId = dupCategory(data.categoryId, targetParent)
+    if (!newRootId) return null
 
     const newCat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [newRootId])[0]
     return {
       id: newCat.id, name: newCat.name, parentId: newCat.parent_id,
       sortOrder: newCat.sort_order,
-      categoryType: (newCat.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder',
+      categoryType: normalizeCategoryType(newCat.category_type),
     }
   })
 }

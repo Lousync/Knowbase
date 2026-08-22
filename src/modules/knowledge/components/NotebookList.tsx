@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Check, FileText, Folder, FolderOpen, BookOpen, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, CornerLeftUp, FolderInput, Link2Off, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
+import { Check, FileText, Folder, FolderOpen, BookOpen, BookPlus, Layers, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, FolderInput, Link2Off, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting } from '../../../lib/ipc'
@@ -19,7 +19,11 @@ interface Props {
   activePageId: string | null
   onSelectCategory: (id: string | null) => void
   onSelectCategoryChapter: (notebookId: string, chapterId: string) => void
-  onCreateNotebook: (name: string, categoryType: 'folder' | 'notebook', parentId: string | null) => void
+  /** 传入空间ID时：进入该空间的沉浸视图（只显示空间内内容，不显示其他空间） */
+  spaceId?: string | null
+  /** 空间列表模式下点击空间时触发（打开空间） */
+  onSelectSpace?: (id: string) => void
+  onCreateNotebook: (name: string, categoryType: 'folder' | 'notebook' | 'space', parentId: string | null) => void
   onRenameNotebook: (id: string, name: string) => void
   onDeleteNotebook: (id: string) => void
   onOpenPage: (id: string) => void
@@ -41,6 +45,7 @@ interface Props {
   onPaste?: (targetCategoryId: string | null) => void
   onExportPage?: (pageId: string) => void
   onDeletePage?: (pageId: string) => void
+  onRenamePage?: (pageId: string, name: string) => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
 }
@@ -52,15 +57,18 @@ export function NotebookList({
   onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport, onImportFolder,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
   onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
-  onCopy, onCut, onPaste, onExportPage, onDeletePage, clipboard, cutItemIds,
+  onCopy, onCut, onPaste, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds,
+  spaceId = null, onSelectSpace,
 }: Props) {
+  const isSpaceView = !!spaceId
+
   // -- sort --
   const sortModes: Array<{ id: string; label: string }> = [
     { id: 'custom', label: '自定义' }, { id: 'type', label: '类型' }, { id: 'name', label: '名称' },
     { id: 'created', label: '创建时间' }, { id: 'updated', label: '更新时间' },
   ]
   const [sortMode, setSortMode] = useState<string>('custom')
-  const TYPE_ORDER: Record<string, number> = { notebook: 0, folder: 1 }
+  const TYPE_ORDER: Record<string, number> = { space: 0, notebook: 1, folder: 2 }
   function sortCats(list: KnowledgeCategory[]): KnowledgeCategory[] {
     return [...list].sort((a, b) => {
       if (sortMode === 'type') { const ta = TYPE_ORDER[a.categoryType] ?? 2; const tb = TYPE_ORDER[b.categoryType] ?? 2; if (ta !== tb) return ta - tb; return a.sortOrder - b.sortOrder }
@@ -70,12 +78,17 @@ export function NotebookList({
       return a.sortOrder - b.sortOrder
     })
   }
-  const rootCats = sortCats(categories.filter(c => !c.parentId))
+  // 空间沉浸视图下 root = 空间内的子项；空间列表视图下 root = 所有空间
+  const rootCats = sortCats(isSpaceView
+    ? categories.filter(c => c.parentId === spaceId)
+    : categories.filter(c => !c.parentId))
   const [newName, setNewName] = useState('')
-  const [createMode, setCreateMode] = useState<'folder' | 'notebook' | null>(null)
+  const [createMode, setCreateMode] = useState<'folder' | 'notebook' | 'space' | null>(null)
   const [createParentId, setCreateParentId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editingPageId, setEditingPageId] = useState<string | null>(null)
+  const [editPageName, setEditPageName] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [starredOpen, setStarredOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -199,15 +212,20 @@ export function NotebookList({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditingInput(e)) return
-      if (e.key === 'F2' && selectedCategoryId) {
+      if (e.key === 'F2') {
         e.preventDefault()
-        const cat = categories.find(c => c.id === selectedCategoryId)
-        if (cat) handleStartRename(cat.id, cat.name)
+        if (activePageId) {
+          const pg = allPages.find(p => p.id === activePageId)
+          handleStartRenamePage(activePageId, pg?.title || '')
+        } else if (selectedCategoryId) {
+          const cat = categories.find(c => c.id === selectedCategoryId)
+          if (cat) handleStartRename(cat.id, cat.name)
+        }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedCategoryId, categories])
+  }, [selectedCategoryId, categories, activePageId, allPages])
 
   function toggleExpand(id: string) {
     setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -216,7 +234,11 @@ export function NotebookList({
   function handleCreate() {
     if (switchingModeRef.current) { setNewName(''); return }
     if (!newName.trim()) { setNewName(''); setCreateMode(null); setCreateParentId(null); return }
-    onCreateNotebook(newName.trim(), createMode === 'notebook' ? 'notebook' : 'folder', createParentId)
+    onCreateNotebook(
+      newName.trim(),
+      createMode === 'notebook' ? 'notebook' : createMode === 'space' ? 'space' : 'folder',
+      createParentId
+    )
     if (createParentId) {
       setExpanded(prev => new Set(prev).add(createParentId))
     }
@@ -227,6 +249,12 @@ export function NotebookList({
   function handleRename(id: string) {
     if (!editName.trim()) { setEditingId(null); return }
     onRenameNotebook(id, editName.trim()); setEditingId(null)
+  }
+
+  function handleStartRenamePage(id: string, name: string) { setEditingPageId(id); setEditPageName(name) }
+  function handleRenamePage(id: string) {
+    if (!editPageName.trim()) { setEditingPageId(null); return }
+    onRenamePage?.(id, editPageName.trim()); setEditingPageId(null)
   }
 
   // ---- cycle prevention for category moves ----
@@ -251,6 +279,10 @@ export function NotebookList({
     const target = categories.find(c => c.id === targetId)
     const dragged = categories.find(c => c.id === draggedId)
     if (!target || !dragged) return false
+    if (dragged.categoryType === 'space') return false
+    if (target.categoryType === 'space') {
+      return true  // dragged is guaranteed not a space here
+    }
     // Reject: chapters (folders under notebooks) cannot accept category drops
     if (target.categoryType === 'folder') {
       const parent = categories.find(c => c.id === target.parentId)
@@ -262,6 +294,13 @@ export function NotebookList({
       return !categories.some(c => c.parentId === draggedId)
     }
     return false
+  }
+
+  function canAcceptPage(targetId: string): boolean {
+    const target = categories.find(c => c.id === targetId)
+    // Pages can live directly under a space (散页), folder/chapter, or via
+    // auto-created default chapter when dropped on a notebook.
+    return !!target
   }
 
   // ---- parse drop data (same format as ActivityBar) ----
@@ -298,15 +337,21 @@ export function NotebookList({
     const categoryPages = allPages.filter(p => p.categoryId === cat.id)
     const hasPages = categoryPages.length > 0
     const isNotebook = cat.categoryType === 'notebook'
+    const isSpace = cat.categoryType === 'space'
+    const isChapter = cat.categoryType === 'folder' && categories.find(c => c.id === cat.parentId)?.categoryType === 'notebook'
     // Show expand arrow for folders that have sub-categories OR pages directly
     // Chapters under notebooks never expand — they toggle the sidebar instead
-    const canExpand = notebookAncestorId ? false : (isNotebook ? hasChildren : (hasChildren || hasPages))
+    // Spaces never expand inline — clicking opens the space immersive view
+    const canExpand = isSpace ? false : notebookAncestorId ? false : (isNotebook ? hasChildren : (hasChildren || hasPages))
     // Pass notebook ancestor to children
     const nbId = isNotebook ? cat.id : notebookAncestorId
 
-    // Row click: notebook opens chapter sidebar, chapter under notebook opens focus view, folder toggles expand
+    // Row click: space opens immersive view; notebook opens chapter sidebar,
+    // chapter under notebook opens focus view, folder toggles expand
     const handleRowClick = () => {
-      if (isNotebook) {
+      if (isSpace) {
+        onSelectSpace?.(cat.id)
+      } else if (isNotebook) {
         onSelectCategory(cat.id)
       } else if (notebookAncestorId) {
         onSelectCategoryChapter(notebookAncestorId, cat.id)
@@ -326,8 +371,12 @@ export function NotebookList({
       <div key={cat.id} data-cat-id={cat.id}>
         <div
           data-cat-id={cat.id}
-          draggable
+          draggable={!isSpace}
           onDragStart={e => {
+            if (isSpace) {
+              e.preventDefault()
+              return
+            }
             console.log('[NB dragStart] category:', cat.name, cat.id)
             e.dataTransfer.effectAllowed = 'move'
             const payload = JSON.stringify({ type: 'category', id: cat.id })
@@ -379,7 +428,9 @@ export function NotebookList({
                   <span className="w-3.5" />
                 )}
               </span>
-              {isNotebook ? (
+              {isSpace ? (
+                <Layers size={15} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--info)]'}`} />
+              ) : isNotebook ? (
                 <BookOpen size={15} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
               ) : canExpand ? (
                 isExpanded ? <FolderOpen size={15} className="shrink-0 text-[var(--warning)]" /> : <Folder size={15} className="shrink-0 text-[var(--warning)]" />
@@ -391,12 +442,15 @@ export function NotebookList({
                 {onSortCategory && (<><button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={13} /></button><button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={13} /></button></>)}
                 {isNotebook ? (
                   onCreateChapterUnderNotebook && <button onClick={e => { e.stopPropagation(); onCreateChapterUnderNotebook(cat.id) }} className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建章节"><FolderPlus size={13} /></button>
-                ) : (
+                ) : isChapter ? (
+                  <button onClick={e => { e.stopPropagation(); onCreatePageUnder(cat.id) }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面"><FilePlus size={13} /></button>
+                ) : !isSpace ? (
                   <>
                     <button onClick={e => { e.stopPropagation(); onCreatePageUnder(cat.id) }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面"><FilePlus size={13} /></button>
                     <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('folder'); setNewName('') }} className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建子目录"><FolderPlus size={13} /></button>
+                    <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('notebook'); setNewName('') }} className="p-0.5 hover:text-[var(--info)] text-[var(--text-secondary)]" title="新建笔记本"><BookPlus size={13} /></button>
                   </>
-                )}
+                ) : null}
                 <button onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }} className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="重命名"><Pencil size={13} /></button>
                 <button onClick={e => { e.stopPropagation(); if (skipDeleteConfirm) onDeleteNotebook(cat.id); else setDeleteTarget({ id: cat.id, name: cat.name }) }} className="p-0.5 hover:text-[var(--danger)] text-[var(--text-secondary)]" title="删除"><Trash2 size={13} /></button>
               </div>
@@ -415,7 +469,7 @@ export function NotebookList({
                 if (e.key === 'Enter') handleCreate()
                 if (e.key === 'Escape') { setCreateMode(null); setCreateParentId(null); setNewName('') }
               }}
-              placeholder={`${cat.name} > 子目录名称`}
+              placeholder={`${cat.name} > ${createMode === 'notebook' ? '笔记本名称' : createMode === 'space' ? '空间名称' : '子目录名称'}`}
               autoFocus
             />
           </div>
@@ -454,7 +508,19 @@ export function NotebookList({
               >
                 <span className="w-3.5 shrink-0" />
                 <FileIcon ext={p.fileType || ''} size={14} />
-                <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                {editingPageId === p.id ? (
+                  <input
+                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                    value={editPageName}
+                    onChange={e => setEditPageName(e.target.value)}
+                    onBlur={() => handleRenamePage(p.id)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenamePage(p.id); if (e.key === 'Escape') setEditingPageId(null) }}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                )}
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
@@ -470,16 +536,16 @@ export function NotebookList({
 
   return (
     <div className="flex flex-col h-full overflow-y-auto select-none">
-      {/* Inline create input (root-level only) — shown when creating via context menu */}
-      {createParentId === null && createMode && (
+      {/* Inline create input (root / space-level) — shown when creating via context menu */}
+      {createMode && (isSpaceView ? createParentId === spaceId : createParentId === null) && (
         <div className="px-2 py-1.5 border-b border-[var(--border-color)] shrink-0">
           <input
             className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[12px] outline-none text-[var(--text-primary)]"
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onBlur={handleCreate}
-            onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setCreateMode(null); setNewName('') } }}
-            placeholder={createMode === 'folder' ? '目录名称' : '笔记本名称'}
+            onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setCreateMode(null); setCreateParentId(null); setNewName('') } }}
+            placeholder={createMode === 'folder' ? '目录名称' : createMode === 'space' ? '空间名称' : '笔记本名称'}
             autoFocus
           />
         </div>
@@ -526,8 +592,11 @@ export function NotebookList({
                 clearDragHighlight()
               }
             } else {
-              // page drop on any category
-              applyDragHighlight(targetCat)
+              if (canAcceptPage(catId)) {
+                applyDragHighlight(targetCat)
+              } else {
+                clearDragHighlight()
+              }
             }
           } else if (targetPage && d.type === 'page') {
             applyDragHighlight(targetPage)
@@ -565,8 +634,9 @@ export function NotebookList({
                 console.log('[NB drop] → onMoveCategory:', d.id, '→', targetId)
                 setExpanded(prev => new Set(prev).add(targetId))
                 onMoveCategory(d.id, targetId)
-              } else if (d.type === 'page') {
+              } else if (d.type === 'page' && canAcceptPage(targetId)) {
                 const c = categories.find(x => x.id === targetId)
+                setExpanded(prev => new Set(prev).add(targetId))
                 if (c?.categoryType === 'notebook') onDropOnNotebook(d.id, targetId)
                 else onDropOnCategory(d.id, targetId)
               }
@@ -583,11 +653,11 @@ export function NotebookList({
           if (targetId === '__loose' || !targetId) {
             const looseEl = treeRef.current?.querySelector('[data-loose-area]') as HTMLElement | null
             if (looseEl) looseEl.classList.remove('drag-over-loose')
-            if (d.type === 'category') onMoveCategory(d.id, null)
-            else if (d.type === 'page') onDropOnLooseArea(d.id)
-          } else if (d.type === 'category') {
-            // Category dropped on empty space → move to root
-            onMoveCategory(d.id, null)
+            if (d.type === 'page') {
+              // 空间沉浸视图下空白处拖入 = 放入该空间；否则为全局零散
+              if (isSpaceView && spaceId) onDropOnCategory(d.id, spaceId)
+              else onDropOnLooseArea(d.id)
+            }
           } else if (d.type === 'page') {
             onDropOnLooseArea(d.id)
           }
@@ -595,8 +665,64 @@ export function NotebookList({
       >
         {rootCats.map(cat => renderCategory(cat, 0))}
 
+        {/* Space view: the space's direct pages (loose within the space) */}
+        {isSpaceView && spaceId && (() => {
+          const spacePages = allPages.filter(p => p.categoryId === spaceId)
+          if (spacePages.length === 0) return null
+          return (
+            <div
+              data-loose-area="true"
+              className="mx-1 rounded transition-colors"
+            >
+              {spacePages.map(p => (
+                <div key={p.id}
+                  data-page-id={p.id}
+                  draggable
+                  onDragStart={e => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                    dragRef.current = { type: 'page', id: p.id }
+                    ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
+                  }}
+                  onDragEnd={e => { ;(e.currentTarget as HTMLElement).style.opacity = '1'; dragRef.current = null }}
+                  onClick={() => onOpenPage(p.id)}
+                  onContextMenu={e => {
+                    e.preventDefault(); e.stopPropagation()
+                    setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
+                  }}
+                  className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
+                    activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  }`}
+                  style={{
+                    paddingLeft: '5px', paddingRight: '4px',
+                    ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
+                  }}
+                >
+                  <span className="w-3.5 shrink-0" />
+                  <FileIcon ext={p.fileType || ''} size={14} />
+                  {editingPageId === p.id ? (
+                    <input
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                      value={editPageName}
+                      onChange={e => setEditPageName(e.target.value)}
+                      onBlur={() => handleRenamePage(p.id)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenamePage(p.id); if (e.key === 'Escape') setEditingPageId(null) }}
+                      onClick={e => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                  )}
+                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                  {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Root-level loose pages */}
-        {loosePages.length > 0 && (
+        {!isSpaceView && loosePages.length > 0 && (
           <div
             data-loose-area="true"
             className="mx-1 rounded transition-colors"
@@ -628,7 +754,19 @@ export function NotebookList({
               >
                 <span className="w-3.5 shrink-0" />
                 <FileIcon ext={p.fileType || ''} size={14} />
-                <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                {editingPageId === p.id ? (
+                  <input
+                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                    value={editPageName}
+                    onChange={e => setEditPageName(e.target.value)}
+                    onBlur={() => handleRenamePage(p.id)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenamePage(p.id); if (e.key === 'Escape') setEditingPageId(null) }}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                )}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
               </div>
@@ -636,11 +774,11 @@ export function NotebookList({
           </div>
         )}
 
-        {rootCats.length === 0 && loosePages.length === 0 && (
+        {rootCats.length === 0 && (isSpaceView ? !spaceId || allPages.filter(p => p.categoryId === spaceId).length === 0 : loosePages.length === 0) && (
           <div className="flex flex-col items-center py-8 px-4 text-center">
             <Folder size={28} className="text-[var(--text-disabled)] mb-2" />
             <p className="text-[11px] text-[var(--text-muted)]">暂无内容</p>
-            <p className="text-[10px] text-[var(--text-disabled)] mt-0.5">使用上方按钮创建目录、笔记本或页面</p>
+            <p className="text-[10px] text-[var(--text-disabled)] mt-0.5">右键空白处创建目录、笔记本或页面</p>
           </div>
         )}
       </div>
@@ -661,9 +799,25 @@ export function NotebookList({
             <div className="ml-5 border-l border-[var(--border-color)]">
               {starredPages.map(p => (
                 <div key={p.id} onClick={() => onOpenPage(p.id)}
+                  onContextMenu={e => {
+                    e.preventDefault(); e.stopPropagation()
+                    setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
+                  }}
                   className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] border-l-[3px] ${activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'}`}>
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
-                  <span className="truncate flex-1">{p.title || '无标题'}</span>
+                  {editingPageId === p.id ? (
+                    <input
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1 py-0.5 text-[12px] outline-none text-[var(--text-primary)]"
+                      value={editPageName}
+                      onChange={e => setEditPageName(e.target.value)}
+                      onBlur={() => handleRenamePage(p.id)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenamePage(p.id); if (e.key === 'Escape') setEditingPageId(null) }}
+                      onClick={e => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="truncate flex-1">{p.title || '无标题'}</span>
+                  )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 </div>
               ))}
@@ -721,16 +875,6 @@ export function NotebookList({
                 </button>
                 <button
                   onClick={() => {
-                    onMoveCategory(contextMenu.id, null)
-                    setContextMenu(null)
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
-                >
-                  <CornerLeftUp size={14} className="text-[var(--text-muted)]" />
-                  移到根层级
-                </button>
-                <button
-                  onClick={() => {
                     setMovePickerData({ type: 'category', id: contextMenu.id })
                     setMovePickerOpen(true)
                     setContextMenu(null)
@@ -778,7 +922,7 @@ export function NotebookList({
                   </>
                 )}
                 <div className="border-t border-[var(--border-color)] my-0.5" />
-                <button onClick={() => { onOpenPage(contextMenu.id); setContextMenu(null) }}
+                <button onClick={() => { const pg = allPages.find(x => x.id === contextMenu.id); handleStartRenamePage(contextMenu.id, pg?.title || ''); setContextMenu(null) }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
                   <Pencil size={14} className="text-[var(--text-muted)]" />重命名
                 </button>
@@ -818,9 +962,16 @@ export function NotebookList({
                 {(() => {
                   const ctxCat = contextMenu.id ? categories.find(c => c.id === contextMenu.id) : null
                   const isRoot = !ctxCat
+                  const isSpace = ctxCat?.categoryType === 'space'
                   const isNotebook = ctxCat?.categoryType === 'notebook'
                   const isChapter = ctxCat?.categoryType === 'folder' && categories.find(c => c.id === ctxCat.parentId)?.categoryType === 'notebook'
                   const insideNotebook = isNotebook || isChapter
+                  const canCreatePage = isRoot || (!!ctxCat && !isNotebook)
+                  // 空间沉浸视图下空白处右键：创建目录/笔记本的落点就是当前空间
+                  const canCreateFolder = isSpace || (isRoot && isSpaceView) || (!!ctxCat && !insideNotebook && !isSpace)
+                  const canCreateNotebook = isSpace || (isRoot && isSpaceView) || (!!ctxCat && !insideNotebook && !isSpace)
+                  // 空间沉浸视图下：不在“根”层级，不能新建空间；空白处创建的目标是该空间
+                  const canCreateSpace = isRoot && !isSpaceView
 
                   const btn = (disabled: boolean) =>
                     disabled ? 'text-[var(--text-disabled)] cursor-not-allowed' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -828,55 +979,78 @@ export function NotebookList({
 
                   const handleCreatePage = () => {
                     if (isRoot) {
-                      setContextMenu(null); onCreateLoosePage()
-                    } else if (!insideNotebook && ctxCat) {
+                      setContextMenu(null)
+                      if (isSpaceView && spaceId) onCreatePageUnder(spaceId)
+                      else onCreateLoosePage()
+                    } else if (ctxCat && !isNotebook) {
                       setContextMenu(null); onCreatePageUnder(ctxCat.id)
                     }
                   }
                   const handleCreateFolder = () => {
-                    if (isRoot || (!insideNotebook && ctxCat)) {
+                    if (isSpace || (isRoot && isSpaceView) || (ctxCat && !insideNotebook && !isSpace)) {
                       setContextMenu(null)
-                      setCreateParentId(ctxCat?.id ?? null)
+                      setCreateParentId(ctxCat?.id ?? (isSpaceView ? spaceId : null))
                       setCreateMode('folder')
                       setNewName('')
-                    } else if (insideNotebook && ctxCat) {
+                    } else if (isNotebook && ctxCat) {
                       // Create chapter under notebook
                       setContextMenu(null)
-                      const notebookId = isChapter ? (ctxCat.parentId || '') : ctxCat.id
+                      const notebookId = ctxCat.id
                       if (notebookId && onCreateChapterUnderNotebook) {
                         onCreateChapterUnderNotebook(notebookId)
                       }
                     }
                   }
                   const handleCreateNotebook = () => {
-                    if (insideNotebook) return
+                    if (!canCreateNotebook) return
+                    setContextMenu(null)
+                    setCreateParentId(ctxCat?.id ?? (isSpaceView ? spaceId : null))
+                    setCreateMode('notebook')
+                    setNewName('')
+                  }
+                  const handleCreateSpace = () => {
                     setContextMenu(null)
                     setCreateParentId(null)
-                    setCreateMode('notebook')
+                    setCreateMode('space')
                     setNewName('')
                   }
 
                   return (
                     <>
-                      <button onClick={handleCreatePage} disabled={insideNotebook}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(insideNotebook)}`}>
-                        <FileText size={14} className={iconCls(insideNotebook)} />新建页面
+                      <button onClick={handleCreatePage} disabled={!canCreatePage}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(!canCreatePage)}`}>
+                        <FileText size={14} className={iconCls(!canCreatePage)} />新建页面
                       </button>
-                      <button onClick={handleCreateFolder}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(false)}`}>
-                        <Folder size={14} className={iconCls(false)} />新建{insideNotebook ? '章节' : '目录'}
-                      </button>
-                      <button onClick={handleCreateNotebook} disabled={insideNotebook}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(insideNotebook)}`}>
-                        <BookOpen size={14} className={iconCls(insideNotebook)} />新建笔记本
-                      </button>
+                      {canCreateSpace && (
+                        <button onClick={handleCreateSpace}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(false)}`}>
+                          <Layers size={14} className={iconCls(false)} />新建空间
+                        </button>
+                      )}
+                      {(canCreateFolder || isNotebook) && (
+                        <button onClick={handleCreateFolder}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(false)}`}>
+                          <Folder size={14} className={iconCls(false)} />新建{isNotebook ? '章节' : '目录'}
+                        </button>
+                      )}
+                      {canCreateNotebook && (
+                        <button onClick={handleCreateNotebook}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${btn(false)}`}>
+                          <BookOpen size={14} className={iconCls(false)} />新建笔记本
+                        </button>
+                      )}
                       <div className="border-t border-[var(--border-color)] my-0.5" />
                     </>
                   )
                 })()}
                 {onPaste && (
                   <button
-                    onClick={() => { if (clipboard && clipboard.items.length > 0) { onPaste(null); setContextMenu(null) } }}
+                    onClick={() => {
+                      if (clipboard && clipboard.items.length > 0) {
+                        onPaste(contextMenu.id || (isSpaceView ? spaceId ?? null : null))
+                        setContextMenu(null)
+                      }
+                    }}
                     disabled={!clipboard || clipboard.items.length === 0}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors ${
                       clipboard && clipboard.items.length > 0

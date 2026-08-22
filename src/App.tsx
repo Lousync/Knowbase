@@ -228,7 +228,7 @@ export default function App() {
             {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
             {renderTab('moments', <MomentsModule />)}
             {renderTab('export', <ExportModule />)}
-            {renderTab('recycle', <RecycleBinModule />)}
+            {renderTab('recycle', <RecycleBinModule isActive={activeTab === 'recycle'} />)}
             {renderTab('settings', <SettingsModule />)}
             {renderTab('toolbox', <ToolboxModule />)}
             {renderTab('help', <HelpModule />)}

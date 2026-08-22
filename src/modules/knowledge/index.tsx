@@ -16,6 +16,7 @@ import {
 import { showToast } from '../../lib/toast'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
+import { SpacePanel } from './components/SpacePanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { QuickSearch } from './components/QuickSearch'
@@ -35,6 +36,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [chapterPages, setChapterPages] = useState<KnowledgePage[]>([])
   const [starredPages, setStarredPages] = useState<KnowledgePage[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null)
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null)
   const [focusChapterId, setFocusChapterId] = useState<string | null>(null)  // when set, ChapterPanel shows only this chapter
   const [activePageId, setActivePageId] = useState<string | null>(null)
@@ -88,9 +90,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [sidebarOpen])
 
   // --- derived ---
-  const notebooks = categories.filter(c => !c.parentId)
   const chapters = categories.filter(c => c.parentId === selectedCategoryId)
   const selectedCategory = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId) : null
+  const selectedSpace = selectedSpaceId ? categories.find(c => c.id === selectedSpaceId) ?? null : null
   const allLoosePages = useMemo(() => allPages.filter(p => p.categoryId === null), [allPages])
 
   // --- data loading ---
@@ -136,10 +138,22 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     return () => window.removeEventListener('data-imported', handler)
   }, [refreshCategories, refreshAllPages, refreshStarred])
 
+  // 监听回收站恢复事件 — 恢复页面/目录/空间后立即刷新，恢复的位置立即可见
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const module = (e as CustomEvent).detail?.module
+      if (module === 'knowledge' || module === 'knowledge_category') {
+        refreshCategories(); refreshAllPages(); refreshChapterPages(); refreshStarred()
+      }
+    }
+    window.addEventListener('recycle-restored', handler)
+    return () => window.removeEventListener('recycle-restored', handler)
+  }, [refreshCategories, refreshAllPages, refreshChapterPages, refreshStarred])
+
   useEffect(() => { refreshChapterPages() }, [refreshChapterPages])
 
   // --- notebook CRUD ---
-  const handleCreateNotebook = async (name: string, categoryType: 'folder' | 'notebook', parentId: string | null) => {
+  const handleCreateNotebook = async (name: string, categoryType: 'folder' | 'notebook' | 'space', parentId: string | null) => {
     await createKnowledgeCategory({ name, parentId, categoryType })
     refreshCategories()
   }
@@ -147,15 +161,29 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     await updateKnowledgeCategory(id, { name })
     refreshCategories()
   }
+  const handleRenamePage = async (id: string, name: string) => {
+    await updateKnowledgePage(id, { title: name })
+    setAllPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
+    setChapterPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
+    setStarredPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
+    setOpenPageInfos(prev => {
+      const existing = prev[id]
+      return existing ? { ...prev, [id]: { ...existing, title: name } } : prev
+    })
+    refreshAllPages(); refreshChapterPages()
+  }
   const handleDeleteNotebook = async (id: string) => {
     await deleteKnowledgeCategory(id)
     if (selectedCategoryId === id) { setSelectedCategoryId(null); setSelectedChapterId(null) }
+    if (selectedSpaceId === id) { setSelectedSpaceId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }
     refreshCategories(); refreshAllPages()
   }
 
   // --- chapter CRUD ---
   const handleCreateChapter = async (name: string) => {
     if (!selectedCategoryId) return
+    const selected = categories.find(c => c.id === selectedCategoryId)
+    if (selected?.categoryType !== 'notebook') return
     await createKnowledgeCategory({ name, parentId: selectedCategoryId, categoryType: 'folder' })
     refreshCategories()
   }
@@ -445,19 +473,44 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     const { action, items } = clipboard
 
     try {
+      const notebookChapterCache = new Map<string, string | null>()
       for (const item of items) {
+        let resolvedTargetCategoryId = targetCategoryId
+        const targetCategory = targetCategoryId ? categories.find(c => c.id === targetCategoryId) : null
+
+        if (item.type === 'page' && targetCategory) {
+          if (targetCategory.categoryType === 'notebook') {
+            let chapterId = notebookChapterCache.has(targetCategory.id)
+              ? notebookChapterCache.get(targetCategory.id)
+              : categories.find(c => c.parentId === targetCategory.id)?.id ?? null
+            if (!chapterId) {
+              const chapter = await createKnowledgeCategory({ name: '默认章节', parentId: targetCategory.id, categoryType: 'folder' })
+              await refreshCategories()
+              const freshCategories = await getKnowledgeCategories()
+              chapterId = freshCategories.find(c => c.name === '默认章节' && c.parentId === targetCategory.id)?.id ?? chapter.id
+            }
+            notebookChapterCache.set(targetCategory.id, chapterId)
+            resolvedTargetCategoryId = chapterId
+          }
+        } else if (item.type === 'category' && targetCategoryId === null) {
+          const sourceCategory = categories.find(c => c.id === item.id)
+          if (sourceCategory?.categoryType !== 'space') {
+            throw new Error('普通分类不能移动到根层级')
+          }
+        }
+
         if (action === 'copy') {
           if (item.type === 'page') {
-            await duplicateKnowledgePage({ pageId: item.id, targetCategoryId })
+            await duplicateKnowledgePage({ pageId: item.id, targetCategoryId: resolvedTargetCategoryId })
           } else {
-            await duplicateKnowledgeCategory({ categoryId: item.id, targetParentId: targetCategoryId })
+            await duplicateKnowledgeCategory({ categoryId: item.id, targetParentId: resolvedTargetCategoryId })
           }
         } else {
           // cut = move
           if (item.type === 'page') {
-            await updateKnowledgePage(item.id, { categoryId: targetCategoryId })
+            await updateKnowledgePage(item.id, { categoryId: resolvedTargetCategoryId })
           } else {
-            await updateKnowledgeCategory(item.id, { parentId: targetCategoryId })
+            await updateKnowledgeCategory(item.id, { parentId: resolvedTargetCategoryId })
           }
         }
       }
@@ -473,7 +526,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       console.error(e)
       showToast({ type: 'error', message: '粘贴失败' })
     }
-  }, [clipboard])
+  }, [clipboard, categories, refreshCategories])
 
   const handleExportPage = useCallback(async (pageId: string) => {
     try {
@@ -555,6 +608,30 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   // --- notebook / chapter selection ---
+  const handleSelectSpace = (id: string) => {
+    if (id === selectedSpaceId) {
+      setSelectedSpaceId(null)
+      setSelectedCategoryId(null)
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(false)
+      return
+    }
+    setSelectedSpaceId(id)
+    setSelectedCategoryId(null)
+    setSelectedChapterId(null)
+    setFocusChapterId(null)
+    setShowChapterPanel(false)
+  }
+
+  const handleCollapseSpace = () => {
+    setSelectedSpaceId(null)
+    setSelectedCategoryId(null)
+    setSelectedChapterId(null)
+    setFocusChapterId(null)
+    setShowChapterPanel(false)
+  }
+
   const handleSelectCategory = (id: string | null) => {
     if (id === selectedCategoryId) {
       // Toggle: collapse
@@ -699,6 +776,37 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     const cat = categories.find(c => c.id === categoryId)
     if (!cat) return
 
+    // 若目标在某个空间内，先打开该空间的沉浸视图
+    const findSpaceAncestor = (id: string | null): string | null => {
+      let curId: string | null = id
+      const seen = new Set<string>()
+      while (curId) {
+        if (seen.has(curId)) break; seen.add(curId)
+        const cur = categories.find(c => c.id === curId)
+        if (!cur) return null
+        if (cur.categoryType === 'space') return cur.id
+        curId = cur.parentId
+      }
+      return null
+    }
+
+    if (cat.categoryType === 'space') {
+      // 直接定位空间本身 → 打开该空间
+      setSelectedSpaceId(cat.id)
+      setSelectedCategoryId(null)
+      setSelectedChapterId(null)
+      setFocusChapterId(null)
+      setShowChapterPanel(false)
+      setLocateCategoryId(null)
+      requestAnimationFrame(() => setLocateCategoryId(categoryId))
+      return
+    }
+
+    const spaceAncestorId = findSpaceAncestor(cat.parentId)
+    if (spaceAncestorId) {
+      setSelectedSpaceId(spaceAncestorId)
+    }
+
     // 展开所有祖先
     const ancestors: string[] = []
     let currentId: string | null = cat.parentId
@@ -749,6 +857,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     let catId = page.categoryId
     if (!catId) {
       // Loose page — just select null category and highlight
+      setSelectedSpaceId(null)
       setSelectedCategoryId(null)
       setSelectedChapterId(null)
       setFocusChapterId(null)
@@ -757,24 +866,28 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       return
     }
 
-    // Walk up to find notebook
+    // Walk up to find the nearest notebook ancestor.
     let notebookId: string | null = null
+    let spaceId: string | null = null
     const chain: string[] = [catId]
     let current = categories.find(c => c.id === catId)
     while (current?.parentId) {
       chain.push(current!.parentId)
+      if (current?.categoryType === 'notebook') notebookId = current.id
+      if (current?.categoryType === 'space') spaceId = current.id
       current = categories.find(c => c.id === current!.parentId)
     }
-    // current is now the top-level node
-    if (current) {
-      notebookId = current.categoryType === 'notebook' ? current.id : null
-    }
+    if (current?.categoryType === 'notebook') notebookId = current.id
+    if (current?.categoryType === 'space') spaceId = current.id
 
-    // Select the notebook (or top-level folder)
-    setSelectedCategoryId(current?.id ?? catId)
+    // Open the containing space (if any) in immersive view
+    if (spaceId) setSelectedSpaceId(spaceId)
+
+    // Select the notebook when available; otherwise select the direct category.
+    setSelectedCategoryId(notebookId ?? catId)
     // If under a notebook, select the chapter too
     if (notebookId) {
-      setSelectedChapterId(catId)
+      setSelectedChapterId(notebookId === catId ? null : catId)
       setFocusChapterId(null)
       setShowChapterPanel(true)
     } else {
@@ -796,24 +909,38 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full">
-            {/* Sidebar tab bar */}
-            <div className="flex items-center gap-1 px-2 pt-1.5 pb-1 border-b border-[var(--border-color)] shrink-0">
-              <button
-                onClick={() => setShowOutline(false)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${!showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
-              >
-                <Folder size={13} />文件
-              </button>
-              <button
-                onClick={() => setShowOutline(true)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
-              >
-                <ListTree size={13} />大纲
-              </button>
-            </div>
+            {/* 空间沉浸视图顶部：返回栏（仅空间内显示） */}
+            {selectedSpaceId && selectedSpace && (
+              <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={handleRenameNotebook} />
+            )}
 
-            {/* Outline tab — embedded in the sidebar; shows empty state when no headings */}
-            {showOutline ? (
+            {/* 文件/大纲切换 — 仅在空间内显示，位于返回栏下方 */}
+            {selectedSpaceId && selectedSpace && (
+              <div className="flex items-center gap-1 px-2 pt-1.5 pb-1 border-b border-[var(--border-color)] shrink-0">
+                <button
+                  onClick={() => setShowOutline(false)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${!showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+                >
+                  <Folder size={13} />文件
+                </button>
+                <button
+                  onClick={() => setShowOutline(true)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+                >
+                  <ListTree size={13} />大纲
+                </button>
+              </div>
+            )}
+
+            {/* 空间列表层：顶部居中「工作区」标题 */}
+            {!selectedSpaceId && (
+              <div className="flex items-center justify-center px-2 py-1.5 border-b border-[var(--border-color)] shrink-0">
+                <span className="text-[12px] font-medium text-[var(--text-secondary)] text-center">工作区</span>
+              </div>
+            )}
+
+            {/* 空间列表层：无大纲入口，直接显示文件树；空间内可切换大纲 */}
+            {selectedSpaceId && showOutline ? (
               <div className="flex-1 min-h-0">
                 <OutlinePanel
                   pageTitle={activePageForOutline?.title ?? ''}
@@ -825,42 +952,47 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             ) : (
               <>
                 {/* File tab: tree stays mounted so its expand/collapse state survives drill-in navigation */}
-                <div className={`flex-1 min-h-0 ${showChapterPanel && selectedCategory?.categoryType === 'notebook' ? 'hidden' : ''}`}>
-                  <NotebookList
-                    categories={categories}
-                    allPages={allPages}
-                    loosePages={allLoosePages}
-                    starredPages={starredPages}
-                    selectedCategoryId={selectedCategoryId}
-                    focusChapterId={focusChapterId}
-                    activePageId={activePageId}
-                    onSelectCategory={handleSelectCategory}
-                    onSelectCategoryChapter={handleSelectCategoryChapter}
-                    onCreateNotebook={handleCreateNotebook}
-                    onRenameNotebook={handleRenameNotebook}
-                    onDeleteNotebook={handleDeleteNotebook}
-                    onOpenPage={handleOpenPage}
-                    onCreateLoosePage={handleCreateLoosePage}
-                    onCreatePageUnder={handleCreatePageUnderCategory}
-                    onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
-                    onImport={handleDialogImport}
-                    onImportFolder={handleImportFolder}
-                    onDropOnNotebook={handleDropOnNotebook}
-                    onDropOnCategory={handleDropOnCategory}
-                    onDropOnLooseArea={handleDropOnLooseArea}
-                    onMoveCategory={handleMoveCategory}
-                    onSortCategory={handleSortCategory}
-                    onSortPage={handleSortPage}
-                    locatePageId={locatePageId}
-                    locateCategoryId={locateCategoryId}
-                    onCopy={handleCopy}
-                    onCut={handleCut}
-                    onPaste={handlePaste}
-                    onExportPage={handleExportPage}
-                    onDeletePage={handlePageDeleted}
-                    clipboard={clipboard}
-                    cutItemIds={cutItemIds}
-                  />
+                <div className={`flex flex-col flex-1 min-h-0 ${showChapterPanel && selectedCategory?.categoryType === 'notebook' ? 'hidden' : ''}`}>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <NotebookList
+                      categories={categories}
+                      allPages={allPages}
+                      loosePages={allLoosePages}
+                      starredPages={starredPages}
+                      selectedCategoryId={selectedCategoryId}
+                      focusChapterId={focusChapterId}
+                      activePageId={activePageId}
+                      spaceId={selectedSpaceId}
+                      onSelectSpace={handleSelectSpace}
+                      onSelectCategory={handleSelectCategory}
+                      onSelectCategoryChapter={handleSelectCategoryChapter}
+                      onCreateNotebook={handleCreateNotebook}
+                      onRenameNotebook={handleRenameNotebook}
+                      onDeleteNotebook={handleDeleteNotebook}
+                      onOpenPage={handleOpenPage}
+                      onCreateLoosePage={handleCreateLoosePage}
+                      onCreatePageUnder={handleCreatePageUnderCategory}
+                      onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
+                      onImport={handleDialogImport}
+                      onImportFolder={handleImportFolder}
+                      onDropOnNotebook={handleDropOnNotebook}
+                      onDropOnCategory={handleDropOnCategory}
+                      onDropOnLooseArea={handleDropOnLooseArea}
+                      onMoveCategory={handleMoveCategory}
+                      onSortCategory={handleSortCategory}
+                      onSortPage={handleSortPage}
+                      locatePageId={locatePageId}
+                      locateCategoryId={locateCategoryId}
+                      onCopy={handleCopy}
+                      onCut={handleCut}
+                      onPaste={handlePaste}
+                      onExportPage={handleExportPage}
+                      onDeletePage={handlePageDeleted}
+                      onRenamePage={handleRenamePage}
+                      clipboard={clipboard}
+                      cutItemIds={cutItemIds}
+                    />
+                  </div>
                 </div>
                 {showChapterPanel && selectedCategory && selectedCategory.categoryType === 'notebook' && (
                   <div className="flex-1 min-h-0">
@@ -895,7 +1027,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onCut={handleCut}
                       onExportPage={handleExportPage}
                       onDeletePage={handlePageDeleted}
-                      onRenamePage={handleOpenPage}
+                      onRenamePage={handleRenamePage}
                       clipboard={clipboard}
                       cutItemIds={cutItemIds}
                     />

@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom'
 import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath } from '../../../lib/ipc'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { ConfirmDialog } from '../../../components/shared'
+import { PdfViewer } from './PdfViewer'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 
@@ -92,10 +93,55 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => { isPdfFileRef.current = isPdfFile }, [isPdfFile])
 
   const [attachmentsPath, setAttachmentsPath] = useState('')
+  const [pdfBase64, setPdfBase64] = useState('')
+  // PDF 阅读方式: builtin=内置阅读器, external=本地工具打开
+  const [pdfReaderMode, setPdfReaderMode] = useState<'builtin' | 'external'>('builtin')
+  const pdfReaderModeRef = useRef<'builtin' | 'external'>('builtin')
 
   useEffect(() => {
     getAttachmentsPath().then(setAttachmentsPath).catch(() => {})
+    getSetting('pdfReaderMode').then(v => {
+      const mode = v === 'external' ? 'external' : 'builtin'
+      setPdfReaderMode(mode)
+      pdfReaderModeRef.current = mode
+    })
   }, [])
+
+  // 用本地工具打开 PDF
+  const openPdfExternal = useCallback(async () => {
+    let filePath: string | null = null
+    if (page?.attachmentId) {
+      filePath = await getAttachmentPath(page.attachmentId)
+    }
+    if (!filePath && page) filePath = `${attachmentsPath}\\${page.contentMd}`
+    if (filePath) openExternal(filePath)
+  }, [page, attachmentsPath])
+
+  const switchPdfReaderMode = useCallback((mode: 'builtin' | 'external') => {
+    setPdfReaderMode(mode)
+    pdfReaderModeRef.current = mode
+    setSetting('pdfReaderMode', mode)
+  }, [])
+
+  // PDF 页面：读取附件内容供内置阅读器渲染
+  useEffect(() => {
+    setPdfBase64('')
+    if (!page || page.fileType !== 'pdf') return
+    let cancelled = false
+    const load = async () => {
+      let data: string | null = null
+      if (page.attachmentId) {
+        data = await readAttachmentBase64(page.attachmentId)
+      }
+      if (!data) {
+        // 旧版附件（无 attachment_id，contentMd 存的是文件名）
+        data = await readAttachmentBase64ByFileName(page.contentMd)
+      }
+      if (!cancelled && data) setPdfBase64(data)
+    }
+    load().catch(e => console.error('[PageEditor] load pdf base64 failed:', e))
+    return () => { cancelled = true }
+  }, [page?.id, page?.attachmentId, page?.fileType, page?.contentMd])
 
   useEffect(() => {
     Promise.all([
@@ -452,17 +498,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Content */}
-        {isPdfFile ? (
+        {isXmindFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <input
-              className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
-              value={title}
-              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
-              placeholder={isXmindFile ? 'XMind 思维导图名称' : 'PDF 文档名称'}
-            />
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
               <FileText size={64} className="opacity-20" />
-              <p className="text-sm">{isXmindFile ? 'XMind 思维导图 — 使用 XMind 软件打开编辑' : 'PDF 文件已导入到本地附件目录'}</p>
+              <p className="text-sm">XMind 思维导图 — 使用 XMind 软件打开编辑</p>
               <button
                 onClick={async () => {
                   let filePath: string | null = null
@@ -475,9 +515,58 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
               >
                 <ExternalLink size={15} />
-                {isXmindFile ? '使用 XMind 打开' : '使用系统阅读器打开'}
+                使用 XMind 打开
               </button>
             </div>
+          </div>
+        ) : isPdfFile ? (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex items-center gap-2 px-6 py-2 border-b border-[var(--border-color)] shrink-0">
+              <span className="flex-1 truncate text-[15px] font-semibold text-[var(--text-primary)] min-w-0">{title || 'PDF 文档'}</span>
+              {/* 阅读方式切换 */}
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  onClick={() => switchPdfReaderMode('builtin')}
+                  className={`px-2 py-1 text-[11px] rounded transition-colors ${pdfReaderMode === 'builtin' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
+                  title="使用内置阅读器（在应用内阅读）"
+                >
+                  内置阅读
+                </button>
+                <button
+                  onClick={() => switchPdfReaderMode('external')}
+                  className={`px-2 py-1 text-[11px] rounded transition-colors ${pdfReaderMode === 'external' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
+                  title="使用本地工具打开"
+                >
+                  本地打开
+                </button>
+              </div>
+            </div>
+
+            {pdfReaderMode === 'builtin' ? (
+              pdfBase64 ? (
+                <PdfViewer base64={pdfBase64} title={title || 'PDF 文档'} />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
+                  <FileText size={64} className="opacity-20" />
+                  <p className="text-sm">正在加载 PDF…</p>
+                  <button onClick={openPdfExternal}
+                    className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors">
+                    <ExternalLink size={15} />
+                    使用本地工具打开
+                  </button>
+                </div>
+              )
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
+                <FileText size={64} className="opacity-20" />
+                <p className="text-sm">PDF 文档将使用本地工具打开</p>
+                <button onClick={openPdfExternal}
+                  className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors">
+                  <ExternalLink size={15} />
+                  使用本地工具打开
+                </button>
+              </div>
+            )}
           </div>
         ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -509,12 +598,6 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <input
-              className="w-full bg-transparent text-xl font-bold text-[var(--text-primary)] px-6 py-3 outline-none border-b border-[var(--border-color)] placeholder:text-[var(--text-disabled)] shrink-0"
-              value={title}
-              onChange={e => { setTitle(e.target.value); onTitleChange?.(e.target.value) }}
-              placeholder="页面标题"
-            />
             <div className="flex-1 min-h-0">
               <Editor
                 language={getFileTypeInfo(fileType).monacoLang}

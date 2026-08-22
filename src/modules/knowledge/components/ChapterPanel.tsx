@@ -42,7 +42,7 @@ interface Props {
   onCut?: (items: { type: 'category' | 'page'; id: string }[]) => void
   onExportPage?: (pageId: string) => void
   onDeletePage?: (pageId: string) => void
-  onRenamePage?: (pageId: string) => void
+  onRenamePage?: (pageId: string, name: string) => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
 }
@@ -60,6 +60,8 @@ export function ChapterPanel({
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editingPageId, setEditingPageId] = useState<string | null>(null)
+  const [editPageName, setEditPageName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(null)
@@ -88,12 +90,18 @@ export function ChapterPanel({
     return () => { document.removeEventListener('keydown', onEsc) }
   }, [contextMenu])
 
-  // F2 — keyboard rename selected / focused chapter
+  // F2 — keyboard rename active page / selected / focused chapter
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isEditingInput(e)) return
       if (e.key === 'F2') {
-        // Priority: focused chapter → selected chapter
+        // Priority: active page → focused chapter → selected chapter
+        if (activePageId) {
+          const pg = pages.find(p => p.id === activePageId)
+          e.preventDefault()
+          handleStartRenamePage(activePageId, pg?.title || '')
+          return
+        }
         const targetId = focusChapter?.id ?? selectedChapterId
         if (!targetId) return
         e.preventDefault()
@@ -103,7 +111,7 @@ export function ChapterPanel({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedChapterId, focusChapter, chapters])
+  }, [selectedChapterId, focusChapter, chapters, activePageId, pages])
 
   function handleCreateChapter() {
     if (!newName.trim()) { setShowNewChapter(false); setNewName(''); return }
@@ -114,6 +122,12 @@ export function ChapterPanel({
   function handleRename(id: string) {
     if (!editName.trim()) { setEditingId(null); return }
     onRenameChapter(id, editName.trim()); setEditingId(null)
+  }
+
+  function handleStartRenamePage(id: string, name: string) { setEditingPageId(id); setEditPageName(name) }
+  function handleRenamePage(id: string) {
+    if (!editPageName.trim()) { setEditingPageId(null); return }
+    onRenamePage?.(id, editPageName.trim()); setEditingPageId(null)
   }
 
   // ---- cycle detection for category moves ----
@@ -404,7 +418,19 @@ export function ChapterPanel({
                   }}
                 >
                   <FileIcon ext={p.fileType || ''} size={15} />
-                  <span className="flex-1 truncate">{p.title || '无标题'}</span>
+                  {editingPageId === p.id ? (
+                    <input
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                      value={editPageName}
+                      onChange={e => setEditPageName(e.target.value)}
+                      onBlur={() => handleRenamePage(p.id)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenamePage(p.id); if (e.key === 'Escape') setEditingPageId(null) }}
+                      onClick={e => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="flex-1 truncate">{p.title || '无标题'}</span>
+                  )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return fi.badge ? <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-0.5" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> : null })()}
                   <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }}
@@ -470,7 +496,7 @@ export function ChapterPanel({
             )}
             <div className="border-t border-[var(--border-color)] my-0.5" />
             {onRenamePage && (
-              <button onClick={() => { onRenamePage(contextMenu.pageId); setContextMenu(null) }}
+              <button onClick={() => { const pg = pages.find(x => x.id === contextMenu.pageId); handleStartRenamePage(contextMenu.pageId, pg?.title || ''); setContextMenu(null) }}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
                 <Pencil size={14} className="text-[var(--text-muted)]" />重命名
               </button>

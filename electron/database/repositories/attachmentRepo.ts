@@ -276,6 +276,31 @@ export function registerAttachmentHandlers(): void {
     return getAttachmentFilePath(id)
   })
 
+  // 读取附件文件内容为 base64（PDF 阅读器用）
+  ipcMain.handle('attachment:readBase64', (_e, id: string) => {
+    const p = getAttachmentFilePath(id)
+    if (!p) return null
+    try {
+      return readFileSync(p).toString('base64')
+    } catch (e) {
+      console.error('[attachment:readBase64] failed:', e)
+      return null
+    }
+  })
+
+  // 按附件目录内的文件名读取 base64（兼容旧版无 attachment_id 的附件）
+  ipcMain.handle('attachment:readBase64ByFileName', (_e, fileName: string) => {
+    if (!fileName || /[\\/]/.test(fileName)) return null  // 只允许附件目录内相对文件名
+    const p = join(getAttachmentsDir(), fileName)
+    if (!existsSync(p)) return null
+    try {
+      return readFileSync(p).toString('base64')
+    } catch (e) {
+      console.error('[attachment:readBase64ByFileName] failed:', e)
+      return null
+    }
+  })
+
   ipcMain.handle('attachment:cleanupOrphans', () => {
     let removed = 0
     // 1) 超过 24 小时的未认领上传（owner_id = _pending）

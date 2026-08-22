@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BookOpen, Folder, FolderOpen, X } from 'lucide-react'
+import { BookOpen, Folder, FolderOpen, Layers, X } from 'lucide-react'
 import type { KnowledgeCategory } from '../../../types'
 
 interface Props {
@@ -50,7 +50,10 @@ export function CategoryMovePicker({
     const items = sortCats(categories.filter(c => c.parentId === parentId))
     return items.flatMap(cat => {
       const isNotebook = cat.categoryType === 'notebook'
-      const disabled = moveType === 'category' ? !isValidTarget(cat.id) : false
+      const isSpace = cat.categoryType === 'space'
+      const disabled = moveType === 'category'
+        ? !isValidTarget(cat.id)
+        : false
 
       const handleClick = () => {
         if (disabled) return
@@ -79,7 +82,9 @@ export function CategoryMovePicker({
           }`}
           style={{ paddingLeft: `${depth * 20 + 8}px` }}
         >
-          {isNotebook ? (
+          {isSpace ? (
+            <Layers size={15} className="shrink-0 text-[var(--info)]" />
+          ) : isNotebook ? (
             <BookOpen size={15} className="shrink-0 text-[var(--text-muted)]" />
           ) : (
             <Folder size={15} className="shrink-0 text-[var(--warning)]" />
@@ -115,21 +120,19 @@ export function CategoryMovePicker({
 
         {/* Tree */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-1">
-          {/* Root / Loose option */}
-          <button
-            onClick={() => {
-              if (moveType === 'category') {
-                onMoveCategory(moveId, null)
-              } else {
+          {/* Loose-page option; category moves can no longer target root. */}
+          {moveType === 'page' && (
+            <button
+              onClick={() => {
                 onMovePageToLoose(moveId)
-              }
-              onClose()
-            }}
-            className="w-full flex items-center gap-1.5 py-1.5 px-3 text-left text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors border-b border-[var(--border-color)]"
-          >
-            <FolderOpen size={15} className="shrink-0 text-[var(--text-muted)]" />
-            <span>{moveType === 'category' ? '根层级（移到顶层）' : '松散页面（取消归属）'}</span>
-          </button>
+                onClose()
+              }}
+              className="w-full flex items-center gap-1.5 py-1.5 px-3 text-left text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors border-b border-[var(--border-color)]"
+            >
+              <FolderOpen size={15} className="shrink-0 text-[var(--text-muted)]" />
+              <span>松散页面（取消归属）</span>
+            </button>
+          )}
 
           {renderPickerTree(null, 0)}
         </div>

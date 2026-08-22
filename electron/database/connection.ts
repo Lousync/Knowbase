@@ -625,6 +625,26 @@ export function runMigrations(): void {
     }
     db.run("INSERT INTO _migrations (name) VALUES ('035_avatar_attachment')")
   }
+
+  if (!applied.has('036_knowledge_spaces')) {
+    try {
+      const spaceId = randomUUID()
+      db.run(
+        `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+         VALUES (?, '默认空间', NULL, 0, 'space')`,
+        [spaceId]
+      )
+      db.run(
+        `UPDATE knowledge_categories
+         SET parent_id = ?
+         WHERE parent_id IS NULL AND category_type <> 'space'`,
+        [spaceId]
+      )
+    } catch (e) {
+      console.error('[migration 036] knowledge spaces backfill failed:', e)
+    }
+    db.run("INSERT INTO _migrations (name) VALUES ('036_knowledge_spaces')")
+  }
 }
 
 /**

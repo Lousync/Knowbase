@@ -156,7 +156,7 @@ export function buildAllData(moduleIds?: string[]) {
       tags: scheduleTags
     },
     knowledge: {
-      categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' ? 'notebook' : 'folder') as 'notebook' | 'folder' })),
+      categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parent_id, sortOrder: c.sort_order, categoryType: (c.category_type === 'notebook' || c.category_type === 'space' ? c.category_type : 'folder') as 'notebook' | 'folder' | 'space' })),
       pages: pages.map(p => ({ ...mapPage(p), tags: pageTagMap.get(p.id) || [], backlinks: backlinkMap.get(p.id) || [] })),
       tags: knowledgeTags
     },

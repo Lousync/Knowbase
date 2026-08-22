@@ -407,9 +407,18 @@ export function executeImportData(data: any): { success: boolean; imported: numb
         }
         for (const cat of data.knowledge.categories || []) {
           if (exists('knowledge_categories', cat.id)) { skipped++; continue }
-          const ct = cat.categoryType === 'notebook' ? 'notebook' : 'folder'
+          const ct = cat.categoryType === 'notebook' || cat.categoryType === 'space' ? cat.categoryType : 'folder'
+          let parentId = cat.parentId ?? null
+          if (parentId === null && ct !== 'space') {
+            const space = db.exec(
+              `SELECT id FROM knowledge_categories
+               WHERE category_type = 'space' AND parent_id IS NULL
+               ORDER BY sort_order LIMIT 1`
+            )
+            parentId = space.length > 0 && space[0].values?.[0]?.[0] ? String(space[0].values[0][0]) : null
+          }
           db.run('INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
-            [cat.id, cat.name, cat.parentId, cat.sortOrder, ct])
+            [cat.id, cat.name, parentId, cat.sortOrder, ct])
           imported++
         }
         for (const page of data.knowledge.pages || []) {

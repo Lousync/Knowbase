@@ -172,6 +172,8 @@ export const uploadAttachmentFromPath = (data: { ownerType?: string; ownerId?: s
 export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promise<AttachmentMeta[]> => a().getAttachmentsByOwner(ownerType, ownerId)
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
+export const readAttachmentBase64 = (id: string): Promise<string | null> => a().readAttachmentBase64(id)
+export const readAttachmentBase64ByFileName = (fileName: string): Promise<string | null> => a().readAttachmentBase64ByFileName(fileName)
 export const cleanupOrphanAttachments = () => a().cleanupOrphanAttachments()
 
 /** 把应用内的图片 URL（attachment:// 或 data:）复制到系统剪贴板 */

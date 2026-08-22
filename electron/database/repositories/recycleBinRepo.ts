@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
+import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
 import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
@@ -44,6 +45,44 @@ function queryAll<T>(sql: string, params: unknown[] = []): T[] {
 function run(sql: string, params: unknown[] = []): void {
   getDatabase().run(sql, params)
   saveToDisk()
+}
+
+function normalizeCategoryType(raw: unknown): 'notebook' | 'folder' | 'space' {
+  if (raw === 'notebook' || raw === 'space') return raw
+  return 'folder'
+}
+
+function getOrCreateDefaultSpaceId(): string {
+  const existing = queryAll<{ id: string }>(
+    "SELECT id FROM knowledge_categories WHERE category_type = 'space' AND parent_id IS NULL ORDER BY sort_order, name LIMIT 1"
+  )
+  if (existing[0]) return existing[0].id
+
+  const id = randomUUID()
+  const maxOrder = queryAll<{ m: number }>(
+    'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS NULL'
+  )[0]?.m ?? 0
+  run(
+    `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
+     VALUES (?, '默认空间', NULL, ?, 'space')`,
+    [id, maxOrder]
+  )
+  return id
+}
+
+function resolveCategoryParent(categoryType: unknown, parentId: string | null | undefined): string | null {
+  const ct = normalizeCategoryType(categoryType)
+  if (ct === 'space') return null
+
+  if (parentId) {
+    const parentExists = queryAll<{ id: string }>(
+      'SELECT id FROM knowledge_categories WHERE id = ?',
+      [parentId]
+    ).length > 0
+    if (parentExists) return parentId
+  }
+
+  return getOrCreateDefaultSpaceId()
 }
 
 export function registerRecycleBinHandlers(): void {
@@ -122,15 +161,13 @@ export function registerRecycleBinHandlers(): void {
       // 注意: knowledge_links 不恢复 — 保存页面时会自动重建
     } else if (item.module === 'knowledge_category') {
       const cat = record.category
-      // Verify parent still exists; if not, re-parent to root
-      const parentOk = cat.parentId
-        ? queryAll<{ id: string }>('SELECT id FROM knowledge_categories WHERE id = ?', [cat.parentId]).length > 0
-        : true
+      const categoryType = normalizeCategoryType(cat.categoryType)
+      const parentId = resolveCategoryParent(categoryType, cat.parentId)
 
       run(
         `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
          VALUES (?, ?, ?, ?, ?)`,
-        [cat.id, cat.name, parentOk ? cat.parentId : null, cat.sortOrder || 0, cat.categoryType || 'folder']
+        [cat.id, cat.name, parentId, cat.sortOrder || 0, categoryType]
       )
 
       // Recursively restore children
@@ -140,7 +177,7 @@ export function registerRecycleBinHandlers(): void {
           run(
             `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
              VALUES (?, ?, ?, ?, ?)`,
-            [c.id, c.name, parentId, c.sortOrder || 0, c.categoryType || 'folder']
+            [c.id, c.name, parentId, c.sortOrder || 0, c.categoryType === 'notebook' || c.categoryType === 'space' ? c.categoryType : 'folder']
           )
           // Restore pages under this child
           for (const p of (ch.pages || [])) {
@@ -243,10 +280,12 @@ export function registerRecycleBinHandlers(): void {
     if (path === 'category') {
       // Restore only the top-level category itself (no children/pages)
       const c = record.category
+      const categoryType = normalizeCategoryType(c.categoryType)
+      const parentId = resolveCategoryParent(categoryType, c.parentId)
       run(
         `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
          VALUES (?, ?, ?, ?, ?)`,
-        [c.id, c.name, null, c.sortOrder || 0, c.categoryType || 'folder']
+        [c.id, c.name, parentId, c.sortOrder || 0, categoryType]
       )
       // Remove category from snapshot; if nothing left, delete bin entry
       delete record.category
@@ -282,10 +321,12 @@ export function registerRecycleBinHandlers(): void {
       if (segments.length === 2) {
         // Restore entire child category as root
         const c = child.category
+        const categoryType = normalizeCategoryType(c.categoryType)
+        const parentId = resolveCategoryParent(categoryType, c.parentId)
         run(
           `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
            VALUES (?, ?, ?, ?, ?)`,
-          [c.id, c.name, null, c.sortOrder || 0, c.categoryType || 'folder']
+          [c.id, c.name, parentId, c.sortOrder || 0, categoryType]
         )
         const restorePages = (pages: any[], catId: string) => {
           for (const p of pages) {
@@ -305,7 +346,7 @@ export function registerRecycleBinHandlers(): void {
             run(
               `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
                VALUES (?, ?, ?, ?, ?)`,
-              [cc.id, cc.name, parentId, cc.sortOrder || 0, cc.categoryType || 'folder']
+              [cc.id, cc.name, parentId, cc.sortOrder || 0, cc.categoryType === 'notebook' || cc.categoryType === 'space' ? cc.categoryType : 'folder']
             )
             restorePages(ch.pages || [], cc.id)
             restoreChildren(ch.children || [], cc.id)

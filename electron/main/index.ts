@@ -41,6 +41,9 @@ function flushSettingsToDisk(): void {
   catch (err) { console.error('Failed to persist settings:', err) }
 }
 
+// 允许打包后 file:// 环境下加载本地 module worker（pdf.js 阅读器需要）
+app.commandLine.appendSwitch('allow-file-access-from-files')
+
 // 单实例锁 — 防止多窗口数据不同步（sql.js 内存数据库无跨进程共享能力）
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {

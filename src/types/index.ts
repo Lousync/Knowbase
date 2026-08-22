@@ -133,7 +133,7 @@ export interface UpdateScheduleTodoDTO {
 // knowledge
 export interface KnowledgeCategory {
   id: string; name: string; parentId: string | null; sortOrder: number
-  categoryType: 'notebook' | 'folder'
+  categoryType: 'notebook' | 'folder' | 'space'
   createdAt: string; updatedAt: string
   children?: KnowledgeCategory[]
 }
@@ -147,8 +147,8 @@ export interface KnowledgePage {
   backlinks?: KnowledgePage[]
 }
 export interface KnowledgeTag { id: string; name: string; color: string }
-export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' }
-export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' }
+export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' | 'space' }
+export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' | 'space' }
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
 export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
 
@@ -318,6 +318,8 @@ export interface ElectronAPI {
   getAttachmentsByOwner: (ownerType: string, ownerId: string) => Promise<AttachmentMeta[]>
   deleteAttachment: (id: string) => Promise<void>
   getAttachmentPath: (id: string) => Promise<string | null>
+  readAttachmentBase64: (id: string) => Promise<string | null>
+  readAttachmentBase64ByFileName: (fileName: string) => Promise<string | null>
   cleanupOrphanAttachments: () => Promise<{ removed: number }>
   exportBackupToZip: (zipPath: string, moduleIds?: string[]) => Promise<{ filePath: string; fileCount: number; totalSize: number }>
   importBackupPackage: (srcPath: string) => Promise<{ success: boolean; imported: number; skipped: number; attachments: number; message: string }>

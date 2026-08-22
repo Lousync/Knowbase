@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Folder, BookOpen } from 'lucide-react'
+import { Search, Folder, BookOpen, Layers } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -14,7 +14,7 @@ interface Props {
   onRequestRefresh?: () => void
 }
 
-type ResultKind = 'page' | 'notebook' | 'folder' | 'tag'
+type ResultKind = 'page' | 'notebook' | 'folder' | 'space' | 'tag'
 
 interface ResultItem {
   kind: ResultKind
@@ -82,9 +82,9 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
     for (const c of categories) {
       if (fuzzyMatch(query, c.name)) {
         res.push({
-          kind: c.categoryType === 'notebook' ? 'notebook' : 'folder',
+          kind: c.categoryType === 'space' ? 'space' : c.categoryType === 'notebook' ? 'notebook' : 'folder',
           id: c.id, name: c.name,
-          subtitle: c.categoryType === 'notebook' ? '笔记本' : '目录'
+          subtitle: c.categoryType === 'space' ? '空间' : c.categoryType === 'notebook' ? '笔记本' : '目录'
         })
       }
     }
@@ -167,6 +167,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
         onOpenPage(item.id); break
       case 'notebook':
       case 'folder':
+      case 'space':
         onLocateCategory(item.id); break
       case 'tag':
         if (item.tagPages && item.tagPages.length > 0) {
@@ -233,6 +234,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
                       {item.kind === 'page' && <FileIcon ext={item.fileType || ''} size={15} />}
                       {item.kind === 'notebook' && <BookOpen size={15} className="text-[var(--text-muted)] shrink-0" />}
                       {item.kind === 'folder' && <Folder size={15} className="text-[var(--warning)] shrink-0" />}
+                      {item.kind === 'space' && <Layers size={15} className="text-[var(--info)] shrink-0" />}
                       {item.kind === 'tag' && (
                         <span className="shrink-0 w-3.5 h-3.5 rounded-full" style={{ backgroundColor: item.tagColor || '#6b7280' }} />
                       )}
