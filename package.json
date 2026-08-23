@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "knowbase",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Knowbase Programmer Edition 鈥?鏈湴 Windows 妗岄潰鐭ヨ瘑绠＄悊宸ュ叿",
   "main": "./out/main/index.js",
   "scripts": {

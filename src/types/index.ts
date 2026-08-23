@@ -96,6 +96,19 @@ export interface UpdateHabitDTO {
   sortOrder?: number; archived?: boolean
 }
 
+// ---- 网址导航 ----
+export interface BookmarkCategory { id: string; name: string; color: string; sortOrder: number; createdAt: string }
+export interface BookmarkItem {
+  id: string
+  /** '' = 未分类 */
+  categoryId: string
+  title: string
+  url: string
+  description: string
+  sortOrder: number
+  createdAt: string
+}
+
 // user
 export interface UserProfile {
   username: string
@@ -358,6 +371,17 @@ export interface ElectronAPI {
   deleteHabit: (id: string) => Promise<void>
   toggleHabitCheck: (habitId: string, date: string) => Promise<{ checked: boolean }>
   reorderHabits: (orderedIds: string[]) => Promise<void>
+  // bookmark nav
+  bookmarkGetAll: () => Promise<{ categories: BookmarkCategory[]; bookmarks: BookmarkItem[] }>
+  createBookmarkCategory: (d: { name: string; color?: string }) => Promise<BookmarkCategory>
+  updateBookmarkCategory: (id: string, d: { name?: string; color?: string }) => Promise<BookmarkCategory | null>
+  deleteBookmarkCategory: (id: string) => Promise<void>
+  reorderBookmarkCategories: (orderedIds: string[]) => Promise<void>
+  createBookmarkItem: (d: { title: string; url: string; description?: string; categoryId?: string }) => Promise<BookmarkItem>
+  updateBookmarkItem: (id: string, d: { title?: string; url?: string; description?: string; categoryId?: string | null }) => Promise<BookmarkItem | null>
+  deleteBookmarkItem: (id: string) => Promise<void>
+  openBookmarkUrl: (url: string) => Promise<void>
+  pickBookmarkImportFile: () => Promise<string | null>
   // fill popup
   isFillPopup: boolean
   fillPopupTheme: string

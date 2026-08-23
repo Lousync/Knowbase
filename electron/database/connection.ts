@@ -673,6 +673,30 @@ export function runMigrations(): void {
     `)
     db.run("INSERT INTO _migrations (name) VALUES ('038_checkin_module')")
   }
+
+  if (!applied.has('039_bookmark_nav')) {
+    // 网址导航工具：分类 + 书签（category_id = '' 表示未分类）
+    db.run(`
+      CREATE TABLE IF NOT EXISTS bookmark_categories (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        color      TEXT NOT NULL DEFAULT '#3B82F6',
+        sort_order REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS bookmarks (
+        id          TEXT PRIMARY KEY,
+        category_id TEXT NOT NULL DEFAULT '',
+        title       TEXT NOT NULL,
+        url         TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        sort_order  REAL NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_bookmarks_cat ON bookmarks(category_id);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('039_bookmark_nav')")
+  }
 }
 
 /**

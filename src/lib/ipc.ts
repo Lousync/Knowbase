@@ -204,3 +204,15 @@ export const updateHabit = (id: string, d: UpdateHabitDTO) => a().updateHabit(id
 export const deleteHabit = (id: string) => a().deleteHabit(id)
 export const toggleHabitCheck = (habitId: string, date: string) => a().toggleHabitCheck(habitId, date)
 export const reorderHabits = (orderedIds: string[]) => a().reorderHabits(orderedIds)
+
+// ===== Bookmark Nav =====
+export const bookmarkGetAll = () => a().bookmarkGetAll()
+export const createBookmarkCategory = (d: { name: string; color?: string }) => a().createBookmarkCategory(d)
+export const updateBookmarkCategory = (id: string, d: { name?: string; color?: string }) => a().updateBookmarkCategory(id, d)
+export const deleteBookmarkCategory = (id: string) => a().deleteBookmarkCategory(id)
+export const reorderBookmarkCategories = (orderedIds: string[]) => a().reorderBookmarkCategories(orderedIds)
+export const createBookmarkItem = (d: { title: string; url: string; description?: string; categoryId?: string }) => a().createBookmarkItem(d)
+export const updateBookmarkItem = (id: string, d: { title?: string; url?: string; description?: string; categoryId?: string | null }) => a().updateBookmarkItem(id, d)
+export const deleteBookmarkItem = (id: string) => a().deleteBookmarkItem(id)
+export const openBookmarkUrl = (url: string) => a().openBookmarkUrl(url)
+export const pickBookmarkImportFile = () => a().pickBookmarkImportFile()

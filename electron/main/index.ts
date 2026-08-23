@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, createReadStream } from 'fs'
+import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
@@ -18,12 +18,39 @@ import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/r
 import { registerBackupHandlers } from '../database/repositories/backupRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerCheckinHandlers } from '../database/repositories/checkinRepo'
+import { registerBookmarkHandlers } from '../database/repositories/bookmarkRepo'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
 protocol.registerSchemesAsPrivileged([
   { scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ])
+
+// ===== 数据隔离：开发版（npm run dev）使用独立 userData 目录 =====
+// 已安装版用默认 %APPDATA%/knowbase，开发版用 %APPDATA%/knowbase (dev)。
+// 必须在任何模块读取 userData 路径之前执行（下方 settingsPath 是第一个消费者），
+// 且在 requestSingleInstanceLock 之前——这样开发版与已安装版可同时运行互不抢锁。
+// 首次运行开发版时从共享目录快照一份现有数据（跳过易锁死的缓存目录）；
+// 迁移失败或想重新迁移：删除「xxx (dev)」目录即可。设置 KNOWBASE_SHARED_DATA=1 可强制共用数据。
+if (!app.isPackaged && process.env.KNOWBASE_SHARED_DATA !== '1') {
+  const sharedDir = app.getPath('userData')
+  const devDir = `${sharedDir} (dev)`
+  const marker = join(devDir, '.dev-migrated')
+  if (!existsSync(marker)) {
+    try {
+      if (!existsSync(devDir)) mkdirSync(devDir, { recursive: true })
+      cpSync(sharedDir, devDir, {
+        recursive: true,
+        filter: src => !/[\\/](Cache|Code Cache|GPUCache|DawnCache|DawnGraphiteCache|DawnWebGPUCache|Crashpad|crashpad|blob_storage|Session Storage)([\\/]|$)/i.test(src),
+      })
+      console.log('[DataIsolation] 已从共享目录复制数据到开发目录:', devDir)
+    } catch (e) {
+      console.warn('[DataIsolation] 复制旧数据失败（可能为缓存文件占用），开发目录将使用已复制部分:', e)
+    }
+    try { writeFileSync(marker, new Date().toISOString()) } catch { /* ignore */ }
+  }
+  app.setPath('userData', devDir)
+}
 
 // ===== Settings memory cache =====
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -249,6 +276,7 @@ app.whenReady().then(async () => {
   registerBackupHandlers()
   registerWeightHandlers()
   registerCheckinHandlers()
+  registerBookmarkHandlers()
 
   createWindow()
 

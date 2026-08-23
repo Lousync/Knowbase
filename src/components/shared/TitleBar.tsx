@@ -24,6 +24,13 @@ export function TitleBar() {
       {/* drag region spacer */}
       <div className="flex-1" />
 
+      {/* 开发版角标：dev server 走 http://，打包版走 file:// */}
+      {typeof location !== 'undefined' && location.protocol === 'http:' && (
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 no-drag select-none">
+          DEV
+        </span>
+      )}
+
       {/* VS Code 风格居中搜索框 — absolute centering */}
       <div className="absolute left-1/2 -translate-x-1/2 no-drag" style={{ width: 'min(100% - 180px, 560px)' }}>
         <div id="titlebar-search" />

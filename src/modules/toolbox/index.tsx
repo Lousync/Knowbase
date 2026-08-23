@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Key, Shield, TrendingDown, Timer, CalendarCheck2 } from 'lucide-react'
+import { Key, Shield, TrendingDown, Timer, CalendarCheck2, Globe } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
+import { BookmarkNav } from './components/bookmark-nav'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -34,6 +35,13 @@ const DATA_TOOLS: ToolDefinition[] = [
     name: '强密码生成器',
     desc: '按字符类型和长度生成高强度随机密码',
     icon: <Key size={17} strokeWidth={1.5} />,
+    available: true,
+  },
+  {
+    id: 'bookmark-nav',
+    name: '网址导航',
+    desc: '学习资料网址集中管理，分类保存、一键跳转、JSON/HTML 导出',
+    icon: <Globe size={17} strokeWidth={1.5} />,
     available: true,
   },
 ]
@@ -76,6 +84,8 @@ export function ToolboxModule() {
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
       case 'habit-tracker':
         return <HabitTracker onBack={() => setActiveTool(null)} />
+      case 'bookmark-nav':
+        return <BookmarkNav onBack={() => setActiveTool(null)} />
       default:
         return null
     }

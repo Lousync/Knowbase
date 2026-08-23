@@ -171,6 +171,17 @@ const api = {
   deleteHabit: (id: string) => ipcRenderer.invoke('habit:delete', id),
   toggleHabitCheck: (habitId: string, date: string) => ipcRenderer.invoke('habit:toggleCheck', habitId, date),
   reorderHabits: (orderedIds: string[]) => ipcRenderer.invoke('habit:reorder', orderedIds),
+  // bookmark nav
+  bookmarkGetAll: () => ipcRenderer.invoke('bookmark:getAll'),
+  createBookmarkCategory: (data: unknown) => ipcRenderer.invoke('bookmark:createCategory', data),
+  updateBookmarkCategory: (id: string, data: unknown) => ipcRenderer.invoke('bookmark:updateCategory', id, data),
+  deleteBookmarkCategory: (id: string) => ipcRenderer.invoke('bookmark:deleteCategory', id),
+  reorderBookmarkCategories: (orderedIds: string[]) => ipcRenderer.invoke('bookmark:reorderCategories', orderedIds),
+  createBookmarkItem: (data: unknown) => ipcRenderer.invoke('bookmark:createBookmark', data),
+  updateBookmarkItem: (id: string, data: unknown) => ipcRenderer.invoke('bookmark:updateBookmark', id, data),
+  deleteBookmarkItem: (id: string) => ipcRenderer.invoke('bookmark:deleteBookmark', id),
+  openBookmarkUrl: (url: string) => ipcRenderer.invoke('bookmark:openUrl', url),
+  pickBookmarkImportFile: () => ipcRenderer.invoke('bookmark:pickImportFile'),
 
   // fill popup
   isFillPopup,
