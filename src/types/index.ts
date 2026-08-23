@@ -109,6 +109,36 @@ export interface BookmarkItem {
   createdAt: string
 }
 
+// ---- 远程监督 ----
+export type SupervisePlatform = 'serverchan' | 'wecom' | 'dingtalk' | 'custom'
+export interface SuperviseConfig {
+  enabled: boolean
+  platform: SupervisePlatform
+  /** serverchan 存 SendKey，其余存完整 webhook 地址 */
+  webhookUrl: string
+  /** 仅钉钉加签 */
+  secret: string
+  instantPush: boolean
+  dailyPush: boolean
+  /** HH:mm */
+  dailyTime: string
+  /** 免打扰起止 HH:mm，空 = 不启用 */
+  quietStart: string
+  quietEnd: string
+}
+export interface SuperviseLog {
+  id: number
+  pushType: 'instant' | 'daily'
+  habitId: string | null
+  title: string
+  content: string
+  status: 'success' | 'failed' | 'pending'
+  retryCount: number
+  errorMessage: string | null
+  createdAt: string
+  pushedAt: string | null
+}
+
 // user
 export interface UserProfile {
   username: string
@@ -382,6 +412,15 @@ export interface ElectronAPI {
   deleteBookmarkItem: (id: string) => Promise<void>
   openBookmarkUrl: (url: string) => Promise<void>
   pickBookmarkImportFile: () => Promise<string | null>
+  // remote supervise
+  superviseGetConfig: () => Promise<SuperviseConfig>
+  superviseSaveConfig: (partial: Partial<SuperviseConfig>) => Promise<SuperviseConfig>
+  superviseTest: () => Promise<{ ok: boolean; error?: string }>
+  superviseGetHistory: (limit?: number) => Promise<SuperviseLog[]>
+  superviseRetry: (id: number) => Promise<SuperviseLog | null>
+  superviseRetryAllFailed: () => Promise<{ total: number; ok: number }>
+  superviseSendDailyNow: () => Promise<{ ok: boolean; skipped?: string; error?: string }>
+  superviseClearHistory: () => Promise<void>
   // fill popup
   isFillPopup: boolean
   fillPopupTheme: string

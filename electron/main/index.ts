@@ -19,6 +19,8 @@ import { registerBackupHandlers } from '../database/repositories/backupRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerCheckinHandlers } from '../database/repositories/checkinRepo'
 import { registerBookmarkHandlers } from '../database/repositories/bookmarkRepo'
+import { registerSuperviseHandlers } from '../database/repositories/superviseRepo'
+import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -180,6 +182,9 @@ function registerWindowHandlers(): void {
         'schedule_todos', 'schedule_tags',
         'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags',
         'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'attachments',
+        'habits', 'habit_records',
+        'bookmark_categories', 'bookmarks',
+        'supervise_log', 'supervise_config',
       ]
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
@@ -277,8 +282,12 @@ app.whenReady().then(async () => {
   registerWeightHandlers()
   registerCheckinHandlers()
   registerBookmarkHandlers()
+  registerSuperviseHandlers()
 
   createWindow()
+
+  // 远程监督：每日汇总定时器 + 免打扰补发
+  startSuperviseScheduler()
 
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()
@@ -303,6 +312,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   destroyPasswordFiller()
+  stopSuperviseScheduler()
   // Flush pending settings writes
   if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
   closeDatabase()

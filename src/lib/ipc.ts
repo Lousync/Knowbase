@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, SuperviseConfig } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -216,3 +216,13 @@ export const updateBookmarkItem = (id: string, d: { title?: string; url?: string
 export const deleteBookmarkItem = (id: string) => a().deleteBookmarkItem(id)
 export const openBookmarkUrl = (url: string) => a().openBookmarkUrl(url)
 export const pickBookmarkImportFile = () => a().pickBookmarkImportFile()
+
+// ===== Remote Supervise =====
+export const superviseGetConfig = (): Promise<SuperviseConfig> => a().superviseGetConfig()
+export const superviseSaveConfig = (partial: Partial<SuperviseConfig>): Promise<SuperviseConfig> => a().superviseSaveConfig(partial)
+export const superviseTest = (): Promise<{ ok: boolean; error?: string }> => a().superviseTest()
+export const superviseGetHistory = (limit?: number) => a().superviseGetHistory(limit)
+export const superviseRetry = (id: number) => a().superviseRetry(id)
+export const superviseRetryAllFailed = (): Promise<{ total: number; ok: number }> => a().superviseRetryAllFailed()
+export const superviseSendDailyNow = (): Promise<{ ok: boolean; skipped?: string; error?: string }> => a().superviseSendDailyNow()
+export const superviseClearHistory = (): Promise<void> => a().superviseClearHistory()
