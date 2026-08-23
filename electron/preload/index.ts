@@ -164,9 +164,13 @@ const api = {
   createWeightRecord: (data: unknown) => ipcRenderer.invoke('weight:create', data),
   updateWeightRecord: (id: string, data: unknown) => ipcRenderer.invoke('weight:update', id, data),
   deleteWeightRecord: (id: string) => ipcRenderer.invoke('weight:delete', id),
-
-  // ai
-  aiChat: (opts: unknown) => ipcRenderer.invoke('ai:chat', opts),
+  // checkin
+  habitGetAll: () => ipcRenderer.invoke('habit:getAll'),
+  createHabit: (data: unknown) => ipcRenderer.invoke('habit:create', data),
+  updateHabit: (id: string, data: unknown) => ipcRenderer.invoke('habit:update', id, data),
+  deleteHabit: (id: string) => ipcRenderer.invoke('habit:delete', id),
+  toggleHabitCheck: (habitId: string, date: string) => ipcRenderer.invoke('habit:toggleCheck', habitId, date),
+  reorderHabits: (orderedIds: string[]) => ipcRenderer.invoke('habit:reorder', orderedIds),
 
   // fill popup
   isFillPopup,

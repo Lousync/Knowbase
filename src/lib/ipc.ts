@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -197,5 +197,10 @@ export const createWeightRecord = (d: { weight: number; date: string; series?: s
 export const updateWeightRecord = (id: string, d: { weight?: number; date?: string; series?: string; note?: string }) => a().updateWeightRecord(id, d)
 export const deleteWeightRecord = (id: string) => a().deleteWeightRecord(id)
 
-// ===== AI =====
-export const aiChat = (opts: { messages: { role: string; content: string }[] }) => a().aiChat(opts)
+// ===== Checkin =====
+export const habitGetAll = () => a().habitGetAll()
+export const createHabit = (d: CreateHabitDTO) => a().createHabit(d)
+export const updateHabit = (id: string, d: UpdateHabitDTO) => a().updateHabit(id, d)
+export const deleteHabit = (id: string) => a().deleteHabit(id)
+export const toggleHabitCheck = (habitId: string, date: string) => a().toggleHabitCheck(habitId, date)
+export const reorderHabits = (orderedIds: string[]) => a().reorderHabits(orderedIds)

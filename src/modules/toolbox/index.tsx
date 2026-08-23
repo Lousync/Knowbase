@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Key, Braces, Code, Calculator, Clock, Timer, Bot, Shield, TrendingDown } from 'lucide-react'
+import { Key, Shield, TrendingDown, Timer, CalendarCheck2 } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
-import { AIChatPanel } from './components/AIChatPanel'
+import { HabitTracker } from './components/habit-tracker'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -36,34 +36,6 @@ const DATA_TOOLS: ToolDefinition[] = [
     icon: <Key size={17} strokeWidth={1.5} />,
     available: true,
   },
-  {
-    id: 'json-formatter',
-    name: 'JSON 格式化',
-    desc: 'JSON 美化 / 压缩 / 校验',
-    icon: <Braces size={17} strokeWidth={1.5} />,
-    available: false,
-  },
-  {
-    id: 'base64-codec',
-    name: 'Base64 编解码',
-    desc: '文本与 Base64 互转',
-    icon: <Code size={17} strokeWidth={1.5} />,
-    available: false,
-  },
-  {
-    id: 'timestamp',
-    name: '时间戳转换',
-    desc: 'Unix 时间戳与日期互转',
-    icon: <Clock size={17} strokeWidth={1.5} />,
-    available: false,
-  },
-  {
-    id: 'unit-converter',
-    name: '单位换算',
-    desc: '长度 / 重量 / 温度 / 数据大小换算',
-    icon: <Calculator size={17} strokeWidth={1.5} />,
-    available: false,
-  },
 ]
 
 const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
@@ -74,14 +46,11 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
     icon: <Timer size={17} strokeWidth={1.5} />,
     available: true,
   },
-]
-
-const AI_TOOLS: ToolDefinition[] = [
   {
-    id: 'ai-chat',
-    name: 'AI 助手',
-    desc: 'AI 对话，辅助写作翻译编程',
-    icon: <Bot size={17} strokeWidth={1.5} />,
+    id: 'habit-tracker',
+    name: '习惯打卡',
+    desc: '每日习惯打卡，连续天数与统计激励，支持补卡',
+    icon: <CalendarCheck2 size={17} strokeWidth={1.5} />,
     available: true,
   },
 ]
@@ -105,8 +74,8 @@ export function ToolboxModule() {
         return <PasswordVault onBack={() => setActiveTool(null)} />
       case 'password-generator':
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
-      case 'ai-chat':
-        return <AIChatPanel onBack={() => setActiveTool(null)} />
+      case 'habit-tracker':
+        return <HabitTracker onBack={() => setActiveTool(null)} />
       default:
         return null
     }
@@ -177,13 +146,6 @@ export function ToolboxModule() {
         </div>
 
         {renderSection('效率工具', PRODUCTIVITY_TOOLS)}
-
-        {/* Divider */}
-        <div className="flex items-center gap-3 max-w-[600px] mx-auto">
-          <div className="flex-1 h-px bg-[var(--border-color)]" />
-        </div>
-
-        {renderSection('AI 工具', AI_TOOLS)}
       </div>
     </div>
   )

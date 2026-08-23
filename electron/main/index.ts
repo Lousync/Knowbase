@@ -17,7 +17,7 @@ import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
 import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/repositories/attachmentRepo'
 import { registerBackupHandlers } from '../database/repositories/backupRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
-import { registerAIHandlers } from '../ai/aiHandler'
+import { registerCheckinHandlers } from '../database/repositories/checkinRepo'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -248,7 +248,7 @@ app.whenReady().then(async () => {
   registerAttachmentHandlers()
   registerBackupHandlers()
   registerWeightHandlers()
-  registerAIHandlers()
+  registerCheckinHandlers()
 
   createWindow()
 

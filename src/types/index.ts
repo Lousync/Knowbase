@@ -12,10 +12,6 @@ export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtm
 export interface Tag { id: string; name: string; color: string }
 export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'export' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox'
 
-// ai
-export interface AIChatMessage { role: 'system' | 'user' | 'assistant'; content: string }
-export interface AIChatResult { content: string; error?: string }
-
 // toolbox
 export interface ToolboxScript {
   id: string; name: string; description: string; content: string
@@ -73,6 +69,32 @@ export interface MomentsPost {
 export interface WeightRecord { id: string; weight: number; date: string; series: string; note: string; createdAt: string }
 export interface CreateWeightDTO { weight: number; date: string; series?: string; note?: string }
 export interface UpdateWeightDTO { weight?: number; date?: string; series?: string; note?: string }
+
+// ---- 打卡模块 ----
+export type HabitRuleType = 'daily' | 'weekdays' | 'flexible'
+export interface Habit {
+  id: string
+  name: string
+  color: string
+  ruleType: HabitRuleType
+  /** weekdays 规则的计划日，JS getDay() 数字，0=周日 */
+  ruleDays: number[]
+  /** flexible 规则的每周目标次数 */
+  weeklyTarget: number
+  sortOrder: number
+  archived: boolean
+  createdAt: string
+}
+export interface HabitRecord { id: string; habitId: string; date: string }
+export interface CreateHabitDTO {
+  name: string; color?: string; ruleType?: HabitRuleType
+  ruleDays?: number[]; weeklyTarget?: number; sortOrder?: number
+}
+export interface UpdateHabitDTO {
+  name?: string; color?: string; ruleType?: HabitRuleType
+  ruleDays?: number[]; weeklyTarget?: number
+  sortOrder?: number; archived?: boolean
+}
 
 // user
 export interface UserProfile {
@@ -329,8 +351,13 @@ export interface ElectronAPI {
   createWeightRecord: (d: CreateWeightDTO) => Promise<WeightRecord>
   updateWeightRecord: (id: string, d: UpdateWeightDTO) => Promise<WeightRecord>
   deleteWeightRecord: (id: string) => Promise<void>
-  // ai
-  aiChat: (opts: { messages: AIChatMessage[] }) => Promise<AIChatResult>
+  // checkin
+  habitGetAll: () => Promise<{ habits: Habit[]; records: HabitRecord[] }>
+  createHabit: (d: CreateHabitDTO) => Promise<Habit>
+  updateHabit: (id: string, d: UpdateHabitDTO) => Promise<Habit>
+  deleteHabit: (id: string) => Promise<void>
+  toggleHabitCheck: (habitId: string, date: string) => Promise<{ checked: boolean }>
+  reorderHabits: (orderedIds: string[]) => Promise<void>
   // fill popup
   isFillPopup: boolean
   fillPopupTheme: string
