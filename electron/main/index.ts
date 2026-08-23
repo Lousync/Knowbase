@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage } from 'electron'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
@@ -27,14 +27,15 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 // ===== 数据隔离：开发版（npm run dev）使用独立 userData 目录 =====
-// 已安装版用默认 %APPDATA%/knowbase，开发版用 %APPDATA%/knowbase (dev)。
+// 已安装版用默认 %APPDATA%/knowbase；开发版用 %APPDATA%/knowbase (dev <目录名>)。
+// 按检出目录名隔离 → 主仓库与各 git worktree 的 dev 实例数据互不影响、单实例锁互不冲突。
 // 必须在任何模块读取 userData 路径之前执行（下方 settingsPath 是第一个消费者），
-// 且在 requestSingleInstanceLock 之前——这样开发版与已安装版可同时运行互不抢锁。
-// 首次运行开发版时从共享目录快照一份现有数据（跳过易锁死的缓存目录）；
-// 迁移失败或想重新迁移：删除「xxx (dev)」目录即可。设置 KNOWBASE_SHARED_DATA=1 可强制共用数据。
+// 且在 requestSingleInstanceLock 之前。
+// 首次运行时从正式版目录快照一份现有数据（跳过易锁死的缓存目录）；
+// 想重新迁移：删除对应「knowbase (dev ...)」目录即可。设置 KNOWBASE_SHARED_DATA=1 可强制共用。
 if (!app.isPackaged && process.env.KNOWBASE_SHARED_DATA !== '1') {
   const sharedDir = app.getPath('userData')
-  const devDir = `${sharedDir} (dev)`
+  const devDir = `${sharedDir} (dev ${basename(app.getAppPath())})`
   const marker = join(devDir, '.dev-migrated')
   if (!existsSync(marker)) {
     try {
