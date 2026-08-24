@@ -1,58 +1,84 @@
-# Knowbase
+# Knowbase Programmer Edition
 
 Windows 桌面端知识日程管理工具，纯本地运行，对标 VS Code 体验。
+
+> 所有数据保存在你自己的电脑上——无需注册、没有云端、不联网也能用。
 
 ## 功能模块
 
 | 模块 | 说明 |
 |------|------|
-| 📝 博客 | 每日一篇，Markdown 写作，标签分类，日历筛选，全文搜索 |
-| 📅 日程 | 日历视图，待办列表，四象限优先级，子任务，截止日期 |
-| 📚 知识库 | 分类树 + 笔记本，Wiki 风格页面，Markdown 编辑，附件导入 |
-| 🧰 工具箱 | 强密码生成器、番茄钟、AI 助手等内嵌实用工具 |
-| 💾 导出 | 一键导出全部模块数据（JSON / Markdown / ZIP），增量备份 |
-| 🗑️ 回收站 | 软删除，可恢复，30 天自动清理 |
-| ⚙️ 设置 | 主题切换、字体、编码、AI 服务配置等 |
+| 📝 博客 | 每日一篇，Markdown 写作，标签分类，日历筛选，全文搜索；**周/月总结面板**自动汇总区间数据，**自定义模板**一键套用 |
+| 📅 任务 | 日历视图，待办列表，四象限优先级，子任务，截止时间线，周期任务 |
+| 📚 知识库 | 空间 / 笔记本 / 章节 / 页面四级结构，`[[双链]]` + **关联网络**（反链上下文、手动关联、相关性推荐），PDF / 代码 / XMind 附件与注解层，**沉浸阅读模式** |
+| 💬 说说 | 轻量动态 + 相册管理，支持时间线可见性切换 |
+| 🧰 工具箱 | 7 个内嵌实用工具（见下） |
+| 💾 导出 | 按模块勾选导出备份包（ZIP），拖入窗口即可完整还原 |
+| 🗑️ 回收站 | 软删除，可恢复，保留天数可调，支持导出为 Markdown |
+| 🛡️ 安全 | 可选锁屏密码 + 启动自动锁屏 |
+| ⚙️ 设置 | 深色/浅色主题、字体、缩放、编辑器行为、打卡提醒、博客模板等 |
+
+### 工具箱
+
+| 工具 | 功能 |
+|------|------|
+| 体重追踪 | 多系列 Canvas 折线图，滚轮缩放、横滚浏览，kg/斤切换 |
+| 密码本 | 加密存储（DPAPI），快速搜索，一键复制，全局快速填充悬浮窗（`Ctrl+Alt+P`） |
+| 强密码生成器 | Web Crypto 密码学安全随机，长度与字符类型可调，强度评估 |
+| 网址导航 | 分类管理学习资料网址，JSON 备份 / Netscape HTML 导入浏览器 |
+| 番茄钟 | 三档预设专注循环，状态栏常驻，专注时长计入周月总结 |
+| 习惯打卡 | 每天 / 每周指定 / 每周 N 次三种规则，补卡、连击里程碑与统计 |
+| 远程监督 | 打卡实时推送到微信 / 钉钉 / 企微（Webhook），每日汇总与免打扰 |
+
+### 其他特性
+
+- **新手引导**：首次启动五步向导，快速上手（设置中可随时重看）
+- **检查更新**：应用内检查 GitHub Releases 新版本并直接下载安装
+- **帮助中心**：内置中文文档；侧栏「反馈问题」一键跳转 GitHub Issues
+- **快捷键**：`Ctrl+N` 当前模块新建 · `Ctrl+B` 侧栏 · `Ctrl+O` 大纲 · `Ctrl+滚轮` 缩放界面
 
 ## 技术栈
 
-| 层级 | 技术 | 版本 | 说明 |
-|------|------|------|------|
-| 桌面框架 | Electron | ^33.2.0 | 无边框窗口 + 自定义标题栏 |
-| 前端框架 | React + TypeScript | ^19.0 / ^5.7 | 函数组件 + Hooks，严格模式 |
-| 构建工具 | electron-vite | ^5.0 | 主进程 / preload / 渲染进程统一构建 |
-| UI 样式 | TailwindCSS | ^4.0 | 原子化 CSS，深色/浅色双主题 |
-| 数据库 | sql.js (SQLite WASM) | ^1.12 | 纯 JS，零原生依赖 |
-| 编辑器 | Monaco Editor | ^0.55 | VS Code 同款内核 |
-| Markdown 渲染 | react-markdown + rehype-highlight | | 安全渲染，无 XSS 风险 |
-| 图标 | lucide-react | ^1.0 | 轻量 SVG 图标 |
-| 打包 | electron-builder | ^26.0 | NSIS 安装包 |
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| 桌面框架 | Electron 33 | 无边框窗口 + 自定义标题栏，渲染进程沙箱化 |
+| 前端框架 | React 19 + TypeScript | 函数组件 + Hooks，严格模式 |
+| 构建工具 | electron-vite | 主进程 / preload / 渲染进程统一构建 |
+| UI 样式 | TailwindCSS 4 | 原子化 CSS，深色/浅色双主题（CSS 变量） |
+| 数据库 | sql.js (SQLite WASM) | 零原生依赖；原子写盘 + 自动 `.bak` 回退 |
+| 编辑器 | Monaco Editor | VS Code 同款内核 |
+| Markdown | react-markdown + rehype-highlight | 默认不渲染原始 HTML，安全无 XSS |
+| 图标 | lucide-react | 轻量 SVG 图标 |
+| 打包 | electron-builder | NSIS 安装包（x64） |
 
 ## 项目架构
 
 ```
 Knowbase/
 ├── electron/
-│   ├── main/index.ts          # 窗口管理 + IPC 调度
-│   ├── preload/index.ts       # 安全 API 桥接
-│   ├── database/              # sql.js 初始化 / 迁移 / Repository
-│   ├── ai/                    # AI API 调用处理 (Node fetch)
-│   └── terminal/              # 终端管理器（预留）
+│   ├── main/index.ts          # 窗口管理 + IPC 调度 + 安全策略
+│   ├── main/passwordFiller.ts # 密码快速填充悬浮窗
+│   ├── preload/index.ts       # contextBridge 安全 API 桥接
+│   ├── database/connection.ts # sql.js 初始化 / 迁移（事务化）/ 原子持久化
+│   ├── database/repositories/ # 各模块 Repository（SQL 全参数化）
+│   └── lib/                   # 推送服务、ZIP、路径防护、更新检查等
 ├── src/
-│   ├── App.tsx                # 主组件：TitleBar + ActivityBar + 路由
-│   ├── modules/
-│   │   ├── blog/              # 博客模块
-│   │   ├── schedule/          # 日程模块
-│   │   ├── knowledge/         # 知识库模块
-│   │   ├── export/            # 数据导出模块
-│   │   ├── recycle/           # 回收站模块
-│   │   ├── settings/          # 设置模块
-│   │   ├── help/              # 帮助文档模块
-│   │   ├── user/              # 用户模块
-│   │   └── toolbox/           # 工具箱模块
-│   └── components/shared/     # 通用 UI 组件
-└── scripts/                   # 脚本工具
+│   ├── App.tsx                # 主组件：TitleBar + ActivityBar + 模块路由
+│   ├── modules/               # blog / schedule / knowledge / moments /
+│   │                          # toolbox / export / recycle / settings /
+│   │                          # help / user
+│   ├── components/shared/     # 通用 UI（MarkdownPreview / Onboarding 等）
+│   └── lib/                   # IPC 封装 / 设置 Schema / 日期与快捷键工具
+├── docs/                      # 开发者文档
+└── scripts/                   # 启动脚本
 ```
+
+## 安全设计
+
+- 数据 100% 本地存储（SQLite），密码本列使用系统级加密（Windows DPAPI）
+- 渲染进程沙箱 + contextIsolation，IPC 最小暴露面，路径类操作防穿越（Zip Slip 防护）
+- 复制的密码 30 秒后自动清空剪贴板（仅当内容未被覆盖时）
+- 备份导入预检 + 事务回滚，数据库损坏自动从 `.bak` 恢复
 
 ## 部署
 
@@ -67,45 +93,35 @@ Knowbase/
 ### 开发环境
 
 ```bash
-git clone <repo-url>
-cd KnowledgeRecorder
+git clone https://github.com/Lousync/Knowbase.git
+cd Knowbase
 npm install
 npm run dev       # 启动开发模式（热更新）
 ```
+
+> 开发模式使用独立的 `%APPDATA%/knowbase (dev)` 数据目录，与正式版完全隔离。
 
 ### 生产打包
 
 ```bash
 # 一键构建 + 打包 NSIS 安装包
 npm run pack
-
-# 若遇到 SSL 证书错误，使用：
-NODE_OPTIONS="--use-system-ca" npm run pack
 ```
 
-打包产物在 `dist-electron/` 目录，生成 `Knowbase Setup x.x.x.exe` 安装包。
-
-## AI 助手配置
-
-1. 打开 **设置** → **AI 服务**
-2. 填入 API 密钥（支持 OpenAI / DeepSeek 及其他兼容接口）
-3. 确认 Base URL 和模型名称
-4. 切换到 **工具箱** → 点击「AI 助手」卡片即可对话
-
-默认配置为 DeepSeek（`https://api.deepseek.com/v1`，模型 `deepseek-chat`），只需填入密钥即可使用。
+打包产物在 `dist-electron/` 目录，生成 `Knowbase Programmer Edition Setup x.x.x.exe`。
 
 ## 数据目录
 
 | 文件 | 路径 |
 |------|------|
-| 数据库 | `%APPDATA%/knowbase/data/knowledge.db` |
+| 数据库 | `%APPDATA%/knowbase/data/knowledge.db`（含 `.bak` 自动备份） |
+| 附件 | `%APPDATA%/knowbase/attachments/` |
 | 设置 | `%APPDATA%/knowbase/settings.json` |
 
 ## 环境检查
 
 1. **`ELECTRON_RUN_AS_NODE`** — 系统环境变量中若存在需删除，否则 Electron 以纯 Node 模式运行
-2. **安装路径** — 建议非 C 盘，避免中文路径导致数据库异常
-3. **数据备份** — 定期使用导出功能备份数据库
+2. **数据备份** — 定期使用导出功能备份；数据库损坏时应用会自动尝试 `.bak` 回退
 
 ## 免责声明
 
@@ -113,7 +129,7 @@ NODE_OPTIONS="--use-system-ca" npm run pack
 
 ## 参与贡献
 
-有更好的想法或发现 Bug，欢迎在项目中提 Issue 或 PR。
+有更好的想法或发现 Bug，欢迎 [提 Issue](https://github.com/Lousync/Knowbase/issues) 或 PR；也可在应用内 **帮助 → 反馈问题** 直达。
 
 ## 致谢
 
