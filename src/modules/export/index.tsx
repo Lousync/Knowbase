@@ -146,10 +146,6 @@ export function ExportModule() {
               </div>
             </label>
           ))}
-          <p className="text-[10px] text-[var(--text-disabled)] mt-3 leading-relaxed">
-            勾选模块后导出该模块全部数据与附件<br />
-            工具箱、体重记录与回收站始终包含在备份内
-          </p>
         </div>
       </div>
 

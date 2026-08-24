@@ -6,6 +6,7 @@ import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting, reorderKnowledgePage } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
+import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { CategoryMovePicker } from './CategoryMovePicker'
 import { useContextMenuPosition } from '../../../lib/useContextMenuPosition'
 
@@ -102,6 +103,7 @@ export function ChapterPanel({
   // F2 — keyboard rename active page / selected / focused chapter
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'knowledge') return
       if (isEditingInput(e)) return
       if (e.key === 'F2') {
         // Priority: active page → focused chapter → selected chapter

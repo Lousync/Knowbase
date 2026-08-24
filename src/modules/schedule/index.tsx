@@ -11,6 +11,7 @@ import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { isEditingInput } from '../../lib/shortcuts'
+import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 
@@ -346,6 +347,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'schedule') return
       if (isEditingInput(e)) return
       // Ctrl+N — open new task modal
       if (e.ctrlKey && e.key === 'n') {

@@ -6,6 +6,7 @@ import { BlogTemplateModal } from './BlogTemplateModal'
 import { showToast } from '../../../lib/toast'
 import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { useSettings } from '../../../lib/SettingsContext'
+import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { ConfirmDialog } from '../../../components/shared'
 import { SummaryPanel } from './SummaryPanel'
 import Editor, { type OnMount } from '@monaco-editor/react'
@@ -240,6 +241,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   // Ctrl+/ toggle preview, Ctrl+S save, Escape back
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'blog') return
       if (e.ctrlKey && e.key === '/') { e.preventDefault(); setShowPreview(v => !v) }
       if (e.ctrlKey && e.key === 's') { e.preventDefault(); handleSaveAndClose() }
       if (e.key === 'Escape') { e.preventDefault(); if (checkUnsaved()) { setUnsavedAction(() => onCancel); return } onCancel() }

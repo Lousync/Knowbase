@@ -5,6 +5,7 @@ import { Toast } from './components/shared/Toast'
 import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
+import { setGlobalActiveTab } from './lib/activeTab'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -149,6 +150,9 @@ export default function App() {
   useEffect(() => {
     document.documentElement.style.fontSize = `${s.zoom * 16}px`
   }, [s.zoom])
+
+  // Sync active tab for module-level shortcut guards (hidden modules stay mounted)
+  useEffect(() => { setGlobalActiveTab(activeTab) }, [activeTab])
 
   // Blue-outline drag workaround
   useEffect(() => {

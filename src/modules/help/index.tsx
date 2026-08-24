@@ -30,7 +30,7 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
 
 export function HelpModule() {
   const [docs, setDocs] = useState<HelpDoc[]>([])
-  const [activeDoc, setActiveDoc] = useState<string>('shortcuts')
+  const [activeDoc, setActiveDoc] = useState<string>('键盘快捷键')
 
   useEffect(() => {
     loadHelpDocs().then(docs => {

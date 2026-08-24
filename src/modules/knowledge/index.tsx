@@ -26,6 +26,7 @@ import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePane
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { isEditingInput } from '../../lib/shortcuts'
+import { getGlobalActiveTab } from '../../lib/activeTab'
 
 // ---- 剪贴板类型 ----
 interface ClipItem { type: 'category' | 'page'; id: string }
@@ -685,6 +686,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   // Keyboard shortcuts — module level
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'knowledge') return
       // 沉浸阅读：Ctrl+Shift+R 进出；Esc 退出（阅读态下无输入框，无需输入守卫）
       if (readingMode) {
         if (e.key === 'Escape') { e.preventDefault(); exitReading() }
@@ -1143,8 +1145,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
               <FileText size={48} className="mb-4 opacity-25" />
               <p className="text-sm">选择或创建一个页面开始</p>
-              <p className="text-xs mt-2 text-[var(--text-disabled)]">笔记本是一本「书」，章节是它的「目录」，页面是「内容」</p>
-              <p className="text-xs mt-1 text-[var(--text-disabled)]">零散文件是不属于任何笔记本的独立页面</p>
             </div>
           )}
         </div>

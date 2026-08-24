@@ -21,7 +21,9 @@ export interface HelpDoc {
 
 /** Parse YAML frontmatter from a markdown string */
 function parseFrontmatter(raw: string): { meta: Record<string, string>; body: string } | null {
-  const m = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/)
+  // 统一 CRLF → LF：kv 正则的 (.+)$ 吃不到行尾 \r，会导致所有字段解析失败
+  const text = raw.replace(/\r\n/g, '\n')
+  const m = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/)
   if (!m) return null
   const meta: Record<string, string> = {}
   for (const line of m[1].split('\n')) {

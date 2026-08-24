@@ -6,6 +6,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
+import { getGlobalActiveTab } from '../../lib/activeTab'
 import { localToday } from '../../lib/date'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
@@ -135,6 +136,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'blog') return
       if (isEditingInput(e)) return
 
       if (e.ctrlKey && e.key === 'n') {
@@ -232,6 +234,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   // Ctrl+O toggle outline
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'blog') return
       if (isEditingInput(e)) return
       if (e.ctrlKey && e.key === 'o' && (view === 'editor' || view === 'detail')) {
         e.preventDefault()

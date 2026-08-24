@@ -6,6 +6,7 @@ import { getSetting, setSetting } from '../../../lib/ipc'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
+import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { CategoryMovePicker } from './CategoryMovePicker'
 import { useContextMenuPosition } from '../../../lib/useContextMenuPosition'
 
@@ -249,6 +250,7 @@ export function NotebookList({
   // F2 — keyboard rename selected notebook / folder
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'knowledge') return
       if (isEditingInput(e)) return
       if (e.key === 'F2') {
         e.preventDefault()

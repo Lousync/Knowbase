@@ -242,7 +242,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
       showToast({
         type: 'warning',
         message: '日期太早，暂不支持此日期之前的日志补写。',
-        detail: 'shortcuts',
+        detail: '键盘快捷键',
       })
       return
     }
@@ -253,7 +253,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
       showToast({
         type: 'warning',
         message: '不能创建未来日期的日志。',
-        detail: 'shortcuts',
+        detail: '键盘快捷键',
       })
       return
     }

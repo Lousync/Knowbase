@@ -9,6 +9,7 @@ import { showToast } from '../../../lib/toast'
 import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
+import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { ConfirmDialog } from '../../../components/shared'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
@@ -293,6 +294,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   // Keyboard shortcuts: Ctrl+S, Ctrl+/, Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (getGlobalActiveTab() !== 'knowledge') return
       // Ctrl+S — save immediately (always fire, even in Monaco)
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault()
