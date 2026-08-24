@@ -20,6 +20,7 @@ import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
 import { LockScreen } from './components/shared/LockScreen'
+import { Onboarding } from './components/shared/Onboarding'
 import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
 
@@ -146,6 +147,17 @@ export default function App() {
     return () => window.removeEventListener('help:open', handler)
   }, [])
 
+  // First-run onboarding — show once after load & unlock; re-openable from settings
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
+  useEffect(() => {
+    if (loaded && !locked && !s.onboardingDone) setOnboardingOpen(true)
+  }, [loaded, locked, s.onboardingDone])
+  useEffect(() => {
+    const handler = () => setOnboardingOpen(true)
+    window.addEventListener('onboarding:show', handler)
+    return () => window.removeEventListener('onboarding:show', handler)
+  }, [])
+
   // Keep <html> font-size in sync when zoom changes externally
   useEffect(() => {
     document.documentElement.style.fontSize = `${s.zoom * 16}px`
@@ -245,6 +257,12 @@ export default function App() {
         <StatusBar encoding={encoding} />
       </PomodoroProvider>
       <Toast />
+      {onboardingOpen && !locked && (
+        <Onboarding
+          onComplete={() => { update('onboardingDone', true); setOnboardingOpen(false) }}
+          onSwitchTab={tab => setActiveTab(tab)}
+        />
+      )}
       <LockScreen locked={locked} onUnlock={() => setLocked(false)} />
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
     </div>

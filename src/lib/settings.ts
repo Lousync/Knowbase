@@ -134,6 +134,9 @@ export const SETTINGS = {
   // ---- 打卡提醒 ----
   checkinReminderEnabled: { default: true,   desc: '启用打卡提醒' },
   checkinReminderTime:    { default: '20:00', desc: '打卡提醒时间（HH:mm）' },
+
+  // ---- 新手引导 ----
+  onboardingDone: { default: false, desc: '已完成新手引导' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

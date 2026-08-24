@@ -1,4 +1,4 @@
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Sparkles } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 
 export function AdvancedView() {
@@ -55,6 +55,18 @@ export function AdvancedView() {
               className="accent-[var(--accent)]" />
           </label>
         </div>
+      </div>
+
+      {/* Onboarding */}
+      <div className="mb-8">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">新手引导</h3>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('onboarding:show'))}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+        >
+          <Sparkles size={12} />
+          重新查看新手引导
+        </button>
       </div>
 
       {/* Auto-save info */}
