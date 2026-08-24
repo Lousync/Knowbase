@@ -350,6 +350,11 @@ export interface ElectronAPI {
   importPdf: (base64: string, fileName: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   importPdfFile: (filePath: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   openExternal: (filePath: string) => Promise<void>
+  getAppVersion: () => Promise<string>
+  checkForUpdate: () => Promise<{ ok: boolean; hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; notes: string; asset: { name: string; url: string; size: number } | null; message?: string }>
+  downloadUpdate: (url: string, name: string) => Promise<{ success: boolean; filePath?: string; message?: string }>
+  installUpdate: (filePath: string) => Promise<{ success: boolean; message?: string }>
+  onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => () => void
   getAttachmentsPath: () => Promise<string>
   showImportDataDialog: () => Promise<string[]>
   readImportFile: (filePath: string) => Promise<string | null>

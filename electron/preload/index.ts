@@ -87,6 +87,15 @@ const api = {
   showFolderDialog: () => ipcRenderer.invoke('import:showFolderDialog'),
   importFolder: (folderPath: string, parentCategoryId: string | null) => ipcRenderer.invoke('import:importFolder', folderPath, parentCategoryId),
   openExternal: (filePath: string) => ipcRenderer.invoke('app:openExternal', filePath),
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: (url: string, name: string) => ipcRenderer.invoke('update:download', url, name),
+  installUpdate: (filePath: string) => ipcRenderer.invoke('update:install', filePath),
+  onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => {
+    const handler = (_e: unknown, p: { percent: number; receivedBytes: number; totalBytes: number }) => cb(p)
+    ipcRenderer.on('update:download-progress', handler)
+    return () => { ipcRenderer.removeListener('update:download-progress', handler) }
+  },
   showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
   executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),

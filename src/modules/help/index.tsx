@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
+import { LifeBuoy } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { loadHelpDocs, type HelpDoc } from './docsLoader'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
+import { openExternal } from '../../lib/ipc'
+
+const ISSUES_URL = 'https://github.com/Lousync/Knowbase/issues'
 
 // Module-level target for cross-component navigation (toast "查看详情" etc.)
 let pendingDocId: string | null = null
@@ -77,6 +81,18 @@ export function HelpModule() {
             ))}
           </div>
         ))}
+
+        {/* 反馈入口 — 跳转 GitHub Issues */}
+        <div className="mt-auto px-3 pt-3 border-t border-[var(--border-color)]">
+          <button
+            onClick={() => openExternal(ISSUES_URL).catch(() => {})}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+            title="在 GitHub Issues 中反馈问题或建议"
+          >
+            <LifeBuoy size={13} />
+            反馈问题
+          </button>
+        </div>
       </div>
 
       {/* Right content */}
