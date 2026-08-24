@@ -174,18 +174,27 @@ export interface KnowledgeCategory {
 }
 export interface KnowledgePage {
   id: string; title: string; contentMd: string; contentHtml: string
+  annotationMd?: string
   categoryId: string | null; isStarred: boolean; sortOrder: number
   fileType: string
   attachmentId: string
   createdAt: string; updatedAt: string
   tags?: KnowledgeTag[]
   backlinks?: KnowledgePage[]
+  /** 搜索命中摘录（仅 searchPages 结果携带） */
+  excerpt?: string
+}
+/** 反链条目（带引用上下文摘录） */
+export interface KnowledgeBacklinkItem {
+  id: string; title: string; fileType: string
+  updatedAt: string
+  excerpt: string
 }
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' | 'space' }
 export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' | 'space' }
 export interface CreateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
-export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
+export interface UpdateKnowledgePageDTO { title?: string; contentMd?: string; contentHtml?: string; annotationMd?: string; categoryId?: string | null; fileType?: string; filePath?: string; tags?: string[] }
 
 // import
 export interface ImportFileResult {
@@ -274,6 +283,10 @@ export interface ElectronAPI {
   deleteKnowledgePage: (id: string) => Promise<void>
   searchKnowledgePages: (q: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinks: (pageId: string) => Promise<KnowledgePage[]>
+  getKnowledgeBacklinkContext: (pageId: string) => Promise<KnowledgeBacklinkItem[]>
+  getKnowledgeManualLinks: (pageId: string) => Promise<KnowledgePage[]>
+  addKnowledgeManualLink: (pageId: string, targetId: string) => Promise<{ ok: boolean }>
+  removeKnowledgeManualLink: (a: string, b: string) => Promise<{ ok: boolean }>
   updateKnowledgeLinks: (pageId: string, linkedTitles: string[]) => Promise<void>
   getKnowledgeTags: () => Promise<KnowledgeTag[]>
   createKnowledgeTag: (n: string, c?: string) => Promise<KnowledgeTag>

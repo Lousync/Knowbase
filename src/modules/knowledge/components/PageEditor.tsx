@@ -1,15 +1,16 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
-import type { KnowledgePage, KnowledgeCategory, KnowledgeTag } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinks, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName } from '../../../lib/ipc'
+import type { KnowledgePage, KnowledgeCategory, KnowledgeTag, KnowledgeBacklinkItem } from '../../../types'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinkContext, getKnowledgeManualLinks, addKnowledgeManualLink, removeKnowledgeManualLink, createKnowledgePage, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { ConfirmDialog } from '../../../components/shared'
+import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
@@ -29,9 +30,11 @@ interface Props {
   onTagsChange?: () => void
   onMarkDirty?: () => void
   onClearDirty?: () => void
+  /** 请求进入沉浸阅读模式（由父级切换布局） */
+  onRequestReading?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onTagsChange, onMarkDirty, onClearDirty }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onTagsChange, onMarkDirty, onClearDirty, onRequestReading }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -39,7 +42,16 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [fileType, setFileTypeState] = useState('')
   const [showLangMenu, setShowLangMenu] = useState(false)
   const [preview, setPreview] = useState(false)
-  const [backlinks, setBacklinks] = useState<KnowledgePage[]>([])
+  const [backlinks, setBacklinks] = useState<KnowledgeBacklinkItem[]>([])
+  // 手动关联（双向）
+  const [manualLinks, setManualLinks] = useState<KnowledgePage[]>([])
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false)
+  const [linkQuery, setLinkQuery] = useState('')
+  // 注解层（全类型通用）
+  const [annotation, setAnnotation] = useState('')
+  const [showAnnotation, setShowAnnotation] = useState(false)
+  const savedAnnotationRef = useRef('')
+  const annoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
@@ -146,9 +158,17 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
-        if (p) { setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); setEntryTags(p.tags || []); savedContentRef.current = p.contentMd || ''; savedTitleRef.current = p.title; isDirtyRef.current = false; window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label })); onTitleChange?.(p.title) }
+        if (p) {
+          setPage(p); setTitle(p.title); setContent(p.contentMd); setFileTypeState(p.fileType || ''); setEntryTags(p.tags || [])
+          savedContentRef.current = p.contentMd || ''; savedTitleRef.current = p.title; isDirtyRef.current = false
+          const anno = p.annotationMd || ''
+          setAnnotation(anno); savedAnnotationRef.current = anno
+          window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label }))
+          onTitleChange?.(p.title)
+        }
       }),
-      getKnowledgeBacklinks(pageId).then(setBacklinks),
+      getKnowledgeBacklinkContext(pageId).then(setBacklinks),
+      getKnowledgeManualLinks(pageId).then(setManualLinks),
       getKnowledgeTags().then(setAllTags)
     ])
     setShowBacklinks(true)  // reset when switching pages
@@ -163,7 +183,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const doSave = useCallback(async (t: string, c: string) => {
     if (!pageRef.current) return
     try {
-      const links = parseWikiLinks(c)
+      // 双链解析范围：正文 + 注解层
+      const links = parseWikiLinks(c + '\n' + savedAnnotationRef.current)
       await updateKnowledgePage(pageRef.current.id, { title: t, contentMd: c, contentHtml: '', fileType: fileTypeRef.current, tags: tagsRef.current.map(tag => tag.id) })
       await updateKnowledgeLinks(pageRef.current.id, links)
       isDirtyRef.current = false
@@ -173,6 +194,88 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       onClearDirty?.()
     } catch (e) { console.error(e) }
   }, [])
+
+  // 注解独立防抖保存（不触碰 content 的脏状态机）
+  const saveAnnotation = useCallback(async (id: string, value: string) => {
+    try {
+      await updateKnowledgePage(id, { annotationMd: value })
+      savedAnnotationRef.current = value
+      // 注解里的双链也要入图
+      await updateKnowledgeLinks(id, parseWikiLinks(savedContentRef.current + '\n' + value))
+      void getKnowledgeBacklinkContext(id).then(setBacklinks)
+    } catch (e) { console.error('[PageEditor] save annotation failed:', e) }
+  }, [])
+
+  const handleAnnotationChange = useCallback((v: string) => {
+    setAnnotation(v)
+    if (!pageRef.current) return
+    if (annoTimerRef.current) clearTimeout(annoTimerRef.current)
+    annoTimerRef.current = setTimeout(() => {
+      void saveAnnotation(pageRef.current!.id, v)
+    }, 500)
+  }, [saveAnnotation])
+
+  // ---- 手动关联 ----
+  const handleAddManualLink = useCallback(async (targetId: string) => {
+    if (!pageRef.current) return
+    const res = await addKnowledgeManualLink(pageRef.current.id, targetId)
+    if (res.ok) {
+      setManualLinks(await getKnowledgeManualLinks(pageRef.current.id))
+      showToast({ type: 'info', message: '已建立关联' })
+    }
+    setLinkPickerOpen(false); setLinkQuery('')
+  }, [])
+
+  const handleRemoveManualLink = useCallback(async (targetId: string) => {
+    if (!pageRef.current) return
+    await removeKnowledgeManualLink(pageRef.current.id, targetId)
+    setManualLinks(await getKnowledgeManualLinks(pageRef.current.id))
+  }, [])
+
+  /**
+   * 关联选择器候选：按相关性打分排序，并给出可解释的推荐理由。
+   * 评分 = 共享标签 ×3 + 同章节 ×2 + 最近编辑(14天内) ×1；无命中时按更新时间兜底。
+   */
+  const linkCandidates = useMemo(() => {
+    const q = linkQuery.trim().toLowerCase()
+    const linkedIds = new Set(manualLinks.map(m => m.id))
+    const curCat = page?.categoryId ?? null
+    const curTagIds = new Set(entryTags.map(t => t.id))
+    const now = Date.now()
+
+    return allPages
+      .filter(p => p.id !== pageId && !linkedIds.has(p.id))
+      .map(p => {
+        const reasons: string[] = []
+        let score = 0
+        if (curCat && p.categoryId === curCat) {
+          score += 2
+          reasons.push('同章节')
+        }
+        const shared = (p.tags || []).filter(t => curTagIds.has(t.id))
+        if (shared.length > 0) {
+          score += shared.length * 3
+          reasons.push(`共享标签 ${shared.map(t => t.name).join('、')}`)
+        }
+        const upd = new Date(p.updatedAt).getTime()
+        if (!isNaN(upd) && now - upd < 14 * 86400_000) {
+          score += 1
+          reasons.push('最近编辑')
+        }
+        return { page: p, score, reasons }
+      })
+      .filter(({ page: p }) => {
+        if (!q) return true
+        return p.title.toLowerCase().includes(q) ||
+          (p.tags || []).some(t => t.name.toLowerCase().includes(q))
+      })
+      .sort((a, b) => b.score - a.score ||
+        new Date(b.page.updatedAt).getTime() - new Date(a.page.updatedAt).getTime())
+      .slice(0, 8)
+  }, [allPages, manualLinks, pageId, linkQuery, page?.categoryId, entryTags])
+
+  /** 已知页面标题集合（供预览区分空链接） */
+  const knownWikiTitles = useMemo(() => new Set(allPages.map(p => p.title)), [allPages])
 
   useEffect(() => {
     if (!page) return
@@ -419,7 +522,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     return chain.length > 0 ? chain.join(' / ') : null
   }
 
-  // Resolve a title to knowledge base pages. If >1 match, show picker. If 0, return false.
+  // Resolve a title to knowledge base pages. If >1 match, show picker.
+  // If 0 → offer to create the page (P1 空链接建页闭环).
   const resolveInternalLink = (title: string): boolean => {
     const matches = allPages.filter(p => p.title === title)
     if (matches.length === 1) {
@@ -430,7 +534,24 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       setWikiPicker({ title, candidates: matches })
       return true
     }
-    return false
+    if (!window.confirm(`知识库中还没有「${title}」这个页面，是否现在创建？`)) return false
+    void (async () => {
+      try {
+        const created = await createKnowledgePage({
+          title,
+          categoryId: page?.categoryId ?? null,
+          fileType: 'md',
+          contentMd: `# ${title}\n\n`,
+        })
+        showToast({ type: 'info', message: `页面「${title}」已创建` })
+        onUpdate()
+        onNavigate(created.id)
+      } catch (e) {
+        console.error('[PageEditor] create page from wiki link failed:', e)
+        showToast({ type: 'error', message: '创建失败，请重试' })
+      }
+    })()
+    return true
   }
 
   return (
@@ -441,10 +562,28 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           <button
             onClick={handleToggleStar}
             className={`p-1.5 rounded ${page.isStarred ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'} hover:text-[var(--warning)] transition-colors`}
-            title={page.isStarred ? '取消收藏' : '收藏'}
+            title="收藏"
           >
             <Star size={15} fill={page.isStarred ? '#c5a332' : 'none'} />
           </button>
+          {/* 添加关联：始终可见的入口（右栏折叠时也能用） */}
+          <button
+            onClick={() => { setShowBacklinks(true); setLinkPickerOpen(true) }}
+            className="p-1.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
+            title="添加关联（连接到其他页面）"
+          >
+            <Link2 size={15} />
+          </button>
+          {/* 沉浸阅读入口：仅 md/txt */}
+          {(fileType === 'md' || fileType === 'txt') && (
+            <button
+              onClick={() => onRequestReading?.()}
+              className="p-1.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
+              title="沉浸阅读 (Ctrl+Shift+R)"
+            >
+              <BookOpen size={15} />
+            </button>
+          )}
           {!isPdfFile && (
             <div className="relative">
               <button onClick={() => setShowLangMenu(v => !v)}
@@ -497,6 +636,29 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 注解层：非 md/txt 页面的通用备注条（支持 [[双链]]，自动入图） */}
+        {fileType !== 'md' && fileType !== 'txt' && (
+          <div className="shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+            <button onClick={() => setShowAnnotation(o => !o)}
+              className="w-full flex items-center gap-1.5 px-4 py-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              title="展开/收起注解">
+              <StickyNote size={12} className={annotation ? 'text-[var(--warning)]' : ''} />
+              <span>注解{annotation ? ' · 已填写' : ''}</span>
+              <span className="flex-1" />
+              {showAnnotation ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            </button>
+            {showAnnotation && (
+              <textarea
+                value={annotation}
+                onChange={e => handleAnnotationChange(e.target.value)}
+                rows={3}
+                placeholder="给这份文件写点备注，可用 [[双链]] 关联其他页面…"
+                className="w-full px-4 pb-2 bg-transparent text-[12px] text-[var(--text-primary)] outline-none resize-none placeholder-[var(--text-disabled)]"
+              />
+            )}
+          </div>
+        )}
+
         {/* Content */}
         {isXmindFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
@@ -573,6 +735,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>
             <MarkdownPreview
               content={content}
+              knownWikiTitles={knownWikiTitles}
               onWikiLink={title => {
                 resolveInternalLink(title)
               }}
@@ -780,39 +943,117 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         />
       )}
 
-      {/* Right: Backlinks — collapsible, only visible when page has backlinks */}
-      {backlinks.length > 0 && (
-        <div className={`bg-[var(--bg-secondary)] border-l border-[var(--border-color)] flex flex-col transition-all duration-200 ${showBacklinks ? 'w-48' : 'w-6'}`}>
-          {showBacklinks ? (
-            <>
-              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">反向链接 · {backlinks.length}</span>
-                <button
-                  onClick={() => setShowBacklinks(false)}
-                  className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                  title="折叠反向链接面板"
-                >
-                  <ChevronRight size={13} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
+      {/* Right: 关联 + 反向链接 — 与左侧栏同款 ResizablePanel（拖拽调宽 / 拖过半程吸边收起 / 从边缘拖出展开） */}
+      <ResizablePanel
+        storageKey="knowledgeRailWidth"
+        defaultWidth={224}
+        minWidth={160}
+        maxWidth={400}
+        visible={showBacklinks}
+        side="right"
+        collapsedWidth={12}
+        onSnapClose={() => setShowBacklinks(false)}
+        onSnapOpen={() => setShowBacklinks(true)}
+      >
+        <div className="h-full flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] shrink-0">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">关联网络</span>
+            <button
+              onClick={() => setShowBacklinks(false)}
+              className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              title="收起（从右缘拖出可再展开）"
+            >
+              <ChevronRight size={13} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+                {/* 手动关联 */}
+                <div className="flex items-center gap-1 px-3 pt-2 pb-1">
+                  <Link2 size={11} className="text-[var(--text-muted)]" />
+                  <span className="flex-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">手动关联 · {manualLinks.length}</span>
+                  <button onClick={() => setLinkPickerOpen(true)}
+                    className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
+                    title="添加关联">
+                    <Plus size={12} />
+                  </button>
+                </div>
+                {manualLinks.map(ml => (
+                  <div key={ml.id} onClick={() => onNavigate(ml.id)}
+                    className="group relative px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)] border-dashed">
+                    <span className="text-[12px] text-[var(--text-primary)] truncate block pr-4">{ml.title || '无标题'}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); void handleRemoveManualLink(ml.id) }}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 hidden group-hover:block p-0.5 rounded text-[var(--text-muted)] hover:text-red-400 transition-colors"
+                      title="解除关联"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+                {manualLinks.length === 0 && (
+                  <p className="px-3 py-1 text-[10px] text-[var(--text-muted)] leading-relaxed">暂无。点 + 把相关页面连进来。</p>
+                )}
+
+                {/* 反向链接（带上下文摘录） */}
+                <div className="flex items-center gap-1 px-3 pt-3 pb-1">
+                  <StickyNote size={11} className="text-[var(--text-muted)]" />
+                  <span className="flex-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">被引用 · {backlinks.length}</span>
+                </div>
                 {backlinks.map(bl => (
                   <div key={bl.id} onClick={() => onNavigate(bl.id)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)]">
                     <span className="text-[12px] text-[var(--text-primary)] truncate block">{bl.title || '无标题'}</span>
+                    {bl.excerpt && (
+                      <p className="mt-0.5 text-[10px] leading-snug text-[var(--text-muted)] line-clamp-3">{bl.excerpt}</p>
+                    )}
                   </div>
                 ))}
               </div>
-            </>
-          ) : (
-            // Collapsed strip — blue edge on hover, click to expand
-            <div
-              className="flex-1 cursor-col-resize hover:bg-[var(--accent)]/20 flex items-center justify-center group"
-              onClick={() => setShowBacklinks(true)}
-              title="展开反向链接面板"
-            >
-              <ChevronLeft size={12} className="text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
+        </div>
+      </ResizablePanel>
+
+      {/* 手动关联选择器 */}
+      {linkPickerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-24" onClick={() => setLinkPickerOpen(false)}>
+          <div className="w-[380px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">
+              <Link2 size={14} className="text-[var(--accent)] shrink-0" />
+              <input autoFocus value={linkQuery}
+                onChange={e => setLinkQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && linkCandidates[0]) void handleAddManualLink(linkCandidates[0].page.id)
+                  if (e.key === 'Escape') { setLinkPickerOpen(false); setLinkQuery('') }
+                }}
+                placeholder="搜索要关联的页面…"
+                className="flex-1 bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-disabled)] outline-none"
+              />
+              <button onClick={() => { setLinkPickerOpen(false); setLinkQuery('') }}
+                className="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={14} /></button>
             </div>
-          )}
+            <div className="max-h-72 overflow-y-auto">
+              {linkCandidates.length === 0 && (
+                <p className="px-4 py-6 text-[12px] text-[var(--text-muted)] text-center">没有匹配的页面</p>
+              )}
+              {linkCandidates.map(({ page: c, reasons }) => (
+                <button key={c.id} onClick={() => void handleAddManualLink(c.id)}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
+                  <FileText size={13} className="text-[var(--text-muted)] shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] text-[var(--text-primary)]">{c.title || '无标题'}</span>
+                    {reasons.length > 0 && (
+                      <span className="block truncate text-[10px] mt-0.5" style={{ color: 'var(--accent)' }}>
+                        {reasons.join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)] shrink-0">{c.fileType || 'md'}</span>
+                </button>
+              ))}
+            </div>
+            <div className="px-4 py-1.5 border-t border-[var(--border-color)] text-[10px] text-[var(--text-muted)] flex justify-between">
+              <span>按 同章节 / 共享标签 / 最近编辑 推荐</span><span>Enter 添加第一个</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

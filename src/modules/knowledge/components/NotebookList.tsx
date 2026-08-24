@@ -27,8 +27,7 @@ interface Props {
   onRenameNotebook: (id: string, name: string) => void
   onDeleteNotebook: (id: string) => void
   onOpenPage: (id: string) => void
-  onCreateLoosePage: () => void
-  onCreatePageUnder: (categoryId: string) => void
+  onCreatePageNamed: (categoryId: string | null, title: string) => void
   onImport: () => void
   onImportFolder?: () => void
   onDropOnNotebook: (pageId: string, notebookId: string) => void
@@ -54,7 +53,7 @@ export function NotebookList({
   categories, allPages, loosePages, starredPages,
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onCreateNotebook, onRenameNotebook, onDeleteNotebook,
-  onOpenPage, onCreateLoosePage, onCreatePageUnder, onImport, onImportFolder,
+  onOpenPage, onCreatePageNamed, onImport, onImportFolder,
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
   onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
   onCopy, onCut, onPaste, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds,
@@ -85,6 +84,9 @@ export function NotebookList({
   const [newName, setNewName] = useState('')
   const [createMode, setCreateMode] = useState<'folder' | 'notebook' | 'space' | null>(null)
   const [createParentId, setCreateParentId] = useState<string | null>(null)
+  // 新建页面：先命名再创建（null=根级零散，'id'=目录/章节/空间下）
+  const [pageCreateParent, setPageCreateParent] = useState<{ id: string | null } | null>(null)
+  const [newPageName, setNewPageName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editingPageId, setEditingPageId] = useState<string | null>(null)
@@ -134,6 +136,42 @@ export function NotebookList({
   // When createMode changes, clear any previously-typed name to prevent
   // onBlur of the old input from creating a category with the wrong type.
   useEffect(() => { setNewName('') }, [createMode])
+
+  const handleCommitNewPage = () => {
+    const name = newPageName.trim()
+    const parent = pageCreateParent?.id ?? null
+    setPageCreateParent(null); setNewPageName('')
+    if (name) onCreatePageNamed(parent, name)
+  }
+  const cancelNewPage = () => { setPageCreateParent(null); setNewPageName('') }
+
+  // Ctrl+N：打开根级/当前空间的新建页面命名输入框
+  useEffect(() => {
+    const onStart = () => {
+      setPageCreateParent({ id: isSpaceView && spaceId ? spaceId : null })
+      setNewPageName('')
+    }
+    window.addEventListener('knowledge:start-create-page', onStart)
+    return () => window.removeEventListener('knowledge:start-create-page', onStart)
+  }, [isSpaceView, spaceId])
+
+  /** 新建页面内联输入框 */
+  const renderNewPageInput = (placeholderLabel: string, indentPx?: number) => (
+    <div style={indentPx !== undefined ? { paddingLeft: `${indentPx}px`, paddingRight: '4px' } : { paddingLeft: '4px', paddingRight: '4px' }}>
+      <input
+        className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[12px] outline-none text-[var(--text-primary)] mt-0.5"
+        value={newPageName}
+        onChange={e => setNewPageName(e.target.value)}
+        onBlur={handleCommitNewPage}
+        onKeyDown={e => {
+          if (e.key === 'Enter') handleCommitNewPage()
+          if (e.key === 'Escape') cancelNewPage()
+        }}
+        placeholder={`${placeholderLabel} > 页面名称（Enter 确认）`}
+        autoFocus
+      />
+    </div>
+  )
 
   // Load skip-delete setting
   useEffect(() => {
@@ -443,10 +481,10 @@ export function NotebookList({
                 {isNotebook ? (
                   onCreateChapterUnderNotebook && <button onClick={e => { e.stopPropagation(); onCreateChapterUnderNotebook(cat.id) }} className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建章节"><FolderPlus size={13} /></button>
                 ) : isChapter ? (
-                  <button onClick={e => { e.stopPropagation(); onCreatePageUnder(cat.id) }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面"><FilePlus size={13} /></button>
+                  <button onClick={e => { e.stopPropagation(); setPageCreateParent({ id: cat.id }); setNewPageName('') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面"><FilePlus size={13} /></button>
                 ) : !isSpace ? (
                   <>
-                    <button onClick={e => { e.stopPropagation(); onCreatePageUnder(cat.id) }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面"><FilePlus size={13} /></button>
+                    <button onClick={e => { e.stopPropagation(); setPageCreateParent({ id: cat.id }); setNewPageName('') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-secondary)]" title="在此目录下新建页面"><FilePlus size={13} /></button>
                     <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('folder'); setNewName('') }} className="p-0.5 hover:text-[var(--warning)] text-[var(--text-secondary)]" title="新建子目录"><FolderPlus size={13} /></button>
                     <button onClick={e => { e.stopPropagation(); setCreateParentId(cat.id); setCreateMode('notebook'); setNewName('') }} className="p-0.5 hover:text-[var(--info)] text-[var(--text-secondary)]" title="新建笔记本"><BookPlus size={13} /></button>
                   </>
@@ -474,6 +512,8 @@ export function NotebookList({
             />
           </div>
         )}
+        {/* Per-node inline input for new page under this category */}
+        {pageCreateParent?.id === cat.id && renderNewPageInput(cat.name, (depth + 1) * 16 + 8)}
         {isExpanded && canExpand && (
           <div>
             {/* Pages directly under this category */}
@@ -665,10 +705,13 @@ export function NotebookList({
       >
         {rootCats.map(cat => renderCategory(cat, 0))}
 
+        {/* 根级新建页面输入（零散文件） */}
+        {!isSpaceView && pageCreateParent?.id === null && renderNewPageInput('零散页面')}
+
         {/* Space view: the space's direct pages (loose within the space) */}
         {isSpaceView && spaceId && (() => {
           const spacePages = allPages.filter(p => p.categoryId === spaceId)
-          if (spacePages.length === 0) return null
+          if (spacePages.length === 0 && pageCreateParent?.id !== spaceId) return null
           return (
             <div
               data-loose-area="true"
@@ -717,6 +760,7 @@ export function NotebookList({
                   {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
                 </div>
               ))}
+              {pageCreateParent?.id === spaceId && renderNewPageInput('空间直属页面', 8)}
             </div>
           )
         })()}
@@ -980,10 +1024,9 @@ export function NotebookList({
                   const handleCreatePage = () => {
                     if (isRoot) {
                       setContextMenu(null)
-                      if (isSpaceView && spaceId) onCreatePageUnder(spaceId)
-                      else onCreateLoosePage()
+                      setPageCreateParent({ id: isSpaceView && spaceId ? spaceId : null }); setNewPageName('')
                     } else if (ctxCat && !isNotebook) {
-                      setContextMenu(null); onCreatePageUnder(ctxCat.id)
+                      setContextMenu(null); setPageCreateParent({ id: ctxCat.id }); setNewPageName('')
                     }
                   }
                   const handleCreateFolder = () => {

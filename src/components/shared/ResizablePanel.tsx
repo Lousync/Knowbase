@@ -17,9 +17,13 @@ interface Props {
   onSnapClose?: () => void
   /** VS Code snap-open: called when dragged right past minWidth/2 from collapsed state */
   onSnapOpen?: () => void
+  /** 面板停靠方向：left（默认，手柄在右缘）/ right（手柄在左缘，拖拽方向镜像） */
+  side?: 'left' | 'right'
+  /** 折叠后保留的边条宽度 px。贴窗口边缘的面板建议 ≥12 以避开系统原生缩放热区 */
+  collapsedWidth?: number
 }
 
-export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose, onSnapOpen }: Props) {
+export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose, onSnapOpen, side = 'left', collapsedWidth = 4 }: Props) {
   const [width, setWidth] = useState(initialWidth ?? defaultWidth)
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -57,7 +61,8 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
 
     const onMove = (e: MouseEvent) => {
       if (snapped) return
-      const delta = e.clientX - startXRef.current
+      // right 侧面板：向左拖 = 变宽，方向镜像
+      const delta = (e.clientX - startXRef.current) * (side === 'right' ? -1 : 1)
       const raw = startWRef.current + delta
       // VS Code snap-close: drag past half of minWidth → auto-collapse
       if (onSnapClose && raw < minWidth * 0.5) {
@@ -91,14 +96,14 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
     }
-  }, [dragging, minWidth, maxWidth, storageKey, onSnapClose])
+  }, [dragging, minWidth, maxWidth, storageKey, onSnapClose, side])
   // 注意：width 不在依赖中 — 用 widthRef 避免每次像素变化都重建监听器
 
-  // 折叠时重置为 0，但边缘分割条保留 4px 以供重新拖出
-  const displayWidth = visible ? width : (onSnapOpen ? 4 : 0)
+  // 折叠时重置为边条宽度（贴窗缘的面板用 collapsedWidth 避开系统缩放热区）
+  const displayWidth = visible ? width : (onSnapOpen ? collapsedWidth : 0)
   const showBorder = visible && !dragging
 
-  // 从折叠状态拖拽以拉出侧边栏
+  // 从折叠状态拖拽以拉出侧边栏（right 侧：向左拖出）
   const onEdgeMouseDown = useCallback((e: React.MouseEvent) => {
     if (!onSnapOpen) return
     e.preventDefault()
@@ -108,7 +113,8 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
 
     const onMove = (ev: MouseEvent) => {
       if (opened) return
-      if (ev.clientX - startX > minWidth * 0.5) {
+      const moved = side === 'right' ? startX - ev.clientX : ev.clientX - startX
+      if (moved > minWidth * 0.5) {
         opened = true
         onSnapOpen()
       }
@@ -121,39 +127,42 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
     document.body.style.cursor = 'col-resize'
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [minWidth, onSnapOpen])
+  }, [minWidth, onSnapOpen, side])
 
+  const isRight = side === 'right'
   return (
     <div
       ref={panelRef}
       className={`shrink-0 relative flex flex-col bg-[var(--bg-secondary)] overflow-hidden ${className}`}
       style={{
         width: displayWidth,
-        borderRightWidth: showBorder ? 1 : 0,
+        [isRight ? 'borderLeftWidth' : 'borderRightWidth']: showBorder ? 1 : 0,
         borderColor: showBorder ? 'var(--border-color)' : 'transparent',
         transition: dragging ? 'none' : 'width 200ms ease-out'
       }}
     >
       {visible && children}
 
-      {/* 折叠边缘分割条 — 鼠标悬停显示蓝色可拖拽条，拖拽拉出侧边栏 */}
+      {/* 折叠边缘分割条 — 悬停显示蓝色可拖拽条；支持拖拽拉出 + 单击兜底展开 */}
       {!visible && onSnapOpen && (
         <div
           className="absolute inset-0 z-30 group"
           style={{ cursor: 'col-resize' }}
           onMouseDown={onEdgeMouseDown}
+          onClick={onSnapOpen}
+          title="拖拽或点击展开"
         >
-          <div className="absolute top-0 bottom-0 left-0 w-1 bg-[var(--accent)]/0 group-hover:bg-[var(--accent)]/60 transition-colors duration-150" />
+          <div className={`absolute top-0 bottom-0 ${isRight ? 'right-0' : 'left-0'} w-1 bg-[var(--accent)]/0 group-hover:bg-[var(--accent)]/60 transition-colors duration-150`} />
         </div>
       )}
 
-      {/* 拖拽手柄 — 右边缘内侧 6px，独立于 border 不重叠 */}
+      {/* 拖拽手柄 — 内侧 6px，独立于 border 不重叠 */}
       {visible && showHandle && (
         <div
-          className={`absolute top-0 right-0 w-1.5 h-full z-30 transition-colors ${
+          className={`absolute top-0 h-full w-1.5 z-30 transition-colors ${
             dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize hover:bg-[var(--accent)]/20'
           }`}
-          style={{ marginRight: -3 }}
+          style={isRight ? { marginLeft: -3, left: 0 } : { marginRight: -3, right: 0 }}
           onMouseDown={onHandleMouseDown}
         />
       )}

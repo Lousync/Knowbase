@@ -4,6 +4,7 @@ import { Search, Folder, BookOpen, Layers } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
+import { searchKnowledgePages } from '../../../lib/ipc'
 
 interface Props {
   pages: KnowledgePage[]
@@ -24,6 +25,8 @@ interface ResultItem {
   fileType?: string
   tagColor?: string
   tagPages?: KnowledgePage[]
+  /** 全文命中摘录（含高亮标记） */
+  excerpt?: string
 }
 
 const MAX_VISIBLE = 10
@@ -43,6 +46,57 @@ function fuzzyMatch(query: string, target: string): boolean {
   })
 }
 
+/** 把文本按关键词切分并高亮（多词任一命中） */
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const terms = useMemo(
+    () => query.trim().toLowerCase().split(/\s+/).filter(t => t.length > 0),
+    [query]
+  )
+  const parts = useMemo(() => {
+    if (terms.length === 0 || !text) return [{ t: text, hit: false }]
+    // 扫描所有命中区间后合并输出
+    const lower = text.toLowerCase()
+    const ranges: [number, number][] = []
+    for (const term of terms) {
+      let i = 0
+      while (term.length > 0) {
+        const idx = lower.indexOf(term, i)
+        if (idx === -1) break
+        ranges.push([idx, idx + term.length])
+        i = idx + term.length
+      }
+    }
+    if (ranges.length === 0) return [{ t: text, hit: false }]
+    ranges.sort((a, b) => a[0] - b[0])
+    const merged: [number, number][] = [ranges[0]]
+    for (const r of ranges.slice(1)) {
+      const last = merged[merged.length - 1]
+      if (r[0] <= last[1]) last[1] = Math.max(last[1], r[1])
+      else merged.push(r)
+    }
+    const out: { t: string; hit: boolean }[] = []
+    let cursor = 0
+    for (const [s, e] of merged) {
+      if (s > cursor) out.push({ t: text.slice(cursor, s), hit: false })
+      out.push({ t: text.slice(s, e), hit: true })
+      cursor = e
+    }
+    if (cursor < text.length) out.push({ t: text.slice(cursor), hit: false })
+    return out
+  }, [text, terms])
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="bg-amber-400/30 text-[var(--text-primary)] rounded-sm px-px">{p.t}</mark>
+        ) : (
+          <span key={i}>{p.t}</span>
+        )
+      )}
+    </>
+  )
+}
+
 export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCategory, onRequestRefresh }: Props) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -52,6 +106,21 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
   const panelRef = useRef<HTMLDivElement>(null)
   const portalRoot = useRef<HTMLElement | null>(null)
   const [portalReady, setPortalReady] = useState(false)
+  // 后端全文搜索结果（带摘录），防抖接入
+  const [ftsPages, setFtsPages] = useState<KnowledgePage[]>([])
+  const ftsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) { setFtsPages([]); return }
+    if (ftsTimer.current) clearTimeout(ftsTimer.current)
+    ftsTimer.current = setTimeout(() => {
+      searchKnowledgePages(q)
+        .then(setFtsPages)
+        .catch(() => setFtsPages([]))
+    }, 220)
+    return () => { if (ftsTimer.current) clearTimeout(ftsTimer.current) }
+  }, [query])
 
   useEffect(() => {
     const check = () => {
@@ -65,17 +134,33 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
   const results = useMemo((): ResultItem[] => {
     if (!query.trim()) return []
     const res: ResultItem[] = []
+    const ftsMap = new Map(ftsPages.map(p => [p.id, p]))
 
-    // Pages by title
+    // Pages by title（本地即时）+ 全文命中（后端，含仅正文命中的页面）
+    const titleHit = new Set<string>()
     for (const p of pages) {
       if (fuzzyMatch(query, p.title)) {
+        titleHit.add(p.id)
         const cat = p.categoryId ? categories.find(c => c.id === p.categoryId) : null
         res.push({
           kind: 'page', id: p.id, name: p.title || '无标题',
           subtitle: cat ? cat.name : '零散文件',
-          fileType: p.fileType || ''
+          fileType: p.fileType || '',
+          excerpt: ftsMap.get(p.id)?.excerpt,
         })
       }
+    }
+    // 仅正文命中的页面（标题没匹配到）
+    for (const fp of ftsPages) {
+      if (titleHit.has(fp.id)) continue
+      if (!pages.some(p => p.id === fp.id)) continue // 防御：以当前列表为准
+      const cat = fp.categoryId ? categories.find(c => c.id === fp.categoryId) : null
+      res.push({
+        kind: 'page', id: fp.id, name: fp.title || '无标题',
+        subtitle: (cat ? cat.name : '零散文件') + ' · 正文命中',
+        fileType: fp.fileType || '',
+        excerpt: fp.excerpt,
+      })
     }
 
     // Categories by name
@@ -103,7 +188,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
     }
 
     return res
-  }, [query, pages, categories, tags])
+  }, [query, pages, categories, tags, ftsPages])
 
   useEffect(() => { setSelectedIdx(0) }, [results.length])
 
@@ -226,32 +311,43 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
                   <div key={item.kind + item.id}>
                     <button
                       onClick={() => handleSelect(item)}
-                      className={`w-full flex items-center gap-2.5 px-4 h-9 text-left transition-colors ${
+                      className={`w-full flex items-start gap-2.5 px-4 py-1.5 text-left transition-colors ${
                         idx === selectedIdx ? 'bg-[var(--accent)]/15 text-[var(--text-primary)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                       }`}
                       onMouseEnter={() => setSelectedIdx(idx)}
                     >
-                      {item.kind === 'page' && <FileIcon ext={item.fileType || ''} size={15} />}
-                      {item.kind === 'notebook' && <BookOpen size={15} className="text-[var(--text-muted)] shrink-0" />}
-                      {item.kind === 'folder' && <Folder size={15} className="text-[var(--warning)] shrink-0" />}
-                      {item.kind === 'space' && <Layers size={15} className="text-[var(--info)] shrink-0" />}
+                      {item.kind === 'page' && <span className="mt-0.5 shrink-0"><FileIcon ext={item.fileType || ''} size={15} /></span>}
+                      {item.kind === 'notebook' && <BookOpen size={15} className="mt-0.5 text-[var(--text-muted)] shrink-0" />}
+                      {item.kind === 'folder' && <Folder size={15} className="mt-0.5 text-[var(--warning)] shrink-0" />}
+                      {item.kind === 'space' && <Layers size={15} className="mt-0.5 text-[var(--info)] shrink-0" />}
                       {item.kind === 'tag' && (
-                        <span className="shrink-0 w-3.5 h-3.5 rounded-full" style={{ backgroundColor: item.tagColor || '#6b7280' }} />
+                        <span className="shrink-0 mt-0.5 w-3.5 h-3.5 rounded-full" style={{ backgroundColor: item.tagColor || '#6b7280' }} />
                       )}
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className="text-[13px] truncate">{item.name}</span>
-                        {item.subtitle && (
-                          <span className="text-[11px] text-[var(--text-muted)] shrink-0">{item.subtitle}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 min-h-[22px]">
+                          <span className="text-[13px] truncate">
+                            {item.kind === 'page'
+                              ? <Highlighted text={item.name} query={query} />
+                              : item.name}
+                          </span>
+                          {item.subtitle && (
+                            <span className="text-[11px] text-[var(--text-muted)] shrink-0">{item.subtitle}</span>
+                          )}
+                        </div>
+                        {item.excerpt && (
+                          <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-muted)] line-clamp-2">
+                            <Highlighted text={item.excerpt} query={query} />
+                          </p>
                         )}
                       </div>
                       {item.kind === 'page' && (() => {
                         const fi = getFileTypeInfo(item.fileType || '')
                         return fi.badge ? (
-                          <span className="shrink-0 text-[9px] px-1 rounded font-medium" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span>
+                          <span className="shrink-0 mt-0.5 text-[9px] px-1 rounded font-medium" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span>
                         ) : null
                       })()}
                       {item.kind === 'tag' && item.tagPages && item.tagPages.length > 0 && (
-                        <span className="text-[10px] text-[var(--text-muted)] shrink-0">{expandedTagId === item.id ? '▾' : '▸'}</span>
+                        <span className="text-[10px] text-[var(--text-muted)] shrink-0 mt-0.5">{expandedTagId === item.id ? '▾' : '▸'}</span>
                       )}
                     </button>
 

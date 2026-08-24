@@ -22,7 +22,7 @@ interface Props {
   pages: KnowledgePage[]
   activePageId: string | null
   onOpenPage: (id: string) => void
-  onCreatePage: () => void
+  onCreatePageNamed: (categoryId: string, title: string) => void
   onImport: () => void
   onDropOnChapter: (pageId: string, chapterId: string) => void
   onCollapse: () => void
@@ -50,7 +50,7 @@ interface Props {
 export function ChapterPanel({
   notebookName, notebookId, chapters, selectedChapterId, focusChapterId, onSelectChapter,
   onCreateChapter, onRenameChapter, onDeleteChapter,
-  pages, activePageId, onOpenPage, onCreatePage, onImport,
+  pages, activePageId, onOpenPage, onCreatePageNamed, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
   onLocateInExplorer, onMoveCategory,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
@@ -58,6 +58,15 @@ export function ChapterPanel({
 }: Props) {
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
+  // 新建页面：先命名再创建
+  const [showNewPage, setShowNewPage] = useState(false)
+  const [newPageName, setNewPageName] = useState('')
+
+  const commitNewPage = () => {
+    const name = newPageName.trim()
+    setShowNewPage(false); setNewPageName('')
+    if (name) onCreatePageNamed((selectedChapterId || focusChapterId) as string, name)
+  }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editingPageId, setEditingPageId] = useState<string | null>(null)
@@ -450,16 +459,32 @@ export function ChapterPanel({
             )
           ))}
         {(selectedChapterId || focusChapterId) && (
-          <div className="flex gap-1 mt-1">
-            <button onClick={onCreatePage}
-              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
-              <Plus size={12} />新建页面
-            </button>
-            <button onClick={onImport}
-              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
-              <Download size={12} />导入
-            </button>
-          </div>
+          <>
+            {showNewPage && (
+              <input
+                autoFocus
+                value={newPageName}
+                onChange={e => setNewPageName(e.target.value)}
+                onBlur={() => { commitNewPage() }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitNewPage()
+                  if (e.key === 'Escape') { setShowNewPage(false); setNewPageName('') }
+                }}
+                placeholder="页面名称（Enter 确认）"
+                className="w-full mt-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-2 py-1 text-[12px] outline-none text-[var(--text-primary)]"
+              />
+            )}
+            <div className="flex gap-1 mt-1">
+              <button onClick={() => setShowNewPage(true)}
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
+                <Plus size={12} />新建页面
+              </button>
+              <button onClick={onImport}
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
+                <Download size={12} />导入
+              </button>
+            </div>
+          </>
         )}
       </div>
 

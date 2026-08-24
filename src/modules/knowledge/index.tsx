@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText, Folder, ListTree } from 'lucide-react'
+import { FileText, Folder, ListTree, X } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../types'
+import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, getKnowledgePageById, createKnowledgePage, deleteKnowledgePage,
@@ -129,6 +130,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     setLoading(true)
     Promise.all([refreshCategories(), refreshAllPages(), refreshStarred(), refreshTags()])
       .finally(() => setLoading(false))
+    console.log('[Knowledge] module mounted · net-v2（手动关联/注解/沉浸阅读已启用）')
   }, [])
 
   // 监听数据导入事件 — 导入完成后刷新所有数据
@@ -198,10 +200,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   // --- page CRUD ---
-  const handleCreateLoosePage = async () => {
+  const handleCreatePageNamed = async (categoryId: string | null, title: string) => {
     try {
-      const p = await createKnowledgePage({ categoryId: null })
-      handleOpenPage(p.id); refreshAllPages()
+      const p = await createKnowledgePage({ title, categoryId })
+      handleOpenPage(p.id)
+      await refreshAllPages()
+      if (selectedChapterId === categoryId) refreshChapterPages()
     } catch (e) { console.error(e) }
   }
 
@@ -213,24 +217,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     setSelectedChapterId(newChapter.id)
     setFocusChapterId(null)
     setShowChapterPanel(true)
-  }
-
-  const handleCreatePageUnderCategory = async (categoryId: string) => {
-    try {
-      const p = await createKnowledgePage({ categoryId })
-      handleOpenPage(p.id)
-      refreshAllPages()
-      if (selectedChapterId === categoryId) refreshChapterPages()
-      else refreshAllPages()
-    } catch (e) { console.error(e) }
-  }
-
-  const handleCreateChapterPage = async () => {
-    if (!selectedChapterId) return
-    try {
-      const p = await createKnowledgePage({ categoryId: selectedChapterId })
-      handleOpenPage(p.id); refreshChapterPages()
-    } catch (e) { console.error(e) }
   }
 
   const handleImportFolder = async () => {
@@ -303,6 +289,38 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       refreshAllPages()
     } catch (e) { console.error(e) }
   }
+
+  // --- 沉浸阅读模式 ---
+  const [readingMode, setReadingMode] = useState(false)
+  const [readingPage, setReadingPage] = useState<KnowledgePage | null>(null)
+
+  const enterReading = useCallback(async () => {
+    const id = activePageIdRef.current
+    if (!id) { showToast({ type: 'warning', message: '请先打开一个页面' }); return }
+    try {
+      const p = await getKnowledgePageById(id)
+      if (!p) return
+      const ft = (p.fileType || 'md').toLowerCase()
+      if (ft !== 'md' && ft !== 'txt') {
+        showToast({ type: 'warning', message: '沉浸阅读仅支持 md / txt 页面' })
+        return
+      }
+      setReadingPage(p)
+      setReadingMode(true)
+    } catch (e) { console.error(e) }
+  }, [])
+
+  const exitReading = useCallback(() => {
+    setReadingMode(false)
+    setReadingPage(null)
+  }, [])
+
+  const openInReading = useCallback(async (pageId: string) => {
+    try {
+      const p = await getKnowledgePageById(pageId)
+      if (p) setReadingPage(p)
+    } catch (e) { console.error(e) }
+  }, [])
 
   // --- tab management (VS Code preview mode) ---
   const handleOpenPage = useCallback(async (pageId: string) => {
@@ -667,12 +685,23 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   // Keyboard shortcuts — module level
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 沉浸阅读：Ctrl+Shift+R 进出；Esc 退出（阅读态下无输入框，无需输入守卫）
+      if (readingMode) {
+        if (e.key === 'Escape') { e.preventDefault(); exitReading() }
+        return
+      }
       if (isEditingInput(e)) return
 
-      // Ctrl+N — create new loose page
+      if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+        e.preventDefault()
+        void enterReading()
+        return
+      }
+
+      // Ctrl+N — create new loose page（通知列表组件打开内联命名输入框）
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault()
-        handleCreateLoosePage()
+        window.dispatchEvent(new CustomEvent('knowledge:start-create-page'))
         return
       }
 
@@ -759,7 +788,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleCreateLoosePage, handleCloseTab, handleDeleteChapter, handleDeleteNotebook, handlePageDeleted, handleCopy, handleCut, handlePaste])
+  }, [handleCloseTab, handleDeleteChapter, handleDeleteNotebook, handlePageDeleted, handleCopy, handleCut, handlePaste, readingMode, enterReading, exitReading])
 
   // --- outline ---
   const activePageForOutline = useMemo(() => {
@@ -903,9 +932,51 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const panelsVisible = sidebarOpen
 
+  /** 已知页面标题集合：阅读模式区分空链接 */
+  const knownWikiTitles = useMemo(() => new Set(allPages.map(p => p.title)), [allPages])
+
   return (
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
+        {readingMode ? (
+          /* ===== 沉浸阅读：只保留正文 ===== */
+          <div className="flex-1 min-w-0 relative">
+            {/* 顶部悬停退出区（平时隐形） */}
+            <div
+              className="absolute top-0 inset-x-0 h-9 z-40 group/rtop cursor-pointer"
+              onClick={exitReading}
+              title="退出沉浸阅读 (Esc)"
+            >
+              <div className="h-full opacity-0 group-hover/rtop:opacity-100 transition-opacity duration-200 flex items-center gap-2 px-4 bg-gradient-to-b from-black/45 to-transparent">
+                <X size={15} className="text-white/90" />
+                <span className="text-[12px] text-white/90">退出阅读</span>
+                <span className="flex-1 text-center text-[12px] text-white/70 truncate px-10">{readingPage?.title}</span>
+                <span className="w-16" />
+              </div>
+            </div>
+
+            <div className="h-full overflow-y-auto">
+              <div className="max-w-[720px] mx-auto px-10 py-14" style={{ fontSize: '15px', lineHeight: 1.9 }}>
+                <h1 className="text-[26px] font-bold leading-snug mb-6">{readingPage?.title || '无标题'}</h1>
+                {readingPage && (
+                  <MarkdownPreview
+                    content={readingPage.contentMd}
+                    knownWikiTitles={knownWikiTitles}
+                    onWikiLink={t => {
+                      const hit = allPages.find(p => p.title === t)
+                      if (hit) void openInReading(hit.id)
+                      else showToast({ type: 'warning', message: `未找到「${t}」— 退出阅读后可点击虚线创建` })
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="absolute bottom-4 right-5 text-[10px] text-[var(--text-disabled)] select-none pointer-events-none">
+              沉浸阅读 · Esc 退出
+            </div>
+          </div>
+        ) : (
+        <>
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full">
@@ -970,8 +1041,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onRenameNotebook={handleRenameNotebook}
                       onDeleteNotebook={handleDeleteNotebook}
                       onOpenPage={handleOpenPage}
-                      onCreateLoosePage={handleCreateLoosePage}
-                      onCreatePageUnder={handleCreatePageUnderCategory}
+  onCreatePageNamed={handleCreatePageNamed}
                       onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
                       onImport={handleDialogImport}
                       onImportFolder={handleImportFolder}
@@ -1009,7 +1079,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       pages={chapterPages}
                       activePageId={activePageId}
                       onOpenPage={handleOpenPage}
-                      onCreatePage={handleCreateChapterPage}
+                      onCreatePageNamed={handleCreatePageNamed}
                       onImport={handleDialogImport}
                       onDropOnChapter={handleDropOnChapter}
                       onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
@@ -1067,6 +1137,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onTagsChange={handleSearchRefresh}
               onMarkDirty={handleMarkDirty}
               onClearDirty={handleClearDirty}
+              onRequestReading={enterReading}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
@@ -1077,6 +1148,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
       {isActive && (
         <QuickSearch

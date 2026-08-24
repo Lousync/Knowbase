@@ -7,7 +7,7 @@ import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from '.
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
-interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; attachment_id: string; created_at: string; updated_at: string }
+interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; attachment_id: string; annotation_md?: string; created_at: string; updated_at: string }
 
 type CategoryType = 'notebook' | 'folder' | 'space'
 
@@ -93,6 +93,7 @@ function mapPage(r: PageRow) {
   return {
     id: r.id, title: r.title,
     contentMd: r.content_md, contentHtml: r.content_html || '',
+    annotationMd: (r as any).annotation_md || '',
     categoryId: r.category_id,
     isStarred: !!r.is_starred,
     sortOrder: r.sort_order,
@@ -100,6 +101,33 @@ function mapPage(r: PageRow) {
     attachmentId: r.attachment_id || '',
     createdAt: r.created_at, updatedAt: r.updated_at
   }
+}
+
+/** 粗剥 markdown 记号 → 纯文本（用于搜索/引用摘录展示） */
+function mdToPlain(s: string): string {
+  return s
+    .replace(/```[\s\S]*?```/g, ' ')              // 围栏代码块
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')    // 链接/图片 → 文字
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')           // 标题井号
+    .replace(/[>*`~_|]/g, ' ')                    // 行内记号
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** 在纯文本中定位首个命中词，取前后各 radius 字符的摘录 */
+function buildExcerpt(plain: string, terms: string[], radius = 60): string {
+  if (!plain) return ''
+  const lower = plain.toLowerCase()
+  let idx = -1
+  for (const t of terms) {
+    if (!t) continue
+    idx = lower.indexOf(t.toLowerCase())
+    if (idx >= 0) break
+  }
+  if (idx < 0) return ''
+  const start = Math.max(0, idx - radius)
+  const end = Math.min(plain.length, idx + radius)
+  return (start > 0 ? '…' : '') + plain.slice(start, end).trim() + (end < plain.length ? '…' : '')
 }
 
 // ---- helpers ----
@@ -483,14 +511,22 @@ export function registerKnowledgeHandlers(): void {
     run('DELETE FROM knowledge_pages WHERE id = ?', [id])
   })
 
-  // 搜索页面
+  // 搜索页面（多关键词 AND + 命中摘录）
   ipcMain.handle('knowledge:searchPages', (_e, q: string) => {
-    const like = `%${q}%`
+    const terms = q.trim().split(/\s+/).filter(Boolean)
+    if (terms.length === 0) return []
+    // 每个词都须命中（标题或正文）
+    const conds = terms.map(() => '(title LIKE ? OR content_md LIKE ?)').join(' AND ')
+    const params: unknown[] = []
+    for (const t of terms) { params.push(`%${t}%`, `%${t}%`) }
     const rows = queryAll<PageRow>(
-      'SELECT * FROM knowledge_pages WHERE title LIKE ? OR content_md LIKE ? ORDER BY updated_at DESC',
-      [like, like]
+      `SELECT * FROM knowledge_pages WHERE ${conds} ORDER BY updated_at DESC LIMIT 50`,
+      params
     )
-    return rows.map(mapPage)
+    return rows.map(r => ({
+      ...mapPage(r),
+      excerpt: buildExcerpt(mdToPlain(r.content_md || ''), terms)
+    }))
   })
 
   // 收藏/取消收藏页面
@@ -519,6 +555,78 @@ export function registerKnowledgeHandlers(): void {
       [pageId]
     )
     return rows.map(mapPage)
+  })
+
+  // 反链上下文摘录：定位源页中 [[标题]] 引用处，取前后各约 60 字符
+  ipcMain.handle('knowledge:getBacklinkContext', (_e, pageId: string) => {
+    const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [pageId])[0]
+    if (!page) return []
+    const needle = `[[${page.title}]]`.toLowerCase()
+    const loose = `[[${page.title}`.toLowerCase() // 容忍未闭合/带别名写法
+    const sources = queryAll<PageRow>(
+      `SELECT p.* FROM knowledge_pages p
+       INNER JOIN knowledge_links l ON l.source_page_id = p.id
+       WHERE l.target_page_id = ?
+       ORDER BY p.updated_at DESC`,
+      [pageId]
+    )
+    return sources.map(src => {
+      const texts = [src.content_md || '', (src as any).annotation_md || '']
+      let excerpt = ''
+      for (const raw of texts) {
+        const lower = raw.toLowerCase()
+        const idx = lower.indexOf(needle) >= 0 ? lower.indexOf(needle) : lower.indexOf(loose)
+        if (idx < 0) continue
+        const start = Math.max(0, idx - 60)
+        const end = Math.min(raw.length, idx + page.title.length + 70)
+        excerpt = ((start > 0 ? '…' : '') + raw.slice(start, end) + (end < raw.length ? '…' : ''))
+          .replace(/\s+/g, ' ')
+          .trim()
+        break
+      }
+      return {
+        id: src.id,
+        title: src.title,
+        fileType: ((src.file_type || '') as string).replace(/^\./, '').toLowerCase(),
+        updatedAt: src.updated_at,
+        excerpt
+      }
+    })
+  })
+
+  // ===== 手动关联（与自动 wiki 链接分表，双向展示）=====
+  ipcMain.handle('knowledge:getManualLinks', (_e, pageId: string) => {
+    const rows = queryAll<PageRow>(
+      `SELECT p.* FROM knowledge_pages p
+       INNER JOIN knowledge_manual_links k
+         ON (k.page_id = p.id OR k.target_id = p.id)
+       WHERE (k.page_id = ? OR k.target_id = ?) AND p.id != ?
+       ORDER BY k.created_at DESC`,
+      [pageId, pageId, pageId]
+    )
+    return rows.map(mapPage)
+  })
+
+  ipcMain.handle('knowledge:addManualLink', (_e, pageId: string, targetId: string) => {
+    if (!pageId || !targetId || pageId === targetId) return { ok: false }
+    try {
+      run(
+        'INSERT OR IGNORE INTO knowledge_manual_links (id, page_id, target_id) VALUES (?, ?, ?)',
+        [randomUUID(), pageId, targetId]
+      )
+      return { ok: true }
+    } catch (e) {
+      console.error('[addManualLink] failed:', e)
+      return { ok: false }
+    }
+  })
+
+  ipcMain.handle('knowledge:removeManualLink', (_e, a: string, b: string) => {
+    run(
+      'DELETE FROM knowledge_manual_links WHERE (page_id = ? AND target_id = ?) OR (page_id = ? AND target_id = ?)',
+      [a, b, b, a]
+    )
+    return { ok: true }
   })
 
   // 更新页面链接（保存时调用，重建所有链接关系）

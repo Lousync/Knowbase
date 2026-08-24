@@ -42,10 +42,12 @@ interface Props {
   onWikiLink?: (title: string) => void
   /** Called when a standard markdown link [text](href) is clicked. Default: open in browser/system. */
   onLinkClick?: (href: string) => void
+  /** 已存在的页面标题集合：不在其中的 wiki 链接渲染为「空链接」虚线样式 */
+  knownWikiTitles?: Set<string>
 }
 
 /** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
-export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
+export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles }: Props) {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
     if (onLinkClick) {
@@ -131,35 +133,35 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick }: Props) {
           },
           // Convert [[wiki links]] in paragraph text to clickable spans
           p({ children }) {
-            return <p>{renderWikiLinks(children, onWikiLink)}</p>
+            return <p>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</p>
           },
           // Also handle wiki links in list items, headings, etc.
           li({ children }) {
-            return <li>{renderWikiLinks(children, onWikiLink)}</li>
+            return <li>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</li>
           },
           h1({ children }) {
             const text = extractText(children)
-            return <h1 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h1>
+            return <h1 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h1>
           },
           h2({ children }) {
             const text = extractText(children)
-            return <h2 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h2>
+            return <h2 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h2>
           },
           h3({ children }) {
             const text = extractText(children)
-            return <h3 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h3>
+            return <h3 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h3>
           },
           h4({ children }) {
             const text = extractText(children)
-            return <h4 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h4>
+            return <h4 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h4>
           },
           h5({ children }) {
             const text = extractText(children)
-            return <h5 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h5>
+            return <h5 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h5>
           },
           h6({ children }) {
             const text = extractText(children)
-            return <h6 id={headingId(text)}>{renderWikiLinks(children, onWikiLink)}</h6>
+            return <h6 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h6>
           },
         }}
       >
@@ -182,7 +184,7 @@ function extractText(children: React.ReactNode): string {
 }
 
 /** Recursively scan React children for `[[wiki links]]` in text nodes and replace them with clickable spans. */
-function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string) => void): React.ReactNode {
+function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>): React.ReactNode {
   if (!onWikiLink) return children
   return React.Children.map(children, child => {
     if (typeof child === 'string') {
@@ -201,10 +203,16 @@ function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string)
         }
         // The wiki link
         const display = match[1].split('|')[0].trim()
+        const exists = knownWikiTitles ? knownWikiTitles.has(display) : true
         parts.push(
           <span
             key={key++}
-            className="text-[var(--accent)] cursor-pointer hover:underline"
+            className={
+              exists
+                ? 'text-[var(--accent)] cursor-pointer hover:underline'
+                : 'text-[var(--text-muted)]/70 cursor-pointer hover:text-[var(--accent)] border-b border-dashed border-[var(--text-muted)]/50'
+            }
+            title={exists ? display : `创建页面「${display}」`}
             onClick={() => onWikiLink(display)}
           >
             {display}
@@ -217,7 +225,7 @@ function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string)
     if (React.isValidElement(child) && (child.props as any)?.children) {
       return React.cloneElement(child, {
         ...(child.props as any),
-        children: renderWikiLinks((child.props as any).children, onWikiLink),
+        children: renderWikiLinks((child.props as any).children, onWikiLink, knownWikiTitles),
       } as any)
     }
     return child

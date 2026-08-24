@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu } from 'electron'
 import { join, basename } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync } from 'fs'
 import { Readable } from 'stream'
@@ -54,6 +54,9 @@ if (!app.isPackaged && process.env.KNOWBASE_SHARED_DATA !== '1') {
 }
 
 // ===== Settings memory cache =====
+// 禁用 Electron 默认应用菜单：其 View 角色绑定了 Ctrl+R / Ctrl+Shift+R（强制刷新）
+// / F11 等全局加速键，会在用户操作时整页重载回启动模块。应用自定义快捷键见各模块。
+Menu.setApplicationMenu(null)
 const settingsPath = join(app.getPath('userData'), 'settings.json')
 let settingsCache: Record<string, unknown> = {}
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -102,6 +105,15 @@ function createWindow(): void {
   // 安全：限制导航为本地文件
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('file://')) event.preventDefault()
+  })
+
+  console.log('[Boot] Knowbase main ready · net-v2 ·', app.getVersion())
+
+  // 开发模式：F12 切换 DevTools（默认菜单已禁用）
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (!app.isPackaged && input.type === 'keyDown' && input.key === 'F12') {
+      mainWindow?.webContents.toggleDevTools()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
