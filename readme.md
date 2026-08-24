@@ -1,6 +1,6 @@
 # Knowbase Programmer Edition
 
-Windows 桌面端知识日程管理工具，纯本地运行，对标 VS Code 体验。
+Windows 桌面端知识日程管理工具，纯本地运行
 
 > 所有数据保存在你自己的电脑上——无需注册、没有云端、不联网也能用。
 
