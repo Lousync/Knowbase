@@ -12,6 +12,7 @@ import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePane
 import { Sidebar } from './components/Sidebar'
 import { EntryList } from './views/EntryList'
 import { MarkdownEditor } from './components/MarkdownEditor'
+import { SummaryPanel } from './components/SummaryPanel'
 
 type BlogView = 'list' | 'editor' | 'detail'
 
@@ -426,6 +427,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
           <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">{entry.date}</h1>
           <p className="text-[11px] text-[var(--text-muted)] mb-4">最近修改：{fmtRelative(entry.updatedAt)}</p>
           <MarkdownPreview content={entry.contentMd || ''} onLinkClick={href => openExternal(href)} />
+          <SummaryPanel date={entry.date} />
         </div>
       </div>
 

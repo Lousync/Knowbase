@@ -845,7 +845,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/heic,image/heif"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/svg+xml,image/heic,image/heif"
         multiple
         className="hidden"
         onChange={e => {

@@ -15,7 +15,7 @@ function fileNameBase(filePath: string): string {
 function mimeFromExt(ext: string): string {
   const m: Record<string, string> = {
     pdf: 'application/pdf', xmind: 'application/octet-stream',
-    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml',
     md: 'text/markdown', txt: 'text/plain', json: 'application/json',
   }
   return m[ext] || 'application/octet-stream'
@@ -480,10 +480,53 @@ export function executeImportData(data: any): { success: boolean; imported: numb
           const tags = Array.isArray(post.tags) ? post.tags.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0) : []
           const attachmentIds = Array.isArray(post.attachmentIds) ? post.attachmentIds : []
           db.run(
-            `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, show_in_timeline, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [post.id, post.contentMd || '', post.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), post.albumId || '',
-             post.isPinned ? 1 : 0, post.createdAt, post.updatedAt]
+             post.isPinned ? 1 : 0, post.showInTimeline === false ? 0 : 1, post.createdAt, post.updatedAt]
+          )
+          imported++
+        }
+      }
+      // --- Checkin（习惯打卡）---
+      if (data.checkin) {
+        for (const h of data.checkin.habits || []) {
+          if (exists('habits', h.id)) { skipped++; continue }
+          const ruleDays = Array.isArray(h.ruleDays) && h.ruleDays.length > 0 ? h.ruleDays : [1, 2, 3, 4, 5]
+          db.run(
+            `INSERT INTO habits (id, name, color, icon, rule_type, rule_days, weekly_target, sort_order, archived, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [h.id, h.name, h.color || '#3B82F6', h.icon || 'check',
+             h.ruleType === 'weekdays' || h.ruleType === 'flexible' ? h.ruleType : 'daily',
+             JSON.stringify(ruleDays), Math.min(7, Math.max(1, h.weeklyTarget ?? 3)),
+             h.sortOrder ?? Date.now(), h.archived ? 1 : 0,
+             h.createdAt || new Date().toISOString(), h.updatedAt || h.createdAt || new Date().toISOString()]
+          )
+          imported++
+        }
+        for (const r of data.checkin.records || []) {
+          if (exists('habit_records', r.id)) { skipped++; continue }
+          try {
+            db.run('INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)', [r.id, r.habitId, r.date])
+            imported++
+          } catch { skipped++ } // UNIQUE(habit_id, date) 冲突兜底
+        }
+      }
+      // --- Bookmark Nav（网址导航）---
+      if (data.bookmarkNav) {
+        for (const c of data.bookmarkNav.categories || []) {
+          if (exists('bookmark_categories', c.id)) { skipped++; continue }
+          db.run(
+            'INSERT INTO bookmark_categories (id, name, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?)',
+            [c.id, c.name, c.color || '#3B82F6', c.sortOrder ?? 0, c.createdAt || new Date().toISOString()]
+          )
+          imported++
+        }
+        for (const b of data.bookmarkNav.bookmarks || []) {
+          if (exists('bookmarks', b.id)) { skipped++; continue }
+          db.run(
+            'INSERT INTO bookmarks (id, category_id, title, url, description, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [b.id, b.categoryId || '', b.title, b.url, b.description || '', b.sortOrder ?? 0, b.createdAt || new Date().toISOString()]
           )
           imported++
         }

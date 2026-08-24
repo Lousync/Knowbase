@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, SuperviseConfig } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -82,7 +82,7 @@ export const getKnowledgeBacklinks = (pageId: string) => a().getKnowledgeBacklin
 export const getKnowledgeBacklinkContext = (pageId: string) => a().getKnowledgeBacklinkContext(pageId)
 export const getKnowledgeManualLinks = (pageId: string) => a().getKnowledgeManualLinks(pageId)
 export const addKnowledgeManualLink = (pageId: string, targetId: string) => a().addKnowledgeManualLink(pageId, targetId)
-export const removeKnowledgeManualLink = (a: string, b: string) => a().removeKnowledgeManualLink(a, b)
+export const removeKnowledgeManualLink = (pageIdA: string, pageIdB: string) => a().removeKnowledgeManualLink(pageIdA, pageIdB)
 export const updateKnowledgeLinks = (pageId: string, linkedTitles: string[]) => a().updateKnowledgeLinks(pageId, linkedTitles)
 export const getKnowledgeTags = () => a().getKnowledgeTags()
 export const createKnowledgeTag = (n: string, c?: string) => a().createKnowledgeTag(n, c)
@@ -220,3 +220,30 @@ export const updateBookmarkItem = (id: string, d: { title?: string; url?: string
 export const deleteBookmarkItem = (id: string) => a().deleteBookmarkItem(id)
 export const openBookmarkUrl = (url: string) => a().openBookmarkUrl(url)
 export const pickBookmarkImportFile = () => a().pickBookmarkImportFile()
+
+// ===== Remote Supervise =====
+export const superviseGetConfig = (): Promise<SuperviseConfig> => a().superviseGetConfig()
+export const superviseSaveConfig = (partial: Partial<SuperviseConfig>): Promise<SuperviseConfig> => a().superviseSaveConfig(partial)
+export const superviseTest = (): Promise<{ ok: boolean; error?: string }> => a().superviseTest()
+export const superviseGetHistory = (limit?: number) => a().superviseGetHistory(limit)
+export const superviseRetry = (id: number) => a().superviseRetry(id)
+export const superviseRetryAllFailed = (): Promise<{ total: number; ok: number }> => a().superviseRetryAllFailed()
+export const superviseSendDailyNow = (): Promise<{ ok: boolean; skipped?: string; error?: string }> => a().superviseSendDailyNow()
+export const superviseClearHistory = (): Promise<void> => a().superviseClearHistory()
+
+// ===== Period Summary (weekly / monthly) =====
+export const createPomodoroSession = (minutes: number): Promise<boolean> => a().createPomodoroSession(minutes)
+export interface PeriodStats {
+  checkins: number
+  blogEntries: number
+  knowledgePages: number
+  pomodoroMinutes: number
+  scheduleDone: number
+}
+export const getBlogPeriodStats = (start: string, end: string): Promise<PeriodStats> => a().getBlogPeriodStats(start, end)
+
+// ===== Blog Templates =====
+export const listBlogTemplates = () => a().listBlogTemplates()
+export const createBlogTemplate = (d: { name: string; contentMd?: string }) => a().createBlogTemplate(d)
+export const updateBlogTemplate = (id: string, d: { name?: string; contentMd?: string }) => a().updateBlogTemplate(id, d)
+export const deleteBlogTemplate = (id: string) => a().deleteBlogTemplate(id)

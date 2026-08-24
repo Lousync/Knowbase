@@ -19,6 +19,10 @@ import { registerBackupHandlers } from '../database/repositories/backupRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerCheckinHandlers } from '../database/repositories/checkinRepo'
 import { registerBookmarkHandlers } from '../database/repositories/bookmarkRepo'
+import { registerSuperviseHandlers } from '../database/repositories/superviseRepo'
+import { registerSummaryHandlers } from '../database/repositories/summaryRepo'
+import { registerBlogTemplateHandlers } from '../database/repositories/blogTemplateRepo'
+import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -192,7 +196,12 @@ function registerWindowHandlers(): void {
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
         'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags',
-        'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'attachments',
+        'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'moments_albums', 'attachments',
+        'blog_templates',
+        'toolbox_passwords', 'toolbox_weight_records', 'pomodoro_sessions',
+        'habits', 'habit_records',
+        'bookmark_categories', 'bookmarks',
+        'supervise_log', 'supervise_config',
       ]
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
@@ -238,7 +247,7 @@ app.whenReady().then(async () => {
       const p = getAttachmentFilePath(id, thumb)
       if (!p) return new Response('Not Found', { status: 404 })
       const ext = (p.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
-      const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
+        const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml', ico: 'image/x-icon', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
       return new Response(Readable.toWeb(createReadStream(p)) as unknown as BodyInit, {
         headers: { 'Content-Type': mimeMap[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' },
       })
@@ -259,7 +268,7 @@ app.whenReady().then(async () => {
         // 用 Node fs 读字节再转 data URL：nativeImage.createFromPath 对含中文路径可能失败
         const buf = readFileSync(src.path)
         const ext = (src.path.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
-        const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' }
+        const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml' }
         img = nativeImage.createFromDataURL(`data:${mimeMap[ext] || 'image/png'};base64,${buf.toString('base64')}`)
       }
       if (!img || img.isEmpty()) return false
@@ -290,8 +299,14 @@ app.whenReady().then(async () => {
   registerWeightHandlers()
   registerCheckinHandlers()
   registerBookmarkHandlers()
+  registerSuperviseHandlers()
+  registerSummaryHandlers()
+  registerBlogTemplateHandlers()
 
   createWindow()
+
+  // 远程监督：每日汇总定时器 + 免打扰补发
+  startSuperviseScheduler()
 
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()
@@ -316,6 +331,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   destroyPasswordFiller()
+  stopSuperviseScheduler()
   // Flush pending settings writes
   if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
   closeDatabase()

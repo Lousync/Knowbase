@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getEntryById, updateEntry, getTags, createTag, deleteEntry, getSetting, setSetting, openExternal } from '../../../lib/ipc'
-import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree, ImagePlus } from 'lucide-react'
+import { ArrowLeft, Eye, Code, Plus, X, Trash2, ListTree, ImagePlus, LayoutTemplate } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
+import { BlogTemplateModal } from './BlogTemplateModal'
 import { showToast } from '../../../lib/toast'
 import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
 import { useSettings } from '../../../lib/SettingsContext'
 import { ConfirmDialog } from '../../../components/shared'
+import { SummaryPanel } from './SummaryPanel'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 import type { Tag } from '../../../types'
@@ -33,6 +35,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showTplModal, setShowTplModal] = useState(false)
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
   const [unsavedAction, setUnsavedAction] = useState<(() => void) | null>(null)
@@ -305,14 +308,24 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             {saving ? '保存中...' : lastSaved ? '已保存 ' + fmtTime(lastSaved) : ''}
           </span>
           {!showPreview && (
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
-              title="插入图片"
-            >
-              <ImagePlus size={13} />
-              图片
-            </button>
+            <>
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+                title="插入图片"
+              >
+                <ImagePlus size={13} />
+                图片
+              </button>
+              <button
+                onClick={() => setShowTplModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+                title="套用博客模板"
+              >
+                <LayoutTemplate size={13} />
+                模板
+              </button>
+            </>
           )}
           <button onClick={() => setShowPreview(!showPreview)}
             className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]')}
@@ -385,6 +398,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">
               <MarkdownPreview content={contentMd} onLinkClick={href => openExternal(href)} />
+              {date && <SummaryPanel date={date} />}
             </div>
           </div>
         ) : (
@@ -432,13 +446,27 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/heic,image/heif"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/svg+xml,image/heic,image/heif"
         multiple
         className="hidden"
         onChange={e => {
           const files = Array.from(e.target.files || [])
           if (files.length > 0) void insertImageFiles(files)
           e.target.value = ''
+        }}
+      />
+
+      {/* 模板套用弹层：空文档直接套用，否则插入到文末 */}
+      <BlogTemplateModal
+        open={showTplModal}
+        onClose={() => setShowTplModal(false)}
+        onApply={(tplContent, tplName) => {
+          const cur = contentRef.current
+          const next = cur.trim().length === 0
+            ? tplContent
+            : cur.replace(/\s*$/, '') + '\n\n' + tplContent
+          handleChange(next)
+          showToast({ type: 'info', message: `模板「${tplName}」已应用` })
         }}
       />
 

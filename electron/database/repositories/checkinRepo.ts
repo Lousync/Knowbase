@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { notifyCheckin } from '../../lib/pushService'
 
 interface HabitRow {
   id: string; name: string; color: string; icon: string
@@ -121,6 +122,8 @@ export function registerCheckinHandlers(): void {
       'INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)',
       [randomUUID(), habitId, date]
     )
+    // 远程监督：打卡成功后异步推送（静默失败，不影响打卡本身）
+    void notifyCheckin(habitId, date)
     return { checked: true }
   })
 

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Key, Shield, TrendingDown, Timer, CalendarCheck2, Globe } from 'lucide-react'
+import { Key, Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing } from 'lucide-react'
 import { PasswordGenerator } from './components/PasswordGenerator'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
 import { BookmarkNav } from './components/bookmark-nav'
+import { RemoteSupervise } from './components/remote-supervise'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -61,6 +62,13 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
     icon: <CalendarCheck2 size={17} strokeWidth={1.5} />,
     available: true,
   },
+  {
+    id: 'remote-supervise',
+    name: '远程监督',
+    desc: '打卡实时推送给监督者微信/钉钉，支持每日汇总与补推',
+    icon: <BellRing size={17} strokeWidth={1.5} />,
+    available: true,
+  },
 ]
 
 export function ToolboxModule() {
@@ -84,6 +92,8 @@ export function ToolboxModule() {
         return <PasswordGenerator onBack={() => setActiveTool(null)} />
       case 'habit-tracker':
         return <HabitTracker onBack={() => setActiveTool(null)} />
+      case 'remote-supervise':
+        return <RemoteSupervise onBack={() => setActiveTool(null)} />
       case 'bookmark-nav':
         return <BookmarkNav onBack={() => setActiveTool(null)} />
       default:

@@ -186,6 +186,23 @@ const api = {
   deleteBookmarkItem: (id: string) => ipcRenderer.invoke('bookmark:deleteBookmark', id),
   openBookmarkUrl: (url: string) => ipcRenderer.invoke('bookmark:openUrl', url),
   pickBookmarkImportFile: () => ipcRenderer.invoke('bookmark:pickImportFile'),
+  // remote supervise
+  superviseGetConfig: () => ipcRenderer.invoke('supervise:getConfig'),
+  superviseSaveConfig: (partial: unknown) => ipcRenderer.invoke('supervise:saveConfig', partial),
+  superviseTest: () => ipcRenderer.invoke('supervise:test'),
+  superviseGetHistory: (limit?: number) => ipcRenderer.invoke('supervise:getHistory', limit),
+  superviseRetry: (id: number) => ipcRenderer.invoke('supervise:retry', id),
+  superviseRetryAllFailed: () => ipcRenderer.invoke('supervise:retryAllFailed'),
+  superviseSendDailyNow: () => ipcRenderer.invoke('supervise:sendDailyNow'),
+  superviseClearHistory: () => ipcRenderer.invoke('supervise:clearHistory'),
+  // period summary (weekly / monthly)
+  createPomodoroSession: (minutes: number) => ipcRenderer.invoke('pomodoro:createSession', minutes),
+  getBlogPeriodStats: (start: string, end: string) => ipcRenderer.invoke('blog:periodStats', start, end),
+  // blog templates
+  listBlogTemplates: () => ipcRenderer.invoke('blogTpl:list'),
+  createBlogTemplate: (d: unknown) => ipcRenderer.invoke('blogTpl:create', d),
+  updateBlogTemplate: (id: string, d: unknown) => ipcRenderer.invoke('blogTpl:update', id, d),
+  deleteBlogTemplate: (id: string) => ipcRenderer.invoke('blogTpl:delete', id),
 
   // fill popup
   isFillPopup,

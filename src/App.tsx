@@ -20,6 +20,7 @@ import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
 import { LockScreen } from './components/shared/LockScreen'
 import { ImportModal } from './modules/shared/components/ImportModal'
+import { useCheckinReminder } from './lib/useCheckinReminder'
 
 export default function App() {
   // Fill popup mode: render standalone popup instead of full app
@@ -35,6 +36,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
   const { s, update } = useSettings()
+  useCheckinReminder()
   const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
