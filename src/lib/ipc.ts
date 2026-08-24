@@ -226,3 +226,20 @@ export const superviseRetry = (id: number) => a().superviseRetry(id)
 export const superviseRetryAllFailed = (): Promise<{ total: number; ok: number }> => a().superviseRetryAllFailed()
 export const superviseSendDailyNow = (): Promise<{ ok: boolean; skipped?: string; error?: string }> => a().superviseSendDailyNow()
 export const superviseClearHistory = (): Promise<void> => a().superviseClearHistory()
+
+// ===== Period Summary (weekly / monthly) =====
+export const createPomodoroSession = (minutes: number): Promise<boolean> => a().createPomodoroSession(minutes)
+export interface PeriodStats {
+  checkins: number
+  blogEntries: number
+  knowledgePages: number
+  pomodoroMinutes: number
+  scheduleDone: number
+}
+export const getBlogPeriodStats = (start: string, end: string): Promise<PeriodStats> => a().getBlogPeriodStats(start, end)
+
+// ===== Blog Templates =====
+export const listBlogTemplates = () => a().listBlogTemplates()
+export const createBlogTemplate = (d: { name: string; contentMd?: string }) => a().createBlogTemplate(d)
+export const updateBlogTemplate = (id: string, d: { name?: string; contentMd?: string }) => a().updateBlogTemplate(id, d)
+export const deleteBlogTemplate = (id: string) => a().deleteBlogTemplate(id)

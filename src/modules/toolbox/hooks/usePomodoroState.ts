@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { createPomodoroSession } from '../../../lib/ipc'
 
 const PRESETS = [
   { label: '15min', work: 15, break: 3 },
@@ -112,6 +113,17 @@ export function usePomodoroState() {
 
   // Cleanup on unmount
   useEffect(() => () => clearTimer(), [clearTimer])
+
+  // 专注阶段自然完成 → 落库一次番茄钟记录（每次完成只报一次）
+  const reportedRef = useRef(false)
+  useEffect(() => {
+    if (state.done && state.phase === 'work') {
+      if (reportedRef.current) return
+      reportedRef.current = true
+      void createPomodoroSession(PRESETS[state.presetIdx].work).catch(() => { /* 静默失败 */ })
+    }
+    if (!state.done) reportedRef.current = false
+  }, [state.done, state.phase, state.presetIdx])
 
   const preset = PRESETS[state.presetIdx]
   const totalSeconds = state.phase === 'work' ? preset.work * 60 : preset.break * 60

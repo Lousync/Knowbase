@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, ImagePlus, Trash2, Clock3, RefreshCw, PencilLine, Pin, PinOff, X, Camera, Check,
-  ChevronLeft, ChevronRight, ChevronDown, Search, Images, List, LayoutGrid, Copy,
+  ChevronLeft, ChevronRight, ChevronDown, Search, Images, List, LayoutGrid, Copy, Eye, EyeOff,
 } from 'lucide-react'
 import { ConfirmDialog } from '../../components/shared'
 import {
@@ -235,6 +235,9 @@ export function MomentsModule() {
     { mode: 'pick'; postId: string } | { mode: 'create'; postId?: string } | { mode: 'rename'; albumId: string } | null
   >(null)
   const [albumNameDraft, setAlbumNameDraft] = useState('')
+  /** 相册「添加照片」的确认弹层：已上传的临时附件，等待用户选择是否上时间线 */
+  const [albumPhotoConfirm, setAlbumPhotoConfirm] = useState<{ id: string; thumbUrl: string }[] | null>(null)
+  const [albumPhotoShowTimeline, setAlbumPhotoShowTimeline] = useState(false)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [avatarDataUrl, setAvatarDataUrl] = useState('')
@@ -322,8 +325,8 @@ export function MomentsModule() {
     return posts.filter(p => (p.tags || []).some(t => t.toLowerCase().includes(q)))
   }, [posts, tagQuery])
 
-  const pinnedPosts = useMemo(() => filteredPosts.filter(p => p.isPinned), [filteredPosts])
-  const normalPosts = useMemo(() => filteredPosts.filter(p => !p.isPinned), [filteredPosts])
+  const pinnedPosts = useMemo(() => filteredPosts.filter(p => p.isPinned && p.showInTimeline !== false), [filteredPosts])
+  const normalPosts = useMemo(() => filteredPosts.filter(p => !p.isPinned && p.showInTimeline !== false), [filteredPosts])
   const albumPosts = useMemo(
     () => (selectedAlbumId ? filteredPosts.filter(p => p.albumId === selectedAlbumId && postImages(p).urls.length > 0) : []),
     [filteredPosts, selectedAlbumId]
@@ -442,16 +445,51 @@ export function MomentsModule() {
     const input = albumPhotoInputRef.current
     if (!input?.files?.length || !selectedAlbumId) return
     const files = Array.from(input.files).slice(0, MAX_IMAGES)
+    input.value = ''
     if (files.length === 0) return
     try {
       const prepared = await Promise.all(files.map(prepareImageFile))
       const records = await uploadAttachments({ ownerType: 'moments_post', ownerId: '', files: prepared })
-      await createMomentsPost({ contentMd: '', contentHtml: '', attachmentIds: records.map(r => r.id), albumId: selectedAlbumId, isPinned: false })
-      await Promise.all([loadPosts(), loadAlbums()])
+      // 上传完成后弹层让用户选择：仅存相册 / 同时显示在时间线
+      setAlbumPhotoShowTimeline(false)
+      setAlbumPhotoConfirm(records.map(r => ({ id: r.id, thumbUrl: r.thumbUrl })))
     } catch (err) {
       showToast({ type: 'error', message: err instanceof Error ? err.message : '图片处理失败，请重试' })
-    } finally {
-      input.value = ''
+    }
+  }
+
+  /** 取消添加：清理已上传的临时附件 */
+  const cancelAlbumPhotoConfirm = async () => {
+    const ids = (albumPhotoConfirm || []).map(a => a.id)
+    setAlbumPhotoConfirm(null)
+    for (const id of ids) await deleteAttachment(id).catch(() => { /* ignore */ })
+  }
+
+  const confirmAlbumPhotos = async () => {
+    if (!albumPhotoConfirm || !selectedAlbumId) return
+    try {
+      await createMomentsPost({
+        contentMd: '',
+        contentHtml: '',
+        attachmentIds: albumPhotoConfirm.map(a => a.id),
+        albumId: selectedAlbumId,
+        isPinned: false,
+        showInTimeline: albumPhotoShowTimeline,
+      })
+      setAlbumPhotoConfirm(null)
+      await Promise.all([loadPosts(), loadAlbums()])
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  /** 切换某条说说是否显示在时间线（相册卡片 / 时间线卡片共用） */
+  const togglePostTimeline = async (post: MomentsPost) => {
+    try {
+      await updateMomentsPost(post.id, { showInTimeline: post.showInTimeline === false })
+      await loadPosts()
+    } catch (err) {
+      console.error(err)
     }
   }
 
@@ -616,33 +654,51 @@ export function MomentsModule() {
   // 相册分组卡片头部（列表 / 网格展开态共用）
   const renderAlbumCardHeader = (post: MomentsPost, imgs: { urls: string[]; thumbs: string[] }, text: string, expanded: boolean) => {
     const cover = imgs.thumbs[0] || imgs.urls[0]
+    const hiddenInTimeline = post.showInTimeline === false
     return (
-      <button
-        onClick={() => toggleAlbumPost(post.id)}
-        className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-[var(--bg-hover)]/50 transition-colors"
-        title={expanded ? '收起' : '展开'}
-      >
-        {cover ? (
-          <img src={cover} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0 border border-[var(--border-color)]" loading="lazy" />
-        ) : (
-          <div className="w-14 h-14 rounded-lg bg-[var(--bg-primary)] shrink-0 border border-[var(--border-color)]" />
-        )}
-        <div className="min-w-0 flex-1">
-          {text ? (
-            <div className={'text-[13px] leading-snug text-[var(--text-primary)] whitespace-pre-wrap break-words ' + (expanded ? '' : 'line-clamp-2')}>
-              {text}
-            </div>
+      <div className="w-full flex items-center">
+        <button
+          onClick={() => toggleAlbumPost(post.id)}
+          className="flex-1 min-w-0 flex items-center gap-3 px-3 py-3 text-left hover:bg-[var(--bg-hover)]/50 transition-colors"
+          title={expanded ? '收起' : '展开'}
+        >
+          {cover ? (
+            <img src={cover} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0 border border-[var(--border-color)]" loading="lazy" />
           ) : (
-            <div className="text-[13px] text-[var(--text-muted)] italic">无文字记录</div>
+            <div className="w-14 h-14 rounded-lg bg-[var(--bg-primary)] shrink-0 border border-[var(--border-color)]" />
           )}
-          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
-            <span>{formatDateTime(post.createdAt)}</span>
-            <span>·</span>
-            <span>{imgs.urls.length} 张照片</span>
+          <div className="min-w-0 flex-1">
+            {text ? (
+              <div className={'text-[13px] leading-snug text-[var(--text-primary)] whitespace-pre-wrap break-words ' + (expanded ? '' : 'line-clamp-2')}>
+                {text}
+              </div>
+            ) : (
+              <div className="text-[13px] text-[var(--text-muted)] italic">无文字记录</div>
+            )}
+            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+              <span>{formatDateTime(post.createdAt)}</span>
+              <span>·</span>
+              <span>{imgs.urls.length} 张照片</span>
+              {hiddenInTimeline && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full bg-[var(--bg-hover)] border border-[var(--border-color)]">
+                  <EyeOff size={9} />
+                  仅相册
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-        <ChevronDown size={16} className={'shrink-0 text-[var(--text-muted)] transition-transform duration-200 ' + (expanded ? 'rotate-180' : '')} />
-      </button>
+          <ChevronDown size={16} className={'shrink-0 text-[var(--text-muted)] transition-transform duration-200 ' + (expanded ? 'rotate-180' : '')} />
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); void togglePostTimeline(post) }}
+          className={'mr-2 p-2 rounded-full transition-colors shrink-0 ' + (hiddenInTimeline
+            ? 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            : 'text-[var(--accent)] hover:bg-[var(--bg-hover)]')}
+          title={hiddenInTimeline ? '显示在时间线' : '从时间线隐藏（仅保留在相册）'}
+        >
+          {hiddenInTimeline ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </div>
     )
   }
 
@@ -796,6 +852,11 @@ export function MomentsModule() {
               <button onClick={e => { e.stopPropagation(); openAlbumModal({ mode: 'pick', postId: post.id }) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.albumId ? '更换相册' : '加入相册'}>
                 <Images size={14} />
               </button>
+              {post.albumId && (
+                <button onClick={e => { e.stopPropagation(); void togglePostTimeline(post) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="仅在相册中显示（从时间线隐藏）">
+                  <EyeOff size={14} />
+                </button>
+              )}
               <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
                 <PencilLine size={14} />
               </button>
@@ -1496,6 +1557,65 @@ export function MomentsModule() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {albumPhotoConfirm && (
+        <div
+          className="absolute inset-0 z-[60] bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
+          onMouseDown={e => { if (e.target === e.currentTarget) void cancelAlbumPhotoConfirm() }}
+        >
+          <div className="w-full max-w-sm rounded-[22px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_24px_70px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="px-5 h-[52px] flex items-center justify-between border-b border-[var(--border-color)]">
+              <span className="text-[14px] font-semibold text-[var(--text-primary)]">添加照片到相册</span>
+              <button onClick={() => void cancelAlbumPhotoConfirm()} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="关闭">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-1.5">
+                {albumPhotoConfirm.slice(0, 6).map((a, i) => (
+                  <img key={i} src={a.thumbUrl} alt="" className="w-11 h-11 rounded-lg object-cover border border-[var(--border-color)]" />
+                ))}
+                {albumPhotoConfirm.length > 6 && (
+                  <span className="w-11 h-11 rounded-lg border border-dashed border-[var(--border-color)] flex items-center justify-center text-[12px] text-[var(--text-muted)] shrink-0">
+                    +{albumPhotoConfirm.length - 6}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+                将 {albumPhotoConfirm.length} 张照片添加到「{selectedAlbum?.name || ''}」。
+                这条记录默认<b className="text-[var(--text-primary)]">只保存在相册中</b>，不出现在时间线。
+              </p>
+
+              <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={albumPhotoShowTimeline}
+                  onChange={e => setAlbumPhotoShowTimeline(e.target.checked)}
+                  className="mt-0.5 accent-[var(--accent)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13px] text-[var(--text-primary)]">同时显示在时间线</span>
+                  <span className="block text-[10px] text-[var(--text-muted)] mt-0.5">之后也可在相册或时间线中随时切换</span>
+                </span>
+              </label>
+            </div>
+
+            <div className="px-4 py-3 border-t border-[var(--border-color)] flex justify-end gap-2">
+              <button onClick={() => void cancelAlbumPhotoConfirm()} className="px-3.5 py-2 rounded-xl text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+                取消
+              </button>
+              <button
+                onClick={() => void confirmAlbumPhotos()}
+                className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-[13px] hover:opacity-90 transition-opacity"
+              >
+                确认添加
+              </button>
             </div>
           </div>
         </div>

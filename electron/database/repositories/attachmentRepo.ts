@@ -21,6 +21,7 @@ interface AttachmentRow {
 
 const EXT_MAP: Record<string, string> = {
   'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/bmp': 'bmp',
+  'image/svg+xml': 'svg',
   'application/pdf': 'pdf', 'text/plain': 'txt', 'text/markdown': 'md', 'application/json': 'json',
   'application/octet-stream': 'bin',
 }
@@ -33,7 +34,7 @@ function extFor(mime: string, fallbackName: string): string {
 
 function mimeFromPath(p: string): string {
   const ext = (p.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
-  const inv: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
+  const inv: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
   return inv[ext] || 'application/octet-stream'
 }
 

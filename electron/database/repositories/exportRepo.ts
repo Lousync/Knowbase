@@ -17,12 +17,15 @@ interface ScheduleTagRow { id: string; name: string; color: string }
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
 interface PageRow { id: string; title: string; content_md: string; content_html: string | null; category_id: string | null; is_starred: number; sort_order: number; file_type: string; attachment_id: string | null; created_at: string; updated_at: string }
 interface PasswordRow { id: string; title: string; url: string | null; username: string | null; account: string | null; password: string; notes: string | null; sort_order: number; created_at: string; updated_at: string }
-interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; attachment_ids: string | null; tags: string | null; album_id: string | null; is_pinned: number; created_at: string; updated_at: string }
+interface MomentsRow { id: string; content_md: string; content_html: string | null; image_data_url: string | null; images_data_urls: string | null; attachment_ids: string | null; tags: string | null; album_id: string | null; is_pinned: number; show_in_timeline: number | null; created_at: string; updated_at: string }
 interface AlbumRow { id: string; name: string; cover_data_url: string | null; cover_post_id: string | null; cover_index: number | null; created_at: string; updated_at: string }
 interface ScriptRow { id: string; name: string; description: string; content: string; language: string; sort_order: number; created_at: string; updated_at: string }
 interface WeightRow { id: string; weight: number; date: string; series: string; note: string; created_at: string }
 interface RecycleRow { id: string; original_id: string; module: string; title: string; data: string; deleted_at: string }
 interface KnowledgePageTagRow { page_id: string; tag_id: string }
+interface HabitRow { id: string; name: string; color: string; icon: string; rule_type: string; rule_days: string; weekly_target: number; sort_order: number; archived: number; created_at: string; updated_at: string }
+interface BookmarkCategoryRow { id: string; name: string; color: string; sort_order: number; created_at: string }
+interface BookmarkItemRow { id: string; category_id: string; title: string; url: string; description: string; sort_order: number; created_at: string }
 
 // ---- helpers ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
@@ -75,11 +78,25 @@ function mapMoments(r: MomentsRow) {
       if (Array.isArray(arr)) attachmentIds = arr.filter((v: unknown): v is string => typeof v === 'string')
     } catch { /* fall through */ }
   }
-  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, attachmentIds, attachments: [], tags, albumId: r.album_id || '', isPinned: r.is_pinned === 1, createdAt: r.created_at, updatedAt: r.updated_at }
+  return { id: r.id, contentMd: r.content_md, contentHtml: r.content_html || '', imageDataUrls: images, attachmentIds, attachments: [], tags, albumId: r.album_id || '', isPinned: r.is_pinned === 1, showInTimeline: r.show_in_timeline !== 0, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 function mapAlbum(r: AlbumRow) {
   return { id: r.id, name: r.name, photoCount: 0, cover: '', coverPostId: r.cover_post_id || '', coverIndex: r.cover_index || 0, createdAt: r.created_at, updatedAt: r.updated_at }
+}
+
+function mapHabit(r: HabitRow) {
+  let ruleDays: number[] = []
+  try {
+    const arr = JSON.parse(r.rule_days)
+    if (Array.isArray(arr)) ruleDays = arr.map(Number)
+  } catch { /* fall through */ }
+  return {
+    id: r.id, name: r.name, color: r.color, icon: r.icon || 'check',
+    ruleType: (r.rule_type === 'weekdays' || r.rule_type === 'flexible' ? r.rule_type : 'daily') as 'daily' | 'weekdays' | 'flexible',
+    ruleDays, weeklyTarget: r.weekly_target ?? 3, sortOrder: r.sort_order ?? 0,
+    archived: !!r.archived, createdAt: r.created_at, updatedAt: r.updated_at,
+  }
 }
 
 export function buildAllData(moduleIds?: string[]) {
@@ -131,6 +148,12 @@ export function buildAllData(moduleIds?: string[]) {
   const moments = sel('moments') ? queryAll<MomentsRow>('SELECT * FROM moments_posts ORDER BY is_pinned DESC, created_at DESC') : []
   const albums = sel('moments') ? queryAll<AlbumRow>('SELECT * FROM moments_albums ORDER BY created_at DESC') : []
 
+  // Checkin（习惯打卡）+ Bookmark Nav（网址导航）
+  const habitRows = sel('checkin') ? queryAll<HabitRow>('SELECT * FROM habits ORDER BY sort_order, created_at') : []
+  const habitRecordRows = sel('checkin') ? queryAll<{ id: string; habit_id: string; date: string }>('SELECT id, habit_id, date FROM habit_records') : []
+  const bmCatRows = sel('bookmarkNav') ? queryAll<BookmarkCategoryRow>('SELECT * FROM bookmark_categories ORDER BY sort_order, created_at') : []
+  const bmItemRows = sel('bookmarkNav') ? queryAll<BookmarkItemRow>('SELECT * FROM bookmarks ORDER BY category_id, sort_order, created_at') : []
+
   // Toolbox + Recycle bin (app-level, always included)
   const scripts = queryAll<ScriptRow>('SELECT * FROM toolbox_scripts ORDER BY sort_order, created_at')
   const weightRecords = queryAll<WeightRow>('SELECT * FROM toolbox_weight_records ORDER BY date DESC, created_at DESC')
@@ -166,6 +189,14 @@ export function buildAllData(moduleIds?: string[]) {
     moments: {
       posts: moments.map(mapMoments),
       albums: albums.map(mapAlbum)
+    },
+    checkin: {
+      habits: habitRows.map(mapHabit),
+      records: habitRecordRows.map(r => ({ id: r.id, habitId: r.habit_id, date: r.date }))
+    },
+    bookmarkNav: {
+      categories: bmCatRows.map(c => ({ id: c.id, name: c.name, color: c.color, sortOrder: c.sort_order ?? 0, createdAt: c.created_at })),
+      bookmarks: bmItemRows.map(b => ({ id: b.id, categoryId: b.category_id || '', title: b.title, url: b.url, description: b.description || '', sortOrder: b.sort_order ?? 0, createdAt: b.created_at }))
     },
     toolbox: {
       scripts: scripts.map(s => ({ id: s.id, name: s.name, description: s.description, content: s.content, language: s.language, sortOrder: s.sort_order, createdAt: s.created_at, updatedAt: s.updated_at })),

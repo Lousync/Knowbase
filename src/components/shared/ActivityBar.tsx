@@ -90,12 +90,12 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
     e.dataTransfer.setData('text/plain', id)
     setDragId(id)
     requestAnimationFrame(() => {
-      (e.currentTarget as HTMLElement).style.opacity = '0.4'
+      (e.currentTarget as HTMLElement | null)?.style?.setProperty('opacity', '0.4')
     })
   }
 
   const handleDragEnd = (e: React.DragEvent) => {
-    (e.currentTarget as HTMLElement).style.opacity = '1'
+    (e.currentTarget as HTMLElement | null)?.style?.setProperty('opacity', '1')
     setDragId(null)
   }
 

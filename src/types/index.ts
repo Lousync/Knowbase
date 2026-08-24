@@ -18,6 +18,11 @@ export interface ToolboxScript {
   language: string; sortOrder: number
   createdAt: string; updatedAt: string
 }
+// blog template
+export interface BlogTemplate {
+  id: string; name: string; contentMd: string
+  sortOrder: number; createdAt: string; updatedAt: string
+}
 export interface CreateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string }
 export interface UpdateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string; sortOrder?: number }
 
@@ -49,8 +54,8 @@ export interface AttachmentMeta {
   size: number
   position: number
 }
-export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
-export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }
+export interface CreateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean; showInTimeline?: boolean }
+export interface UpdateMomentsPostDTO { contentMd?: string; contentHtml?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean; showInTimeline?: boolean }
 
 export interface MomentsPost {
   id: string
@@ -62,6 +67,8 @@ export interface MomentsPost {
   tags: string[]
   albumId: string
   isPinned: boolean
+  /** false = 仅归档到相册，不在时间线显示 */
+  showInTimeline: boolean
   createdAt: string
   updatedAt: string
 }
@@ -242,12 +249,22 @@ export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag 
 export interface KnowledgeExportData { categories: KnowledgeCategory[]; pages: (KnowledgePage & { tags: KnowledgeTag[]; backlinks: string[] })[]; tags: KnowledgeTag[] }
 export interface PasswordVaultExportData { entries: PasswordEntry[] }
 export interface MomentsExportData { posts: MomentsPost[]; albums: MomentsAlbum[] }
+export interface HabitExport {
+  id: string; name: string; color: string; icon: string
+  ruleType: HabitRuleType; ruleDays: number[]; weeklyTarget: number
+  sortOrder: number; archived: boolean; createdAt: string; updatedAt: string
+}
+export interface HabitRecordExport { id: string; habitId: string; date: string }
+export interface CheckinExportData { habits: HabitExport[]; records: HabitRecordExport[] }
+export interface BookmarkNavExportData { categories: BookmarkCategory[]; bookmarks: BookmarkItem[] }
 export interface AllExportData {
   exportVersion: string; exportedAt: string
   user?: UserExportData & { settings: Record<string, unknown>; stats: UserStats }
   blog: BlogExportData; schedule: ScheduleExportData; knowledge: KnowledgeExportData
   passwordVault?: PasswordVaultExportData
   moments?: MomentsExportData
+  checkin?: CheckinExportData
+  bookmarkNav?: BookmarkNavExportData
 }
 
 export interface ExportFileResult { filePath: string; size: number }
@@ -421,6 +438,20 @@ export interface ElectronAPI {
   superviseRetryAllFailed: () => Promise<{ total: number; ok: number }>
   superviseSendDailyNow: () => Promise<{ ok: boolean; skipped?: string; error?: string }>
   superviseClearHistory: () => Promise<void>
+  // period summary (weekly / monthly)
+  createPomodoroSession: (minutes: number) => Promise<boolean>
+  getBlogPeriodStats: (start: string, end: string) => Promise<{
+    checkins: number
+    blogEntries: number
+    knowledgePages: number
+    pomodoroMinutes: number
+    scheduleDone: number
+  }>
+  // blog templates
+  listBlogTemplates: () => Promise<BlogTemplate[]>
+  createBlogTemplate: (d: { name: string; contentMd?: string }) => Promise<BlogTemplate | null>
+  updateBlogTemplate: (id: string, d: { name?: string; contentMd?: string }) => Promise<BlogTemplate | null>
+  deleteBlogTemplate: (id: string) => Promise<void>
   // fill popup
   isFillPopup: boolean
   fillPopupTheme: string

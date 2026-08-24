@@ -125,6 +125,15 @@ export const SETTINGS = {
   activityBarOrder:  { default: '["blog","schedule","knowledge","moments","toolbox","export","recycle"]', desc: '活动栏图标顺序 (JSON)' },
   activityBarHidden: { default: '[]', desc: '活动栏隐藏的模块 (JSON)' },
   startupTab:        { default: 'blog', desc: '启动时默认显示的模块' },
+
+  // ---- 周期总结（每日博客） ----
+  summaryWeeklyDay:      { default: 0, desc: '周总结日（0=周日 … 6=周六）' },
+  summaryMonthlyMode:    { default: 'last', desc: '月总结日模式：first=每月第一天 / last=每月最后一天 / fixed=固定日' },
+  summaryMonthlyFixedDay: { default: 1, desc: '固定月总结日的日期（1-28）' },
+
+  // ---- 打卡提醒 ----
+  checkinReminderEnabled: { default: true,   desc: '启用打卡提醒' },
+  checkinReminderTime:    { default: '20:00', desc: '打卡提醒时间（HH:mm）' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

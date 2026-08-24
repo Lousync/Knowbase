@@ -13,6 +13,7 @@ interface MomentsRow {
   album_id: string | null
   attachment_ids: string | null
   is_pinned: number
+  show_in_timeline: number | null
   created_at: string
   updated_at: string
 }
@@ -74,6 +75,7 @@ function rowToMoments(row: MomentsRow, attachmentMeta: AttachmentMeta[] = []) {
     tags: parseTags(row),
     albumId: row.album_id || '',
     isPinned: row.is_pinned === 1,
+    showInTimeline: row.show_in_timeline !== 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -113,23 +115,23 @@ export function registerMomentsHandlers(): void {
     return rowToMoments(rows[0], meta)
   })
 
-  ipcMain.handle('moments:create', (_e, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }) => {
+  ipcMain.handle('moments:create', (_e, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean; showInTimeline?: boolean }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
     const images = Array.isArray(data.imageDataUrls) ? data.imageDataUrls : (data.imageDataUrl ? [data.imageDataUrl] : [])
     const attachmentIds = Array.isArray(data.attachmentIds) ? data.attachmentIds : []
     const tags = Array.isArray(data.tags) ? data.tags.filter(t => t.trim().length > 0) : []
     run(
-      `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.contentMd || '', data.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), data.albumId || '', data.isPinned ? 1 : 0, now, now]
+      `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, show_in_timeline, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.contentMd || '', data.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), data.albumId || '', data.isPinned ? 1 : 0, data.showInTimeline === false ? 0 : 1, now, now]
     )
     if (attachmentIds.length > 0) claimAttachments(attachmentIds, 'moments_post', id)
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
     return rowToMoments(rows[0], getAttachmentsForIds(attachmentIds))
   })
 
-  ipcMain.handle('moments:update', (_e, id: string, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean }) => {
+  ipcMain.handle('moments:update', (_e, id: string, data: { contentMd?: string; contentHtml?: string; imageDataUrl?: string; imageDataUrls?: string[]; attachmentIds?: string[]; tags?: string[]; albumId?: string; isPinned?: boolean; showInTimeline?: boolean }) => {
     const prevRows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
     if (prevRows.length === 0) return null
     const prevIds = parseAttachmentIds(prevRows[0])
@@ -161,7 +163,7 @@ export function registerMomentsHandlers(): void {
           params.push(v || '')
         } else {
           sets.push(`${camelToSnake(k)} = ?`)
-          params.push(k === 'isPinned' ? (v ? 1 : 0) : v)
+          params.push(k === 'isPinned' || k === 'showInTimeline' ? (v ? 1 : 0) : v)
         }
       }
     }

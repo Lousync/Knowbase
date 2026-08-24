@@ -191,6 +191,14 @@ const api = {
   superviseRetryAllFailed: () => ipcRenderer.invoke('supervise:retryAllFailed'),
   superviseSendDailyNow: () => ipcRenderer.invoke('supervise:sendDailyNow'),
   superviseClearHistory: () => ipcRenderer.invoke('supervise:clearHistory'),
+  // period summary (weekly / monthly)
+  createPomodoroSession: (minutes: number) => ipcRenderer.invoke('pomodoro:createSession', minutes),
+  getBlogPeriodStats: (start: string, end: string) => ipcRenderer.invoke('blog:periodStats', start, end),
+  // blog templates
+  listBlogTemplates: () => ipcRenderer.invoke('blogTpl:list'),
+  createBlogTemplate: (d: unknown) => ipcRenderer.invoke('blogTpl:create', d),
+  updateBlogTemplate: (id: string, d: unknown) => ipcRenderer.invoke('blogTpl:update', id, d),
+  deleteBlogTemplate: (id: string) => ipcRenderer.invoke('blogTpl:delete', id),
 
   // fill popup
   isFillPopup,

@@ -721,6 +721,41 @@ export function runMigrations(): void {
     `)
     db.run("INSERT INTO _migrations (name) VALUES ('040_supervise_module')")
   }
+
+  if (!applied.has('041_moments_show_in_timeline')) {
+    // 说说时间线可见性：0 = 仅归档到相册，不在时间线显示
+    db.run("ALTER TABLE moments_posts ADD COLUMN show_in_timeline INTEGER NOT NULL DEFAULT 1")
+    db.run("INSERT INTO _migrations (name) VALUES ('041_moments_show_in_timeline')")
+  }
+
+  if (!applied.has('042_pomodoro_sessions')) {
+    // 番茄钟专注记录：每自然完成一次专注写入一行（分钟数按预设时长）
+    db.run(`
+      CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+        id         TEXT PRIMARY KEY,
+        minutes    INTEGER NOT NULL,
+        date       TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_pomodoro_date ON pomodoro_sessions(date);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('042_pomodoro_sessions')")
+  }
+
+  if (!applied.has('043_blog_templates')) {
+    // 博客模板：用户自编辑的日记模板，写博客时可一键套用
+    db.run(`
+      CREATE TABLE IF NOT EXISTS blog_templates (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        content_md TEXT NOT NULL DEFAULT '',
+        sort_order REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      )
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('043_blog_templates')")
+  }
 }
 
 /**

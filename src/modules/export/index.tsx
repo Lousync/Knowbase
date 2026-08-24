@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react'
-import { Upload, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles } from 'lucide-react'
+import { Upload, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles, CalendarCheck2, Globe } from 'lucide-react'
 import { exportBackupToZip, showExportSaveDialog } from '../../lib/ipc'
 import { SETTINGS_DEFAULTS } from '../../lib/settings'
 import { ProgressPanel } from './components/ProgressPanel'
 
 // ---- types ----
 interface ModuleOption {
-  id: 'blog' | 'schedule' | 'knowledge' | 'passwordVault' | 'moments'
+  id: 'blog' | 'schedule' | 'knowledge' | 'passwordVault' | 'moments' | 'checkin' | 'bookmarkNav'
   label: string
   icon: React.ReactNode
   count: string
@@ -25,6 +25,8 @@ const MODULES: ModuleOption[] = [
   { id: 'knowledge', label: '知识库', icon: <FileArchive size={16} />, count: '页面 + 分类 + 链接' },
   { id: 'passwordVault', label: '密码本', icon: <Shield size={16} />, count: '加密密码条目' },
   { id: 'moments', label: '说说', icon: <Sparkles size={16} />, count: '本地时间线 + 置顶' },
+  { id: 'checkin', label: '打卡', icon: <CalendarCheck2 size={16} />, count: '习惯 + 打卡记录' },
+  { id: 'bookmarkNav', label: '网址导航', icon: <Globe size={16} />, count: '分类 + 书签' },
 ]
 
 const FORMAT_LABEL = '备份包（含附件）'
