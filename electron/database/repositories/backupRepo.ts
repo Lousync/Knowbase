@@ -1,10 +1,11 @@
 import { ipcMain } from 'electron'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'fs'
 import { getAttachmentsDir, getDatabase, saveToDisk } from '../connection'
-import { buildAllData } from './exportRepo'
+import { buildAllData, isWritePathAuthorized } from './exportRepo'
 import { executeImportData } from './importRepo'
 import { zipBuffer, unzipBuffer, ZipEntry } from '../../lib/zip'
+import { safePathInside } from '../../lib/pathGuard'
 
 interface AttachmentRow {
   id: string
@@ -56,6 +57,8 @@ function collectAttachments(moduleIds?: string[]): AttachmentRow[] {
 export function registerBackupHandlers(): void {
   // 单文件 zip：export.json + attachments/ 压缩为一个包
   ipcMain.handle('export:backupToZip', (_e, zipPath: string, moduleIds?: string[]) => {
+    // 写路径授权:zipPath 必须来自保存对话框(防渲染层被注入后把整库写到任意位置)
+    if (!isWritePathAuthorized(zipPath)) throw new Error('写入路径未经过保存对话框授权,已拒绝')
     const data: Record<string, unknown> = buildAllData(moduleIds) as unknown as Record<string, unknown>
     const rows = collectAttachments(moduleIds)
     data._attachments = rows
@@ -108,22 +111,31 @@ export function registerBackupHandlers(): void {
       return files?.get(`${zipPrefix}attachments/${rel.replace(/\\/g, '/')}`) || null
     }
 
+    // 业务数据合并导入（executeImportData 内部有事务,失败即回滚且不落盘）
+    // 先导业务数据,成功后才动附件文件与用户资料——避免业务失败留下已改的半状态
+    const result = executeImportData(data)
+    if (!result.success) {
+      return { success: false, imported: 0, skipped: 0, attachments: 0, message: result.message }
+    }
+
     // 恢复附件文件与记录（幂等）
+    // Zip Slip 防护:file_path/thumb_path 来自备份包(不可信),必须解析回附件目录内,否则跳过
     const db = getDatabase()
     let attRestored = 0
     for (const att of (data._attachments || []) as AttachmentRow[]) {
+      const dest = safePathInside(getAttachmentsDir(), att.file_path)
+      if (!dest) continue
       const buf = readAtt(att.file_path)
       if (buf) {
-        const dest = join(getAttachmentsDir(), att.file_path)
-        mkdirSync(join(dest, '..'), { recursive: true })
+        mkdirSync(dirname(dest), { recursive: true })
         writeFileSync(dest, buf)
       }
-      if (att.thumb_path) {
+      const safeThumb = att.thumb_path ? safePathInside(getAttachmentsDir(), att.thumb_path) : null
+      if (safeThumb) {
         const tb = readAtt(att.thumb_path)
         if (tb) {
-          const tdest = join(getAttachmentsDir(), att.thumb_path)
-          mkdirSync(join(tdest, '..'), { recursive: true })
-          writeFileSync(tdest, tb)
+          mkdirSync(dirname(safeThumb), { recursive: true })
+          writeFileSync(safeThumb, tb)
         }
       }
       const existing = db.exec('SELECT id FROM attachments WHERE id = ?', [att.id])
@@ -131,7 +143,7 @@ export function registerBackupHandlers(): void {
         db.run(
           `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, thumb_path, mime_type, size_bytes, trashed, trash_path, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)`,
-          [att.id, att.owner_type, att.owner_id, att.position, att.file_name, att.file_path, att.thumb_path || '', att.mime_type || '', att.size_bytes || 0, att.created_at || new Date().toISOString()]
+          [att.id, att.owner_type, att.owner_id, att.position, att.file_name, att.file_path, safeThumb ? att.thumb_path : '', att.mime_type || '', att.size_bytes || 0, att.created_at || new Date().toISOString()]
         )
         attRestored++
       }
@@ -146,15 +158,13 @@ export function registerBackupHandlers(): void {
       )
     }
 
-    // 业务数据合并导入
-    const result = executeImportData(data)
     saveToDisk()
     return {
-      success: result.success,
+      success: true,
       imported: result.imported,
       skipped: result.skipped,
       attachments: attRestored,
-      message: result.success ? `成功导入 ${result.imported} 条记录、${attRestored} 个附件${result.skipped > 0 ? `，跳过 ${result.skipped} 条已有记录` : ''}` : result.message,
+      message: `成功导入 ${result.imported} 条记录、${attRestored} 个附件${result.skipped > 0 ? `，跳过 ${result.skipped} 条已有记录` : ''}`,
     }
   })
 

@@ -50,16 +50,16 @@ export function registerSummaryHandlers(): void {
       checkins: count('SELECT COUNT(*) AS n FROM habit_records WHERE date BETWEEN ? AND ?', [start, end]),
       // 博客篇数（entries.date 为 YYYY-MM-DD）
       blogEntries: count('SELECT COUNT(*) AS n FROM entries WHERE date BETWEEN ? AND ?', [start, end]),
-      // 知识库页面数（created_at 是 ISO 或 datetime 格式，统一取前 10 位日期比较）
+      // 知识库页面数（created_at 为 UTC ISO 串,转本地日期再比较,避免东八区 0-8 点算错天）
       knowledgePages: count(
-        "SELECT COUNT(*) AS n FROM knowledge_pages WHERE substr(created_at, 1, 10) BETWEEN ? AND ?",
+        "SELECT COUNT(*) AS n FROM knowledge_pages WHERE date(created_at, 'localtime') BETWEEN ? AND ?",
         [start, end]
       ),
       // 番茄钟专注分钟数
       pomodoroMinutes: count('SELECT COALESCE(SUM(minutes), 0) AS n FROM pomodoro_sessions WHERE date BETWEEN ? AND ?', [start, end]),
-      // 完成的日程任务数（按完成时间 updated_at 归日）
+      // 完成的日程任务数（按完成时间 updated_at 归日,转本地日期）
       scheduleDone: count(
-        "SELECT COUNT(*) AS n FROM schedule_todos WHERE status = 'done' AND substr(updated_at, 1, 10) BETWEEN ? AND ?",
+        "SELECT COUNT(*) AS n FROM schedule_todos WHERE status = 'done' AND date(updated_at, 'localtime') BETWEEN ? AND ?",
         [start, end]
       ),
     }

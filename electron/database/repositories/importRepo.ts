@@ -1,9 +1,10 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync, readdirSync, statSync } from 'fs'
 import { basename, extname, join } from 'path'
-import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs } from '../connection'
+import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs, validateDatabaseBuffer } from '../connection'
 import { randomUUID } from 'crypto'
 import { registerAttachment } from './attachmentRepo'
+import { encryptExistingPasswords } from './passwordRepo'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
 
@@ -126,7 +127,6 @@ export function registerImportHandlers(): void {
       )
       saveToDisk()
 
-      const rows = db.exec('SELECT * FROM knowledge_pages WHERE id = ?')
       // Return basic page info
       return { id, title: fileName.replace(/\.pdf$/i, ''), fileType: 'pdf' }
     } catch (e: any) {
@@ -340,13 +340,27 @@ export function registerImportHandlers(): void {
   // ===== All-or-nothing db file replacement =====
   ipcMain.handle('import:importDb', async (_e, srcPath: string) => {
     try {
+      // 预检:目标必须是可正常打开的合法 SQLite 库,避免用损坏/伪造文件覆盖唯一数据库
+      const buffer = readFileSync(srcPath)
+      if (!validateDatabaseBuffer(buffer)) {
+        return { success: false, message: '所选文件不是有效的 Knowbase 数据库文件' }
+      }
+      // 替换前备份当前库,失败时还原
+      const dbPath = getDbPath()
+      const preImportBak = `${dbPath}.pre-import`
+      if (existsSync(dbPath)) copyFileSync(dbPath, preImportBak)
       closeDatabase()
-      copyFileSync(srcPath, getDbPath())
-      await initDatabase()
-      return { success: true, message: '数据库已替换，应用数据已全部更新' }
+      try {
+        copyFileSync(srcPath, dbPath)
+        await initDatabase()
+        return { success: true, message: '数据库已替换，应用数据已全部更新' }
+      } catch (e: any) {
+        // 替换后的库初始化失败 → 从备份还原原库
+        try { if (existsSync(preImportBak)) copyFileSync(preImportBak, dbPath) } catch { /* ignore */ }
+        try { await initDatabase() } catch { /* 原库也无法打开(极端情况),损坏文件已留存 */ }
+        return { success: false, message: `数据库导入失败: ${e.message}` }
+      }
     } catch (e: any) {
-      // Try to reopen original database on failure
-      try { await initDatabase() } catch { /* db was already closed */ }
       return { success: false, message: `数据库导入失败: ${e.message}` }
     }
   })
@@ -357,6 +371,8 @@ export function registerImportHandlers(): void {
 export function executeImportData(data: any): { success: boolean; imported: number; skipped: number; message: string } {
   const db = getDatabase()
   let imported = 0, skipped = 0
+  // 事务包裹:任何一条插入失败即整体回滚,避免"半更新"状态被 saveToDisk 固化
+  db.run('BEGIN')
   try {
       // --- Blog ---
       if (data.blog) {
@@ -564,9 +580,13 @@ export function executeImportData(data: any): { success: boolean; imported: numb
           imported++
         }
       }
+      db.run('COMMIT')
+      // 导入的密码为明文 JSON,统一走一次加密(幂等)再落盘
+      encryptExistingPasswords()
       saveToDisk()
       return { success: true, imported, skipped, message: `成功导入 ${imported} 条记录${skipped > 0 ? `，跳过 ${skipped} 条已有记录` : ''}` }
   } catch (e: any) {
-    return { success: false, imported, skipped, message: `导入出错: ${e.message}` }
+    try { db.run('ROLLBACK') } catch { /* ignore */ }
+    return { success: false, imported: 0, skipped: 0, message: `导入出错(已回滚，数据未变更): ${e.message}` }
   }
 }

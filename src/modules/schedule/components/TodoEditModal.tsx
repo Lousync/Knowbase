@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ScheduleTag, ScheduleTodo } from '../../../types'
 import { X, Plus, Trash2, Check } from 'lucide-react'
+import { localToday } from '../../../lib/date'
 
 interface TodoForm {
   title: string; description: string; time: string
@@ -39,7 +40,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
     if (!subtaskTitle.trim() || !onCreateSubtask) return
     onCreateSubtask({
       title: subtaskTitle.trim(),
-      date: new Date().toISOString().slice(0, 10),
+      date: localToday(),
       taskType: 'daily',
     })
     setSubtaskTitle('')
@@ -346,9 +347,4 @@ function parseDeadline(time: string | null | undefined) {
   const m = time.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/)
   if (!m) return d
   return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]), hour: Number(m[4]), minute: Number(m[5]) }
-}
-
-function localToday(): string {
-  const n = new Date()
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }

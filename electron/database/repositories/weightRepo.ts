@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { buildUpdateSet } from '../../lib/safeUpdate'
 
 interface WeightRow {
   id: string; weight: number; date: string; series: string
@@ -63,13 +64,11 @@ export function registerWeightHandlers(): void {
   ipcMain.handle('weight:update', (_e, id: string, data: {
     weight?: number; date?: string; series?: string; note?: string
   }) => {
-    const sets: string[] = []
-    const params: unknown[] = []
-    for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined) {
-        sets.push(`${camelToSnake(k)} = ?`)
-        params.push(v)
-      }
+    // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
+    const { sets, params } = buildUpdateSet(data, ['weight', 'date', 'series', 'note'])
+    if (sets.length === 0) {
+      const rows = queryAll<WeightRow>('SELECT * FROM toolbox_weight_records WHERE id = ?', [id])
+      return rows.length > 0 ? rowToWeight(rows[0]) : null
     }
     params.push(id)
     run(`UPDATE toolbox_weight_records SET ${sets.join(', ')} WHERE id = ?`, params)

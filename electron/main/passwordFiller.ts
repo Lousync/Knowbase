@@ -2,6 +2,7 @@ import { BrowserWindow, globalShortcut, screen, clipboard, app, ipcMain } from '
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
 import { getDatabase } from '../database/connection'
+import { decryptPassword } from '../database/repositories/passwordRepo'
 
 let fillWindow: BrowserWindow | null = null
 
@@ -26,13 +27,19 @@ function createFillWindow(): BrowserWindow {
     backgroundColor: bgColor,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false, contextIsolation: true, nodeIntegration: false,
+      sandbox: true, contextIsolation: true, nodeIntegration: false,
       additionalArguments: ['--fill-popup-window', `--theme=${theme}`],
     },
   })
 
   // Never steal focus — user stays in their target app
   win.setAlwaysOnTop(true, 'floating')
+
+  // 与主窗口同级的导航防护:悬浮窗自身永不导航、永不开新窗口
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault()
+  })
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/fill-popup`)
@@ -71,14 +78,20 @@ export function initPasswordFiller() {
     stmt.free()
     return rows.map((r: any) => ({
       id: r.id, title: r.title, url: r.url || '', account: r.account || '',
-      username: r.username || '', password: r.password, notes: r.notes || '',
+      username: r.username || '', password: decryptPassword(r.password), notes: r.notes || '',
       sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at
     }))
   })
 
-  // Copy to clipboard
+  // Copy to clipboard — 30 秒后若剪贴板仍是所复制的密码则自动清空(不覆盖用户后续复制的内容)
+  let clipboardClearTimer: NodeJS.Timeout | null = null
   ipcMain.handle('fillPopup:copy', (_e, field: string, value: string) => {
     clipboard.writeText(value)
+    if (clipboardClearTimer) clearTimeout(clipboardClearTimer)
+    clipboardClearTimer = setTimeout(() => {
+      clipboardClearTimer = null
+      try { if (clipboard.readText() === value) clipboard.writeText('') } catch { /* ignore */ }
+    }, 30_000)
     console.log(`[PasswordFiller] copied ${field}`)
   })
 

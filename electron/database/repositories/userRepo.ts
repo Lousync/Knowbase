@@ -229,7 +229,8 @@ export function registerUserHandlers(): void {
     for (let i = 0; i < 3650; i++) { // max 10 years
       const d = new Date(today)
       d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
+      // 本地日期(不用 toISOString 的 UTC 截断,避免凌晨连击算错)
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const hasEntry = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM entries WHERE date = ?', [dateStr])
       const hasSchedule = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM schedule_todos WHERE date = ?', [dateStr])
       if ((hasEntry?.cnt ?? 0) > 0 || (hasSchedule?.cnt ?? 0) > 0) {

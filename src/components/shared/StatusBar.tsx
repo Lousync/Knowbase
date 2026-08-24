@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Timer } from 'lucide-react'
 import { usePomodoro } from '../../modules/toolbox/hooks/PomodoroContext'
+import { localToday } from '../../lib/date'
 
 interface StatusBarProps {
   date?: string
@@ -13,7 +14,7 @@ export function StatusBar({
   fileType: initialFileType = 'Markdown',
   encoding = 'UTF-8'
 }: StatusBarProps) {
-  const today = date || new Date().toISOString().split('T')[0]
+  const today = date || localToday()
   const [currentFileType, setCurrentFileType] = useState(initialFileType)
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import initSqlJs, { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js'
 import { app } from 'electron'
 import { join, basename } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, renameSync, unlinkSync } from 'fs'
 import { randomUUID } from 'crypto'
 
 let db: SqlJsDatabase | null = null
@@ -40,11 +40,42 @@ export async function initDatabase(): Promise<void> {
   }
 
   dbPath = join(dataDir, 'knowledge.db')
+  const bakPath = `${dbPath}.bak`
+
+  // 清理上次写盘残留的临时文件(正常流程中 rename 后不存在,崩溃残留则删除)
+  try { if (existsSync(`${dbPath}.tmp`)) unlinkSync(`${dbPath}.tmp`) } catch { /* ignore */ }
+
+  // 打开数据库文件;文件损坏(非法 SQLite / 探针查询失败)返回 null
+  const tryOpen = (p: string): SqlJsDatabase | null => {
+    try {
+      const d = new SQL.Database(readFileSync(p))
+      d.exec('SELECT count(*) FROM sqlite_master') // 触发文件解析,损坏在此抛错
+      return d
+    } catch (err) {
+      console.error(`[DB] 无法打开数据库文件: ${p}`, err)
+      return null
+    }
+  }
 
   if (existsSync(dbPath)) {
-    const buffer = readFileSync(dbPath)
-    db = new SQL.Database(buffer)
-  } else {
+    db = tryOpen(dbPath)
+    if (!db) {
+      // 主库损坏:留存现场供抢救,再尝试从 .bak 回退
+      const corruptPath = `${dbPath}.corrupt-${Date.now()}`
+      try { renameSync(dbPath, corruptPath) } catch { /* ignore */ }
+      console.error(`[DB] 主数据库损坏,已留存为 ${corruptPath}`)
+    }
+  }
+  if (!db && existsSync(bakPath)) {
+    db = tryOpen(bakPath)
+    if (db) {
+      try { copyFileSync(bakPath, dbPath) } catch { /* ignore */ }
+      console.warn('[DB] 已从 .bak 备份恢复数据库')
+    } else {
+      console.error('[DB] .bak 备份亦损坏,将创建全新数据库(损坏文件已留存于磁盘)')
+    }
+  }
+  if (!db) {
     db = new SQL.Database()
   }
 
@@ -72,6 +103,11 @@ export function runMigrations(): void {
       applied.add(row[0] as string)
     }
   }
+
+  // 整个迁移过程包在事务中:DDL 与 _migrations 标记同生共死,
+  // 崩溃/断电不会留下"已 ALTER 但未记标记"(下次重复执行报 duplicate column 永远起不来)的中间态
+  db.run('BEGIN')
+  try {
 
   if (!applied.has('001_init')) {
     db.run(`
@@ -741,7 +777,13 @@ export function runMigrations(): void {
 
   if (!applied.has('041_moments_show_in_timeline')) {
     // 说说时间线可见性：0 = 仅归档到相册，不在时间线显示
-    db.run("ALTER TABLE moments_posts ADD COLUMN show_in_timeline INTEGER NOT NULL DEFAULT 1")
+    // 幂等保护:列已存在(历史中断残留)时跳过 ALTER,仅补记标记
+    try {
+      db.run("ALTER TABLE moments_posts ADD COLUMN show_in_timeline INTEGER NOT NULL DEFAULT 1")
+    } catch (err) {
+      const msg = String((err as Error)?.message || err)
+      if (!/duplicate column/i.test(msg)) throw err
+    }
     db.run("INSERT INTO _migrations (name) VALUES ('041_moments_show_in_timeline')")
   }
 
@@ -773,19 +815,47 @@ export function runMigrations(): void {
     `)
     db.run("INSERT INTO _migrations (name) VALUES ('043_blog_templates')")
   }
+
+  db.run('COMMIT')
+  } catch (err) {
+    try { db.run('ROLLBACK') } catch { /* ignore */ }
+    console.error('[DB] 迁移执行失败,已回滚:', err)
+    throw err
+  }
 }
 
 /**
  * 保存 SQLite 数据到磁盘（sql.js 默认在内存中运行，需要手动持久化）
+ *
+ * 原子写盘流程:先写临时文件 → 上一份完好库改名轮转为 .bak(仅改名,零拷贝) → 临时文件改名顶替主文件。
+ * 任意时刻崩溃/断电,主文件要么是旧的完好库、要么是新的完整库,不会出现写了一半的损坏状态;
+ * 极端窗口(两次改名之间)由 initDatabase 的 .bak 回退兜底。
  */
 export function saveToDisk(): void {
   if (!db || !dbPath) return
   try {
     const data = db.export()
-    const buffer = Buffer.from(data)
-    writeFileSync(dbPath, buffer)
+    const tmpPath = `${dbPath}.tmp`
+    writeFileSync(tmpPath, Buffer.from(data))
+    try { if (existsSync(dbPath)) renameSync(dbPath, `${dbPath}.bak`) } catch { /* ignore */ }
+    renameSync(tmpPath, dbPath)
   } catch (err) {
     console.error('Failed to save database to disk:', err)
+  }
+}
+
+/** 校验 buffer 是否为可正常打开的合法 SQLite 数据库（供数据库文件导入预检） */
+export function validateDatabaseBuffer(buffer: Buffer): boolean {
+  if (!SQL) return false
+  let probe: SqlJsDatabase | null = null
+  try {
+    probe = new SQL.Database(buffer)
+    probe.exec('SELECT count(*) FROM sqlite_master')
+    return true
+  } catch {
+    return false
+  } finally {
+    try { probe?.close() } catch { /* ignore */ }
   }
 }
 

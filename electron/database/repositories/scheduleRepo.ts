@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { buildUpdateSet } from '../../lib/safeUpdate'
 
 // ---- types ----
 interface TodoRow {
@@ -122,14 +123,12 @@ export function registerScheduleHandlers(): void {
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
     status?: string; endCriteria?: string; parentId?: string | null
   }) => {
-    const sets: string[] = ['updated_at = ?']
-    const params: unknown[] = [new Date().toISOString()]
-    for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined) {
-        sets.push(`${camelToSnake(k)} = ?`)
-        params.push(v)
-      }
-    }
+    // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
+    const { sets, params } = buildUpdateSet(
+      data,
+      ['title', 'description', 'date', 'time', 'quadrant', 'task_type', 'tag_id', 'status', 'end_criteria', 'parent_id'],
+      { sets: ['updated_at = ?'], params: [new Date().toISOString()] }
+    )
     params.push(id)
     run(`UPDATE schedule_todos SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<TodoRow>('SELECT * FROM schedule_todos WHERE id = ?', [id])

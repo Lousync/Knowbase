@@ -4,6 +4,7 @@ import { existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
 import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
+import { buildUpdateSet } from '../../lib/safeUpdate'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
@@ -376,14 +377,12 @@ export function registerKnowledgeHandlers(): void {
   // 更新页面
   ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
     if (data.categoryId !== undefined) assertPageContainer(data.categoryId ?? null)
-    const sets: string[] = ['updated_at = ?']
-    const params: unknown[] = [new Date().toISOString()]
-    for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined && k !== 'tags') {
-        sets.push(`${camelToSnake(k)} = ?`)
-        params.push(v)
-      }
-    }
+    // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
+    const { sets, params } = buildUpdateSet(
+      data,
+      ['title', 'content_md', 'content_html', 'category_id', 'file_type'],
+      { sets: ['updated_at = ?'], params: [new Date().toISOString()] }
+    )
     // When moving page to a different category, reset sort_order to append at end
     if (data.categoryId !== undefined) {
       const oldPage = queryAll<PageRow>('SELECT category_id FROM knowledge_pages WHERE id = ?', [id])[0]

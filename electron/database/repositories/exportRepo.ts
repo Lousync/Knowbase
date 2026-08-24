@@ -1,7 +1,9 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { resolve } from 'path'
 import { getDatabase } from '../connection'
 import { writeFileSync, statSync } from 'fs'
 import * as iconv from 'iconv-lite'
+import { decryptPassword } from './passwordRepo'
 
 function encodeText(content: string, encoding: string): Buffer {
   if (encoding === 'utf-8' || encoding === 'utf8') return Buffer.from(content, 'utf-8')
@@ -52,7 +54,7 @@ function mapPage(r: PageRow) {
 }
 
 function mapPassword(r: PasswordRow) {
-  return { id: r.id, title: r.title, url: r.url || '', username: r.username || '', account: r.account || '', password: r.password, notes: r.notes || '', sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
+  return { id: r.id, title: r.title, url: r.url || '', username: r.username || '', account: r.account || '', password: decryptPassword(r.password), notes: r.notes || '', sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
 function mapMoments(r: MomentsRow) {
@@ -208,6 +210,21 @@ export function buildAllData(moduleIds?: string[]) {
   }
 }
 
+// ===== 写路径授权 =====
+// 只有近期由"保存对话框"返回的路径才允许被写入 IPC 使用——
+// 防止渲染层被注入后用任意路径覆写系统文件(启动目录/计划任务等)。
+const authorizedWritePaths = new Set<string>()
+
+export function isWritePathAuthorized(p: string): boolean {
+  try {
+    const resolved = resolve(p)
+    for (const ap of authorizedWritePaths) {
+      if (resolve(ap) === resolved) return true
+    }
+  } catch { /* ignore */ }
+  return false
+}
+
 export function registerExportHandlers(): void {
   // ===== File dialogs =====
   ipcMain.handle('export:showSaveDialog', async (_e, opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => {
@@ -217,11 +234,14 @@ export function registerExportHandlers(): void {
       defaultPath: opts.defaultName,
       filters: opts.filters
     })
-    return { filePath: result.canceled ? null : result.filePath ?? null }
+    const filePath = result.canceled ? null : result.filePath ?? null
+    if (filePath) authorizedWritePaths.add(filePath)
+    return { filePath }
   })
 
   // ===== File I/O =====
   ipcMain.handle('export:writeTextFile', (_e, filePath: string, content: string, encoding: string = 'utf-8') => {
+    if (!isWritePathAuthorized(filePath)) throw new Error('写入路径未经过保存对话框授权,已拒绝')
     const buf = encodeText(content, encoding)
     writeFileSync(filePath, buf)
     const size = statSync(filePath).size

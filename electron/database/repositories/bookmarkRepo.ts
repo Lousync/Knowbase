@@ -117,7 +117,12 @@ export function registerBookmarkHandlers(): void {
   })
 
   // ---- 外链 / 文件 ----
+  // 协议白名单:书签 URL 可经 JSON 导入植入,仅放行网页协议,防 file:// / 自定义协议拉起外部程序
   ipcMain.handle('bookmark:openUrl', async (_e, url: string) => {
+    if (typeof url !== 'string' || !url) return
+    let u: URL
+    try { u = new URL(url) } catch { return }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return
     await shell.openExternal(url)
   })
 

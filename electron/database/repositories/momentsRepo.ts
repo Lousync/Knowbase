@@ -144,6 +144,7 @@ export function registerMomentsHandlers(): void {
     }
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [new Date().toISOString()]
+    const allow = new Set(['is_pinned', 'show_in_timeline', 'content_md', 'content_html', 'album_id'])
     for (const [k, v] of Object.entries(data)) {
       if (v !== undefined) {
         if (k === 'imageDataUrls') {
@@ -162,7 +163,10 @@ export function registerMomentsHandlers(): void {
           sets.push('album_id = ?')
           params.push(v || '')
         } else {
-          sets.push(`${camelToSnake(k)} = ?`)
+          // 列名白名单:其余 key 仅允许固定集合(防注入)
+          const col = camelToSnake(k)
+          if (!allow.has(col)) continue
+          sets.push(`${col} = ?`)
           params.push(k === 'isPinned' || k === 'showInTimeline' ? (v ? 1 : 0) : v)
         }
       }

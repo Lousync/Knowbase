@@ -107,7 +107,7 @@ export async function trashItem(binId: string, item: { module: string; title: st
       md += `| 名称 | 账号 | 用户名 | 密码 | 网址 | 备注 |\n`
       md += `|------|------|--------|------|------|------|\n`
       const esc = (s: string) => (s || '-').replace(/\|/g, '\\|').replace(/\n/g, ' ')
-      md += `| ${esc(e.title)} | ${esc(e.account)} | ${esc(e.username)} | ${esc(e.password)} | ${esc(e.url)} | ${esc(e.notes)} |\n`
+      md += `| ${esc(e.title)} | ${esc(e.account)} | ${esc(e.username)} | ${esc(e.password ? '••••••（已隐藏）' : '-')} | ${esc(e.url)} | ${esc(e.notes)} |\n`
       writeFileSync(filePath, md, 'utf-8')
       files.push(filePath)
     } else if (item.module === 'knowledge_category') {
@@ -144,7 +144,7 @@ export async function trashAll(items: Array<{ binId: string; module: string; tit
         md += `| 名称 | 账号 | 用户名 | 密码 | 网址 | 备注 |\n`
         md += `|------|------|--------|------|------|------|\n`
         const esc = (s: string) => (s || '-').replace(/\|/g, '\\|').replace(/\n/g, ' ')
-        md += `| ${esc(e.title)} | ${esc(e.account)} | ${esc(e.username)} | ${esc(e.password)} | ${esc(e.url)} | ${esc(e.notes)} |\n`
+        md += `| ${esc(e.title)} | ${esc(e.account)} | ${esc(e.username)} | ${esc(e.password ? '••••••（已隐藏）' : '-')} | ${esc(e.url)} | ${esc(e.notes)} |\n`
         writeFileSync(filePath, md, 'utf-8')
       } else if (item.module === 'knowledge_category') {
         const catName = item.data?.category?.name || item.title || '知识目录'

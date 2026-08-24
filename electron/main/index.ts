@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu } from 'electron'
-import { join, basename } from 'path'
+import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
@@ -24,6 +24,7 @@ import { registerSummaryHandlers } from '../database/repositories/summaryRepo'
 import { registerBlogTemplateHandlers } from '../database/repositories/blogTemplateRepo'
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
+import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
 protocol.registerSchemesAsPrivileged([
@@ -100,15 +101,15 @@ function createWindow(): void {
     backgroundColor: '#1e1e1e',           // 深色背景，防启动白屏
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,                         // preload 仅用 contextBridge/ipcRenderer/webUtils,完全兼容沙箱
       contextIsolation: true,
       nodeIntegration: false
     }
   })
 
-  // 安全：限制导航为本地文件
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file://')) event.preventDefault()
+  // 安全：主窗口自身永不导航(应用为单页,任何导航请求均为异常/注入行为)
+  mainWindow.webContents.on('will-navigate', (event) => {
+    event.preventDefault()
   })
 
   console.log('[Boot] Knowbase main ready · net-v2 ·', app.getVersion())
@@ -121,8 +122,10 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('file://')) return { action: 'allow' }
-    shell.openExternal(url)
+    // 一律不在应用内开新窗口;网页链接转交系统浏览器,其余(file:// 等)直接拒绝
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url)
+    }
     return { action: 'deny' }
   })
 
@@ -180,10 +183,15 @@ function registerWindowHandlers(): void {
     return { ...settingsCache }
   })
   ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
+    // 键白名单 + 值类型校验:防止渲染层被注入后覆写任意配置(如 trashExportDir 指向系统目录)
+    if (typeof key !== 'string' || !(key in SETTINGS)) return false
+    const expected = typeof (SETTINGS as unknown as Record<string, { default: unknown }>)[key].default
+    if (typeof value !== expected) return false
     settingsCache[key] = value
     // Debounce write to disk — coalesce rapid setSetting calls into one write
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(flushSettingsToDisk, 500)
+    return true
   })
 
   // 清空所有数据 + 恢复默认设置
@@ -195,7 +203,7 @@ function registerWindowHandlers(): void {
       const tables = [
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
-        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags',
+        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags', 'knowledge_manual_links',
         'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'moments_albums', 'attachments',
         'blog_templates',
         'toolbox_passwords', 'toolbox_weight_records', 'pomodoro_sessions',
@@ -259,6 +267,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:getPath', () => getDbPath())
   ipcMain.handle('app:getAttachmentsPath', () => getAttachmentsDir())
   // 复制图片到系统剪贴板（path 或 dataUrl），供粘贴到其他程序
+  // 剪贴板条件清空:仅当剪贴板内容仍为所复制的密码时才清空,不覆盖用户后续复制的内容
+  ipcMain.handle('clipboard:clearIfEqual', (_e, text: string) => {
+    try { if (typeof text === 'string' && text && clipboard.readText() === text) clipboard.writeText('') } catch { /* ignore */ }
+    return true
+  })
   ipcMain.handle('clipboard:copyImage', (_e, src: { path?: string; dataUrl?: string }) => {
     try {
       let img: Electron.NativeImage | null = null
@@ -278,8 +291,22 @@ app.whenReady().then(async () => {
       return false
     }
   })
-  ipcMain.handle('app:openExternal', async (_e, filePath: string) => {
-    await shell.openPath(filePath)
+  ipcMain.handle('app:openExternal', async (_e, target: string) => {
+    if (typeof target !== 'string' || !target) return
+    // 网页链接 → 系统浏览器(仅 http/https,拒绝 file:/自定义协议)
+    if (/^https?:\/\//i.test(target)) {
+      await shell.openExternal(target)
+      return
+    }
+    // 本地路径 → 仅允许打开应用数据目录内的文件(附件等);UNC/任意盘符路径一律拒绝
+    const resolved = resolve(target)
+    const userDataRoot = resolve(app.getPath('userData'))
+    const rootWithSep = userDataRoot.endsWith(sep) ? userDataRoot : userDataRoot + sep
+    if (resolved.startsWith(rootWithSep) && existsSync(resolved)) {
+      await shell.openPath(resolved)
+    } else {
+      console.warn('[Security] 拒绝打开数据目录外的路径:', target)
+    }
   })
   await initDatabase()
   registerWindowHandlers()

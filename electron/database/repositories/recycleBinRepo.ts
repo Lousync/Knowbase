@@ -6,13 +6,17 @@ import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
 import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
+import { encryptExistingPasswords } from './passwordRepo'
 
 function getSettingsRetentionDays(): number {
   try {
     const path = join(app.getPath('userData'), 'settings.json')
     if (!existsSync(path)) return 30
     const s = JSON.parse(readFileSync(path, 'utf-8'))
-    return typeof s.recycleBinRetentionDays === 'number' ? s.recycleBinRetentionDays : 30
+    const raw = typeof s.recycleBinRetentionDays === 'number' ? s.recycleBinRetentionDays : 30
+    // NaN/非法值兜底并夹取到合理区间,避免拼出 "-NaN days" 非法 SQL 修饰符
+    if (!Number.isFinite(raw)) return 30
+    return Math.min(3650, Math.max(1, Math.round(raw)))
   } catch { return 30 }
 }
 
@@ -96,28 +100,42 @@ export function registerRecycleBinHandlers(): void {
       'SELECT * FROM recycle_bin ORDER BY deleted_at DESC'
     )
 
-    return rows.map(r => ({
-      id: r.id,
-      originalId: r.original_id,
-      module: r.module,
-      title: r.title,
-      data: JSON.parse(r.data),
-      deletedAt: r.deleted_at
-    }))
+    // 逐条容错:单条快照损坏只跳过该条,不拖垮整个回收站列表
+    const items: unknown[] = []
+    for (const r of rows) {
+      try {
+        items.push({
+          id: r.id,
+          originalId: r.original_id,
+          module: r.module,
+          title: r.title,
+          data: JSON.parse(r.data),
+          deletedAt: r.deleted_at
+        })
+      } catch { /* 跳过损坏条目 */ }
+    }
+    return items
   })
 
   // ---- 恢复回收站项目 ----
-  ipcMain.handle('recycleBin:restoreItem', (_e, id: string) => {
+  ipcMain.handle('recycleBin:restoreItem', (_e, id: string): { success: boolean; message?: string } | undefined => {
     const rows = queryAll<RecycleBinRow>(
       'SELECT * FROM recycle_bin WHERE id = ?', [id]
     )
     if (rows.length === 0) return
 
     const item = rows[0]
-    const record = JSON.parse(item.data)
+    let record: any
+    try { record = JSON.parse(item.data) } catch {
+      return { success: false, message: '该条目数据已损坏,无法恢复(可直接删除)' }
+    }
 
     if (item.module === 'blog') {
-      // 恢复博文
+      // 恢复博文 — 同日期去重:已有该日期日志时不恢复(避免造出重复日期条目)
+      const dup = queryAll<{ id: string }>('SELECT id FROM entries WHERE date = ?', [record.date])
+      if (dup.length > 0) {
+        return { success: false, message: `恢复失败:${record.date} 已存在日志,请先处理该日的现有日志` }
+      }
       run(
         `INSERT INTO entries (id, title, content_md, content_html, date, created_at, updated_at, is_pinned, word_count)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -138,13 +156,16 @@ export function registerRecycleBinHandlers(): void {
         }
       }
     } else if (item.module === 'knowledge') {
-      // 恢复知识页面
+      // 恢复知识页面 — 分类可能已被单独删除:失效时置 NULL(落入未分类),避免外键失败卡死条目
+      const catOk = record.categoryId
+        ? queryAll<{ id: string }>('SELECT id FROM knowledge_categories WHERE id = ?', [record.categoryId]).length > 0
+        : false
       run(
         `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           record.id, record.title, record.contentMd, record.contentHtml || '',
-          record.categoryId || null, record.isStarred ? 1 : 0,
+          catOk ? record.categoryId : null, record.isStarred ? 1 : 0,
           record.sortOrder || 0, record.fileType || '', record.createdAt, record.updatedAt
         ]
       )
@@ -181,11 +202,13 @@ export function registerRecycleBinHandlers(): void {
           )
           // Restore pages under this child
           for (const p of (ch.pages || [])) {
-            run(
-              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [p.id, p.title, p.contentMd, p.contentHtml || '', c.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
-            )
+            try {
+              run(
+                `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [p.id, p.title, p.contentMd, p.contentHtml || '', c.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
+              )
+            } catch { /* 页面已存在(可能被单独恢复过),跳过 */ }
             for (const tag of (p.tags || [])) {
               try {
                 run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id])
@@ -199,11 +222,13 @@ export function registerRecycleBinHandlers(): void {
 
       // Restore direct pages
       for (const p of (record.pages || [])) {
-        run(
-          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [p.id, p.title, p.contentMd, p.contentHtml || '', cat.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
-        )
+        try {
+          run(
+            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [p.id, p.title, p.contentMd, p.contentHtml || '', cat.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
+          )
+        } catch { /* 页面已存在(可能被单独恢复过),跳过 */ }
         for (const tag of (p.tags || [])) {
           try {
             run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id])
@@ -211,7 +236,7 @@ export function registerRecycleBinHandlers(): void {
         }
       }
     } else if (item.module === 'passwordVault') {
-      // 恢复密码条目
+      // 恢复密码条目(新快照中密码为密文,直接插回;旧明文快照插入后由加密清理统一处理)
       const maxRow = queryAll<{ m: number }>(
         'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_passwords'
       )
@@ -224,21 +249,27 @@ export function registerRecycleBinHandlers(): void {
           (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
         ]
       )
+      encryptExistingPasswords()
     } else if (item.module === 'moments') {
       const images = Array.isArray(record.imageDataUrls)
         ? record.imageDataUrls
         : (record.imageDataUrl ? [record.imageDataUrl] : [])
       const tags = Array.isArray(record.tags) ? record.tags.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0) : []
       const attachmentIds = Array.isArray(record.attachmentIds) ? record.attachmentIds : []
-      if (attachmentIds.length > 0) restoreAttachments(attachmentIds)
+      // 相册可能已删除:置空避免外键失败
+      const albumOk = record.albumId
+        ? queryAll<{ id: string }>('SELECT id FROM moments_albums WHERE id = ?', [record.albumId]).length > 0
+        : false
+      // 先插记录、后恢复附件文件:插入失败时文件不被挪动,不留半状态
       run(
         `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          record.id, record.contentMd || '', record.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), record.albumId || '', record.isPinned ? 1 : 0,
+          record.id, record.contentMd || '', record.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), albumOk ? record.albumId : '', record.isPinned ? 1 : 0,
           record.createdAt, record.updatedAt
         ]
       )
+      if (attachmentIds.length > 0) restoreAttachments(attachmentIds)
     }
 
     // 从回收站移除

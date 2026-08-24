@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Trash2, X, TrendingDown, RotateCcw, ChevronDown, Chevr
 import type { WeightRecord } from '../../../types'
 import { getWeightRecords, getWeightSeries, createWeightRecord, updateWeightRecord, deleteWeightRecord } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
+import { localToday } from '../../../lib/date'
 
 interface Props { onBack: () => void }
 
@@ -28,7 +29,7 @@ export function WeightTracker({ onBack }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [formWeight, setFormWeight] = useState('')
-  const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10))
+  const [formDate, setFormDate] = useState(localToday())
   const [formSeries, setFormSeries] = useState('default')
   const [formNewSeries, setFormNewSeries] = useState('')
   const [formNote, setFormNote] = useState('')
@@ -178,7 +179,7 @@ export function WeightTracker({ onBack }: Props) {
   const handleEdit = (r: WeightRecord) => { setEditId(r.id); setFormWeight(String(r.weight)); setFormDate(r.date); setFormSeries(r.series); setFormNewSeries(''); setFormNote(r.note); setShowForm(true) }
   const handleDelete = async (id: string) => { setDeleteId(null); setSelectedPt(null); try { await deleteWeightRecord(id); loadData() } catch (e) { console.error(e) } }
   const displayWeight = (kg: number) => unit === 'kg' ? kg.toFixed(1) + ' kg' : (kg * 2).toFixed(1) + ' 斤'
-  const today = (() => { const d = new Date(); d.setHours(8, 0, 0, 0); return d.toISOString().slice(0, 10) })()
+  const today = localToday()
 
   // Records grouped by series for list
   const groupedRecords = useMemo(() => {

@@ -3,6 +3,7 @@ import { join, basename } from 'path'
 import { mkdirSync, writeFileSync, copyFileSync, existsSync, unlinkSync, renameSync, readFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
+import { safePathInside } from '../../lib/pathGuard'
 
 interface AttachmentRow {
   id: string
@@ -89,14 +90,12 @@ export function parseInlineAttachmentIds(md: string): string[] {
   return ids
 }
 
-/** 供 attachment:// 协议解析真实文件路径 */
+/** 供 attachment:// 协议解析真实文件路径（路径防护:历史脏数据/恶意注入的 file_path 不会越出附件目录） */
 export function getAttachmentFilePath(id: string, thumb = false): string | null {
   const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
   if (!row) return null
-  const p = thumb && row.thumb_path
-    ? join(getAttachmentsDir(), row.thumb_path)
-    : join(getAttachmentsDir(), row.file_path)
-  return existsSync(p) ? p : null
+  const p = safePathInside(getAttachmentsDir(), thumb && row.thumb_path ? row.thumb_path : row.file_path)
+  return p && existsSync(p) ? p : null
 }
 
 /** 一次查询多个附件的元数据（供说说列表批量组装） */
@@ -125,7 +124,8 @@ export function trashAttachments(ids: string[], binId: string): void {
     if (!id) continue
     const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
     if (!row || row.trashed) continue
-    const src = join(getAttachmentsDir(), row.file_path)
+    const src = safePathInside(getAttachmentsDir(), row.file_path)
+    if (!src) continue
     const dest = join(trashRoot, basename(row.file_path))
     try {
       if (existsSync(src)) renameSync(src, dest)
@@ -134,9 +134,9 @@ export function trashAttachments(ids: string[], binId: string): void {
     }
     let relThumb = ''
     if (row.thumb_path) {
-      const tsrc = join(getAttachmentsDir(), row.thumb_path)
+      const tsrc = safePathInside(getAttachmentsDir(), row.thumb_path)
       const tdest = join(trashRoot, basename(row.thumb_path))
-      try {
+      if (tsrc) try {
         if (existsSync(tsrc)) renameSync(tsrc, tdest)
       } catch {
         try { if (existsSync(tsrc)) { copyFileSync(tsrc, tdest); unlinkSync(tsrc) } } catch { /* keep */ }
@@ -153,8 +153,10 @@ export function restoreAttachments(ids: string[]): void {
     if (!id) continue
     const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
     if (!row || !row.trashed || !row.trash_path) continue
-    const src = join(app.getPath('userData'), row.trash_path)
-    const dest = join(getAttachmentsDir(), row.file_path)
+    // 路径防护:trash_path / file_path 均来自数据库,越出预期目录的脏数据直接跳过
+    const src = safePathInside(app.getPath('userData'), row.trash_path)
+    const dest = safePathInside(getAttachmentsDir(), row.file_path)
+    if (!src || !dest) continue
     try {
       if (existsSync(dest)) unlinkSync(dest)
       if (existsSync(src)) renameSync(src, dest)
@@ -173,10 +175,12 @@ export function deleteAttachments(ids: string[]): void {
     if (!row) continue
     for (const p of [row.file_path, row.thumb_path]) {
       if (!p) continue
-      try { if (existsSync(join(getAttachmentsDir(), p))) unlinkSync(join(getAttachmentsDir(), p)) } catch { /* ignore */ }
+      const full = safePathInside(getAttachmentsDir(), p)
+      try { if (full && existsSync(full)) unlinkSync(full) } catch { /* ignore */ }
     }
     if (row.trashed && row.trash_path) {
-      try { if (existsSync(join(app.getPath('userData'), row.trash_path))) unlinkSync(join(app.getPath('userData'), row.trash_path)) } catch { /* ignore */ }
+      const trashFull = safePathInside(app.getPath('userData'), row.trash_path)
+      try { if (trashFull && existsSync(trashFull)) unlinkSync(trashFull) } catch { /* ignore */ }
     }
     run('DELETE FROM attachments WHERE id = ?', [id])
   }
@@ -210,6 +214,8 @@ export function registerAttachmentHandlers(): void {
   }) => {
     const ownerType = data.ownerType || 'misc'
     const ownerId = data.ownerId || '_pending'
+    // 白名单校验:两者会拼进落盘路径,含路径分隔符/点号可越出附件目录
+    if (!/^[A-Za-z0-9_-]+$/.test(ownerType) || !/^[A-Za-z0-9_-]+$/.test(ownerId)) return []
     const now = new Date().toISOString()
     const out: ReturnType<typeof toMeta>[] = []
     for (const f of data.files || []) {
@@ -247,6 +253,8 @@ export function registerAttachmentHandlers(): void {
     if (!data.filePath || !existsSync(data.filePath)) return null
     const ownerType = data.ownerType || 'misc'
     const ownerId = data.ownerId || '_pending'
+    // 白名单校验:两者会拼进落盘路径(同 uploadMany)
+    if (!/^[A-Za-z0-9_-]+$/.test(ownerType) || !/^[A-Za-z0-9_-]+$/.test(ownerId)) return null
     const id = randomUUID()
     const name = basename(data.filePath)
     const ext = extFor(mimeFromPath(data.filePath), name)

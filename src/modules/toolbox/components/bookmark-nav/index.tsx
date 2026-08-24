@@ -9,6 +9,7 @@ import { showToast } from '../../../../lib/toast'
 import { buildJsonExport, buildHtmlExport, parseJsonImport, domainOf } from './io'
 import { CategorySidebar } from './components/CategorySidebar'
 import { BookmarkEditModal, CategoryEditModal } from './components/BookmarkModals'
+import { localToday } from '../../../../lib/date'
 
 interface Props { onBack: () => void }
 
@@ -95,7 +96,7 @@ export function BookmarkNav({ onBack }: Props) {
   }, [bookmarks, selected])
 
   // ---- 导出 ----
-  const dateTag = () => new Date().toISOString().slice(0, 10)
+  const dateTag = () => localToday()
 
   const handleExportJson = useCallback(async () => {
     setExportMenuOpen(false)

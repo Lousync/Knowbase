@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Entry, Tag } from '../../../types'
 import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star, List, Hash } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
-import { formatEntryDate } from '../../../lib/date'
+import { formatEntryDate, localToday } from '../../../lib/date'
 
 interface SidebarProps {
   entries: Entry[]
@@ -154,7 +154,7 @@ function computeSearchResults(
 }
 
 export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, onNewEntry, onShowAll, allTags }: SidebarProps) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localToday()
   const thisYear = new Date().getFullYear().toString()
   const thisMonth = (new Date().getMonth() + 1).toString().padStart(2, '0')
   const hasToday = entries.some(e => e.date === today)

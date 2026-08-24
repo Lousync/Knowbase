@@ -154,7 +154,8 @@ export function PasswordVault({ onBack }: Props) {
       else {
         setCopiedPass(true); setTimeout(() => setCopiedPass(false), 2000)
         if (clipboardTimer.current) clearTimeout(clipboardTimer.current)
-        clipboardTimer.current = setTimeout(() => navigator.clipboard.writeText('').catch(() => {}), 30000)
+        // 30 秒后仅当剪贴板仍是该密码时才清空(不覆盖用户后续复制的内容)
+        clipboardTimer.current = setTimeout(() => { window.api?.clearClipboardIfEqual(text) }, 30000)
       }
       const label = type === 'account' ? '账号已复制' : type === 'user' ? '用户名已复制' : '密码已复制（30秒后自动清除）'
       showToast({ type: 'info', message: label })
