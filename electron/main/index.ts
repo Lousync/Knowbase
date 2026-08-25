@@ -1,6 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu, net } from 'electron'
 import { join, basename, resolve, sep } from 'path'
-import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
@@ -25,7 +25,7 @@ import { registerBlogTemplateHandlers } from '../database/repositories/blogTempl
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 import { registerUpdateHandlers } from '../lib/updateService'
-import { registerPluginHandlers } from '../lib/pluginRegistry'
+import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -253,23 +253,27 @@ app.whenReady().then(async () => {
 
   // UI 插件页面协议:plugin://{id}/{file}
   // 安全:CSP 锁死网络(none),只允许插件自身源的内联资源;配合渲染层 iframe sandbox 使用
+  const pluginDebugLog = (line: string) => {
+    try { appendFileSync(join(app.getPath('userData'), 'plugin-debug.log'), new Date().toISOString().slice(11, 23) + ' ' + line + '\n') } catch { /* ignore */ }
+  }
   protocol.handle('plugin', async (request) => {
+    pluginDebugLog(`request: ${request.url}`)
     try {
       const url = new URL(request.url)
       const id = url.hostname
       const rel = decodeURIComponent(url.pathname).replace(/^\//, '')
       if (!id || !/^[a-z0-9][a-z0-9._-]*$/.test(id) || !rel) {
-        console.warn('[plugin://] 400 — url:', request.url, '| hostname:', JSON.stringify(id), '| rel:', JSON.stringify(rel))
+        pluginDebugLog(`400 校验失败 — hostname=${JSON.stringify(id)} rel=${JSON.stringify(rel)}`)
         return new Response('Bad Request', { status: 400 })
       }
       const dir = join(getPluginsRoot(), id)
       const resolved = resolve(dir, rel)
       if (!resolved.startsWith(dir.endsWith(sep) ? dir : dir + sep)) {
-        console.warn('[plugin://] 403 — url:', request.url, '| resolved:', resolved)
+        pluginDebugLog(`403 越界 — resolved=${resolved}`)
         return new Response('Forbidden', { status: 403 })
       }
       if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-        console.warn('[plugin://] 404 — url:', request.url, '| resolved:', resolved)
+        pluginDebugLog(`404 不存在 — resolved=${resolved}`)
         return new Response('Not Found', { status: 404 })
       }
       const ext = (resolved.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
@@ -287,6 +291,7 @@ app.whenReady().then(async () => {
         },
       })
     } catch (e) {
+      pluginDebugLog(`handler 异常: ${e}`)
       console.error('[plugin://] handler 异常:', request.url, e)
       return new Response('Bad Request', { status: 400 })
     }
@@ -379,7 +384,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
-  // 启动自测:验证 plugin:// 管线(仅内置插件存在时)
+  // 启动自测:验证 plugin:// 管线(仅内置插件存在时),结果写 userData/plugin-debug.log
   {
     const builtinDirDev = join(app.getAppPath(), 'resources', 'builtin-plugins')
     const builtinDir = app.isPackaged ? join(process.resourcesPath, 'builtin-plugins') : builtinDirDev
@@ -387,12 +392,26 @@ app.whenReady().then(async () => {
       if (existsSync(builtinDir)) {
         const first = readdirSync(builtinDir, { withFileTypes: true }).find(d => d.isDirectory())
         if (first) {
-          net.fetch(`plugin://${first.name}/index.html`)
-            .then(r => console.log(`[plugin://] 自测: ${first.name}/index.html → HTTP ${r.status}`))
-            .catch(e => console.error('[plugin://] 自测失败:', e))
+          // 注意:插件 id 以 manifest 为准,可能与目录名不同
+          let manifestId = first.name
+          try {
+            const mf = JSON.parse(readFileSync(join(builtinDir, first.name, 'plugin.json'), 'utf-8'))
+            if (typeof mf.id === 'string' && mf.id) manifestId = mf.id
+          } catch { /* 用目录名兜底 */ }
+          const testUrl = `plugin://${manifestId}/index.html`
+          pluginDebugLog(`自测开始: ${testUrl}`)
+          net.fetch(testUrl)
+            .then(async r => {
+              const body = r.ok ? await r.text() : ''
+              pluginDebugLog(`自测结果: HTTP ${r.status}${r.ok ? `, body ${body.length} bytes, head=${JSON.stringify(body.slice(0, 50))}` : ''}`)
+              console.log(`[plugin://] 自测: ${manifestId}/index.html → HTTP ${r.status}`)
+            })
+            .catch(e => { pluginDebugLog(`自测失败: ${e}`); console.error('[plugin://] 自测失败:', e) })
         }
+      } else {
+        pluginDebugLog(`自测跳过: builtin 目录不存在 ${builtinDir}`)
       }
-    } catch { /* ignore */ }
+    } catch (e) { pluginDebugLog(`自测初始化异常: ${e}`) }
   }
 
   createWindow()
@@ -433,3 +452,7 @@ app.on('before-quit', () => {
 app.on('web-contents-created', (_e, contents) => {
   contents.on('will-attach-webview', (_ev, _wp, _params) => _ev.preventDefault())
 })
+
+// dev-watch tick 180146
+
+// dev-watch tick 180459
