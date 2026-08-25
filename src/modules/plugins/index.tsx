@@ -9,6 +9,7 @@ import {
   pluginListInstalled, pluginSetEnabled, pluginUninstall, pluginGetContribution,
   pluginSetGranted, pluginAuditList, pluginAuditClear, pluginAuditWrite,
   createHabit, createBookmarkCategory, createBookmarkItem, bookmarkGetAll,
+  knowledgePackGetState, knowledgePackImport, onKnowledgePackProgress,
 } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { showToast } from '../../lib/toast'
@@ -29,6 +30,7 @@ const CONTRIBUTION_LABELS: Record<string, string> = {
   helpDocs: '帮助文档',
   tools: '工具卡片',
   automationRule: '自动化规则',
+  knowledgePages: '知识内容',
 }
 
 const CONTRIBUTION_HINTS: Record<string, string> = {
@@ -40,6 +42,7 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
   helpDocs: '帮助模块侧栏「插件」分类中可见',
   tools: '工具箱「插件工具」区可见',
   automationRule: '自动化规则(Tier1 预留)',
+  knowledgePages: '导入到知识库(创建空间/笔记本/章节/页面)',
 }
 
 const CAPABILITY_LABELS: Record<string, string> = {
@@ -56,6 +59,7 @@ const DATA_TARGETS: Record<string, string> = {
   habitPresets: '习惯打卡(写入习惯与预设)',
   bookmarkPresets: '网址导航(写入分类与书签)',
   automationRule: '自动化(写入规则配置)',
+  knowledgePages: '知识库(创建空间与页面,可随更新维护)',
 }
 
 const LEVEL_META: Record<PluginRiskLevel, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
@@ -114,6 +118,13 @@ export function PluginsModule() {
   const [consent, setConsent] = useState<ConsentState | null>(null)
   const [auditRows, setAuditRows] = useState<PluginAuditEntry[]>([])
 
+  // 内容型插件(knowledgePages)导入状态
+  const [kpState, setKpState] = useState<{ state: string; chapters?: number; totalPages?: number; newPages?: number; changedPages?: number; lastImportedAt?: string } | null>(null)
+  const [kpNotebook, setKpNotebook] = useState('')
+  const [kpBusy, setKpBusy] = useState(false)
+  const [kpProgress, setKpProgress] = useState<{ current: number; total: number; title: string } | null>(null)
+  const [kpConfirm, setKpConfirm] = useState<{ overwrite: boolean } | null>(null)
+
   const refreshInstalled = useCallback(async () => {
     try { setInstalled(await pluginListInstalled()) } catch { /* 忽略 */ }
   }, [])
@@ -136,6 +147,23 @@ export function PluginsModule() {
       pluginAuditList(selected.plugin.id).then(setAuditRows).catch(() => setAuditRows([]))
     } else setAuditRows([])
   }, [selected])
+
+  // 内容型插件:加载导入状态
+  useEffect(() => {
+    if (selected?.kind === 'installed' && selected.plugin.contributions.includes('knowledgePages') && !selected.plugin.broken) {
+      knowledgePackGetState(selected.plugin.id).then(r => setKpState(r.ok ? { state: r.state!, chapters: r.chapters, totalPages: r.totalPages, newPages: r.newPages, changedPages: r.changedPages, lastImportedAt: r.lastImportedAt } : null)).catch(() => setKpState(null))
+      pluginGetContribution(selected.plugin.id, 'knowledgePages').then(r => {
+        const nb = (r.data as { notebook?: unknown } | undefined)?.notebook
+        setKpNotebook(typeof nb === 'string' ? nb : '')
+      }).catch(() => setKpNotebook(''))
+    } else { setKpState(null); setKpNotebook('') }
+  }, [selected])
+
+  useEffect(() => onKnowledgePackProgress(p => {
+    if (selected?.kind === 'installed' && selected.plugin.id === p.pluginId) {
+      setKpProgress({ current: p.current, total: p.total, title: p.title })
+    }
+  }), [selected])
 
   const allowedLevels: PluginRiskLevel[] = (s.pluginAllowedLevels || 'S,A,B')
     .split(',').map(x => x.trim().toUpperCase()).filter((x): x is PluginRiskLevel => ['S', 'A', 'B'].includes(x))
@@ -307,6 +335,21 @@ export function PluginsModule() {
       showToast({ type: 'success', message: `已导入 ${catOk} 个分类、${bmOk} 个书签${skipped > 0 ? `,跳过重复 ${skipped} 个` : ''}` })
       markImported(p.id, 'bookmarkPresets')
     } else showToast({ type: 'error', message: '没有可导入的书签' })
+  }
+
+  const doImportPack = async (overwrite: boolean) => {
+    if (selected?.kind !== 'installed') return
+    const p = selected.plugin
+    setKpBusy(true); setKpConfirm(null); setKpProgress({ current: 0, total: kpState?.totalPages || 0, title: '' })
+    const r = await knowledgePackImport(p.id, overwrite)
+    setKpBusy(false); setKpProgress(null)
+    if (r.ok) {
+      showToast({ type: 'success', message: `导入完成:新建 ${r.created || 0} 页,更新 ${r.updated || 0} 页${r.skipped ? `,跳过 ${r.skipped}` : ''}` })
+      knowledgePackGetState(p.id).then(s => setKpState(s.ok ? { state: s.state!, chapters: s.chapters, totalPages: s.totalPages, newPages: s.newPages, changedPages: s.changedPages, lastImportedAt: s.lastImportedAt } : null)).catch(() => {})
+      pluginAuditList(p.id).then(setAuditRows).catch(() => {})
+    } else {
+      showToast({ type: 'error', message: r.message || '导入失败' })
+    }
   }
 
   // ---------- 派生与筛选 ----------
@@ -604,9 +647,61 @@ export function PluginsModule() {
               <div className="text-[12px] text-[var(--text-muted)]">无法读取</div>
             ) : p.contributions.length === 0 ? (
               <div className="text-[12px] text-[var(--text-muted)]">无</div>
-            ) : p.contributions.map(key => {
+            ) :             p.contributions.map(key => {
               const imported = importedKeys.has(`${p.id}:${key}`)
               const importable = key === 'habitPresets' || key === 'bookmarkPresets'
+              // 内容型插件:专属导入 UI(状态/进度/确认)
+              if (key === 'knowledgePages') {
+                const st = kpState?.state
+                return (
+                  <div key={key} className="p-3 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 size={14} className="text-[var(--accent)] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium text-[var(--text-primary)]">
+                          知识内容{kpState ? ` · ${kpState.chapters || 0} 章 · ${kpState.totalPages || 0} 页` : ''}
+                        </div>
+                        <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                          {kpBusy && kpProgress
+                            ? `正在导入 ${kpProgress.current}/${kpProgress.total}${kpProgress.title ? `:${kpProgress.title}` : ''}`
+                            : st === 'not-imported' ? '未导入,导入后成为知识库中的完整笔记本'
+                            : st === 'update-available' ? `有可用更新(新增 ${kpState?.newPages || 0} 页,变化 ${kpState?.changedPages || 0} 页)`
+                            : st === 'imported' ? `已导入${kpState?.lastImportedAt ? ` · ${kpState.lastImportedAt}` : ''}`
+                            : CONTRIBUTION_HINTS[key] || ''}
+                        </div>
+                      </div>
+                      {kpBusy ? (
+                        <Loader2 size={14} className="animate-spin text-[var(--accent)] shrink-0" />
+                      ) : (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {st !== 'not-imported' && (
+                            <button
+                              onClick={() => window.dispatchEvent(new CustomEvent('knowledge:open'))}
+                              className="px-2.5 py-1.5 text-[11px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+                              title="打开知识库模块"
+                            >
+                              去知识库查看
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setKpConfirm({ overwrite: false })}
+                            className="px-3 py-1.5 text-[11px] font-medium text-white bg-[var(--accent)] rounded hover:bg-[var(--accent-hover)] transition-colors"
+                          >
+                            {st === 'not-imported' ? '导入到知识库' : st === 'update-available' ? '检查更新' : '重新导入'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {kpBusy && kpProgress && kpProgress.total > 0 && (
+                      <div className="mt-2">
+                        <div className="h-1.5 bg-[var(--bg-tertiary)] rounded overflow-hidden">
+                          <div className="h-full bg-[var(--accent)] transition-all" style={{ width: `${Math.round((kpProgress.current / kpProgress.total) * 100)}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              }
               return (
                 <div key={key} className="flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
                   <CheckCircle2 size={14} className="text-[var(--accent)] shrink-0" />
@@ -838,6 +933,54 @@ export function PluginsModule() {
       </div>
 
       {renderConsent()}
+
+      {/* 内容型插件导入确认(A 级知情授权) */}
+      {kpConfirm && selected?.kind === 'installed' && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55" onMouseDown={e => { if (e.target === e.currentTarget) setKpConfirm(null) }}>
+          <div className="w-[440px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldAlert size={15} className="text-[var(--warning)]" />
+                <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">
+                  {kpState?.state === 'not-imported' ? '导入到知识库' : kpState?.state === 'update-available' ? '插件内容更新' : '重新导入'}
+                </h3>
+              </div>
+              <p className="text-[12px] text-[var(--text-muted)]">来源:{selected.plugin.id} v{selected.plugin.version} · 安全等级 <LevelBadge level={selected.plugin.riskLevel} /></p>
+            </div>
+            <div className="px-5 py-4 space-y-2 text-[12px] text-[var(--text-secondary)] leading-relaxed">
+              <p>
+                将在知识库中创建空间《<span className="text-[var(--text-primary)] font-medium">{kpNotebook || selected.plugin.name}</span>》
+                (含 {kpState?.chapters || 0} 章 · {kpState?.totalPages || 0} 页),并可随插件更新维护这些页面。
+              </p>
+              {kpState?.state === 'update-available' && (
+                <>
+                  <p>检测到内容变化:新增 {kpState.newPages || 0} 页,内容变化 {kpState.changedPages || 0} 页。</p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={kpConfirm.overwrite}
+                      onChange={e => setKpConfirm({ overwrite: e.target.checked })}
+                      className="accent-[var(--accent)]"
+                    />
+                    强制覆盖我本地已修改的页面(默认跳过)
+                  </label>
+                </>
+              )}
+              <p className="text-[11px] text-[var(--text-muted)]">导入全程单事务执行,失败自动回滚;卸载插件后已导入的页面保留。</p>
+            </div>
+            <div className="px-5 py-3 border-t border-[var(--border-color)] flex justify-end gap-2">
+              <button onClick={() => setKpConfirm(null)} className="px-3.5 py-2 text-[12px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors">取消</button>
+              <button
+                onClick={() => doImportPack(kpConfirm.overwrite)}
+                disabled={kpBusy}
+                className="px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
+              >
+                {kpBusy ? <Loader2 size={12} className="animate-spin" /> : '确认导入'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

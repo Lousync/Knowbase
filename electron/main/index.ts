@@ -207,7 +207,7 @@ function registerWindowHandlers(): void {
       const tables = [
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
-        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags', 'knowledge_manual_links',
+        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags', 'knowledge_manual_links', 'knowledge_pack_imports',
         'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'moments_albums', 'attachments',
         'blog_templates',
         'toolbox_passwords', 'toolbox_weight_records', 'pomodoro_sessions',

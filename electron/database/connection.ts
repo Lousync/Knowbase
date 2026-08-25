@@ -831,6 +831,24 @@ export function runMigrations(): void {
     db.run("INSERT INTO _migrations (name) VALUES ('044_plugin_audit_log')")
   }
 
+  if (!applied.has('045_knowledge_pack_imports')) {
+    // 内容型插件(knowledgePages)导入映射:external_id 幂等键 + 内容哈希(更新检测)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS knowledge_pack_imports (
+        plugin_id    TEXT NOT NULL,
+        external_id  TEXT NOT NULL,
+        page_id      TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        pack_version TEXT NOT NULL DEFAULT '',
+        space_id     TEXT,
+        imported_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        PRIMARY KEY (plugin_id, external_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_kp_imports_plugin ON knowledge_pack_imports(plugin_id);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('045_knowledge_pack_imports')")
+  }
+
   db.run('COMMIT')
   } catch (err) {
     try { db.run('ROLLBACK') } catch { /* ignore */ }

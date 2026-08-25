@@ -6,6 +6,7 @@ import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { getDatabase, saveToDisk } from '../database/connection'
+import { getPackState, importPack } from './knowledgePackImporter'
 
 /**
  * 插件注册表与安装管理。
@@ -31,12 +32,12 @@ const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
 // 贡献类型白名单(automationRule 为 Tier1 数据级预留)
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'automationRule']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'automationRule', 'knowledgePages']
 // 安全分级:S=内容级(纯静态) / A=数据级(写库) / B=能力级(UI 沙箱+桥)
 export type RiskLevel = 'S' | 'A' | 'B'
 const LEVEL_RANK: Record<RiskLevel, number> = { S: 0, A: 1, B: 2 }
 // 数据级贡献键(命中即为 A 级)
-const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule']
+const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'knowledgePages']
 // 内容级贡献键(仅含这些为 S 级)
 const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets']
 // UI 插件能力白名单(一期发布值;data.* 预留语法本期不放行)
@@ -160,6 +161,29 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
     for (const key of Object.keys(raw.contributes)) {
       if (!KNOWN_CONTRIBUTIONS.includes(key)) return { error: `不支持的贡献类型: ${key}` }
       if (key === 'tools' && raw.type !== 'ui') return { error: 'tools 贡献仅 UI 插件(type: ui)可声明' }
+      if (key === 'knowledgePages') {
+        const kp = (raw.contributes as Record<string, unknown>).knowledgePages
+        if (!kp || typeof kp !== 'object' || Array.isArray(kp)) return { error: 'knowledgePages 必须是对象' }
+        const k = kp as Record<string, unknown>
+        if (typeof k.notebook !== 'string' || !k.notebook.trim() || k.notebook.length > 50) return { error: 'knowledgePages.notebook 缺失或过长' }
+        if (k.coverColor !== undefined && (typeof k.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(k.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
+        if (!Array.isArray(k.chapters) || k.chapters.length === 0 || k.chapters.length > 50) return { error: 'chapters 需为 1-50 个章节' }
+        let pageTotal = 0
+        for (const ch of k.chapters as Record<string, unknown>[]) {
+          if (!ch || typeof ch !== 'object') return { error: '章节条目非法' }
+          if (typeof ch.name !== 'string' || !ch.name.trim() || ch.name.length > 50) return { error: '章节 name 缺失或过长' }
+          if (!Array.isArray(ch.pages) || ch.pages.length === 0 || ch.pages.length > 500) return { error: `章节「${ch.name}」页面数需为 1-500` }
+          for (const pg of ch.pages as Record<string, unknown>[]) {
+            pageTotal++
+            if (pageTotal > 1500) return { error: '页面总数超出限制(最大 1500),请拆包' }
+            if (!pg || typeof pg !== 'object') return { error: '页面条目非法' }
+            if (typeof pg.file !== 'string' || !/^[\w][\w\-./ ]{0,150}\.md$/i.test(pg.file) || String(pg.file).includes('..')) return { error: `页面 file 路径非法: ${String(pg.file)}` }
+            if (typeof pg.title !== 'string' || !pg.title.trim() || pg.title.length > 100) return { error: '页面 title 缺失或过长' }
+            if (typeof pg.externalId !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(pg.externalId)) return { error: '页面 externalId 缺失或非法' }
+            if (pg.tags !== undefined && (!Array.isArray(pg.tags) || pg.tags.length > 10 || pg.tags.some((t: unknown) => typeof t !== 'string' || String(t).length > 20))) return { error: '页面 tags 非法(最多 10 个、每个 20 字符)' }
+          }
+        }
+      }
       if (key === 'tools') {
         const tools = (raw.contributes as Record<string, unknown>).tools
         if (!Array.isArray(tools) || tools.length === 0 || tools.length > 10) return { error: 'tools 必须是非空数组(最多 10 个)' }
@@ -219,7 +243,7 @@ function getAllowedLevels(): Set<string> {
 }
 
 /** 行为审计 */
-function auditWrite(pluginId: string, action: string, detail: unknown): void {
+export function auditWrite(pluginId: string, action: string, detail: unknown): void {
   try {
     getDatabase().run(
       'INSERT INTO plugin_audit_log (id, plugin_id, action, detail) VALUES (?, ?, ?, ?)',
@@ -300,8 +324,9 @@ async function fetchRegistryRaw(): Promise<any> {
 // ---------- 安装 ----------
 
 function installFromBuffer(buf: Buffer, grantedCapabilities?: string[]): { success: true; manifest: PluginManifest; riskLevel: RiskLevel; isUpdate: boolean } | { success: false; message: string } {
-  if (buf.length === 0 || buf.length > MAX_PACKAGE_BYTES) {
-    return { success: false, message: `插件包大小超出限制(最大 ${Math.round(MAX_PACKAGE_BYTES / 1048576)}MB)` }
+  // 绝对上限(内容型插件放宽到 60MB,精确限额在 manifest 解析后判定)
+  if (buf.length === 0 || buf.length > 60 * 1024 * 1024) {
+    return { success: false, message: '插件包为空或超出 60MB 上限' }
   }
   let files: Map<string, Buffer>
   try { files = unzipBuffer(buf) } catch (e: any) { return { success: false, message: `插件包解压失败: ${e?.message || e}` } }
@@ -319,6 +344,14 @@ function installFromBuffer(buf: Buffer, grantedCapabilities?: string[]): { succe
   const parsed = readManifestFromBuffer(files.get(manifestEntry)!)
   if ('error' in parsed) return { success: false, message: parsed.error }
   const manifest = parsed.manifest
+
+  // 限额:内容型插件(knowledgePages)单独放宽(60MB / 1500 文件),其余沿用通用值
+  const isKnowledgePack = Boolean(manifest.contributes?.knowledgePages)
+  const maxBytes = isKnowledgePack ? 60 * 1024 * 1024 : MAX_PACKAGE_BYTES
+  const maxFiles = isKnowledgePack ? 1500 : MAX_FILE_COUNT
+  if (buf.length > maxBytes) {
+    return { success: false, message: `插件包大小超出限制(最大 ${Math.round(maxBytes / 1048576)}MB)` }
+  }
 
   // 安全分级:主进程强算 + 自报取高(防骗标)
   const riskLevel = effectiveRiskLevel(manifest)
@@ -355,9 +388,9 @@ function installFromBuffer(buf: Buffer, grantedCapabilities?: string[]): { succe
     if (!rel) continue
     const dest = safePathInside(pluginDir, rel)
     if (!dest) return { success: false, message: `插件包含非法路径条目: ${rel}(已中止安装)` }
-    if (data.length > MAX_PACKAGE_BYTES) return { success: false, message: '插件包含超大文件,已中止安装' }
+    if (data.length > maxBytes) return { success: false, message: '插件包含超大文件,已中止安装' }
     fileCount++
-    if (fileCount > MAX_FILE_COUNT) return { success: false, message: `插件文件数超出限制(最大 ${MAX_FILE_COUNT})` }
+    if (fileCount > maxFiles) return { success: false, message: `插件文件数超出限制(最大 ${maxFiles})` }
     mkdirSync(resolve(dest, '..'), { recursive: true })
     writeFileSync(dest, data)
   }
@@ -550,6 +583,13 @@ export function registerPluginHandlers(): void {
     delete idx[id]
     writeIndex(idx)
     return { success: true }
+  })
+
+  // 内容型插件(knowledgePages):导入状态与执行
+  ipcMain.handle('knowledgePack:getImportState', (_e, pluginId: string) => getPackState(pluginId))
+  ipcMain.handle('knowledgePack:importPack', (_e, pluginId: string, overwriteModified: boolean) => {
+    const r = importPack(pluginId, Boolean(overwriteModified))
+    return r
   })
 
   // 内置插件落位:随应用分发的官方插件,首次运行(或目录缺失)时复制到插件目录
