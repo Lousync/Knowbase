@@ -25,6 +25,7 @@ import { registerBlogTemplateHandlers } from '../database/repositories/blogTempl
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 import { registerUpdateHandlers } from '../lib/updateService'
+import { registerPluginHandlers } from '../lib/pluginRegistry'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -331,6 +332,7 @@ app.whenReady().then(async () => {
   registerSummaryHandlers()
   registerBlogTemplateHandlers()
   registerUpdateHandlers()
+  registerPluginHandlers()
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
 

@@ -280,6 +280,32 @@ export interface ExportFileResult { filePath: string; size: number }
 export interface ExportMarkdownProgress { current: number; total: number; currentFile: string; phase: string }
 export interface ExportMarkdownResult { fileCount: number; totalSize: number; files: { relPath: string; size: number }[] }
 
+export interface PluginRegistryEntry {
+  id: string
+  name: string
+  version: string
+  description?: string
+  author?: string
+  downloadUrl: string
+  size?: number
+  checksum?: string
+  updatedAt?: string
+}
+
+export interface PluginSummary {
+  id: string
+  name: string
+  version: string
+  engineVersion?: string
+  author?: string
+  description?: string
+  type: string
+  enabled: boolean
+  installedAt: string
+  contributions: string[]
+  broken?: boolean
+}
+
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
   copyImage: (src: { path?: string; dataUrl?: string }) => Promise<boolean>
@@ -355,6 +381,13 @@ export interface ElectronAPI {
   downloadUpdate: (url: string, name: string) => Promise<{ success: boolean; filePath?: string; message?: string }>
   installUpdate: (filePath: string) => Promise<{ success: boolean; message?: string }>
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => () => void
+  pluginFetchRegistry: () => Promise<{ ok: boolean; plugins: PluginRegistryEntry[]; updatedAt?: string; message?: string }>
+  pluginInstall: (url: string) => Promise<{ success: boolean; message?: string }>
+  pluginInstallFromFile: () => Promise<{ success: boolean; message?: string }>
+  pluginListInstalled: () => Promise<PluginSummary[]>
+  pluginSetEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; message?: string }>
+  pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
+  pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
   getAttachmentsPath: () => Promise<string>
   showImportDataDialog: () => Promise<string[]>
   readImportFile: (filePath: string) => Promise<string | null>

@@ -96,6 +96,13 @@ const api = {
     ipcRenderer.on('update:download-progress', handler)
     return () => { ipcRenderer.removeListener('update:download-progress', handler) }
   },
+  pluginFetchRegistry: () => ipcRenderer.invoke('plugin:fetchRegistry'),
+  pluginInstall: (url: string) => ipcRenderer.invoke('plugin:install', url),
+  pluginInstallFromFile: () => ipcRenderer.invoke('plugin:installFromFile'),
+  pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),
+  pluginSetEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('plugin:setEnabled', id, enabled),
+  pluginUninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
+  pluginGetContribution: (id: string, key: string) => ipcRenderer.invoke('plugin:getContribution', id, key),
   showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
   executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),

@@ -33,6 +33,11 @@ function normalizeVersion(v: string): number[] {
   return cleaned.split('.').map(n => parseInt(n, 10) || 0)
 }
 
+/** semver 比较:latest 是否比 current 新(供插件更新检查复用) */
+export function isNewerVersion(latest: string, current: string): boolean {
+  return isNewer(latest, current)
+}
+
 function isNewer(latest: string, current: string): boolean {
   const a = normalizeVersion(latest)
   const b = normalizeVersion(current)
