@@ -65,14 +65,17 @@ export default function App() {
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   // 插件主题:先确保 <style> 已注入,再应用主题类(插件主题依赖运行时注入的 CSS 变量)
+  // 历史值归一化:旧版可能存了带 "." 的插件主题 id(点号会破坏 CSS 类选择器)
   useEffect(() => {
-    const theme = s.theme
+    const raw = s.theme
+    const theme = raw.replace(/[^a-zA-Z0-9_-]/g, '-')
+    if (theme !== raw) update('theme', theme)
     if (theme.startsWith('plugin-')) {
       import('./lib/pluginService').then(m => m.ensurePluginThemeStyles()).then(() => applyThemeClass(theme)).catch(() => applyThemeClass(theme))
     } else {
       applyThemeClass(theme)
     }
-  }, [s.theme, settingsReady])
+  }, [s.theme, settingsReady, update])
 
   // Apply persisted settings on first render — 必须等真实设置加载完成,否则会用默认值覆盖一次
   useEffect(() => {

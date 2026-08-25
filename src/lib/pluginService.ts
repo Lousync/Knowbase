@@ -67,7 +67,8 @@ export async function ensurePluginThemeStyles(): Promise<PluginThemeWithVars[]> 
     const d = item.data as { name?: unknown; colors?: unknown }
     const vars = sanitizeVars(d?.colors)
     if (typeof d?.name !== 'string' || !d.name.trim() || vars.length === 0) continue
-    const themeId = `plugin-${item.pluginId}`
+    // CSS 类名消毒:插件 id 可能含 "."(如 sample.study-pack),点在类选择器里是分隔符,必须替换
+    const themeId = `plugin-${item.pluginId.replace(/[^a-zA-Z0-9_-]/g, '-')}`
     themes.push({ id: themeId, name: d.name.trim(), pluginName: item.pluginName, colors: d.colors as Record<string, string> })
     rules.push(`html.theme-${themeId} {\n${vars.join('\n')}\n}`)
   }
