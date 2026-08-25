@@ -2,15 +2,9 @@ import { useEffect } from 'react'
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react'
 import { usePomodoro } from '../hooks/PomodoroContext'
 
-const PRESETS = [
-  { label: '15 分钟', work: 15, break: 3 },
-  { label: '25 分钟', work: 25, break: 5 },
-  { label: '45 分钟', work: 45, break: 10 },
-]
-
 export function PomodoroPanel() {
   const pom = usePomodoro()
-  const { state: ps } = pom
+  const { state: ps, presets } = pom
 
   // Collapse when user switches tabs (so the new tab content isn't hidden behind this overlay)
   useEffect(() => {
@@ -40,8 +34,8 @@ export function PomodoroPanel() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center gap-6 pb-8">
         {/* Preset buttons */}
-        <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-md p-0.5">
-          {PRESETS.map((p, i) => (
+        <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-md p-0.5 flex-wrap max-w-[90%] justify-center">
+          {presets.map((p, i) => (
             <button
               key={p.label}
               onClick={() => pom.setPresetIdx(i)}

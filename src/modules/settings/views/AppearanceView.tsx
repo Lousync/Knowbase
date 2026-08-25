@@ -1,7 +1,9 @@
-import { Sun, Moon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Sun, Moon, Puzzle } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon } from '../../../components/shared/ModuleIcons'
+import { ensurePluginThemeStyles, type PluginThemeWithVars } from '../../../lib/pluginService'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={24} />,
@@ -14,6 +16,16 @@ const THEME_DESCS: Record<string, string> = {
 
 export function AppearanceView() {
   const { s, update } = useSettings()
+  const [pluginThemes, setPluginThemes] = useState<PluginThemeWithVars[]>([])
+
+  useEffect(() => {
+    ensurePluginThemeStyles().then(setPluginThemes).catch(() => {})
+  }, [])
+
+  const allThemes: { id: string; label: string; desc: string; icon: React.ReactNode }[] = [
+    ...THEME_OPTIONS.map(t => ({ id: t.id, label: t.label, desc: THEME_DESCS[t.id] || '', icon: THEME_ICONS[t.id] || <Sun size={24} /> })),
+    ...pluginThemes.map(t => ({ id: t.id, label: t.name, desc: `来自插件「${t.pluginName}」`, icon: <Puzzle size={24} /> })),
+  ]
 
   return (
     <div>
@@ -23,7 +35,7 @@ export function AppearanceView() {
       <div className="mb-8">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">主题</h3>
         <div className="grid grid-cols-2 gap-3 max-w-md">
-          {THEME_OPTIONS.map(t => (
+          {allThemes.map(t => (
             <button
               key={t.id}
               onClick={() => {
@@ -37,12 +49,12 @@ export function AppearanceView() {
               }`}
             >
               <span className={s.theme === t.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}>
-                {THEME_ICONS[t.id]}
+                {t.icon}
               </span>
               <span className={`text-[13px] font-medium ${s.theme === t.id ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
                 {t.label}
               </span>
-              <span className="text-[10px] text-[var(--text-muted)] text-center">{THEME_DESCS[t.id]}</span>
+              <span className="text-[10px] text-[var(--text-muted)] text-center">{t.desc}</span>
             </button>
           ))}
         </div>

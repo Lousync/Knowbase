@@ -100,6 +100,8 @@ export function PluginsModule() {
     if (r.success) {
       await refreshInstalled()
       setSelected(s => s?.kind === 'installed' ? { kind: 'installed', plugin: { ...s.plugin, enabled: !p.enabled } } : s)
+      // 主题类贡献随启禁刷新(禁用的插件主题立即从设置列表消失)
+      import('../../lib/pluginService').then(m => m.ensurePluginThemeStyles()).catch(() => {})
       showToast({ type: 'success', message: p.enabled ? '插件已禁用' : '插件已启用' })
     } else showToast({ type: 'error', message: r.message || '操作失败' })
   }
@@ -114,6 +116,7 @@ export function PluginsModule() {
       showToast({ type: 'success', message: '插件已卸载' })
       setSelected(null)
       await refreshInstalled()
+      import('../../lib/pluginService').then(m => m.ensurePluginThemeStyles()).catch(() => {})
     } else showToast({ type: 'error', message: r.message || '卸载失败' })
   }
 

@@ -55,6 +55,15 @@ export async function loadHelpDocs(): Promise<HelpDoc[]> {
     })
   }
 
+  // 插件贡献的帮助文档(虚拟合并,失败静默)
+  try {
+    const { getPluginHelpDocs } = await import('../../lib/pluginService')
+    const pluginDocs = await getPluginHelpDocs()
+    for (const d of pluginDocs) {
+      docs.push({ id: d.id, category: d.category, title: d.title, icon: d.icon, md: d.md })
+    }
+  } catch { /* 插件文档加载失败不影响内置文档 */ }
+
   // Sort by category then title
   docs.sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title))
   return docs
