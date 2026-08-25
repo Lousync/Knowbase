@@ -69,6 +69,17 @@ export function ToolboxModule() {
 
   useEffect(() => { refreshPluginTools() }, [refreshPluginTools])
 
+  // 插件模块安装/启禁/卸载后同步刷新;切换标签页时也兜底刷新一次
+  useEffect(() => {
+    const refresh = () => refreshPluginTools()
+    window.addEventListener('plugins-changed', refresh)
+    window.addEventListener('tab-switched', refresh)
+    return () => {
+      window.removeEventListener('plugins-changed', refresh)
+      window.removeEventListener('tab-switched', refresh)
+    }
+  }, [refreshPluginTools])
+
   const handleActivateTool = (toolId: string) => {
     if (toolId === 'pomodoro') {
       window.dispatchEvent(new CustomEvent('pomodoro:activate', { detail: { preset: 0 } }))

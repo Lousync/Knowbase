@@ -72,6 +72,7 @@ export function PluginsModule() {
     setBusy(false)
     if (r.success) {
       showToast({ type: 'success', message: `「${p.name}」安装成功` })
+      window.dispatchEvent(new CustomEvent('plugins-changed'))
       await refreshInstalled()
       const fresh = (await pluginListInstalled()).find(x => x.id === p.id)
       if (fresh) setSelected({ kind: 'installed', plugin: fresh })
@@ -86,6 +87,7 @@ export function PluginsModule() {
     setBusy(false)
     if (r.success) {
       showToast({ type: 'success', message: '插件安装成功' })
+      window.dispatchEvent(new CustomEvent('plugins-changed'))
       await refreshInstalled()
       setTab('installed')
     } else if (r.message && r.message !== '已取消') {
@@ -102,6 +104,7 @@ export function PluginsModule() {
       setSelected(s => s?.kind === 'installed' ? { kind: 'installed', plugin: { ...s.plugin, enabled: !p.enabled } } : s)
       // 主题类贡献随启禁刷新(禁用的插件主题立即从设置列表消失)
       import('../../lib/pluginService').then(m => m.ensurePluginThemeStyles()).catch(() => {})
+      window.dispatchEvent(new CustomEvent('plugins-changed'))
       showToast({ type: 'success', message: p.enabled ? '插件已禁用' : '插件已启用' })
     } else showToast({ type: 'error', message: r.message || '操作失败' })
   }
@@ -115,6 +118,7 @@ export function PluginsModule() {
     if (r.success) {
       showToast({ type: 'success', message: '插件已卸载' })
       setSelected(null)
+      window.dispatchEvent(new CustomEvent('plugins-changed'))
       await refreshInstalled()
       import('../../lib/pluginService').then(m => m.ensurePluginThemeStyles()).catch(() => {})
     } else showToast({ type: 'error', message: r.message || '卸载失败' })
