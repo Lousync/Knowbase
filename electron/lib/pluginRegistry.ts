@@ -13,8 +13,16 @@ import { isNewerVersion } from './updateService'
  * 安全边界:下载域名白名单 / Zip Slip 防护 / manifest 严格校验 / 体积与文件数上限。
  */
 
-const REGISTRY_URL = 'https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json'
-const TRUSTED_HOSTS = new Set(['github.com', 'objects.githubusercontent.com', 'raw.githubusercontent.com', 'codeload.github.com'])
+const REGISTRY_MIRRORS = [
+  'https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json',
+  'https://cdn.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
+  'https://fastly.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
+]
+// 下载镜像:raw 失败时自动改走 jsDelivr 的 GitHub 镜像(国内可达性好)
+const TRUSTED_HOSTS = new Set([
+  'github.com', 'objects.githubusercontent.com', 'raw.githubusercontent.com', 'codeload.github.com',
+  'cdn.jsdelivr.net', 'fastly.jsdelivr.net', 'gcore.jsdelivr.net',
+])
 const MAX_PACKAGE_BYTES = 20 * 1024 * 1024   // 单个插件包上限
 const MAX_FILE_COUNT = 500                    // 单插件文件数上限
 const MAX_MANIFEST_BYTES = 256 * 1024         // manifest 上限
@@ -131,14 +139,48 @@ function isTrustedUrl(url: string): boolean {
   } catch { return false }
 }
 
+/** 带超时的 fetch(15 秒,防单点挂起拖垮整个回退链) */
+async function fetchWithTimeout(url: string, headers: Record<string, string>): Promise<Response> {
+  return net.fetch(url, { headers, signal: AbortSignal.timeout(15000) })
+}
+
+/** raw.githubusercontent URL → jsDelivr 镜像候选列表 */
+function mirrorCandidates(url: string): string[] {
+  const list = [url]
+  const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(url)
+  if (m) {
+    const [, owner, repo, branch, path] = m
+    list.push(`https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${path}`)
+    list.push(`https://fastly.jsdelivr.net/gh/${owner}/${repo}@${branch}/${path}`)
+  }
+  return list
+}
+
+/** 依次尝试所有镜像,任一成功即返回;全部失败抛最后一个错误 */
+async function fetchBufferWithMirrors(url: string, headers: Record<string, string>): Promise<Buffer> {
+  let lastErr: unknown = null
+  for (const u of mirrorCandidates(url)) {
+    try {
+      const res = await fetchWithTimeout(u, headers)
+      if (!res.ok) { lastErr = new Error(`${new URL(u).hostname} 返回 ${res.status}`); continue }
+      return Buffer.from(await res.arrayBuffer())
+    } catch (e) { lastErr = e }
+  }
+  throw lastErr ?? new Error('所有下载源均不可达')
+}
+
 async function fetchRegistryRaw(): Promise<any> {
-  const res = await net.fetch(REGISTRY_URL, {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Knowbase-App' }
-  })
-  if (!res.ok) throw new Error(`插件仓库返回 ${res.status}`)
-  const data = await res.json()
-  if (!data || !Array.isArray(data.plugins)) throw new Error('registry.json 格式非法')
-  return data
+  let lastErr: unknown = null
+  for (const url of REGISTRY_MIRRORS) {
+    try {
+      const res = await fetchWithTimeout(url, { Accept: 'application/vnd.github+json', 'User-Agent': 'Knowbase-App' })
+      if (!res.ok) { lastErr = new Error(`${new URL(url).hostname} 返回 ${res.status}`); continue }
+      const data = await res.json()
+      if (!data || !Array.isArray(data.plugins)) throw new Error('registry.json 格式非法')
+      return data
+    } catch (e) { lastErr = e }
+  }
+  throw lastErr ?? new Error('所有插件仓库镜像均不可达,请检查网络后重试')
 }
 
 // ---------- 安装 ----------
@@ -226,9 +268,7 @@ export function registerPluginHandlers(): void {
   ipcMain.handle('plugin:install', async (_e, url: string) => {
     try {
       if (typeof url !== 'string' || !isTrustedUrl(url)) return { success: false, message: '下载地址不受信任(仅允许 GitHub)' }
-      const res = await net.fetch(url, { headers: { 'User-Agent': 'Knowbase-App' } })
-      if (!res.ok) return { success: false, message: `下载失败(HTTP ${res.status})` }
-      const buf = Buffer.from(await res.arrayBuffer())
+      const buf = await fetchBufferWithMirrors(url, { 'User-Agent': 'Knowbase-App' })
       return installFromBuffer(buf)
     } catch (e: any) {
       return { success: false, message: `安装失败: ${e?.message || e}` }
