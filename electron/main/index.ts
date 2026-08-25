@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu } from 'electron'
 import { join, basename, resolve, sep } from 'path'
-import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
@@ -32,7 +32,7 @@ import { SETTINGS } from '../../src/lib/settings'
 // 插件自定义协议：plugin://{id}/{file} — UI 插件的沙箱页面(配合 iframe sandbox 使用)
 protocol.registerSchemesAsPrivileged([
 { scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-{ scheme: 'plugin', privileges: { standard: true, secure: true } },
+{ scheme: 'plugin', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ])
 
 // ===== 数据隔离：开发版（npm run dev）使用独立 userData 目录 =====
@@ -258,11 +258,20 @@ app.whenReady().then(async () => {
       const url = new URL(request.url)
       const id = url.hostname
       const rel = decodeURIComponent(url.pathname).replace(/^\//, '')
-      if (!id || !/^[a-z0-9][a-z0-9._-]*$/.test(id) || !rel) return new Response('Bad Request', { status: 400 })
+      if (!id || !/^[a-z0-9][a-z0-9._-]*$/.test(id) || !rel) {
+        console.warn('[plugin://] 400 — url:', request.url, '| hostname:', JSON.stringify(id), '| rel:', JSON.stringify(rel))
+        return new Response('Bad Request', { status: 400 })
+      }
       const dir = join(getPluginsRoot(), id)
       const resolved = resolve(dir, rel)
-      if (!resolved.startsWith(dir.endsWith(sep) ? dir : dir + sep)) return new Response('Forbidden', { status: 403 })
-      if (!existsSync(resolved) || !statSync(resolved).isFile()) return new Response('Not Found', { status: 404 })
+      if (!resolved.startsWith(dir.endsWith(sep) ? dir : dir + sep)) {
+        console.warn('[plugin://] 403 — url:', request.url, '| resolved:', resolved)
+        return new Response('Forbidden', { status: 403 })
+      }
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+        console.warn('[plugin://] 404 — url:', request.url, '| resolved:', resolved)
+        return new Response('Not Found', { status: 404 })
+      }
       const ext = (resolved.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
       const mimeMap: Record<string, string> = {
         html: 'text/html', js: 'text/javascript', mjs: 'text/javascript', css: 'text/css',
@@ -277,7 +286,8 @@ app.whenReady().then(async () => {
           'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline' plugin:; style-src 'unsafe-inline' plugin:; img-src data: plugin:; font-src data: plugin:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
         },
       })
-    } catch {
+    } catch (e) {
+      console.error('[plugin://] handler 异常:', request.url, e)
       return new Response('Bad Request', { status: 400 })
     }
   })
@@ -368,6 +378,22 @@ app.whenReady().then(async () => {
   registerPluginHandlers()
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
+
+  // 启动自测:验证 plugin:// 管线(仅内置插件存在时)
+  {
+    const builtinDirDev = join(app.getAppPath(), 'resources', 'builtin-plugins')
+    const builtinDir = app.isPackaged ? join(process.resourcesPath, 'builtin-plugins') : builtinDirDev
+    try {
+      if (existsSync(builtinDir)) {
+        const first = readdirSync(builtinDir, { withFileTypes: true }).find(d => d.isDirectory())
+        if (first) {
+          net.fetch(`plugin://${first.name}/index.html`)
+            .then(r => console.log(`[plugin://] 自测: ${first.name}/index.html → HTTP ${r.status}`))
+            .catch(e => console.error('[plugin://] 自测失败:', e))
+        }
+      }
+    } catch { /* ignore */ }
+  }
 
   createWindow()
 
