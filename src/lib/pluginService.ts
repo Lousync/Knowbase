@@ -101,6 +101,28 @@ export async function getPluginPomodoroPresets(): Promise<PluginPomodoroPreset[]
   return out
 }
 
+// ---------- 工具卡片(UI 插件) ----------
+
+export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string }
+
+export async function getPluginTools(): Promise<PluginTool[]> {
+  let installed: PluginSummary[] = []
+  try { installed = await pluginListInstalled() } catch { return [] }
+  const out: PluginTool[] = []
+  for (const p of installed) {
+    if (!p.enabled || p.broken || p.type !== 'ui' || !p.entry || !p.contributions.includes('tools')) continue
+    try {
+      const r = await pluginGetContribution(p.id, 'tools')
+      if (!r.ok || !Array.isArray(r.data)) continue
+      for (const t of r.data as { id?: unknown; name?: unknown }[]) {
+        if (typeof t?.id !== 'string' || typeof t?.name !== 'string') continue
+        out.push({ pluginId: p.id, toolId: t.id, name: t.name, entry: p.entry })
+      }
+    } catch { /* 单个插件失败跳过 */ }
+  }
+  return out
+}
+
 // ---------- 帮助文档 ----------
 
 export async function getPluginHelpDocs(): Promise<PluginHelpDoc[]> {

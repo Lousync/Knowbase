@@ -300,8 +300,10 @@ export interface PluginSummary {
   author?: string
   description?: string
   type: string
+  entry?: string
   enabled: boolean
   installedAt: string
+  builtin?: boolean
   contributions: string[]
   broken?: boolean
 }

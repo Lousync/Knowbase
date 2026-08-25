@@ -1,0 +1,15 @@
+{
+  "id": "knowbase.password-generator",
+  "name": "强密码生成器",
+  "version": "1.0.0",
+  "author": "Knowbase",
+  "description": "官方内置插件:生成高强度随机密码。长度与字符类型可调,密码学安全随机数,支持一键复制。",
+  "type": "ui",
+  "entry": "index.html",
+  "activation": ["startup"],
+  "contributes": {
+    "tools": [
+      { "id": "password-generator", "name": "强密码生成器" }
+    ]
+  }
+}

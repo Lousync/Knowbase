@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu } from 'electron'
 import { join, basename, resolve, sep } from 'path'
-import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
@@ -29,8 +29,10 @@ import { registerPluginHandlers } from '../lib/pluginRegistry'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
+// 插件自定义协议：plugin://{id}/{file} — UI 插件的沙箱页面(配合 iframe sandbox 使用)
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+{ scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+{ scheme: 'plugin', privileges: { standard: true, secure: true } },
 ])
 
 // ===== 数据隔离：开发版（npm run dev）使用独立 userData 目录 =====
@@ -248,6 +250,37 @@ function registerWindowHandlers(): void {
 app.whenReady().then(async () => {
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()
+
+  // UI 插件页面协议:plugin://{id}/{file}
+  // 安全:CSP 锁死网络(none),只允许插件自身源的内联资源;配合渲染层 iframe sandbox 使用
+  protocol.handle('plugin', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const id = url.hostname
+      const rel = decodeURIComponent(url.pathname).replace(/^\//, '')
+      if (!id || !/^[a-z0-9][a-z0-9._-]*$/.test(id) || !rel) return new Response('Bad Request', { status: 400 })
+      const dir = join(getPluginsRoot(), id)
+      const resolved = resolve(dir, rel)
+      if (!resolved.startsWith(dir.endsWith(sep) ? dir : dir + sep)) return new Response('Forbidden', { status: 403 })
+      if (!existsSync(resolved) || !statSync(resolved).isFile()) return new Response('Not Found', { status: 404 })
+      const ext = (resolved.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+      const mimeMap: Record<string, string> = {
+        html: 'text/html', js: 'text/javascript', mjs: 'text/javascript', css: 'text/css',
+        json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
+        jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', woff2: 'font/woff2', woff: 'font/woff',
+      }
+      return new Response(Readable.toWeb(createReadStream(resolved)) as unknown as BodyInit, {
+        headers: {
+          'Content-Type': mimeMap[ext] || 'application/octet-stream',
+          'Cache-Control': 'no-cache',
+          // 插件页面专用 CSP:允许内联脚本/样式与同源自取,断网、禁嵌套、禁表单提交
+          'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline' plugin:; style-src 'unsafe-inline' plugin:; img-src data: plugin:; font-src data: plugin:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+        },
+      })
+    } catch {
+      return new Response('Bad Request', { status: 400 })
+    }
+  })
 
   protocol.handle('attachment', async (request) => {
     try {

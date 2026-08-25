@@ -1,16 +1,14 @@
 import { app, ipcMain, net, dialog, BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 
 /**
- * 插件注册表与安装管理(一期:声明式插件,无代码执行)。
- *
- * 插件包 = zip(根目录含 plugin.json);安装后落盘 userData/plugins/<id>/,
- * 状态(启用/禁用/安装时间)记录在 userData/plugins/installed.json。
- * 安全边界:下载域名白名单 / Zip Slip 防护 / manifest 严格校验 / 体积与文件数上限。
+ * 插件注册表与安装管理。
+ * 一期:声明式插件(declarative,纯数据);二期:UI 插件(ui,自带 HTML 界面,经 plugin:// 协议
+ * 在沙箱 iframe 中渲染,无任何特权 API)。code 类型仍被拒绝。
  */
 
 const REGISTRY_MIRRORS = [
@@ -28,7 +26,8 @@ const MAX_FILE_COUNT = 500                    // 单插件文件数上限
 const MAX_MANIFEST_BYTES = 256 * 1024         // manifest 上限
 const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs']
+const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools']
 
 export interface PluginManifest {
   id: string
@@ -37,12 +36,13 @@ export interface PluginManifest {
   engineVersion?: string
   author?: string
   description?: string
-  type: 'declarative' | 'code'
+  type: 'declarative' | 'ui' | 'code'
+  entry?: string
   activation?: string[]
   contributes?: Record<string, unknown>
 }
 
-interface InstalledEntry { id: string; version: string; enabled: boolean; installedAt: string }
+interface InstalledEntry { id: string; version: string; enabled: boolean; installedAt: string; builtin?: boolean; userRemoved?: boolean }
 type InstalledIndex = Record<string, InstalledEntry>
 
 export interface PluginSummary {
@@ -53,22 +53,23 @@ export interface PluginSummary {
   author?: string
   description?: string
   type: string
+  entry?: string
   enabled: boolean
   installedAt: string
+  builtin?: boolean
   contributions: string[]
   broken?: boolean
 }
 
-// ---------- 存储 ----------
-
-function pluginsDir(): string {
+/** 插件根目录(userData/plugins) */
+export function getPluginsRoot(): string {
   const dir = join(app.getPath('userData'), 'plugins')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
 }
 
 function indexPath(): string {
-  return join(pluginsDir(), 'installed.json')
+  return join(getPluginsRoot(), 'installed.json')
 }
 
 function readIndex(): InstalledIndex {
@@ -95,13 +96,28 @@ function validateManifest(m: unknown): { manifest: PluginManifest } | { error: s
   if (typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 50) return { error: '插件 name 缺失或过长' }
   if (typeof raw.version !== 'string' || !VER_RE.test(raw.version)) return { error: '插件 version 缺失或格式非法(需 x.y.z)' }
   if (raw.type === 'code') return { error: '暂不支持代码插件(type: code)' }
-  if (raw.type !== undefined && raw.type !== 'declarative') return { error: `未知的插件类型: ${String(raw.type)}` }
+  if (raw.type !== 'ui' && raw.type !== 'declarative') return { error: `未知的插件类型: ${String(raw.type)}` }
+  if (raw.type === 'ui') {
+    if (typeof raw.entry !== 'string' || !ENTRY_RE.test(raw.entry)) {
+      return { error: 'UI 插件必须提供 entry(入口 HTML 文件名,如 index.html)' }
+    }
+  }
   if (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 300)) return { error: 'description 过长' }
   if (raw.author !== undefined && (typeof raw.author !== 'string' || raw.author.length > 50)) return { error: 'author 过长' }
   if (raw.contributes !== undefined) {
     if (typeof raw.contributes !== 'object' || raw.contributes === null || Array.isArray(raw.contributes)) return { error: 'contributes 必须是对象' }
     for (const key of Object.keys(raw.contributes)) {
       if (!KNOWN_CONTRIBUTIONS.includes(key)) return { error: `不支持的贡献类型: ${key}` }
+      if (key === 'tools') {
+        const tools = (raw.contributes as Record<string, unknown>).tools
+        if (!Array.isArray(tools) || tools.length === 0 || tools.length > 10) return { error: 'tools 必须是非空数组(最多 10 个)' }
+        for (const t of tools) {
+          const tt = t as Record<string, unknown>
+          if (!tt || typeof tt !== 'object') return { error: 'tools 条目非法' }
+          if (typeof tt.id !== 'string' || !ID_RE.test(tt.id)) return { error: 'tools 条目 id 非法' }
+          if (typeof tt.name !== 'string' || !tt.name.trim() || tt.name.length > 30) return { error: 'tools 条目 name 缺失或过长' }
+        }
+      }
     }
   } else {
     return { error: '插件缺少 contributes(没有任何可提供的内容)' }
@@ -206,9 +222,15 @@ function installFromBuffer(buf: Buffer): { success: true; manifest: PluginManife
   if ('error' in parsed) return { success: false, message: parsed.error }
   const manifest = parsed.manifest
 
+  // UI 插件:入口 HTML 必须存在于包内
+  if (manifest.type === 'ui') {
+    const entryKey = prefix + manifest.entry!
+    if (!files.has(entryKey)) return { success: false, message: `UI 插件入口文件缺失: ${manifest.entry}` }
+  }
+
   // id 即目录名(已通过正则校验,无路径成分)
-  const pluginDir = join(pluginsDir(), manifest.id)
-  const inside = safePathInside(pluginsDir(), manifest.id)
+  const pluginDir = join(getPluginsRoot(), manifest.id)
+  const inside = safePathInside(getPluginsRoot(), manifest.id)
   if (!inside || resolve(inside) !== resolve(pluginDir)) return { success: false, message: '插件 id 非法' }
 
   // 逐条目落盘(防 Zip Slip + 数量/体积限制)
@@ -294,7 +316,7 @@ export function registerPluginHandlers(): void {
   ipcMain.handle('plugin:getContribution', (_e, id: string, key: string) => {
     if (typeof id !== 'string' || !ID_RE.test(id)) return { ok: false, message: '插件 id 非法' }
     if (typeof key !== 'string' || !KNOWN_CONTRIBUTIONS.includes(key)) return { ok: false, message: '贡献类型非法' }
-    const dir = safePathInside(pluginsDir(), id)
+    const dir = safePathInside(getPluginsRoot(), id)
     if (!dir || !existsSync(dir)) return { ok: false, message: '插件未安装' }
     const idx = readIndex()
     if (!idx[id]?.enabled) return { ok: false, message: '插件已禁用,请先启用' }
@@ -310,17 +332,17 @@ export function registerPluginHandlers(): void {
     const idx = readIndex()
     const out: PluginSummary[] = []
     for (const [id, entry] of Object.entries(idx)) {
-      const pluginDir = join(pluginsDir(), id)
+      const pluginDir = join(getPluginsRoot(), id)
       const parsed = existsSync(pluginDir) ? readManifestAt(pluginDir) : { error: '插件目录不存在' }
       if ('error' in parsed) {
-        out.push({ id, name: id, version: entry.version, type: 'declarative', enabled: false, installedAt: entry.installedAt, contributions: [], broken: true })
+        out.push({ id, name: id, version: entry.version, type: 'declarative', enabled: false, installedAt: entry.installedAt, contributions: [], broken: true, builtin: entry.builtin })
         continue
       }
       const m = parsed.manifest
       out.push({
         id: m.id, name: m.name, version: m.version, engineVersion: m.engineVersion,
-        author: m.author, description: m.description, type: m.type,
-        enabled: entry.enabled, installedAt: entry.installedAt,
+        author: m.author, description: m.description, type: m.type, entry: m.entry,
+        enabled: entry.enabled, installedAt: entry.installedAt, builtin: entry.builtin,
         contributions: m.contributes ? Object.keys(m.contributes) : [],
       })
     }
@@ -338,14 +360,44 @@ export function registerPluginHandlers(): void {
 
   ipcMain.handle('plugin:uninstall', (_e, id: string) => {
     if (typeof id !== 'string' || !ID_RE.test(id)) return { success: false, message: '插件 id 非法' }
-    const dir = safePathInside(pluginsDir(), id)
+    const idx = readIndex()
+    if (!idx[id]) return { success: false, message: '插件未安装' }
+    if (idx[id].builtin) return { success: false, message: '内置插件不可卸载,可改为禁用' }
+    const dir = safePathInside(getPluginsRoot(), id)
     if (!dir) return { success: false, message: '插件 id 非法' }
     try { if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) } catch (e: any) {
       return { success: false, message: `删除插件目录失败: ${e?.message || e}` }
     }
-    const idx = readIndex()
     delete idx[id]
     writeIndex(idx)
     return { success: true }
   })
+
+  // 内置插件落位:随应用分发的官方插件,首次运行(或目录缺失)时复制到插件目录
+  try {
+    const builtinDir = app.isPackaged
+      ? join(process.resourcesPath, 'builtin-plugins')
+      : join(app.getAppPath(), 'resources', 'builtin-plugins')
+    if (existsSync(builtinDir)) {
+      const idx = readIndex()
+      let changed = false
+      for (const ent of readdirSync(builtinDir, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue
+        const mfPath = join(builtinDir, ent.name, 'plugin.json')
+        if (!existsSync(mfPath)) continue
+        const parsed = readManifestFromBuffer(readFileSync(mfPath))
+        if ('error' in parsed) { console.warn(`[Plugins] 内置插件清单非法(${ent.name}):`, parsed.error); continue }
+        const id = parsed.manifest.id
+        if (idx[id]?.userRemoved) continue          // 用户明确卸载过,不再自动恢复
+        if (existsSync(join(getPluginsRoot(), id))) continue  // 已就位
+        cpSync(join(builtinDir, ent.name), join(getPluginsRoot(), id), { recursive: true })
+        idx[id] = { id, version: parsed.manifest.version, enabled: idx[id]?.enabled ?? true, installedAt: idx[id]?.installedAt || new Date().toISOString(), builtin: true }
+        changed = true
+        console.log(`[Plugins] 内置插件已就位: ${id}@${parsed.manifest.version}`)
+      }
+      if (changed) writeIndex(idx)
+    }
+  } catch (err) {
+    console.error('[Plugins] 内置插件落位失败:', err)
+  }
 }

@@ -41,7 +41,13 @@
   "build": {
     "appId": "com.local.knowbase.programmer",
     "productName": "Knowbase Programmer Edition",
-    "directories": {
+    "extraResources": [
+      {
+        "from": "resources/builtin-plugins",
+        "to": "builtin-plugins"
+      }
+    ],
+    "directories":  {
       "output": "dist-electron"
     },
     "files": [

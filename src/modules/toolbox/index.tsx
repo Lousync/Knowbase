@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Key, Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing } from 'lucide-react'
-import { PasswordGenerator } from './components/PasswordGenerator'
+import { useState, useEffect, useCallback } from 'react'
+import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
 import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
+import { getPluginTools, type PluginTool } from '../../lib/pluginService'
+import { showToast } from '../../lib/toast'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -26,12 +27,6 @@ const DATA_TOOLS: ToolDefinition[] = [
     id: 'password-vault',
     name: '密码本',
     icon: <Shield size={26} strokeWidth={1.5} />,
-    available: true,
-  },
-  {
-    id: 'password-generator',
-    name: '强密码生成器',
-    icon: <Key size={26} strokeWidth={1.5} />,
     available: true,
   },
   {
@@ -65,6 +60,14 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
 
 export function ToolboxModule() {
   const [activeTool, setActiveTool] = useState<string | null>(null)
+  const [pluginTools, setPluginTools] = useState<PluginTool[]>([])
+  const [activePluginTool, setActivePluginTool] = useState<PluginTool | null>(null)
+
+  const refreshPluginTools = useCallback(async () => {
+    try { setPluginTools(await getPluginTools()) } catch { /* 忽略 */ }
+  }, [])
+
+  useEffect(() => { refreshPluginTools() }, [refreshPluginTools])
 
   const handleActivateTool = (toolId: string) => {
     if (toolId === 'pomodoro') {
@@ -80,8 +83,6 @@ export function ToolboxModule() {
         return <WeightTracker onBack={() => setActiveTool(null)} />
       case 'password-vault':
         return <PasswordVault onBack={() => setActiveTool(null)} />
-      case 'password-generator':
-        return <PasswordGenerator onBack={() => setActiveTool(null)} />
       case 'habit-tracker':
         return <HabitTracker onBack={() => setActiveTool(null)} />
       case 'remote-supervise':
@@ -93,12 +94,22 @@ export function ToolboxModule() {
     }
   }
 
-  // If a tool is active, show it full-screen
+  // 内置工具全屏
   if (activeTool) {
     return (
       <div className="flex flex-col h-full bg-[var(--bg-primary)]">
         {renderTool()}
       </div>
+    )
+  }
+
+  // UI 插件工具全屏宿主
+  if (activePluginTool) {
+    return (
+      <PluginToolHost
+        tool={activePluginTool}
+        onBack={() => { setActivePluginTool(null); refreshPluginTools() }}
+      />
     )
   }
 
@@ -156,6 +167,92 @@ export function ToolboxModule() {
         </div>
 
         {renderSection('效率工具', PRODUCTIVITY_TOOLS)}
+
+        {/* 插件工具(UI 插件贡献) */}
+        {pluginTools.length > 0 && (
+          <>
+            <div className="flex items-center gap-3 max-w-[600px] mx-auto">
+              <div className="flex-1 h-px bg-[var(--border-color)]" />
+            </div>
+
+            <div className="space-y-2.5">
+              <h3 className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider px-1">插件工具</h3>
+              <div className="flex justify-center">
+                <div className="grid grid-cols-3 gap-3 w-full max-w-[660px]">
+                  {pluginTools.map(t => (
+                    <button
+                      key={`${t.pluginId}:${t.toolId}`}
+                      onClick={() => setActivePluginTool(t)}
+                      className="flex flex-col items-center gap-2.5 p-5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
+                    >
+                      <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)]">
+                        <Puzzle size={26} strokeWidth={1.5} />
+                      </div>
+                      <div className="text-[13px] font-medium leading-tight text-[var(--text-primary)]">{t.name}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** UI 插件宿主:sandbox iframe 加载 plugin:// 页面,postMessage 桥提供剪贴板等最小能力 */
+function PluginToolHost({ tool, onBack }: { tool: PluginTool; onBack: () => void }) {
+  const src = `plugin://${tool.pluginId}/${tool.entry}`
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data
+      if (!d || d.channel !== 'kb-plugin') return
+      if (d.action === 'copy' && typeof d.payload === 'string') {
+        navigator.clipboard.writeText(d.payload)
+          .then(() => showToast({ type: 'info', message: '已复制到剪贴板' }))
+          .catch(() => showToast({ type: 'error', message: '复制失败' }))
+      } else if (d.action === 'toast' && typeof d.payload === 'string') {
+        showToast({ type: 'info', message: d.payload })
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
+  // iframe 加载完成后下发主题变量(插件据此适配深浅色)
+  const sendInit = () => {
+    const iframe = document.querySelector<HTMLIFrameElement>('iframe[data-plugin-frame]')
+    if (!iframe?.contentWindow) return
+    const style = getComputedStyle(document.documentElement)
+    const varNames = ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-hover', '--text-primary', '--text-secondary', '--text-muted', '--text-disabled', '--accent', '--accent-hover', '--border-color', '--success', '--danger', '--warning']
+    const vars: Record<string, string> = {}
+    for (const name of varNames) vars[name] = style.getPropertyValue(name).trim()
+    iframe.contentWindow.postMessage({ channel: 'kb-plugin', action: 'init', payload: { vars } }, '*')
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+      <div className="px-5 py-3 border-b border-[var(--border-color)] shrink-0 flex items-center gap-3">
+        <button onClick={onBack} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors">
+          ← 返回
+        </button>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] flex items-center gap-2">
+          <Puzzle size={15} className="text-[var(--accent)]" />
+          {tool.name}
+          <span className="text-[10px] text-[var(--text-disabled)] font-normal">插件</span>
+        </h2>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <iframe
+          data-plugin-frame
+          src={src}
+          onLoad={sendInit}
+          sandbox="allow-scripts"
+          className="w-full h-full border-0"
+          title={tool.name}
+        />
       </div>
     </div>
   )

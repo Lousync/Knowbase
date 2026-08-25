@@ -223,6 +223,7 @@ export function PluginsModule() {
           <div className="flex items-center gap-1.5">
             <span className={`text-[13px] font-medium truncate ${p.enabled ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{p.name}</span>
             <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v{p.version}</span>
+            {p.builtin && <span className="text-[9px] px-1 py-px rounded bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">内置</span>}
           </div>
           <div className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
             {p.broken ? '⚠ 数据损坏' : !p.enabled ? '已禁用' : (p.description || p.id)}
@@ -374,24 +375,31 @@ export function PluginsModule() {
           <SectionTitle>更多信息</SectionTitle>
           <div className="text-[12px] space-y-1.5 text-[var(--text-muted)]">
             <div className="flex"><span className="w-24 shrink-0">插件 ID</span><span className="font-mono text-[var(--text-secondary)]">{p.id}</span></div>
+            <div className="flex"><span className="w-24 shrink-0">类型</span><span>{p.builtin ? '内置(随应用分发)' : p.type === 'ui' ? 'UI 插件' : '声明式插件'}</span></div>
             <div className="flex"><span className="w-24 shrink-0">状态</span><span className={p.enabled ? 'text-[var(--success)]' : ''}>{p.enabled ? '已启用' : '已禁用'}</span></div>
           </div>
 
-          {/* 卸载 */}
+          {/* 卸载(内置插件不可卸载,仅可禁用) */}
           <div className="mt-10 pt-5 border-t border-[var(--border-color)]">
-            <button
-              onClick={() => handleUninstall(p)}
-              disabled={busy}
-              className={`flex items-center gap-1.5 px-3.5 py-2 text-[12px] rounded-md transition-colors ${
-                confirmDeleteId === p.id
-                  ? 'text-white bg-[var(--danger)]'
-                  : 'text-[var(--danger)] border border-[var(--danger)]/40 hover:bg-[var(--danger)]/10'
-              }`}
-            >
-              <AlertTriangle size={12} />
-              {confirmDeleteId === p.id ? '再点一次确认卸载' : '卸载插件'}
-            </button>
-            <p className="text-[11px] text-[var(--text-muted)] mt-2">卸载会删除插件文件;已导入的预设与数据不受影响。</p>
+            {p.builtin ? (
+              <p className="text-[11px] text-[var(--text-muted)]">这是随应用分发的官方插件,不可卸载;不需要时可在上方禁用。</p>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleUninstall(p)}
+                  disabled={busy}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 text-[12px] rounded-md transition-colors ${
+                    confirmDeleteId === p.id
+                      ? 'text-white bg-[var(--danger)]'
+                      : 'text-[var(--danger)] border border-[var(--danger)]/40 hover:bg-[var(--danger)]/10'
+                  }`}
+                >
+                  <AlertTriangle size={12} />
+                  {confirmDeleteId === p.id ? '再点一次确认卸载' : '卸载插件'}
+                </button>
+                <p className="text-[11px] text-[var(--text-muted)] mt-2">卸载会删除插件文件;已导入的预设与数据不受影响。</p>
+              </>
+            )}
           </div>
         </div>
       </div>

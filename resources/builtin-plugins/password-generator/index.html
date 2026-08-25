@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>强密码生成器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg-primary: #1e1e1e; --bg-secondary: #252526; --bg-tertiary: #2d2d2d;
+    --bg-hover: #2a2d2e; --text-primary: #cccccc; --text-secondary: #9da0a6;
+    --text-muted: #6e7681; --text-disabled: #4b5261; --accent: #4a9eff;
+    --accent-hover: #6ab0ff; --border-color: #3c3c3c; --success: #4ec9b0;
+  }
+  body {
+    background: var(--bg-primary); color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    padding: 24px; display: flex; justify-content: center; min-height: 100vh;
+  }
+  .wrap { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 18px; }
+  .output-box {
+    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+    padding: 14px; min-height: 76px; display: flex; align-items: center; gap: 10px;
+  }
+  .output {
+    flex: 1; font-family: Consolas, monospace; font-size: 15px; word-break: break-all;
+    line-height: 1.5; color: var(--text-primary); cursor: text; user-select: all; min-height: 24px;
+  }
+  .output.empty { color: var(--text-disabled); user-select: none; }
+  .copy-btn {
+    background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-secondary);
+    border-radius: 6px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 5px;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .copy-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .copy-btn.copied { color: var(--success); border-color: var(--success); }
+  .gen-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 12px;
+    font-size: 14px; font-weight: 600; cursor: pointer; letter-spacing: 1px;
+  }
+  .gen-btn:hover { background: var(--accent-hover); }
+  .gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .strength { display: flex; align-items: center; gap: 10px; }
+  .strength-bar { flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+  .strength-bar > div { height: 100%; border-radius: 2px; transition: all .25s; }
+  .strength-text { font-size: 12px; display: flex; align-items: center; gap: 4px; min-width: 44px; justify-content: flex-end; }
+  .section-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: -10px; }
+  .len-row { display: flex; align-items: center; gap: 14px; }
+  .len-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .len-num { font-family: Consolas, monospace; font-size: 22px; font-weight: 700; color: var(--text-primary); min-width: 44px; text-align: right; }
+  .quick { display: flex; gap: 8px; }
+  .quick button {
+    background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary);
+    border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; font-family: Consolas, monospace;
+  }
+  .quick button.on { border-color: var(--accent); color: var(--accent); }
+  .quick button:hover { background: var(--bg-hover); }
+  .char-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .char-card {
+    background: var(--bg-secondary); border: 1.5px solid var(--border-color); border-radius: 8px;
+    padding: 10px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; transition: border-color .15s;
+  }
+  .char-card.on { border-color: var(--accent); }
+  .char-card.off { opacity: 0.55; }
+  .char-card .t { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 7px; }
+  .char-card .d { font-size: 11px; color: var(--text-muted); font-family: Consolas, monospace; }
+  .tick { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--border-color); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
+  .char-card.on .tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .hint { font-size: 11px; color: var(--text-disabled); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="output-box">
+    <div class="output empty" id="output">点击「生成」创建密码</div>
+    <button class="copy-btn" id="copyBtn" style="display:none" title="复制">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      复制
+    </button>
+  </div>
+
+  <button class="gen-btn" id="genBtn">⚡ 生 成</button>
+
+  <div class="strength">
+    <div class="strength-bar"><div id="strBar" style="width:0%"></div></div>
+    <div class="strength-text" id="strText"></div>
+  </div>
+
+  <div class="section-label">长度</div>
+  <div class="len-row">
+    <input type="range" id="len" min="4" max="64" value="16">
+    <span class="len-num" id="lenNum">16</span>
+  </div>
+  <div class="quick" id="quick">
+    <button data-len="12">12</button>
+    <button data-len="16" class="on">16</button>
+    <button data-len="24">24</button>
+    <button data-len="32">32</button>
+  </div>
+
+  <div class="section-label">字符类型</div>
+  <div class="char-grid" id="chars">
+    <div class="char-card on" data-k="lower"><span class="t"><span class="tick">✓</span>小写字母</span><span class="d">a-z</span></div>
+    <div class="char-card on" data-k="upper"><span class="t"><span class="tick">✓</span>大写字母</span><span class="d">A-Z</span></div>
+    <div class="char-card on" data-k="digit"><span class="t"><span class="tick">✓</span>数字</span><span class="d">0-9</span></div>
+    <div class="char-card on" data-k="symbol"><span class="t"><span class="tick">✓</span>特殊符号</span><span class="d">!@#$%^&*</span></div>
+  </div>
+
+  <div class="hint">使用 Web Crypto 密码学安全随机数 · 每种已选类型至少包含一个字符 · 不保存任何历史</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var SETS = {
+    lower:  'abcdefghijklmnopqrstuvwxyz',
+    upper:  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    digit:  '0123456789',
+    symbol: '!@#$%^&*()-_=+[]{}:,.?'
+  };
+  var state = { len: 16, types: { lower: true, upper: true, digit: true, symbol: true }, pwd: '' };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var outEl = $('output'), copyBtn = $('copyBtn'), genBtn = $('genBtn');
+  var lenEl = $('len'), lenNum = $('lenNum');
+
+  // ---- 宿主桥:主题变量 + 剪贴板 ----
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || d.channel !== 'kb-plugin') return;
+    if (d.action === 'init' && d.payload && d.payload.vars) {
+      Object.keys(d.payload.vars).forEach(function (k) {
+        document.documentElement.style.setProperty(k, d.payload.vars[k]);
+      });
+    }
+  });
+  function bridge(action, payload) {
+    try { parent.postMessage({ channel: 'kb-plugin', action: action, payload: payload }, '*'); } catch (e) {}
+  }
+
+  // ---- 生成 ----
+  function randInt(max) {
+    var a = new Uint32Array(1);
+    var limit = Math.floor(0xFFFFFFFF / max) * max;
+    do { crypto.getRandomValues(a); } while (a[0] >= limit);
+    return a[0] % max;
+  }
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = randInt(i + 1);
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+  }
+  function generate() {
+    var active = Object.keys(state.types).filter(function (k) { return state.types[k]; });
+    if (active.length === 0) return;
+    var pool = active.map(function (k) { return SETS[k]; }).join('');
+    var chars = active.map(function (k) { return SETS[k][randInt(SETS[k].length)]; });
+    for (var i = chars.length; i < state.len; i++) chars.push(pool[randInt(pool.length)]);
+    shuffle(chars);
+    state.pwd = chars.join('');
+    outEl.textContent = state.pwd;
+    outEl.className = 'output';
+    copyBtn.style.display = 'flex';
+    copyBtn.classList.remove('copied');
+    copyBtn.lastChild.textContent = ' 复制';
+    renderStrength();
+  }
+  function strength() {
+    var len = state.pwd.length;
+    var kinds = activeCount();
+    var score = 0;
+    if (len >= 8) score++; if (len >= 12) score++; if (len >= 16) score++; if (len >= 24) score++;
+    score += (kinds - 1) * 2;
+    if (score <= 2) return { t: '弱', c: '#f48771', w: 25 };
+    if (score <= 4) return { t: '一般', c: '#dcb67a', w: 50 };
+    if (score <= 6) return { t: '强', c: '#4ec9b0', w: 75 };
+    return { t: '极强', c: 'var(--accent)', w: 100 };
+  }
+  function activeCount() { return Object.keys(state.types).filter(function (k) { return state.types[k]; }).length; }
+  function renderStrength() {
+    var s = state.pwd ? strength() : { t: '', c: 'transparent', w: 0 };
+    $('strBar').style.width = s.w + '%';
+    $('strBar').style.background = s.c;
+    $('strText').textContent = s.t;
+    $('strText').style.color = s.c;
+  }
+
+  // ---- 事件 ----
+  genBtn.addEventListener('click', function () {
+    if (activeCount() === 0) return;
+    generate();
+  });
+  copyBtn.addEventListener('click', function () {
+    if (!state.pwd) return;
+    bridge('copy', state.pwd);
+    copyBtn.classList.add('copied');
+    copyBtn.lastChild.textContent = ' 已复制';
+    setTimeout(function () {
+      copyBtn.classList.remove('copied');
+      copyBtn.lastChild.textContent = ' 复制';
+    }, 2000);
+  });
+  lenEl.addEventListener('input', function () {
+    state.len = parseInt(lenEl.value, 10);
+    lenNum.textContent = state.len;
+    Array.prototype.forEach.call($('quick').children, function (b) {
+      b.classList.toggle('on', parseInt(b.dataset.len, 10) === state.len);
+    });
+    clearPwd();
+  });
+  Array.prototype.forEach.call($('quick').children, function (b) {
+    b.addEventListener('click', function () {
+      state.len = parseInt(b.dataset.len, 10);
+      lenEl.value = state.len; lenNum.textContent = state.len;
+      Array.prototype.forEach.call($('quick').children, function (x) { x.classList.toggle('on', x === b); });
+      clearPwd();
+    });
+  });
+  Array.prototype.forEach.call($('chars').children, function (card) {
+    card.addEventListener('click', function () {
+      var k = card.dataset.k;
+      var onCount = activeCount();
+      if (state.types[k] && onCount === 1) return; // 不允许全部关闭
+      state.types[k] = !state.types[k];
+      card.classList.toggle('on', state.types[k]);
+      card.classList.toggle('off', !state.types[k]);
+      card.querySelector('.tick').textContent = state.types[k] ? '✓' : '';
+      clearPwd();
+    });
+  });
+  function clearPwd() {
+    state.pwd = '';
+    outEl.textContent = '点击「生成」创建密码';
+    outEl.className = 'output empty';
+    copyBtn.style.display = 'none';
+    renderStrength();
+  }
+})();
+</script>
+</body>
+</html>
