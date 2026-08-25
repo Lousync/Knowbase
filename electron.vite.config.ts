@@ -30,7 +30,7 @@ export default defineConfig({
     root: '.',
     server: {
       host: '127.0.0.1',
-      port: 6173,
+      port: 7173,          // 6173 会落入 Windows Hyper-V/winnat 排除端口段导致 EACCES
       strictPort: false
     },
     build: {
