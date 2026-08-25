@@ -52,6 +52,7 @@ export interface PluginManifest {
   type: 'declarative' | 'ui' | 'code'
   entry?: string
   icon?: string
+  category?: string
   riskLevel?: RiskLevel
   capabilities?: string[]
   activation?: string[]
@@ -71,6 +72,7 @@ export interface PluginSummary {
   type: string
   entry?: string
   icon?: string
+  category?: string
   riskLevel: RiskLevel
   capabilities: string[]
   grantedCapabilities: string[]
@@ -131,6 +133,9 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
   }
   if (raw.icon !== undefined) {
     if (typeof raw.icon !== 'string' || !ICON_RE.test(raw.icon)) return { error: 'icon 必须是包内图片文件名(svg/png/jpg/webp/gif)' }
+  }
+  if (raw.category !== undefined) {
+    if (typeof raw.category !== 'string' || !raw.category.trim() || raw.category.length > 20) return { error: 'category 需为 1-20 字符的分类名' }
   }
   if (raw.riskLevel !== undefined) {
     if (typeof raw.riskLevel !== 'string' || !['S', 'A', 'B'].includes(raw.riskLevel)) return { error: 'riskLevel 仅允许 S / A / B' }
@@ -464,6 +469,7 @@ export function registerPluginHandlers(): void {
         id: m.id, name: m.name, version: m.version, engineVersion: m.engineVersion,
         author: m.author, description: m.description, type: m.type, entry: m.entry,
         icon: pluginIconUrl(m.id, m.icon) || undefined,
+        category: m.category,
         riskLevel: level,
         capabilities: m.capabilities || [],
         grantedCapabilities: m.type === 'ui' ? (entry.grantedCapabilities || m.capabilities || []) : [],

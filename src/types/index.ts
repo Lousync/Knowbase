@@ -288,6 +288,10 @@ export interface PluginRegistryEntry {
   author?: string
   downloadUrl: string
   iconUrl?: string
+  category?: string
+  riskLevel?: PluginRiskLevel
+  contributions?: string[]
+  capabilities?: string[]
   size?: number
   checksum?: string
   updatedAt?: string
@@ -305,6 +309,7 @@ export interface PluginSummary {
   type: string
   entry?: string
   icon?: string
+  category?: string
   riskLevel: PluginRiskLevel
   capabilities: string[]
   grantedCapabilities: string[]

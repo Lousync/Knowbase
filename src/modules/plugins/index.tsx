@@ -102,6 +102,7 @@ export function PluginsModule() {
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState<'' | PluginRiskLevel>('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [installed, setInstalled] = useState<PluginSummary[]>([])
   const [market, setMarket] = useState<PluginRegistryEntry[]>([])
   const [marketLoading, setMarketLoading] = useState(false)
@@ -315,8 +316,9 @@ export function PluginsModule() {
   const matchLevel = (l: PluginRiskLevel) => !levelFilter || levelFilter === l
   const matchText = (name: string, desc: string | undefined, id: string) =>
     !q || name.toLowerCase().includes(q) || (desc || '').toLowerCase().includes(q) || id.includes(q)
-  const filteredInstalled = installed.filter(p => matchLevel(p.riskLevel) && matchText(p.name, p.description, p.id))
-  const filteredMarket = market.filter(p => matchLevel((p.riskLevel || 'S') as PluginRiskLevel) && matchText(p.name, p.description, p.id))
+  const filteredInstalled = installed.filter(p => matchLevel(p.riskLevel) && matchText(p.name, p.description, p.id) && (!categoryFilter || (p.category || '其他') === categoryFilter))
+  const marketCategories: string[] = [...new Set(market.map(p => p.category || '其他'))]
+  const filteredMarket = market.filter(p => matchLevel((p.riskLevel || 'S') as PluginRiskLevel) && matchText(p.name, p.description, p.id) && (!categoryFilter || (p.category || '其他') === categoryFilter))
 
   // ---------- 列表项 ----------
 
@@ -365,7 +367,10 @@ export function PluginsModule() {
             <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v{p.version}</span>
             {installedVer && <span className="text-[10px] text-[var(--success)] shrink-0">✓</span>}
           </div>
-          <div className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">{p.description || p.id}</div>
+          <div className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+            {p.category && <span className="text-[10px] text-[var(--accent)] mr-1">{p.category}</span>}
+            {p.description || p.id}
+          </div>
         </div>
       </>
     ))
@@ -740,6 +745,31 @@ export function PluginsModule() {
             </button>
           ))}
         </div>
+
+        {/* 分类筛选(市场) */}
+        {tab === 'market' && marketCategories.length > 1 && (
+          <div className="px-2 pb-2 flex flex-wrap gap-1 shrink-0">
+            <button
+              onClick={() => setCategoryFilter('')}
+              className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
+                categoryFilter === '' ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10' : 'border-[var(--border-color)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              全部分类
+            </button>
+            {marketCategories.map(c => (
+              <button
+                key={c}
+                onClick={() => setCategoryFilter(categoryFilter === c ? '' : c)}
+                className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
+                  categoryFilter === c ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10' : 'border-[var(--border-color)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 策略开关 */}
         <div className="px-2 pb-2 shrink-0">
