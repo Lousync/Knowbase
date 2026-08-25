@@ -20,6 +20,10 @@ export function AppearanceView() {
 
   useEffect(() => {
     ensurePluginThemeStyles().then(setPluginThemes).catch(() => {})
+    // 插件模块安装/启禁/卸载主题插件后同步刷新
+    const refresh = () => { ensurePluginThemeStyles().then(setPluginThemes).catch(() => {}) }
+    window.addEventListener('plugins-changed', refresh)
+    return () => window.removeEventListener('plugins-changed', refresh)
   }, [])
 
   const allThemes: { id: string; label: string; desc: string; icon: React.ReactNode }[] = [
