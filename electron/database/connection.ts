@@ -816,6 +816,21 @@ export function runMigrations(): void {
     db.run("INSERT INTO _migrations (name) VALUES ('043_blog_templates')")
   }
 
+  if (!applied.has('044_plugin_audit_log')) {
+    // 插件安全分级:行为审计日志(安装/更新/授权/导入/可疑调用拒绝)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS plugin_audit_log (
+        id         TEXT PRIMARY KEY,
+        plugin_id  TEXT NOT NULL,
+        action     TEXT NOT NULL,
+        detail     TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_plugin_audit ON plugin_audit_log(plugin_id, created_at);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('044_plugin_audit_log')")
+  }
+
   db.run('COMMIT')
   } catch (err) {
     try { db.run('ROLLBACK') } catch { /* ignore */ }

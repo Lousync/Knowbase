@@ -137,6 +137,9 @@ export const SETTINGS = {
 
   // ---- 新手引导 ----
   onboardingDone: { default: false, desc: '已完成新手引导' },
+
+  // ---- 插件安全分级 ----
+  pluginAllowedLevels: { default: 'S,A,B', desc: '允许安装/启用的插件安全等级(S/A/B 逗号分隔)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

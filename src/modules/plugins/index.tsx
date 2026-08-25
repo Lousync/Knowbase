@@ -1,20 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Puzzle, RefreshCw, Search, FolderOpen, Download, Loader2,
-  CheckCircle2, AlertTriangle, ArrowLeft,
+  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield,
+  History, Trash2, ScrollText,
 } from 'lucide-react'
 import {
   pluginFetchRegistry, pluginInstall, pluginInstallFromFile,
   pluginListInstalled, pluginSetEnabled, pluginUninstall, pluginGetContribution,
+  pluginSetGranted, pluginAuditList, pluginAuditClear, pluginAuditWrite,
   createHabit, createBookmarkCategory, createBookmarkItem, bookmarkGetAll,
 } from '../../lib/ipc'
+import { useSettings } from '../../lib/SettingsContext'
 import { showToast } from '../../lib/toast'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
-import type { PluginSummary, PluginRegistryEntry } from '../../types'
+import type { PluginSummary, PluginRegistryEntry, PluginAuditEntry, PluginRiskLevel } from '../../types'
 
 /**
- * 插件管理模块 —— 对标 VS Code 扩展市场布局:
- * 左侧面板(已安装 / 市场两个标签 + 搜索 + 列表),右侧完整详情页。
+ * 插件管理模块 —— 对标 VS Code 扩展市场布局 + S/A/B 安全分级:
+ * 左侧面板(已安装 / 市场 + 搜索 + 等级筛选),右侧详情页(等级徽章 / 能力与授权 / 最近活动)。
  */
 
 const CONTRIBUTION_LABELS: Record<string, string> = {
@@ -24,6 +27,8 @@ const CONTRIBUTION_LABELS: Record<string, string> = {
   bookmarkPresets: '网址包',
   pomodoroPresets: '番茄钟预设',
   helpDocs: '帮助文档',
+  tools: '工具卡片',
+  automationRule: '自动化规则',
 }
 
 const CONTRIBUTION_HINTS: Record<string, string> = {
@@ -33,13 +38,70 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
   bookmarkPresets: '点击导入后进入「网址导航」,自动去重',
   pomodoroPresets: '番茄钟面板的预设按钮组中可见',
   helpDocs: '帮助模块侧栏「插件」分类中可见',
+  tools: '工具箱「插件工具」区可见',
+  automationRule: '自动化规则(Tier1 预留)',
 }
 
-type MarketSelection = { kind: 'installed'; plugin: PluginSummary } | { kind: 'market'; plugin: PluginRegistryEntry & { iconUrl?: string } }
+const CAPABILITY_LABELS: Record<string, string> = {
+  clipboard: '剪贴板写入',
+  theme: '主题变量注入',
+}
+
+const CAPABILITY_DESCS: Record<string, string> = {
+  clipboard: '允许插件将内容(如生成的密码)复制到系统剪贴板',
+  theme: '允许插件临时调整应用配色变量(关闭即恢复)',
+}
+
+const DATA_TARGETS: Record<string, string> = {
+  habitPresets: '习惯打卡(写入习惯与预设)',
+  bookmarkPresets: '网址导航(写入分类与书签)',
+  automationRule: '自动化(写入规则配置)',
+}
+
+const LEVEL_META: Record<PluginRiskLevel, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+  S: { label: '内容', color: 'var(--success)', bg: 'var(--success)', icon: <ShieldCheck size={11} /> },
+  A: { label: '数据写入', color: 'var(--warning)', bg: 'var(--warning)', icon: <ShieldAlert size={11} /> },
+  B: { label: '增强能力', color: 'var(--danger)', bg: 'var(--danger)', icon: <Shield size={11} /> },
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  install: '安装', update: '更新', grant: '授权变更', deny: '已拒绝可疑调用',
+  import: '数据导入', run: '执行', uninstall: '卸载',
+}
+
+function LevelBadge({ level, size = 'sm' }: { level: PluginRiskLevel; size?: 'sm' | 'lg' }) {
+  const meta = LEVEL_META[level]
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded font-medium shrink-0 ${size === 'lg' ? 'px-2 py-0.5 text-[11px]' : 'px-1.5 py-px text-[10px]'}`}
+      style={{ color: meta.color, border: `1px solid ${meta.color}55`, background: `${meta.color}14` }}
+      title={`安全等级 ${level} · ${meta.label}`}
+    >
+      {meta.icon}{meta.label}
+    </span>
+  )
+}
+
+function LevelDot({ level }: { level: PluginRiskLevel }) {
+  return <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: LEVEL_META[level].bg }} title={`${level} 级`} />
+}
+
+type MarketSelection = { kind: 'installed'; plugin: PluginSummary } | { kind: 'market'; plugin: PluginRegistryEntry & { iconUrl?: string; riskLevel?: PluginRiskLevel; contributions?: string[]; capabilities?: string[] } }
+
+interface ConsentState {
+  entry: PluginRegistryEntry & { riskLevel?: PluginRiskLevel; contributions?: string[]; capabilities?: string[] }
+  isUpdate: boolean
+  level: PluginRiskLevel
+  newContributions: string[]
+  newCapabilities: string[]
+  granted: string[]
+}
 
 export function PluginsModule() {
+  const { s, update } = useSettings()
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
   const [search, setSearch] = useState('')
+  const [levelFilter, setLevelFilter] = useState<'' | PluginRiskLevel>('')
   const [installed, setInstalled] = useState<PluginSummary[]>([])
   const [market, setMarket] = useState<PluginRegistryEntry[]>([])
   const [marketLoading, setMarketLoading] = useState(false)
@@ -48,6 +110,8 @@ export function PluginsModule() {
   const [busy, setBusy] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [importedKeys, setImportedKeys] = useState<Set<string>>(new Set())
+  const [consent, setConsent] = useState<ConsentState | null>(null)
+  const [auditRows, setAuditRows] = useState<PluginAuditEntry[]>([])
 
   const refreshInstalled = useCallback(async () => {
     try { setInstalled(await pluginListInstalled()) } catch { /* 忽略 */ }
@@ -65,18 +129,57 @@ export function PluginsModule() {
 
   useEffect(() => { if (tab === 'market' && market.length === 0 && !marketError) loadMarket() }, [tab, market.length, marketError, loadMarket])
 
-  // ---------- 操作 ----------
+  // 选中已安装插件时加载其最近活动
+  useEffect(() => {
+    if (selected?.kind === 'installed' && !selected.plugin.broken) {
+      pluginAuditList(selected.plugin.id).then(setAuditRows).catch(() => setAuditRows([]))
+    } else setAuditRows([])
+  }, [selected])
 
-  const handleInstall = async (p: PluginRegistryEntry) => {
+  const allowedLevels: PluginRiskLevel[] = (s.pluginAllowedLevels || 'S,A,B')
+    .split(',').map(x => x.trim().toUpperCase()).filter((x): x is PluginRiskLevel => ['S', 'A', 'B'].includes(x))
+
+  // ---------- 安装(含分级授权流程) ----------
+
+  const beginInstall = (p: PluginRegistryEntry & { riskLevel?: PluginRiskLevel; contributions?: string[]; capabilities?: string[] }) => {
+    const level: PluginRiskLevel = p.riskLevel || 'S'
+    const existing = installed.find(x => x.id === p.id)
+    const isUpdate = Boolean(existing)
+
+    if (level === 'B') {
+      // B 级:逐能力勾选(更新时默认勾选既有授权,新增能力需手动勾)
+      const prev = existing?.grantedCapabilities || []
+      const declared = p.capabilities || []
+      const initial = isUpdate ? declared.filter(c => prev.includes(c)) : declared
+      const newCaps = declared.filter(c => !prev.includes(c))
+      setConsent({ entry: p, isUpdate, level, newContributions: [], newCapabilities: newCaps, granted: initial })
+      return
+    }
+
+    if (level === 'A') {
+      const dataKeys = (p.contributions || []).filter(k => k === 'habitPresets' || k === 'bookmarkPresets' || k === 'automationRule')
+      const newKeys = isUpdate ? dataKeys.filter(k => !(existing?.contributions || []).includes(k)) : []
+      // 更新且没有新增数据写入能力 → 免重新确认(沿用既有授权)
+      if (isUpdate && newKeys.length === 0) { doInstall(p, undefined); return }
+      setConsent({ entry: p, isUpdate, level, newContributions: newKeys, newCapabilities: [], granted: [] })
+      return
+    }
+
+    // S 级:免授权直接装
+    doInstall(p, undefined)
+  }
+
+  const doInstall = async (p: PluginRegistryEntry, granted?: string[]) => {
     setBusy(true)
-    const r = await pluginInstall(p.downloadUrl)
+    const r = await pluginInstall(p.downloadUrl, granted)
     setBusy(false)
+    setConsent(null)
     if (r.success) {
       showToast({ type: 'success', message: `「${p.name}」安装成功` })
       window.dispatchEvent(new CustomEvent('plugins-changed'))
       await refreshInstalled()
       const fresh = (await pluginListInstalled()).find(x => x.id === p.id)
-      if (fresh) setSelected({ kind: 'installed', plugin: fresh })
+      if (fresh) { setSelected({ kind: 'installed', plugin: fresh }); setTab('installed') }
     } else {
       showToast({ type: 'error', message: r.message || '安装失败' })
     }
@@ -97,13 +200,13 @@ export function PluginsModule() {
   }
 
   const handleToggle = async (p: PluginSummary) => {
+    // A/B 级禁用后重新启用 = 沿用既有授权,即时生效(授权在安装时已确认)
     setBusy(true)
     const r = await pluginSetEnabled(p.id, !p.enabled)
     setBusy(false)
     if (r.success) {
       await refreshInstalled()
       setSelected(s => s?.kind === 'installed' ? { kind: 'installed', plugin: { ...s.plugin, enabled: !p.enabled } } : s)
-      // 主题类贡献随启禁刷新(禁用的插件主题立即从设置列表消失)
       import('../../lib/pluginService').then(m => m.ensurePluginThemeStyles()).catch(() => {})
       window.dispatchEvent(new CustomEvent('plugins-changed'))
       showToast({ type: 'success', message: p.enabled ? '插件已禁用' : '插件已启用' })
@@ -117,7 +220,7 @@ export function PluginsModule() {
     setBusy(false)
     setConfirmDeleteId(null)
     if (r.success) {
-      showToast({ type: 'success', message: '插件已卸载' })
+      showToast({ type: 'success', message: p.riskLevel === 'A' ? '插件已卸载(已导入的数据保留)' : '插件已卸载' })
       setSelected(null)
       window.dispatchEvent(new CustomEvent('plugins-changed'))
       await refreshInstalled()
@@ -125,11 +228,20 @@ export function PluginsModule() {
     } else showToast({ type: 'error', message: r.message || '卸载失败' })
   }
 
-  // ---------- 预设导入 ----------
-
-  const markImported = (id: string, key: string) => {
-    setImportedKeys(prev => new Set(prev).add(`${id}:${key}`))
+  const handleSetGranted = async (p: PluginSummary, caps: string[]) => {
+    setBusy(true)
+    const r = await pluginSetGranted(p.id, caps)
+    setBusy(false)
+    if (r.success) {
+      await refreshInstalled()
+      setSelected(s => s?.kind === 'installed' ? { kind: 'installed', plugin: { ...s.plugin, grantedCapabilities: caps } } : s)
+      showToast({ type: 'info', message: caps.length ? `已授权:${caps.map(c => CAPABILITY_LABELS[c] || c).join('、')}` : '已撤销全部能力授权' })
+    } else showToast({ type: 'error', message: r.message || '操作失败' })
   }
+
+  // ---------- 预设导入(A 级数据写入,记审计) ----------
+
+  const markImported = (id: string, key: string) => setImportedKeys(prev => new Set(prev).add(`${id}:${key}`))
 
   const importHabitPresets = async (p: PluginSummary) => {
     setBusy(true)
@@ -152,6 +264,7 @@ export function PluginsModule() {
       } catch { /* 单条失败继续 */ }
     }
     setBusy(false)
+    pluginAuditWrite(p.id, 'import', { type: 'habitPresets', count: ok })
     if (ok > 0) { showToast({ type: 'success', message: `已导入 ${ok} 个习惯` }); markImported(p.id, 'habitPresets') }
     else showToast({ type: 'error', message: '没有可导入的预设' })
   }
@@ -188,18 +301,22 @@ export function PluginsModule() {
       } catch { /* 单组失败继续 */ }
     }
     setBusy(false)
+    pluginAuditWrite(p.id, 'import', { type: 'bookmarkPresets', categories: catOk, bookmarks: bmOk, skipped })
     if (bmOk > 0) {
       showToast({ type: 'success', message: `已导入 ${catOk} 个分类、${bmOk} 个书签${skipped > 0 ? `,跳过重复 ${skipped} 个` : ''}` })
       markImported(p.id, 'bookmarkPresets')
     } else showToast({ type: 'error', message: '没有可导入的书签' })
   }
 
-  // ---------- 派生 ----------
+  // ---------- 派生与筛选 ----------
 
   const installedIds: Record<string, string> = Object.fromEntries(installed.map(p => [p.id, p.version]))
   const q = search.trim().toLowerCase()
-  const filteredInstalled = installed.filter(p => !q || p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || p.id.includes(q))
-  const filteredMarket = market.filter(p => !q || p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || p.id.includes(q))
+  const matchLevel = (l: PluginRiskLevel) => !levelFilter || levelFilter === l
+  const matchText = (name: string, desc: string | undefined, id: string) =>
+    !q || name.toLowerCase().includes(q) || (desc || '').toLowerCase().includes(q) || id.includes(q)
+  const filteredInstalled = installed.filter(p => matchLevel(p.riskLevel) && matchText(p.name, p.description, p.id))
+  const filteredMarket = market.filter(p => matchLevel((p.riskLevel || 'S') as PluginRiskLevel) && matchText(p.name, p.description, p.id))
 
   // ---------- 列表项 ----------
 
@@ -208,9 +325,7 @@ export function PluginsModule() {
       key={key}
       onClick={onClick}
       className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left border-l-2 transition-colors ${
-        active
-          ? 'bg-[var(--bg-selected)] border-l-[var(--accent)]'
-          : 'border-l-transparent hover:bg-[var(--bg-hover)]'
+        active ? 'bg-[var(--bg-selected)] border-l-[var(--accent)]' : 'border-l-transparent hover:bg-[var(--bg-hover)]'
       }`}
     >
       {node}
@@ -224,6 +339,7 @@ export function PluginsModule() {
         <PluginIconImg src={p.icon} size={15} className={`shrink-0 mt-0.5 ${p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
+            <LevelDot level={p.riskLevel} />
             <span className={`text-[13px] font-medium truncate ${p.enabled ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{p.name}</span>
             <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v{p.version}</span>
             {p.builtin && <span className="text-[9px] px-1 py-px rounded bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">内置</span>}
@@ -241,9 +357,10 @@ export function PluginsModule() {
     const installedVer = installedIds[p.id]
     return listItem(`mk-${p.id}`, active, () => setSelected({ kind: 'market', plugin: p }), (
       <>
-        <PluginIconImg src={(p as PluginRegistryEntry & { iconUrl?: string }).iconUrl} size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+        <PluginIconImg src={p.iconUrl} size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
+            <LevelDot level={(p.riskLevel || 'S') as PluginRiskLevel} />
             <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">{p.name}</span>
             <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v{p.version}</span>
             {installedVer && <span className="text-[10px] text-[var(--success)] shrink-0">✓</span>}
@@ -252,6 +369,90 @@ export function PluginsModule() {
         </div>
       </>
     ))
+  }
+
+  // ---------- 授权确认弹窗 ----------
+
+  const renderConsent = () => {
+    if (!consent) return null
+    const { entry, level, isUpdate, newContributions, newCapabilities, granted } = consent
+    const dataTargets = (entry.contributions || []).filter(k => DATA_TARGETS[k])
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55" onMouseDown={e => { if (e.target === e.currentTarget) setConsent(null) }}>
+        <div className="w-[440px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--border-color)]">
+            <div className="flex items-center gap-2 mb-1">
+              <ShieldAlert size={15} className="text-[var(--warning)]" />
+              <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">
+                {isUpdate ? '更新需要重新确认' : '安装前请确认'}
+              </h3>
+            </div>
+            <p className="text-[12px] text-[var(--text-muted)]">
+              「{entry.name}」v{entry.version} · 安全等级 <LevelBadge level={level} />
+            </p>
+          </div>
+          <div className="px-5 py-4 space-y-3 text-[12px] text-[var(--text-secondary)] leading-relaxed">
+            {level === 'A' && (
+              <>
+                <p>该插件的数据导入功能将写入以下模块:</p>
+                <ul className="space-y-1">
+                  {dataTargets.map(k => (
+                    <li key={k} className="flex items-center gap-2">
+                      <AlertTriangle size={12} className="text-[var(--warning)] shrink-0" />
+                      {DATA_TARGETS[k]}
+                    </li>
+                  ))}
+                </ul>
+                {isUpdate && newContributions.length > 0 && (
+                  <p className="text-[var(--warning)]">
+                    本次更新新增了写入能力({newContributions.map(k => CONTRIBUTION_LABELS[k] || k).join('、')}),需重新确认。
+                  </p>
+                )}
+                <p className="text-[11px] text-[var(--text-muted)]">导入动作沿用既有去重保护;已导入的数据在卸载插件后保留。</p>
+              </>
+            )}
+            {level === 'B' && (
+              <>
+                <p>该插件为增强能力插件,请勾选允许其使用的能力:</p>
+                <div className="space-y-2">
+                  {(entry.capabilities || []).map(c => (
+                    <label key={c} className="flex items-start gap-2.5 p-2.5 rounded-md border border-[var(--border-color)] cursor-pointer hover:bg-[var(--bg-hover)]">
+                      <input
+                        type="checkbox"
+                        checked={granted.includes(c)}
+                        onChange={e => setConsent(v => v ? { ...v, granted: e.target.checked ? [...v.granted, c] : v.granted.filter(x => x !== c) } : v)}
+                        className="mt-0.5 accent-[var(--accent)]"
+                      />
+                      <span>
+                        <span className="block text-[12px] font-medium text-[var(--text-primary)]">{CAPABILITY_LABELS[c] || c}</span>
+                        <span className="block text-[11px] text-[var(--text-muted)]">{CAPABILITY_DESCS[c] || ''}</span>
+                      </span>
+                    </label>
+                  ))}
+                  {newCapabilities.length > 0 && (
+                    <p className="text-[var(--warning)] text-[11px]">
+                      本次更新新增能力:{newCapabilities.map(c => CAPABILITY_LABELS[c] || c).join('、')},需重新勾选授权。
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-[var(--border-color)] flex justify-end gap-2">
+            <button onClick={() => setConsent(null)} className="px-3.5 py-2 text-[12px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors">
+              取消
+            </button>
+            <button
+              onClick={() => doInstall(entry, level === 'B' ? granted : undefined)}
+              disabled={busy || (level === 'B' && false)}
+              className="px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
+            >
+              {busy ? <Loader2 size={12} className="animate-spin" /> : isUpdate ? '确认更新' : '确认安装'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // ---------- 右侧详情 ----------
@@ -268,6 +469,7 @@ export function PluginsModule() {
 
     if (selected.kind === 'market') {
       const p = selected.plugin
+      const level = (p.riskLevel || 'S') as PluginRiskLevel
       const installedVer = installedIds[p.id]
       const updatable = installedVer && installedVer !== p.version
       return (
@@ -275,10 +477,13 @@ export function PluginsModule() {
           <div className="max-w-2xl mx-auto px-8 py-8">
             <div className="flex items-start gap-4 mb-5">
               <div className="w-14 h-14 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center shrink-0">
-                <PluginIconImg src={(p as PluginRegistryEntry & { iconUrl?: string }).iconUrl} size={34} className="text-[var(--accent)]" />
+                <PluginIconImg src={p.iconUrl} size={34} className="text-[var(--accent)]" />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
+                  <LevelBadge level={level} />
+                </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
                   {p.author || '未知作者'} · v{p.version}
                   {p.size ? ` · ${(p.size / 1024).toFixed(1)} KB` : ''}
@@ -286,13 +491,13 @@ export function PluginsModule() {
               </div>
               <div className="shrink-0">
                 {busy ? <Loader2 size={16} className="animate-spin text-[var(--accent)] mt-2" /> : updatable ? (
-                  <button onClick={() => handleInstall(p)} className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors">
+                  <button onClick={() => beginInstall(p)} className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors">
                     <Download size={13} />更新
                   </button>
                 ) : installedVer ? (
                   <span className="flex items-center gap-1.5 text-[12px] text-[var(--success)] px-2 py-2"><CheckCircle2 size={14} />已安装</span>
                 ) : (
-                  <button onClick={() => handleInstall(p)} className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors">
+                  <button onClick={() => beginInstall(p)} className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors">
                     <Download size={13} />安装
                   </button>
                 )}
@@ -304,9 +509,10 @@ export function PluginsModule() {
             <SectionTitle>更多信息</SectionTitle>
             <div className="text-[12px] space-y-1.5 text-[var(--text-muted)]">
               <div className="flex"><span className="w-24 shrink-0">插件 ID</span><span className="font-mono text-[var(--text-secondary)]">{p.id}</span></div>
+              <div className="flex"><span className="w-24 shrink-0">安全等级</span><span>{level} · {LEVEL_META[level].label}</span></div>
+              {level === 'B' && <div className="flex"><span className="w-24 shrink-0">能力</span><span>{(p.capabilities || []).map(c => CAPABILITY_LABELS[c] || c).join('、') || '无'}</span></div>}
               <div className="flex"><span className="w-24 shrink-0">版本</span><span className="font-mono text-[var(--text-secondary)]">v{p.version}</span></div>
               {p.updatedAt && <div className="flex"><span className="w-24 shrink-0">最近更新</span><span>{p.updatedAt}</span></div>}
-              {installedVer && <div className="flex"><span className="w-24 shrink-0">本地状态</span><span className="text-[var(--success)]">已安装 v{installedVer}</span></div>}
             </div>
           </div>
         </div>
@@ -318,12 +524,16 @@ export function PluginsModule() {
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-8 py-8">
-            <div className="flex items-start gap-4 mb-5">
-              <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${p.enabled && !p.broken ? 'bg-[var(--accent)]/10' : 'bg-[var(--bg-tertiary)]'}`}>
-                <PluginIconImg src={p.icon} size={34} className={p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'} />
-              </div>
+          <div className="flex items-start gap-4 mb-5">
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${p.enabled && !p.broken ? 'bg-[var(--accent)]/10' : 'bg-[var(--bg-tertiary)]'}`}>
+              <PluginIconImg src={p.icon} size={34} className={p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'} />
+            </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
+                <LevelBadge level={p.riskLevel} size="lg" />
+                {p.builtin && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)]">内置</span>}
+              </div>
               <div className="text-[12px] text-[var(--text-muted)] mt-1">
                 {p.author || '未知作者'} · v{p.version} · 安装于 {p.installedAt.slice(0, 10)}
               </div>
@@ -331,6 +541,9 @@ export function PluginsModule() {
                 <div className="flex items-center gap-1.5 text-[12px] text-[var(--danger)] mt-1">
                   <AlertTriangle size={13} />插件数据损坏,建议卸载后重新安装
                 </div>
+              )}
+              {p.legacyGrant && (
+                <div className="text-[11px] text-[var(--text-muted)] mt-1">按旈权限继承(theme + clipboard);更新时将重新确认。</div>
               )}
             </div>
             <button
@@ -344,6 +557,41 @@ export function PluginsModule() {
           </div>
 
           {p.description && <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed mb-6">{p.description}</p>}
+
+          {/* 能力与授权(B 级) */}
+          {p.type === 'ui' && !p.broken && (
+            <>
+              <SectionTitle>能力与授权</SectionTitle>
+              <div className="space-y-2 mb-8">
+                {p.capabilities.length === 0 ? (
+                  <div className="text-[12px] text-[var(--text-muted)]">该插件未申请任何能力(零能力运行)。</div>
+                ) : p.capabilities.map(c => {
+                  const granted = p.grantedCapabilities.includes(c)
+                  return (
+                    <div key={c} className="flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                      {granted ? <CheckCircle2 size={14} className="text-[var(--success)] shrink-0" /> : <Shield size={14} className="text-[var(--text-disabled)] shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium text-[var(--text-primary)]">{CAPABILITY_LABELS[c] || c}</div>
+                        <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{CAPABILITY_DESCS[c] || ''}</div>
+                      </div>
+                      <button
+                        onClick={() => handleSetGranted(p, granted ? p.grantedCapabilities.filter(x => x !== c) : [...p.grantedCapabilities, c])}
+                        disabled={busy}
+                        className={`shrink-0 px-2.5 py-1 text-[11px] rounded transition-colors ${
+                          granted
+                            ? 'text-[var(--text-secondary)] border border-[var(--border-color)] hover:bg-[var(--bg-hover)]'
+                            : 'text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)]'
+                        }`}
+                      >
+                        {granted ? '撤销' : '授权'}
+                      </button>
+                    </div>
+                  )
+                })}
+                <p className="text-[11px] text-[var(--text-muted)]">撤销授权后,插件对应操作将被拒绝并记录到最近活动。</p>
+              </div>
+            </>
+          )}
 
           <SectionTitle>提供的内容</SectionTitle>
           <div className="space-y-2 mb-8">
@@ -376,14 +624,42 @@ export function PluginsModule() {
           </div>
 
           <SectionTitle>更多信息</SectionTitle>
-          <div className="text-[12px] space-y-1.5 text-[var(--text-muted)]">
+          <div className="text-[12px] space-y-1.5 text-[var(--text-muted)] mb-8">
             <div className="flex"><span className="w-24 shrink-0">插件 ID</span><span className="font-mono text-[var(--text-secondary)]">{p.id}</span></div>
+            <div className="flex"><span className="w-24 shrink-0">安全等级</span><span>{p.riskLevel} · {LEVEL_META[p.riskLevel].label}</span></div>
             <div className="flex"><span className="w-24 shrink-0">类型</span><span>{p.builtin ? '内置(随应用分发)' : p.type === 'ui' ? 'UI 插件' : '声明式插件'}</span></div>
             <div className="flex"><span className="w-24 shrink-0">状态</span><span className={p.enabled ? 'text-[var(--success)]' : ''}>{p.enabled ? '已启用' : '已禁用'}</span></div>
           </div>
 
+          {/* 最近活动 */}
+          <SectionTitle>最近活动</SectionTitle>
+          <div className="mb-8">
+            {auditRows.length === 0 ? (
+              <div className="text-[12px] text-[var(--text-muted)]">暂无记录</div>
+            ) : (
+              <div className="space-y-1 mb-2">
+                {auditRows.map(row => (
+                  <div key={row.id} className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] px-2 py-1 rounded hover:bg-[var(--bg-hover)]">
+                    <ScrollText size={11} className="shrink-0" />
+                    <span className="font-mono shrink-0">{row.createdAt}</span>
+                    <span className={`shrink-0 ${row.action === 'deny' ? 'text-[var(--warning)]' : ''}`}>{AUDIT_ACTION_LABELS[row.action] || row.action}</span>
+                    <span className="truncate">{(() => { try { const d = JSON.parse(row.detail); return Object.keys(d).length ? JSON.stringify(d) : '' } catch { return '' } })()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {auditRows.length > 0 && (
+              <button
+                onClick={async () => { await pluginAuditClear(p.id); setAuditRows([]) }}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-[var(--text-muted)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                <Trash2 size={11} />清空活动记录
+              </button>
+            )}
+          </div>
+
           {/* 卸载(内置插件不可卸载,仅可禁用) */}
-          <div className="mt-10 pt-5 border-t border-[var(--border-color)]">
+          <div className="mt-4 pt-5 border-t border-[var(--border-color)]">
             {p.builtin ? (
               <p className="text-[11px] text-[var(--text-muted)]">这是随应用分发的官方插件,不可卸载;不需要时可在上方禁用。</p>
             ) : (
@@ -400,7 +676,9 @@ export function PluginsModule() {
                   <AlertTriangle size={12} />
                   {confirmDeleteId === p.id ? '再点一次确认卸载' : '卸载插件'}
                 </button>
-                <p className="text-[11px] text-[var(--text-muted)] mt-2">卸载会删除插件文件;已导入的预设与数据不受影响。</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                  {p.riskLevel === 'A' ? '卸载删除插件文件;已导入的数据保留在对应模块中。' : '卸载会删除插件文件与全部授权。'}
+                </p>
               </>
             )}
           </div>
@@ -413,7 +691,6 @@ export function PluginsModule() {
     <div className="flex h-full bg-[var(--bg-primary)]">
       {/* 左侧面板 */}
       <div className="w-[280px] shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col">
-        {/* 标签切换 */}
         <div className="flex p-2 gap-1 shrink-0">
           {(['installed', 'market'] as const).map(t => (
             <button
@@ -428,7 +705,6 @@ export function PluginsModule() {
           ))}
         </div>
 
-        {/* 搜索 + 工具 */}
         <div className="px-2 pb-2 flex gap-1.5 shrink-0">
           <div className="flex-1 flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md">
             <Search size={12} className="text-[var(--text-disabled)] shrink-0" />
@@ -450,12 +726,49 @@ export function PluginsModule() {
           )}
         </div>
 
+        {/* 等级筛选 */}
+        <div className="px-2 pb-2 flex gap-1 shrink-0">
+          {(['', 'S', 'A', 'B'] as const).map(l => (
+            <button
+              key={l || 'all'}
+              onClick={() => setLevelFilter(l)}
+              className={`flex-1 px-1.5 py-1 text-[10px] rounded transition-colors ${
+                levelFilter === l ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              {l === '' ? '全部' : `${l} 级`}
+            </button>
+          ))}
+        </div>
+
+        {/* 策略开关 */}
+        <div className="px-2 pb-2 shrink-0">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md">
+            <ShieldCheck size={11} className="text-[var(--text-disabled)] shrink-0" />
+            <span className="text-[10px] text-[var(--text-muted)] shrink-0">允许等级</span>
+            <div className="flex-1 flex gap-0.5 justify-end">
+              {(['S,A,B', 'S,A', 'S'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => update('pluginAllowedLevels', v)}
+                  className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
+                    s.pluginAllowedLevels === v ? 'bg-[var(--accent)]/20 text-[var(--accent)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-muted)]'
+                  }`}
+                  title={`允许安装 ${v.split(',').join('/')} 级插件`}
+                >
+                  {v === 'S,A,B' ? '全部' : v === 'S,A' ? '≤A' : '仅S'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* 列表 */}
         <div className="flex-1 overflow-y-auto">
           {tab === 'installed' ? (
             filteredInstalled.length === 0 ? (
               <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
-                {q ? '没有匹配的插件' : (
+                {q || levelFilter ? '没有匹配的插件' : (
                   <>还没有安装插件<br />
                     <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-1">去市场逛逛 →</button>
                   </>
@@ -473,11 +786,10 @@ export function PluginsModule() {
               <div><button onClick={() => loadMarket(true)} className="text-[var(--accent)] hover:underline mt-1">重试</button></div>
             </div>
           ) : filteredMarket.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)]">{q ? '没有匹配的插件' : '插件仓库还没有上架任何插件'}</div>
+            <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)]">{q || levelFilter ? '没有匹配的插件' : '插件仓库还没有上架任何插件'}</div>
           ) : filteredMarket.map(marketItem)}
         </div>
 
-        {/* 底部提示 */}
         <div className="px-3 py-2 border-t border-[var(--border-color)] shrink-0">
           <span className="text-[10px] text-[var(--text-disabled)]">插件来自 GitHub · Lousync/Knowbase-plugins</span>
         </div>
@@ -485,9 +797,8 @@ export function PluginsModule() {
 
       {/* 右侧详情 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 移动端窄屏时的返回(桌面常驻左侧,不需要) */}
         {selected && (
-          <div className="lg:hidden px-4 py-2 border-b border-[var(--border-color)]">
+          <div className="px-4 py-2 border-b border-[var(--border-color)]">
             <button onClick={() => setSelected(null)} className="flex items-center gap-1 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
               <ArrowLeft size={13} />返回列表
             </button>
@@ -495,6 +806,8 @@ export function PluginsModule() {
         )}
         {renderDetail()}
       </div>
+
+      {renderConsent()}
     </div>
   )
 }

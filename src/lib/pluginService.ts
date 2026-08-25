@@ -103,7 +103,7 @@ export async function getPluginPomodoroPresets(): Promise<PluginPomodoroPreset[]
 
 // ---------- 工具卡片(UI 插件) ----------
 
-export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string; icon?: string }
+export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string; icon?: string; riskLevel: 'S' | 'A' | 'B'; grantedCapabilities: string[] }
 
 export async function getPluginTools(): Promise<PluginTool[]> {
   let installed: PluginSummary[] = []
@@ -116,7 +116,7 @@ export async function getPluginTools(): Promise<PluginTool[]> {
       if (!r.ok || !Array.isArray(r.data)) continue
       for (const t of r.data as { id?: unknown; name?: unknown }[]) {
         if (typeof t?.id !== 'string' || typeof t?.name !== 'string') continue
-        out.push({ pluginId: p.id, toolId: t.id, name: t.name, entry: p.entry, icon: p.icon })
+        out.push({ pluginId: p.id, toolId: t.id, name: t.name, entry: p.entry, icon: p.icon, riskLevel: p.riskLevel, grantedCapabilities: p.grantedCapabilities })
       }
     } catch { /* 单个插件失败跳过 */ }
   }
