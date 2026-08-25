@@ -37,13 +37,13 @@ export default function App() {
   const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
-  const { s, update } = useSettings()
+  const { s, update, ready: settingsReady } = useSettings()
   useCheckinReminder()
   const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
   useEffect(() => {
-    if (!loaded) return
+    if (!settingsReady || !loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
       const all = ['blog','schedule','knowledge','moments','toolbox','export','recycle','help'] as const
@@ -60,13 +60,14 @@ export default function App() {
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded])
+  }, [settingsReady, loaded])
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   useEffect(() => { applyThemeClass(s.theme) }, [s.theme])
 
-  // Apply persisted settings on first render
+  // Apply persisted settings on first render — 必须等真实设置加载完成,否则会用默认值覆盖一次
   useEffect(() => {
+    if (!settingsReady) return
     if (FONT_CSS_MAP[s.editorFont]) document.documentElement.style.setProperty('--font-sans', FONT_CSS_MAP[s.editorFont])
     setEncoding(s.exportEncoding.toUpperCase())
     setSidebarWidths({
@@ -77,7 +78,7 @@ export default function App() {
     })
     document.documentElement.style.fontSize = `${Math.min(s.zoomMax, Math.max(s.zoomMin, s.zoom)) * 16}px`
     setLoaded(true)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settingsReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for encoding changes from settings
   useEffect(() => {
@@ -148,10 +149,11 @@ export default function App() {
   }, [])
 
   // First-run onboarding — show once after load & unlock; re-openable from settings
+  // 依赖 settingsReady:等真实设置到位后再判断,避免默认值 onboardingDone:false 造成的竞态弹出
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   useEffect(() => {
-    if (loaded && !locked && !s.onboardingDone) setOnboardingOpen(true)
-  }, [loaded, locked, s.onboardingDone])
+    if (settingsReady && loaded && !locked && !s.onboardingDone) setOnboardingOpen(true)
+  }, [settingsReady, loaded, locked, s.onboardingDone])
   useEffect(() => {
     const handler = () => setOnboardingOpen(true)
     window.addEventListener('onboarding:show', handler)

@@ -5,6 +5,8 @@ import { getAllSettings, setSetting } from './ipc'
 
 interface SettingsCtx {
   s: AppSettings
+  /** 真实设置是否已从主进程加载完成(默认值 ≠ 加载完成,依赖 s 做一次性判断的逻辑必须等它) */
+  ready: boolean
   update: <K extends SettingsKey>(key: K, value: AppSettings[K]) => void
 }
 
@@ -12,9 +14,10 @@ const Ctx = createContext<SettingsCtx | null>(null)
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [s, setS] = useState<AppSettings>(SETTINGS_DEFAULTS)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    getAllSettings().then(setS)
+    getAllSettings().then(v => { setS(v); setReady(true) })
   }, [])
 
   // Listen for settings refresh from import
@@ -29,7 +32,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSetting(key, value)
   }, [])
 
-  return <Ctx.Provider value={{ s, update }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ s, ready, update }}>{children}</Ctx.Provider>
 }
 
 export function useSettings(): SettingsCtx {
