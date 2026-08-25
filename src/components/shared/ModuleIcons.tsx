@@ -148,3 +148,12 @@ export function SettingsIcon(props: IconProps) {
     </Svg>
   )
 }
+
+/** 插件:拼图块 */
+export function PluginIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9.5 4.5a2 2 0 1 1 4 0V6h3A1.5 1.5 0 0 1 18 7.5v3h1.5a2 2 0 1 1 0 4H18v3a1.5 1.5 0 0 1-1.5 1.5h-3v-1.5a2 2 0 1 0-4 0V19h-3A1.5 1.5 0 0 1 5 17.5v-3H3.5a2 2 0 1 1 0-4H5v-3A1.5 1.5 0 0 1 6.5 6h3V4.5Z" />
+    </Svg>
+  )
+}

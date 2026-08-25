@@ -122,7 +122,7 @@ export const SETTINGS = {
   zoomStep:  { default: 0.05, desc: '缩放步进' },
 
   // ---- 活动栏 ----
-  activityBarOrder:  { default: '["blog","schedule","knowledge","moments","toolbox","export","recycle"]', desc: '活动栏图标顺序 (JSON)' },
+  activityBarOrder:  { default: '["blog","schedule","knowledge","moments","toolbox","plugins","export","recycle"]', desc: '活动栏图标顺序 (JSON)' },
   activityBarHidden: { default: '[]', desc: '活动栏隐藏的模块 (JSON)' },
   startupTab:        { default: 'blog', desc: '启动时默认显示的模块' },
 

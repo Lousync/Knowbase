@@ -16,6 +16,7 @@ import { SettingsModule } from './modules/settings'
 import { HelpModule } from './modules/help'
 import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
+import { PluginsModule } from './modules/plugins'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
@@ -46,7 +47,7 @@ export default function App() {
     if (!settingsReady || !loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
-      const all = ['blog','schedule','knowledge','moments','toolbox','export','recycle','help'] as const
+      const all = ['blog','schedule','knowledge','moments','toolbox','plugins','export','recycle','help'] as const
       if (all.includes(s.startupTab as any) && !hidden.includes(s.startupTab)) {
         setActiveTab(s.startupTab as TabName)
         return
@@ -251,6 +252,7 @@ export default function App() {
             {renderTab('recycle', <RecycleBinModule isActive={activeTab === 'recycle'} />)}
             {renderTab('settings', <SettingsModule />)}
             {renderTab('toolbox', <ToolboxModule />)}
+            {renderTab('plugins', <PluginsModule />)}
             {renderTab('help', <HelpModule />)}
             {renderTab('user', <UserModule />)}
             <PomodoroPanel />
