@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../../../components/shared'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import { monacoThemeFor } from '../../../lib/monaco-setup'
 import type * as Monaco from 'monaco-editor'
 
 interface Props {
@@ -768,7 +769,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
                 onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c) }}
-                theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
+                theme={monacoThemeFor(s.theme)}
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
                 options={{

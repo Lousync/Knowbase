@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Sun, Moon, Puzzle, CheckCircle2 } from 'lucide-react'
+import { Sun, Moon, Puzzle, CheckCircle2, ChevronRight } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon } from '../../../components/shared/ModuleIcons'
@@ -17,6 +17,7 @@ const THEME_DESCS: Record<string, string> = {
 export function AppearanceView() {
   const { s, update } = useSettings()
   const [pluginThemes, setPluginThemes] = useState<PluginThemeWithVars[]>([])
+  const [themeListOpen, setThemeListOpen] = useState(true)
 
   useEffect(() => {
     ensurePluginThemeStyles().then(setPluginThemes).catch(() => {})
@@ -37,9 +38,17 @@ export function AppearanceView() {
       <p className="text-[12px] text-[var(--text-muted)] mb-6">自定义应用的外观和主题</p>
 
       <div className="mb-8">
-        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">主题</h3>
-        <div className="space-y-1.5 max-w-md">
-          {allThemes.map(t => (
+        <button
+          onClick={() => setThemeListOpen(v => !v)}
+          className="w-full flex items-center gap-1.5 mb-3 group"
+        >
+          <ChevronRight size={12} className={`text-[var(--text-muted)] transition-transform ${themeListOpen ? 'rotate-90' : ''}`} />
+          <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide group-hover:text-[var(--text-primary)]">主题</h3>
+          <span className="text-[10px] text-[var(--text-disabled)]">({allThemes.length})</span>
+        </button>
+        {themeListOpen && (
+          <div className="space-y-1.5 max-w-md">
+            {allThemes.map(t => (
             <button
               key={t.id}
               onClick={() => {
@@ -65,6 +74,7 @@ export function AppearanceView() {
             </button>
           ))}
         </div>
+      )}
       </div>
 
       <div className="mb-8">

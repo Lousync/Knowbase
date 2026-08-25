@@ -10,6 +10,7 @@ import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { ConfirmDialog } from '../../../components/shared'
 import { SummaryPanel } from './SummaryPanel'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import { monacoThemeFor } from '../../../lib/monaco-setup'
 import type * as Monaco from 'monaco-editor'
 import type { Tag } from '../../../types'
 
@@ -409,7 +410,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             value={contentMd}
             onChange={handleChange}
             onMount={handleEditorMount}
-            theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
+            theme={monacoThemeFor(s.theme)}
             loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
               fontSize: Math.round(s.editorFontSize * zoom),
