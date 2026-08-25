@@ -27,6 +27,7 @@ const MAX_MANIFEST_BYTES = 256 * 1024         // manifest 上限
 const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
+const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
 const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools']
 
 export interface PluginManifest {
@@ -38,6 +39,7 @@ export interface PluginManifest {
   description?: string
   type: 'declarative' | 'ui' | 'code'
   entry?: string
+  icon?: string
   activation?: string[]
   contributes?: Record<string, unknown>
 }
@@ -54,6 +56,7 @@ export interface PluginSummary {
   description?: string
   type: string
   entry?: string
+  icon?: string
   enabled: boolean
   installedAt: string
   builtin?: boolean
@@ -66,6 +69,12 @@ export function getPluginsRoot(): string {
   const dir = join(app.getPath('userData'), 'plugins')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
+}
+
+/** 插件图标访问地址(经 plugin:// 协议;无图标返回 null) */
+export function pluginIconUrl(id: string, icon?: string): string | null {
+  if (!icon || !ICON_RE.test(icon)) return null
+  return `plugin://${id}/${icon}`
 }
 
 function indexPath(): string {
@@ -101,6 +110,9 @@ function validateManifest(m: unknown): { manifest: PluginManifest } | { error: s
     if (typeof raw.entry !== 'string' || !ENTRY_RE.test(raw.entry)) {
       return { error: 'UI 插件必须提供 entry(入口 HTML 文件名,如 index.html)' }
     }
+  }
+  if (raw.icon !== undefined) {
+    if (typeof raw.icon !== 'string' || !ICON_RE.test(raw.icon)) return { error: 'icon 必须是包内图片文件名(svg/png/jpg/webp/gif)' }
   }
   if (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 300)) return { error: 'description 过长' }
   if (raw.author !== undefined && (typeof raw.author !== 'string' || raw.author.length > 50)) return { error: 'author 过长' }
@@ -222,10 +234,13 @@ function installFromBuffer(buf: Buffer): { success: true; manifest: PluginManife
   if ('error' in parsed) return { success: false, message: parsed.error }
   const manifest = parsed.manifest
 
-  // UI 插件:入口 HTML 必须存在于包内
+  // UI 插件:入口 HTML 必须存在于包内;图标文件同理
   if (manifest.type === 'ui') {
     const entryKey = prefix + manifest.entry!
     if (!files.has(entryKey)) return { success: false, message: `UI 插件入口文件缺失: ${manifest.entry}` }
+  }
+  if (manifest.icon && !files.has(prefix + manifest.icon)) {
+    return { success: false, message: `图标文件缺失: ${manifest.icon}` }
   }
 
   // id 即目录名(已通过正则校验,无路径成分)
@@ -342,6 +357,7 @@ export function registerPluginHandlers(): void {
       out.push({
         id: m.id, name: m.name, version: m.version, engineVersion: m.engineVersion,
         author: m.author, description: m.description, type: m.type, entry: m.entry,
+        icon: pluginIconUrl(m.id, m.icon) || undefined,
         enabled: entry.enabled, installedAt: entry.installedAt, builtin: entry.builtin,
         contributions: m.contributes ? Object.keys(m.contributes) : [],
       })
@@ -389,11 +405,14 @@ export function registerPluginHandlers(): void {
         if ('error' in parsed) { console.warn(`[Plugins] 内置插件清单非法(${ent.name}):`, parsed.error); continue }
         const id = parsed.manifest.id
         if (idx[id]?.userRemoved) continue          // 用户明确卸载过,不再自动恢复
-        if (existsSync(join(getPluginsRoot(), id))) continue  // 已就位
-        cpSync(join(builtinDir, ent.name), join(getPluginsRoot(), id), { recursive: true })
+        const dest = join(getPluginsRoot(), id)
+        // 未安装 → 复制;已安装但内置版本更新 → 覆盖升级(内置插件随应用发版更新)
+        const needInstall = !existsSync(dest) || (idx[id] && isNewerVersion(parsed.manifest.version, idx[id].version))
+        if (!needInstall) continue
+        cpSync(join(builtinDir, ent.name), dest, { recursive: true, force: true })
         idx[id] = { id, version: parsed.manifest.version, enabled: idx[id]?.enabled ?? true, installedAt: idx[id]?.installedAt || new Date().toISOString(), builtin: true }
         changed = true
-        console.log(`[Plugins] 内置插件已就位: ${id}@${parsed.manifest.version}`)
+        console.log(`[Plugins] 内置插件已就位: ${id}@${parsed.manifest.version}${idx[id] && existsSync(dest) ? '(升级)' : ''}`)
       }
       if (changed) writeIndex(idx)
     }

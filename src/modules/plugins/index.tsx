@@ -9,6 +9,7 @@ import {
   createHabit, createBookmarkCategory, createBookmarkItem, bookmarkGetAll,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
+import { PluginIconImg } from '../../components/shared/PluginIconImg'
 import type { PluginSummary, PluginRegistryEntry } from '../../types'
 
 /**
@@ -34,7 +35,7 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
   helpDocs: '帮助模块侧栏「插件」分类中可见',
 }
 
-type MarketSelection = { kind: 'installed'; plugin: PluginSummary } | { kind: 'market'; plugin: PluginRegistryEntry }
+type MarketSelection = { kind: 'installed'; plugin: PluginSummary } | { kind: 'market'; plugin: PluginRegistryEntry & { iconUrl?: string } }
 
 export function PluginsModule() {
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
@@ -220,9 +221,7 @@ export function PluginsModule() {
     const active = selected?.kind === 'installed' && selected.plugin.id === p.id
     return listItem(`in-${p.id}`, active, () => setSelected({ kind: 'installed', plugin: p }), (
       <>
-        <div className={`shrink-0 mt-0.5 ${p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'}`}>
-          <Puzzle size={15} />
-        </div>
+        <PluginIconImg src={p.icon} size={15} className={`shrink-0 mt-0.5 ${p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className={`text-[13px] font-medium truncate ${p.enabled ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{p.name}</span>
@@ -242,7 +241,7 @@ export function PluginsModule() {
     const installedVer = installedIds[p.id]
     return listItem(`mk-${p.id}`, active, () => setSelected({ kind: 'market', plugin: p }), (
       <>
-        <div className="shrink-0 mt-0.5 text-[var(--accent)]"><Puzzle size={15} /></div>
+        <PluginIconImg src={(p as PluginRegistryEntry & { iconUrl?: string }).iconUrl} size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">{p.name}</span>
@@ -276,7 +275,7 @@ export function PluginsModule() {
           <div className="max-w-2xl mx-auto px-8 py-8">
             <div className="flex items-start gap-4 mb-5">
               <div className="w-14 h-14 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center shrink-0">
-                <Puzzle size={28} className="text-[var(--accent)]" />
+                <PluginIconImg src={(p as PluginRegistryEntry & { iconUrl?: string }).iconUrl} size={34} className="text-[var(--accent)]" />
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
@@ -319,10 +318,10 @@ export function PluginsModule() {
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-8 py-8">
-          <div className="flex items-start gap-4 mb-5">
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${p.enabled && !p.broken ? 'bg-[var(--accent)]/10' : 'bg-[var(--bg-tertiary)]'}`}>
-              <Puzzle size={28} className={p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'} />
-            </div>
+            <div className="flex items-start gap-4 mb-5">
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${p.enabled && !p.broken ? 'bg-[var(--accent)]/10' : 'bg-[var(--bg-tertiary)]'}`}>
+                <PluginIconImg src={p.icon} size={34} className={p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'} />
+              </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
               <div className="text-[12px] text-[var(--text-muted)] mt-1">

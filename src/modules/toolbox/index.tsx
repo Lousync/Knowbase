@@ -6,6 +6,7 @@ import { HabitTracker } from './components/habit-tracker'
 import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
 import { getPluginTools, type PluginTool } from '../../lib/pluginService'
+import { PluginIconImg } from '../../components/shared/PluginIconImg'
 import { showToast } from '../../lib/toast'
 
 // ---- Tool registry ----
@@ -197,7 +198,7 @@ export function ToolboxModule() {
                       className="flex flex-col items-center gap-2.5 p-5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
                     >
                       <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)]">
-                        <Puzzle size={26} strokeWidth={1.5} />
+                        <PluginIconImg src={t.icon} size={26} className="group-hover:opacity-90" />
                       </div>
                       <div className="text-[13px] font-medium leading-tight text-[var(--text-primary)]">{t.name}</div>
                     </button>

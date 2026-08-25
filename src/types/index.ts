@@ -287,6 +287,7 @@ export interface PluginRegistryEntry {
   description?: string
   author?: string
   downloadUrl: string
+  iconUrl?: string
   size?: number
   checksum?: string
   updatedAt?: string
