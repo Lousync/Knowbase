@@ -157,6 +157,9 @@ export const SETTINGS = {
   aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },
   // ---- 插件安全分级 ----
   pluginAllowedLevels: { default: 'S,A,B', desc: '允许安装/启用的插件安全等级(S/A/B 逗号分隔)' },
+
+  // ---- 更新下载 ----
+  updateMirror: { default: 'https://gh.dpik.top', desc: '更新下载镜像(GitHub 加速代理前缀,留空直连 GitHub;失效可随时替换)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

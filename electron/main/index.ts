@@ -428,7 +428,7 @@ app.whenReady().then(async () => {
   registerSuperviseHandlers()
   registerSummaryHandlers()
   registerBlogTemplateHandlers()
-  registerUpdateHandlers()
+  registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
   registerPluginHandlers()
   // AI 工具注册表（M1 地基）：内置只读工具 + 审计 + 月度调用上限
   registerAiToolHandlers({ getSettingValue: (key) => settingsCache[key] })

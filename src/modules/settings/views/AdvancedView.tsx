@@ -83,6 +83,26 @@ export function AdvancedView() {
           </button>
         </div>
 
+        {/* 下载镜像:GitHub 加速代理前缀,失效可随时替换(留空直连) */}
+        <div className="mb-4 max-w-md">
+          <label className="block text-[12px] text-[var(--text-secondary)] mb-1">下载镜像(GitHub 加速代理)</label>
+          <input
+            value={String(s.updateMirror ?? '')}
+            onChange={e => update('updateMirror', e.target.value.trim())}
+            placeholder="留空 = 直连 GitHub,例:https://gh.dpik.top"
+            spellCheck={false}
+            className="w-full px-2.5 py-1.5 text-[12px] font-mono bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
+          />
+          <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
+            以 <code>镜像/原始地址</code> 前缀方式加速安装包下载;镜像失效时自动回退直连。常用:{' '}
+            {[['gh.dpik.top', 'https://gh.dpik.top'], ['gh-proxy.com', 'https://gh-proxy.com'], ['cdn.gh-proxy.com', 'https://cdn.gh-proxy.com']].map(([name, url], i) => (
+              <button key={url} onClick={() => update('updateMirror', url)} className="text-[var(--accent)] hover:underline font-mono" title={`使用 ${url}`}>
+                {name}{i < 2 ? ' / ' : ''}
+              </button>
+            ))}
+          </p>
+        </div>
+
         {updState === 'uptodate' && (
           <div className="flex items-center gap-1.5 text-[12px] text-[var(--success)]">
             <CheckCircle2 size={13} />已是最新版本
