@@ -11,6 +11,7 @@
     "pack": "electron-vite build && electron-builder --win --publish=never"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@monaco-editor/react": "^4.7.0",
     "heic-to": "^1.5.2",
     "highlight.js": "^11.11.1",
@@ -47,7 +48,7 @@
         "to": "builtin-plugins"
       }
     ],
-    "directories":  {
+    "directories": {
       "output": "dist-electron"
     },
     "files": [

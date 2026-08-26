@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Palette, Type, FileDown, Wrench, Info, Search, Keyboard, PencilLine, BellRing } from 'lucide-react'
+import { Palette, Type, FileDown, Wrench, Info, Search, Keyboard, PencilLine, BellRing, Bot } from 'lucide-react'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
 import { ExportSettingsView } from './views/ExportSettingsView'
@@ -7,8 +7,9 @@ import { AdvancedView } from './views/AdvancedView'
 import { ShortcutsView } from './views/ShortcutsView'
 import { BlogView } from './views/BlogView'
 import { ReminderView } from './views/ReminderView'
+import { AiToolsView } from './views/AiToolsView'
 
-type SettingsSection = 'appearance' | 'editor' | 'blog' | 'export' | 'advanced' | 'shortcuts' | 'reminder'
+type SettingsSection = 'appearance' | 'editor' | 'blog' | 'export' | 'aiTools' | 'advanced' | 'shortcuts' | 'reminder'
 
 interface SectionDef {
   id: SettingsSection
@@ -22,6 +23,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'editor',     label: '编辑器', icon: <Type size={16} />,     keywords: ['字体', '行号', '编辑', '代码', '样式', 'font', '字号'] },
   { id: 'blog',       label: '博客',   icon: <PencilLine size={16} />, keywords: ['博客', '总结', '周总结', '月总结', '模板', '打卡', '周期'] },
   { id: 'export',     label: '导出',   icon: <FileDown size={16} />, keywords: ['编码', '导出', 'encoding', 'utf', 'gbk', '保存'] },
+  { id: 'aiTools',    label: 'AI 工具', icon: <Bot size={16} />,    keywords: ['AI', '工具', 'agent', '智能体', 'MCP', '内置工具', '调用', '上限'] },
   { id: 'advanced',   label: '高级',   icon: <Wrench size={16} />,   keywords: ['缩放', '删除', '确认', '保存', 'zoom', '重置', '自动', '跳过'] },
   { id: 'shortcuts',  label: '快捷键', icon: <Keyboard size={16} />, keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', 'ctrl', 'tab', '删除', '保存', '预览', '重命名', '侧栏', '切换'] },
   { id: 'reminder',   label: '提醒',   icon: <BellRing size={16} />, keywords: ['提醒', '打卡', '通知', '时间', 'remind'] },
@@ -123,6 +125,7 @@ export function SettingsModule() {
           {section === 'editor' && <EditorView />}
           {section === 'blog' && <BlogView />}
           {section === 'export' && <ExportSettingsView />}
+          {section === 'aiTools' && <AiToolsView />}
           {section === 'advanced' && <AdvancedView />}
           {section === 'shortcuts' && <ShortcutsView />}
           {section === 'reminder' && <ReminderView />}

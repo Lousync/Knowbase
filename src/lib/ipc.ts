@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, SuperviseConfig } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, CcSwitchScanResult, CcSwitchImportResult } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -259,3 +259,36 @@ export const listBlogTemplates = () => a().listBlogTemplates()
 export const createBlogTemplate = (d: { name: string; contentMd?: string }) => a().createBlogTemplate(d)
 export const updateBlogTemplate = (id: string, d: { name?: string; contentMd?: string }) => a().updateBlogTemplate(id, d)
 export const deleteBlogTemplate = (id: string) => a().deleteBlogTemplate(id)
+
+// ===== AI Tools (ToolRegistry) =====
+export const aiToolsList = (): Promise<AiToolsListResult> => a().aiToolsList()
+export const aiToolsInvoke = (name: string, args?: unknown): Promise<AiToolInvokeResult> => a().aiToolsInvoke(name, args)
+export const aiToolsGetUsage = (): Promise<AiToolUsage> => a().aiToolsGetUsage()
+export const aiToolsGetRecentAudit = (limit?: number): Promise<AuditEntryInfo[]> => a().aiToolsGetRecentAudit(limit)
+
+// ===== MCP Servers =====
+export const mcpListServers = (): Promise<McpServerInfo[]> => a().mcpListServers()
+export const mcpAddServer = (draft: McpServerDraft): Promise<McpServerInfo> => a().mcpAddServer(draft)
+export const mcpUpdateServer = (id: string, patch: Partial<McpServerDraft>): Promise<McpServerInfo | null> => a().mcpUpdateServer(id, patch)
+export const mcpRemoveServer = (id: string): Promise<boolean> => a().mcpRemoveServer(id)
+export const mcpToggleServer = (id: string, enabled: boolean): Promise<{ ok: boolean; error?: string } & Partial<McpServerInfo>> => a().mcpToggleServer(id, enabled)
+export const mcpListTools = (id: string): Promise<{ tools: McpToolPreview[] }> => a().mcpListTools(id)
+export const mcpRefreshTools = (id: string): Promise<{ ok: boolean; error?: string; tools: McpToolPreview[] }> => a().mcpRefreshTools(id)
+export const mcpTestConnection = (draft: McpServerDraft): Promise<McpTestResult> => a().mcpTestConnection(draft)
+
+// ===== Skills =====
+export const aiToolsListSkills = (): Promise<{ skills: SkillInfo[] }> => a().aiToolsListSkills()
+export const aiToolsCopySkillPrompt = (pluginId: string, skillId: string): Promise<boolean> => a().aiToolsCopySkillPrompt(pluginId, skillId)
+
+// ===== Model Gateway + AI 对话 =====
+export const llmListProviders = (): Promise<{ providers: LlmProviderInfo[]; defaultChatModel: string }> => a().llmListProviders()
+export const llmSaveProvider = (d: LlmProviderDraft): Promise<{ ok: boolean; id?: string; error?: string }> => a().llmSaveProvider(d)
+export const llmRemoveProvider = (id: string): Promise<{ ok: boolean }> => a().llmRemoveProvider(id)
+export const llmToggleProvider = (id: string, enabled: boolean): Promise<{ ok: boolean }> => a().llmToggleProvider(id, enabled)
+export const llmTestConnection = (d: { type: LlmProviderType; baseUrl: string; apiKey?: string }): Promise<LlmTestResultInfo> => a().llmTestConnection(d)
+export const llmRefreshModels = (id: string): Promise<{ ok: boolean; models: string[]; error?: string }> => a().llmRefreshModels(id)
+export const llmSetDefaultModel = (value: string): Promise<{ ok: boolean }> => a().llmSetDefaultModel(value)
+export const llmGetUsage = (): Promise<LlmUsageInfo> => a().llmGetUsage()
+export const agentChat = (messages: AgentChatMessage[]): Promise<AgentChatResult> => a().agentChat({ messages })
+export const llmCcSwitchList = (): Promise<CcSwitchScanResult> => a().llmCcSwitchList()
+export const llmCcSwitchImport = (ids: string[]): Promise<CcSwitchImportResult> => a().llmCcSwitchImport(ids)

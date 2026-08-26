@@ -160,6 +160,13 @@ export default function App() {
     return () => window.removeEventListener('help:open', handler)
   }, [])
 
+  // Listen for plugins:open — navigate to plugins tab (e.g. 设置→AI 工具→Skill 跳市场)
+  useEffect(() => {
+    const handler = () => { setActiveTab('plugins'); setSidebarOpen(true) }
+    window.addEventListener('plugins:open', handler)
+    return () => window.removeEventListener('plugins:open', handler)
+  }, [])
+
   // First-run onboarding — show once after load & unlock; re-openable from settings
   // 依赖 settingsReady:等真实设置到位后再判断,避免默认值 onboardingDone:false 造成的竞态弹出
   const [onboardingOpen, setOnboardingOpen] = useState(false)

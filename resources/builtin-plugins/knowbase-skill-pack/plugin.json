@@ -1,0 +1,29 @@
+{
+  "id": "knowbase.skill-pack",
+  "name": "官方 AI 技能包",
+  "version": "1.0.0",
+  "author": "Knowbase",
+  "description": "官方示例 Skill 包：内置周报撰写与知识摘要两个提示词技能，供未来的 AI 助手引用。可在 设置 → AI 工具 → Skill 中查看。",
+  "type": "declarative",
+  "activation": ["startup"],
+  "contributes": {
+    "skills": [
+      {
+        "id": "weekly-review",
+        "title": "周报撰写",
+        "description": "基于本周知识库与打卡数据生成一份复盘草稿",
+        "prompt": "请基于以下上下文撰写一份本周复盘周报：\n\n【本周记录与笔记】\n{{context}}\n\n要求：\n1. 用「本周进展 / 遇到的问题 / 下周计划」三段结构输出；\n2. 语言简洁，总长度控制在 300 字以内；\n3. 直接输出周报正文，不要额外解释。",
+        "variables": ["context"],
+        "tools": ["builtin.knowledge.search", "builtin.habits.list"]
+      },
+      {
+        "id": "knowledge-summary",
+        "title": "知识摘要",
+        "description": "把一篇长文提炼成结构化摘要",
+        "prompt": "请把下面的内容提炼为结构化摘要：\n\n{{content}}\n\n要求：\n1. 先用一句话概括核心观点；\n2. 然后列出 3-5 条要点；\n3. 如有专业术语，附一句通俗解释。",
+        "variables": ["content"],
+        "tools": ["builtin.knowledge.read"]
+      }
+    ]
+  }
+}

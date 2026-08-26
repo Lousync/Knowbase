@@ -26,6 +26,12 @@ import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushServ
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 import { registerUpdateHandlers } from '../lib/updateService'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
+import { registerAiToolHandlers } from '../lib/aiTools'
+import { registerBuiltinTools } from '../lib/builtinTools'
+import { registerMcpHandlers, restoreMcpConnections } from '../lib/mcpService'
+import { registerSkillHandlers } from '../lib/skillService'
+import { registerLlmHandlers } from '../lib/llmService'
+import { registerAgentHandlers } from '../lib/agentService'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -60,6 +66,36 @@ if (!app.isPackaged && process.env.KNOWBASE_SHARED_DATA !== '1') {
     try { writeFileSync(marker, new Date().toISOString()) } catch { /* ignore */ }
   }
   app.setPath('userData', devDir)
+}
+
+// ===== 崩溃/异常留痕（黑匣子）：写入 userData/crash-log.txt，供事后定位 =====
+{
+  const crashLog = () => {
+    try { return join(app.getPath('userData'), 'crash-log.txt') } catch { return 'crash-log.txt' }
+  }
+  const logCrash = (tag: string, detail: string): void => {
+    try {
+      const line = `\n[${new Date().toISOString()}] ${tag} v${app.getVersion()}\n${detail}\n`
+      appendFileSync(crashLog(), line)
+    } catch { /* 留痕失败不影响主流程 */ }
+  }
+  process.on('uncaughtException', err => {
+    logCrash('uncaughtException', err.stack ?? String(err))
+    console.error('[crash] uncaughtException:', err)
+  })
+  process.on('unhandledRejection', reason => {
+    const stack = (reason as Error)?.stack ?? String(reason)
+    logCrash('unhandledRejection', stack)
+    console.error('[crash] unhandledRejection:', reason)
+  })
+  app.on('child-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return
+    logCrash(`child-process-gone(${details.type})`, `reason=${details.reason} exitCode=${details.exitCode}`)
+  })
+  ;(globalThis as any).__kbLogRendererGone = (details: { reason: string; exitCode: number }): void => {
+    if (details.reason === 'clean-exit') return
+    logCrash('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
+  }
 }
 
 // ===== Settings memory cache =====
@@ -138,6 +174,7 @@ function createWindow(): void {
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('[Window] render-process-gone:', details)
+    ;(globalThis as any).__kbLogRendererGone?.(details)
   })
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     if (level >= 2) {
@@ -214,6 +251,7 @@ function registerWindowHandlers(): void {
         'habits', 'habit_records',
         'bookmark_categories', 'bookmarks',
         'supervise_log', 'supervise_config',
+        'plugin_audit_log', 'mcp_servers',
       ]
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
@@ -381,6 +419,27 @@ app.whenReady().then(async () => {
   registerBlogTemplateHandlers()
   registerUpdateHandlers()
   registerPluginHandlers()
+  // AI 工具注册表（M1 地基）：内置只读工具 + 审计 + 月度调用上限
+  registerAiToolHandlers({ getSettingValue: (key) => settingsCache[key] })
+  registerBuiltinTools()
+  // MCP 外部服务器管理面（M2）
+  registerMcpHandlers()
+  // Skill 提示词资产（M3）：聚合插件贡献并登记进注册表
+  registerSkillHandlers()
+  // 模型网关 + 最小 Agent 循环
+  {
+    const getSettingValue = (key: string) => settingsCache[key]
+    const setSettingValue = (key: string, value: unknown) => {
+      if (typeof key !== 'string' || !(key in SETTINGS)) return false
+      if (typeof value !== typeof (SETTINGS as unknown as Record<string, { default: unknown }>)[key].default) return false
+      settingsCache[key] = value
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(flushSettingsToDisk, 500)
+      return true
+    }
+    registerLlmHandlers({ getSettingValue, setSettingValue })
+    registerAgentHandlers()
+  }
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
@@ -418,6 +477,9 @@ app.whenReady().then(async () => {
 
   // 远程监督：每日汇总定时器 + 免打扰补发
   startSuperviseScheduler()
+
+  // MCP：恢复上次启用状态的外部服务器连接（异步，不阻断首帧）
+  void restoreMcpConnections()
 
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()

@@ -28,7 +28,11 @@ const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills']
+/** Skill 变量名规则（提示词 {{var}} 占位符） */
+const SKILL_VAR_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,30}$/
+/** Skill 声明依赖的工具名（命名空间规则与 ToolRegistry 一致，一期仅展示不校验执行权） */
+const SKILL_TOOL_REF_RE = /^[a-z][a-z0-9]*(\.[a-z0-9][a-z0-9._-]*)*$/
 
 export interface PluginManifest {
   id: string
@@ -96,6 +100,11 @@ function writeIndex(idx: InstalledIndex): void {
   }
 }
 
+/** 已安装索引只读快照（供 Skill 等派生消费方遍历启用状态） */
+export function getInstalledIndex(): InstalledIndex {
+  return readIndex()
+}
+
 // ---------- manifest 校验 ----------
 
 function validateManifest(m: unknown): { manifest: PluginManifest } | { error: string } {
@@ -128,6 +137,32 @@ function validateManifest(m: unknown): { manifest: PluginManifest } | { error: s
           if (!tt || typeof tt !== 'object') return { error: 'tools 条目非法' }
           if (typeof tt.id !== 'string' || !ID_RE.test(tt.id)) return { error: 'tools 条目 id 非法' }
           if (typeof tt.name !== 'string' || !tt.name.trim() || tt.name.length > 30) return { error: 'tools 条目 name 缺失或过长' }
+        }
+      }
+      if (key === 'skills') {
+        // AI 技能包：纯声明式提示词资产（分级上属 A 级数据贡献族，见 tiers 文档）
+        const skills = (raw.contributes as Record<string, unknown>).skills
+        if (!Array.isArray(skills) || skills.length === 0 || skills.length > 20) return { error: 'skills 必须是非空数组(最多 20 个)' }
+        for (const s of skills) {
+          const sk = s as Record<string, unknown>
+          if (!sk || typeof sk !== 'object') return { error: 'skills 条目非法' }
+          if (typeof sk.id !== 'string' || !ID_RE.test(sk.id)) return { error: 'skills 条目 id 非法' }
+          if (typeof sk.title !== 'string' || !sk.title.trim() || sk.title.length > 60) return { error: 'skills 条目 title 缺失或过长' }
+          if (typeof sk.prompt !== 'string' || !sk.prompt.trim()) return { error: 'skills 条目 prompt 缺失' }
+          if (sk.prompt.length > 8000) return { error: 'skills 条目 prompt 过长(最大 8000 字符)' }
+          if (sk.description !== undefined && (typeof sk.description !== 'string' || sk.description.length > 300)) return { error: 'skills 条目 description 过长' }
+          if (sk.variables !== undefined) {
+            if (!Array.isArray(sk.variables) || sk.variables.length > 10) return { error: 'skills variables 必须是数组(最多 10 个)' }
+            for (const v of sk.variables) {
+              if (typeof v !== 'string' || !SKILL_VAR_RE.test(v)) return { error: `skills 变量名非法: ${String(v)}` }
+            }
+          }
+          if (sk.tools !== undefined) {
+            if (!Array.isArray(sk.tools) || sk.tools.length > 10) return { error: 'skills tools 必须是数组(最多 10 个)' }
+            for (const t of sk.tools) {
+              if (typeof t !== 'string' || !SKILL_TOOL_REF_RE.test(t)) return { error: `skills 声明的工具名非法: ${String(t)}` }
+            }
+          }
         }
       }
     }
@@ -275,6 +310,7 @@ function installFromBuffer(buf: Buffer): { success: true; manifest: PluginManife
   }
   writeIndex(idx)
   console.log(`[Plugins] 已安装插件 ${manifest.id}@${manifest.version}`)
+  notifyPluginsChanged()
   return { success: true, manifest }
 }
 
@@ -283,6 +319,21 @@ function readManifestFromBuffer(buf: Buffer): { manifest: PluginManifest } | { e
   try {
     return validateManifest(JSON.parse(buf.toString('utf-8')))
   } catch { return { error: 'plugin.json 不是有效的 JSON' } }
+}
+
+// ---------- 变更通知（供 Skill 等消费方同步派生状态） ----------
+
+const changeSubscribers: Array<() => void> = []
+
+/** 订阅插件集合/启用状态变化（安装、卸载、启停、内置落位后触发） */
+export function onPluginsChanged(cb: () => void): void {
+  changeSubscribers.push(cb)
+}
+
+function notifyPluginsChanged(): void {
+  for (const cb of changeSubscribers) {
+    try { cb() } catch (err) { console.error('[Plugins] 变更订阅回调失败:', err) }
+  }
 }
 
 // ---------- IPC ----------
@@ -371,6 +422,7 @@ export function registerPluginHandlers(): void {
     if (!idx[id]) return { success: false, message: '插件未安装' }
     idx[id].enabled = Boolean(enabled)
     writeIndex(idx)
+    notifyPluginsChanged()
     return { success: true }
   })
 
@@ -386,15 +438,23 @@ export function registerPluginHandlers(): void {
     }
     delete idx[id]
     writeIndex(idx)
+    notifyPluginsChanged()
     return { success: true }
   })
 
   // 内置插件落位:随应用分发的官方插件,首次运行(或目录缺失)时复制到插件目录
   try {
-    const builtinDir = app.isPackaged
-      ? join(process.resourcesPath, 'builtin-plugins')
-      : join(app.getAppPath(), 'resources', 'builtin-plugins')
-    if (existsSync(builtinDir)) {
+    // 打包版在 resources 下;开发版从应用路径探测——直接以 js 文件启动时 getAppPath() 可能指向
+    // out/main,需向工程根回溯,否则内置插件永远找不到(存量缺陷)
+    const builtinCandidates = app.isPackaged
+      ? [join(process.resourcesPath, 'builtin-plugins')]
+      : [
+          join(app.getAppPath(), 'resources', 'builtin-plugins'),
+          resolve(app.getAppPath(), '../..', 'resources', 'builtin-plugins'),
+          join(process.cwd(), 'resources', 'builtin-plugins'),
+        ]
+    const builtinDir = builtinCandidates.find(p => existsSync(p))
+    if (builtinDir) {
       const idx = readIndex()
       let changed = false
       for (const ent of readdirSync(builtinDir, { withFileTypes: true })) {
@@ -415,6 +475,7 @@ export function registerPluginHandlers(): void {
         console.log(`[Plugins] 内置插件已就位: ${id}@${parsed.manifest.version}${idx[id] && existsSync(dest) ? '(升级)' : ''}`)
       }
       if (changed) writeIndex(idx)
+      if (changed) notifyPluginsChanged()
     }
   } catch (err) {
     console.error('[Plugins] 内置插件落位失败:', err)

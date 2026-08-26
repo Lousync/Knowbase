@@ -137,6 +137,18 @@ export const SETTINGS = {
 
   // ---- 新手引导 ----
   onboardingDone: { default: false, desc: '已完成新手引导' },
+
+  // ---- AI 工具 ----
+  aiToolMonthlyLimit: { default: 0, desc: 'AI 工具月度调用上限（0=不限）' },
+
+  // ---- 模型网关 ----
+  modelProviders:      { default: '',   desc: 'LLM 供应商列表（加密 JSON 容器，渲染层不可解）' },
+  defaultChatModel:    { default: '',   desc: '默认对话模型（格式 providerId:modelId）' },
+  monthlyTokenBudget:  { default: 0,    desc: '月度 token 预算（0=不限）' },
+  llmMaxTokens:        { default: 4096, desc: '单次调用 maxTokens 上限' },
+
+  // ---- AI 模块权限 ----
+  aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","bookmarks":"read","pomodoro":"read"}', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写(JSON)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

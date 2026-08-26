@@ -15,6 +15,7 @@ import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
+import { bindEditorTheme } from '../../../lib/editorTheme'
 
 interface Props {
   pageId: string
@@ -768,7 +769,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
                 onChange={v => { const c = v || ''; setContent(c); onContentChange?.(c) }}
-                theme={s.theme === 'light' ? 'vs' : 'vs-dark'}
+                beforeMount={monaco => bindEditorTheme(monaco)}
+                theme="knowbase-auto"
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
                 options={{

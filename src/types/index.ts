@@ -309,6 +309,208 @@ export interface PluginSummary {
   broken?: boolean
 }
 
+// ===== AI 工具（ToolRegistry，方案见 .claude/plans/agent-tools-foundation.md） =====
+
+export interface AgentToolInfo {
+  /** 全局唯一：builtin.knowledge.search / mcp.<serverId>.<toolName> / skill.<id>.<name> */
+  name: string
+  title: string
+  description: string
+  inputSchema: {
+    type: 'object'
+    properties?: Record<string, {
+      type: 'string' | 'number' | 'boolean'
+      description?: string
+      minimum?: number
+      maximum?: number
+      enum?: string[]
+    }>
+    required?: string[]
+  }
+  source: 'builtin' | 'mcp' | 'skill'
+  enabled: boolean
+  readOnly: boolean
+  /** 所属业务模块（按模块控制 AI 权限） */
+  module?: string
+  /** 调用所需最低权限 */
+  requires?: 'read' | 'write'
+}
+
+export interface AiToolUsage {
+  used: number
+  /** 0 = 不限 */
+  limit: number
+}
+
+export type AiToolErrorCode =
+  | 'TOOL_NOT_FOUND'
+  | 'TOOL_DISABLED'
+  | 'INVALID_ARGS'
+  | 'LIMIT_EXCEEDED'
+  | 'EXEC_ERROR'
+
+export type AiToolInvokeResult = {
+  ok: true
+  data: unknown
+} | {
+  ok: false
+  code: AiToolErrorCode
+  message: string
+}
+
+export interface AiToolsListResult {
+  tools: AgentToolInfo[]
+  usage: AiToolUsage
+}
+
+export interface AuditEntryInfo {
+  id: string
+  pluginId: string
+  action: string
+  detail: string
+  createdAt: string
+}
+
+// ===== MCP 外部服务器（M2） =====
+
+export interface McpToolPreview {
+  name: string
+  description: string
+}
+
+export interface McpServerInfo {
+  id: string
+  name: string
+  transport: 'stdio' | 'sse' | 'http'
+  /** stdio=命令行拼接预览 / sse·http=URL */
+  endpointPreview: string
+  /** 环境变量键名列表（值永不回传渲染层） */
+  envKeys: string[]
+  enabled: boolean
+  status: 'untested' | 'ok' | 'error'
+  lastError: string
+  toolCount: number
+  maxConnections: number
+}
+
+/** 添加/编辑/连通性测试共用草稿 */
+export interface McpServerDraft {
+  name: string
+  transport: 'stdio' | 'sse' | 'http'
+  command?: string
+  commandArgs?: string[]
+  url?: string
+  env?: Record<string, string>
+  /** stdio 双重确认：未确认时主进程拒绝保存与测试 */
+  confirmCommand?: boolean
+}
+
+export interface McpTestResult {
+  ok: boolean
+  latencyMs: number
+  tools: McpToolPreview[]
+  error?: string
+}
+
+// ===== Skill 提示词资产（M3） =====
+
+export interface SkillInfo {
+  pluginId: string
+  pluginName: string
+  /** 注册表内名称 skill.<pluginId>.<skillId> */
+  registryName: string
+  id: string
+  title: string
+  description: string
+  variables: string[]
+  /** 声明依赖的工具（展示用途） */
+  tools: string[]
+}
+
+// ===== 模型网关 + AI 对话 =====
+
+export type LlmProviderType = 'openai-compatible' | 'ollama' | 'anthropic'
+
+/** 脱敏后的供应商信息（Key 相关字段永不回传） */
+export interface LlmProviderInfo {
+  id: string
+  name: string
+  type: LlmProviderType
+  baseUrl: string
+  enabled: boolean
+  hasKey: boolean
+  models: string[]
+  isDefault: boolean
+}
+
+export interface LlmProviderDraft {
+  id?: string
+  name: string
+  type: LlmProviderType
+  baseUrl: string
+  /** 仅新增/更换时传入；编辑留空保留旧密文 */
+  apiKey?: string
+  enabled?: boolean
+}
+
+export interface LlmTestResultInfo {
+  ok: boolean
+  latencyMs: number
+  models?: string[]
+  error?: string
+}
+
+export interface LlmUsageInfo {
+  monthTokens: number
+  budget: number
+}
+
+// ===== CC Switch 一键导入 =====
+
+export interface CcSwitchItem {
+  id: string
+  name: string
+  type: LlmProviderType
+  baseUrl: string
+  /** 打码预览（前6+***+后4），明文永不离开主进程 */
+  keyPreview: string
+}
+
+export interface CcSwitchScanResult {
+  found: boolean
+  source: string
+  items: CcSwitchItem[]
+}
+
+export interface CcSwitchImportResult {
+  imported: number
+  skipped: number
+  errors: string[]
+}
+
+export interface AgentTraceStep {
+  kind: 'llm' | 'tool'
+  name?: string
+  ok: boolean
+  durationMs: number
+  tokens?: number
+  summary?: string
+}
+
+export interface AgentChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AgentChatResult {
+  ok: boolean
+  reply?: string
+  error?: string
+  code?: string
+  trace: AgentTraceStep[]
+}
+
+
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
   copyImage: (src: { path?: string; dataUrl?: string }) => Promise<boolean>
@@ -514,6 +716,35 @@ export interface ElectronAPI {
   fillPopupCopy: (field: string, value: string) => Promise<void>
   fillPopupHide: () => Promise<void>
   onFillPopupRefresh: (cb: () => void) => () => void
+  // AI tools (ToolRegistry)
+  aiToolsList: () => Promise<AiToolsListResult>
+  aiToolsInvoke: (name: string, args?: unknown) => Promise<AiToolInvokeResult>
+  aiToolsGetUsage: () => Promise<AiToolUsage>
+  aiToolsGetRecentAudit: (limit?: number) => Promise<AuditEntryInfo[]>
+  // MCP servers
+  mcpListServers: () => Promise<McpServerInfo[]>
+  mcpAddServer: (draft: McpServerDraft) => Promise<McpServerInfo>
+  mcpUpdateServer: (id: string, patch: Partial<McpServerDraft>) => Promise<McpServerInfo | null>
+  mcpRemoveServer: (id: string) => Promise<boolean>
+  mcpToggleServer: (id: string, enabled: boolean) => Promise<{ ok: boolean; error?: string } & Partial<McpServerInfo>>
+  mcpListTools: (id: string) => Promise<{ tools: McpToolPreview[] }>
+  mcpRefreshTools: (id: string) => Promise<{ ok: boolean; error?: string; tools: McpToolPreview[] }>
+  mcpTestConnection: (draft: McpServerDraft) => Promise<McpTestResult>
+  // Skills
+  aiToolsListSkills: () => Promise<{ skills: SkillInfo[] }>
+  aiToolsCopySkillPrompt: (pluginId: string, skillId: string) => Promise<boolean>
+  // Model gateway + agent
+  llmListProviders: () => Promise<{ providers: LlmProviderInfo[]; defaultChatModel: string }>
+  llmSaveProvider: (draft: LlmProviderDraft) => Promise<{ ok: boolean; id?: string; error?: string }>
+  llmRemoveProvider: (id: string) => Promise<{ ok: boolean }>
+  llmToggleProvider: (id: string, enabled: boolean) => Promise<{ ok: boolean }>
+  llmTestConnection: (draft: { type: LlmProviderType; baseUrl: string; apiKey?: string }) => Promise<LlmTestResultInfo>
+  llmRefreshModels: (id: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
+  llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
+  llmGetUsage: () => Promise<LlmUsageInfo>
+  agentChat: (req: { messages: AgentChatMessage[] }) => Promise<AgentChatResult>
+  llmCcSwitchList: () => Promise<CcSwitchScanResult>
+  llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>
 }
 
 declare global { interface Window { api: ElectronAPI } }

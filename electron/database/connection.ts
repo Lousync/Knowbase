@@ -816,6 +816,43 @@ export function runMigrations(): void {
     db.run("INSERT INTO _migrations (name) VALUES ('043_blog_templates')")
   }
 
+  if (!applied.has('044_plugin_audit_log')) {
+    // 插件/AI 工具行为审计日志：安装、授权变更、工具调用等追加式记录（见 .claude/plans/plugin-security-tiers.md 第八节）
+    // created_at 用本地时间：月度调用量按用户感知的自然月统计
+    db.run(`
+      CREATE TABLE IF NOT EXISTS plugin_audit_log (
+        id         TEXT PRIMARY KEY,
+        plugin_id  TEXT NOT NULL DEFAULT '',
+        action     TEXT NOT NULL,
+        detail     TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_pal_created ON plugin_audit_log(created_at);
+      CREATE INDEX IF NOT EXISTS idx_pal_action ON plugin_audit_log(action);
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('044_plugin_audit_log')")
+  }
+
+  if (!applied.has('045_mcp_servers')) {
+    // MCP 外部服务器配置（见 .claude/plans/agent-tools-foundation.md 第三节）
+    // endpoint: stdio=命令行 JSON 数组 ["node","srv.js"] / sse·http=完整 URL
+    // args_json: {"env":{k:v}} 环境变量，值经 DPAPI 加密后存储
+    db.run(`
+      CREATE TABLE IF NOT EXISTS mcp_servers (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        transport   TEXT NOT NULL,
+        endpoint    TEXT NOT NULL,
+        args_json   TEXT NOT NULL DEFAULT '{}',
+        enabled     INTEGER NOT NULL DEFAULT 0,
+        status      TEXT NOT NULL DEFAULT 'untested',
+        last_error  TEXT DEFAULT '',
+        created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+    `)
+    db.run("INSERT INTO _migrations (name) VALUES ('045_mcp_servers')")
+  }
+
   db.run('COMMIT')
   } catch (err) {
     try { db.run('ROLLBACK') } catch { /* ignore */ }
