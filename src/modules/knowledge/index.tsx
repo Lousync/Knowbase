@@ -5,7 +5,7 @@ import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, getKnowledgePageById, createKnowledgePage, deleteKnowledgePage,
-  searchKnowledgePages, getKnowledgeBacklinks, getKnowledgeStarredPages,
+  searchKnowledgePages, getKnowledgeStarredPages,
   moveKnowledgePage, moveKnowledgeCategory,
   updateKnowledgePage, toggleKnowledgeStar,
   showImportOpenDialog, readImportFiles, importPdf, importPdfFile, importBinaryFile,
@@ -103,19 +103,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [])
 
   const refreshAllPages = useCallback(async () => {
-    try {
-      const result = await getKnowledgePages()
-      for (const p of result) { p.backlinks = await getKnowledgeBacklinks(p.id) }
-      setAllPages(result)
-    } catch (e) { console.error(e) }
+    try { setAllPages(await getKnowledgePages()) } catch (e) { console.error(e) }
   }, [])
 
   const refreshChapterPages = useCallback(async () => {
     if (!selectedChapterId) { setChapterPages([]); return }
     try {
-      const result = await getKnowledgePages(selectedChapterId)
-      for (const p of result) { p.backlinks = await getKnowledgeBacklinks(p.id) }
-      setChapterPages(result)
+      // 列表项为瘦身载荷,反链在编辑器内按需查询
+      setChapterPages(await getKnowledgePages(selectedChapterId))
     } catch (e) { console.error(e) }
   }, [selectedChapterId])
 
@@ -136,7 +131,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // 监听数据导入事件 — 导入完成后刷新所有数据
   useEffect(() => {
-    const handler = () => { refreshCategories(); refreshAllPages(); refreshAllPages(); refreshStarred(); refreshTags() }
+    const handler = () => { refreshCategories(); refreshAllPages(); refreshStarred(); refreshTags() }
     window.addEventListener('data-imported', handler)
     return () => window.removeEventListener('data-imported', handler)
   }, [refreshCategories, refreshAllPages, refreshStarred])
@@ -549,7 +544,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleExportPage = useCallback(async (pageId: string) => {
     try {
-      const page = allPages.find(p => p.id === pageId) ?? await getKnowledgePageById(pageId)
+      const page = await getKnowledgePageById(pageId) ?? allPages.find(p => p.id === pageId)
       if (!page) { showToast({ type: 'error', message: '页面不存在' }); return }
 
       // Determine file extension from fileType

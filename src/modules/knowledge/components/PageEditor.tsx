@@ -169,6 +169,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           setAnnotation(anno); savedAnnotationRef.current = anno
           window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label }))
           onTitleChange?.(p.title)
+          // 种子 liveContent(大纲/导出依赖);列表已瘦身,活动页内容以编辑器装载为准
+          onContentChange?.(p.contentMd || '')
           // 非 md/txt 类型(pdf/代码)强制编辑视图;md/txt 保持阅读优先
           const ft = (p.fileType || 'md').toLowerCase()
           setPreview(ft === 'md' || ft === '' || ft === 'txt')
