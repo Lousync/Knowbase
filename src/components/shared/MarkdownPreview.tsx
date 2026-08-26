@@ -50,6 +50,30 @@ interface Props {
 }
 
 /** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
+/** 折叠块(kb-import-408.md 2.2 节):```spoiler-answer 围栏 → 答案/解析默认收起,内部走完整 Markdown 管线 */
+function SpoilerBlock({ content }: { content: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="my-2.5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] transition-colors select-none ${
+          open
+            ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10'
+            : 'border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]'
+        }`}
+      >
+        {open ? '收起答案 ▴' : '显示答案 ▸'}
+      </button>
+      {open && (
+        <div className="mt-1.5 px-3 py-2 rounded-md border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+          <MarkdownPreview content={content} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles }: Props) {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
@@ -75,7 +99,11 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
         rehypePlugins={[rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]}
         urlTransform={safeUrlTransform}
         components={{
+          // 折叠块/动画 fence 不包 <pre>
           pre({ children }) {
+            const child = Array.isArray(children) ? children[0] : children
+            const cls = (React.isValidElement(child) && ((child.props as { className?: string }).className || '')) || ''
+            if (/language-(spoiler|anim)/.test(cls)) return <>{children}</>
             return <pre>{children}</pre>
           },
           // Override ul/ol to restore list-style killed by Tailwind reset
@@ -120,6 +148,10 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
             )
           },
           code({ className, children, node, ...props }) {
+            // 内容包折叠块 fence:spoiler-answer → 答案/解析默认收起(内部递归完整管线)
+            if (/(?:^|\s)language-spoiler/.test(className || '')) {
+              return <SpoilerBlock content={String(children).replace(/\n$/, '')} />
+            }
             // 内容包动画 fence:anim@<pluginId>:<blockId> → 沙箱 iframe 播放器
             // (rehype-highlight 会在 className 前加 "hljs ",故不用锚定匹配)
             const anim = /language-anim@([a-z0-9][a-z0-9._-]*):([A-Za-z0-9._-]+)/.exec(className || '')

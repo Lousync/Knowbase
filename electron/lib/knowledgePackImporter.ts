@@ -156,42 +156,58 @@ function preprocessPageMd(raw: string, pluginId: string): string {
 }
 
 /**
- * md 中的图片/内联 svg → **内嵌 data URL** 方案:
- * 示意图以 base64 直接写进页面内容,不落附件表、不经协议解析——
- * 渲染零外部依赖(CSP img-src 原生放行 data:)。返回改写后的 md。
+ * md 中的图片/内联 svg → 导入引用:
+ * - svg(矢量小图)→ 内嵌 base64 data URL,自包含零依赖
+ * - png/jpg 等栅格大图(如真题题图)→ 附件管线(attachment://,可去重、页面不膨胀)
  * assetBaseDir = 页面 md 所在目录(相对引用以其为基准解析),最终仍受插件根目录约束。
  */
-function processImages(md: string, pluginDir: string, pageFileDir: string): string {
-  const toDataUrl = (assetRel: string, contentOverride?: string): string | null => {
+function processImages(md: string, pluginDir: string, pageFileDir: string, ownerId: string, stagedFiles: string[]): string {
+  const toRef = (assetRel: string, contentOverride?: string): string | null => {
     let buf: Buffer
+    let fileName: string
     if (contentOverride !== undefined) {
       buf = Buffer.from(contentOverride, 'utf-8')
+      fileName = basename(assetRel)
     } else {
       // 相对引用基于 md 文件目录解析;再校验仍在插件目录内(防穿越)
       const src = safePathInside(pluginDir, join(pageFileDir, assetRel))
       if (!src || !existsSync(src)) return null
       buf = readFileSync(src)
+      fileName = basename(src)
     }
     const ext = (assetRel.match(/\.(\w+)$/)?.[1] || 'png').toLowerCase()
     const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' }
     const mime = mimeMap[ext] || 'application/octet-stream'
-    let bytes = buf
-    if (ext === 'svg') bytes = Buffer.from(sanitizeSvgText(buf.toString('utf-8')), 'utf-8')
-    return `data:${mime};base64,${bytes.toString('base64')}`
+    if (ext === 'svg') {
+      return `data:${mime};base64,${Buffer.from(sanitizeSvgText(buf.toString('utf-8')), 'utf-8').toString('base64')}`
+    }
+    // 栅格图 → 附件(直接 INSERT,不经 run(),避免事务中途 saveToDisk 破坏原子性)
+    const id = randomUUID()
+    const rel = join('knowledge_page', ownerId, `${id}.${ext}`)
+    const dest = join(getAttachmentsDir(), rel)
+    mkdirSync(resolve(dest, '..'), { recursive: true })
+    writeFileSync(dest, buf)
+    stagedFiles.push(dest)
+    getDatabase().run(
+      `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
+       VALUES (?, 'knowledge_page', ?, 0, ?, ?, ?, ?, ?)`,
+      [id, ownerId, fileName, rel, mime, buf.length, new Date().toISOString()]
+    )
+    return `attachment://${id}`
   }
 
-  // 1) 内联 svg 提取 → 直接内嵌
+  // 1) 内联 svg 提取 → 内嵌(svg 走 sanitize+data URL)
   const ex = extractInlineSvgs(md)
   let out = ex.md
   for (const item of ex.extracted) {
-    const url = toDataUrl(item.name, sanitizeSvgText(item.content))
+    const url = toRef(item.name, sanitizeSvgText(item.content))
     if (!url) continue
     out = out.replace(`](${item.name})`, `](${url})`)
   }
 
-  // 2) 既有 assets 引用改写为 data URL(支持 pages/<book>/ 下形如 ../../assets/<book>/x.svg 的相对引用)
+  // 2) assets 引用改写:svg 内嵌 / 栅格附件化(支持 pages/<book>/ 下形如 ../../assets/<book>/x.svg 的相对引用)
   out = out.replace(/(!\[[^\]]*\]\()((?:\.\.\/)*assets\/[^)]+)(\))/g, (_m, pre: string, assetRel: string, post: string) => {
-    const url = toDataUrl(assetRel)
+    const url = toRef(assetRel)
     if (!url) return `${pre}${assetRel}${post}` // 找不到文件原样保留
     return `${pre}${url}${post}`
   })
@@ -291,6 +307,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
 
   const db = getDatabase()
   const mapping = readMapping(pluginId)
+  const stagedFiles: string[] = []   // 事务回滚时清理的附件文件
   const now = new Date().toISOString()
 
   // 展平页面用于进度(跨全部笔记本)
@@ -414,7 +431,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
             continue
           }
           // 覆盖/静默更新
-          const md = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file))
+          const md = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), livePageId ?? pageId, stagedFiles)
           db.run(
             'UPDATE knowledge_pages SET content_md = ?, updated_at = ? WHERE id = ?',
             [md, now, livePageId]
@@ -430,7 +447,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
 
         // 新页面
         const pageId = randomUUID()
-        const md = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file))
+        const md = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), livePageId ?? pageId, stagedFiles)
         const pgOrder = getDatabase().exec(
           'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id = ?',
           [chapterId]
@@ -463,6 +480,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
   } catch (e: any) {
     try { db.run('ROLLBACK') } catch { /* ignore */ }
     // 清理已落盘的孤儿附件
+    for (const f of stagedFiles) { try { if (existsSync(f)) rmSync(f, { force: true }) } catch { /* ignore */ } }
     return { ok: false, message: `导入失败(已回滚): ${e?.message || e}`, conflicts }
   }
 
