@@ -1,0 +1,138 @@
+{
+  "id": "knowbase.themes-collection",
+  "name": "主题合集",
+  "version": "1.2.0",
+  "author": "Knowbase",
+  "description": "五套精选主题一键装:GitHub Dark / GitHub Light / 护眼米白纸感 / 赛博朋克夜城 / 手绘线条(米纸底+红蜡笔+手写字体)。安装后到 设置 → 外观 切换。",
+  "type": "declarative",
+  "icon": "icon.svg",
+  "category": "外观",
+  "riskLevel": "S",
+  "activation": ["startup"],
+  "contributes": {
+    "theme": [
+      {
+        "name": "GitHub Dark",
+        "colors": {
+          "--activitybar-bg": "#010409",
+          "--sidebar-bg": "#0d1117",
+          "--input-bg": "#0d1117",
+          "--danger": "#f85149",
+          "--bg-primary": "#0d1117",
+          "--bg-secondary": "#161b22",
+          "--bg-selected": "#274a80",
+          "--card-bg": "#161b22",
+          "--warning": "#d29922",
+          "--bg-tertiary": "#21262d",
+          "--text-primary": "#e6edf3",
+          "--success": "#3fb950",
+          "--text-muted": "#6e7681",
+          "--text-disabled": "#484f58",
+          "--text-secondary": "#8b949e",
+          "--accent-hover": "#539bf5",
+          "--accent": "#2f81f7",
+          "--border-color": "#30363d",
+          "--bg-hover": "#292e36"
+        }
+      },
+      {
+        "name": "GitHub Light",
+        "colors": {
+          "--activitybar-bg": "#f6f8fa",
+          "--sidebar-bg": "#ffffff",
+          "--input-bg": "#f6f8fa",
+          "--danger": "#cf222e",
+          "--bg-primary": "#ffffff",
+          "--bg-secondary": "#f6f8fa",
+          "--bg-selected": "#d1e3f8",
+          "--card-bg": "#ffffff",
+          "--warning": "#9a6700",
+          "--bg-tertiary": "#eff2f5",
+          "--text-primary": "#1f2328",
+          "--success": "#1a7f37",
+          "--text-muted": "#8b949e",
+          "--text-disabled": "#afb8c1",
+          "--text-secondary": "#656d76",
+          "--accent-hover": "#0550ae",
+          "--accent": "#0969da",
+          "--border-color": "#d0d7de",
+          "--bg-hover": "#eaeef2"
+        }
+      },
+      {
+        "name": "护眼米白纸感",
+        "colors": {
+          "--activitybar-bg": "#ece5cf",
+          "--sidebar-bg": "#efe9d8",
+          "--input-bg": "#fbf8ee",
+          "--danger": "#c0563f",
+          "--bg-primary": "#f7f3e3",
+          "--bg-secondary": "#efe9d8",
+          "--bg-selected": "#dbe6c9",
+          "--card-bg": "#faf6ea",
+          "--warning": "#a8842c",
+          "--bg-tertiary": "#e7dfc9",
+          "--text-primary": "#3d3d34",
+          "--success": "#5a8a3c",
+          "--text-muted": "#99927e",
+          "--text-disabled": "#b5ad97",
+          "--text-secondary": "#6b6b5f",
+          "--accent-hover": "#3d6a4b",
+          "--accent": "#4a7c59",
+          "--border-color": "#ddd3b8",
+          "--bg-hover": "#e3dac2"
+        }
+      },
+      {
+        "name": "赛博朋克夜城",
+        "colors": {
+          "--activitybar-bg": "#070912",
+          "--sidebar-bg": "#10142a",
+          "--input-bg": "#161c38",
+          "--danger": "#ff2e63",
+          "--bg-primary": "#0b0e1a",
+          "--bg-secondary": "#131730",
+          "--bg-selected": "#2a3a6e",
+          "--card-bg": "#141936",
+          "--warning": "#ffe14d",
+          "--bg-tertiary": "#1b2140",
+          "--text-primary": "#d8e0ff",
+          "--success": "#00ff9f",
+          "--text-muted": "#5a6399",
+          "--text-disabled": "#3d4470",
+          "--text-secondary": "#8a93c9",
+          "--accent-hover": "#66f5ff",
+          "--accent": "#00f0ff",
+          "--border-color": "#2a3070",
+          "--bg-hover": "#232a52"
+        }
+      },
+      {
+        "name": "手绘线条",
+        "colors": {
+          "--bg-primary": "#faf6ee",
+          "--bg-secondary": "#f4eee1",
+          "--bg-tertiary": "#ede5d3",
+          "--bg-hover": "#efe7d6",
+          "--bg-selected": "#ece4cd",
+          "--activitybar-bg": "#e9dfc8",
+          "--sidebar-bg": "#f4eee1",
+          "--input-bg": "#fffdf6",
+          "--card-bg": "#fffdf6",
+          "--text-primary": "#3b3835",
+          "--text-secondary": "#6e685e",
+          "--text-muted": "#98917f",
+          "--text-disabled": "#b5ad9a",
+          "--accent": "#d95d39",
+          "--accent-hover": "#c44f2e",
+          "--danger": "#cc3f3f",
+          "--success": "#5a8a3c",
+          "--warning": "#c98a1b",
+          "--warning-bg": "#faf0d3",
+          "--border-color": "#8f8672",
+          "--font-sans": "'Segoe Print','Comic Sans MS','KaiTi','STKaiti','楷体',system-ui,sans-serif"
+        }
+      }
+    ]
+  }
+}
