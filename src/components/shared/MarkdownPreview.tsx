@@ -121,7 +121,8 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
           },
           code({ className, children, node, ...props }) {
             // 内容包动画 fence:anim@<pluginId>:<blockId> → 沙箱 iframe 播放器
-            const anim = /^language-anim@([a-z0-9][a-z0-9._-]*):([A-Za-z0-9._-]+)$/.exec(className || '')
+            // (rehype-highlight 会在 className 前加 "hljs ",故不用锚定匹配)
+            const anim = /language-anim@([a-z0-9][a-z0-9._-]*):([A-Za-z0-9._-]+)/.exec(className || '')
             if (anim) return <AnimEmbed pluginId={anim[1]} animId={anim[2]} label={String(children).trim().split('\n')[0]} />
             const match = /language-(\w+)/.exec(className || '')
             const lang = match ? match[1] : ''

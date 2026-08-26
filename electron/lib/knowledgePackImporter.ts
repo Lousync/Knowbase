@@ -119,9 +119,23 @@ function extractInlineSvgs(md: string): { md: string; extracted: { name: string;
   return { md: outLines.join('\n'), extracted }
 }
 
-/** 剥离 svg 文本中的活动内容 */
+/**
+ * SVG 规范化(导入安全 + 尺寸修正):
+ * 1) 剥离 <script> 与 on* 事件属性
+ * 2) 剥离 svg 根节点的 style 属性(源站常用 width:100%,在 <img> 中会塌缩为 0×0)
+ * 3) 无显式宽高时从 viewBox 注入 width/height,保证 <img> 有真实内在尺寸
+ */
 function sanitizeSvgText(content: string): string {
-  return content.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  let out = content.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  out = out.replace(/<svg([^>]*)>/i, (_m, attrs: string) => {
+    let a = attrs.replace(/\sstyle\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    if (!/\swidth\s*=/i.test(a)) {
+      const vb = /viewBox\s*=\s*["']\s*0\s+0\s+([\d.]+)\s+([\d.]+)/i.exec(a)
+      if (vb) a += ` width="${vb[1]}" height="${vb[2]}"`
+    }
+    return `<svg${a}>`
+  })
+  return out
 }
 
 /**
@@ -161,7 +175,9 @@ function processImages(md: string, pluginDir: string, pageFileDir: string): stri
     const ext = (assetRel.match(/\.(\w+)$/)?.[1] || 'png').toLowerCase()
     const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' }
     const mime = mimeMap[ext] || 'application/octet-stream'
-    return `data:${mime};base64,${buf.toString('base64')}`
+    let bytes = buf
+    if (ext === 'svg') bytes = Buffer.from(sanitizeSvgText(buf.toString('utf-8')), 'utf-8')
+    return `data:${mime};base64,${bytes.toString('base64')}`
   }
 
   // 1) 内联 svg 提取 → 直接内嵌
