@@ -124,7 +124,7 @@
   var outEl = $('output'), copyBtn = $('copyBtn'), genBtn = $('genBtn');
   var lenEl = $('len'), lenNum = $('lenNum');
 
-  // ---- 宿主桥:主题变量 + 剪贴板 ----
+  // ---- 宿主桥:主题变量 + 能力白名单消息(clipboard.write 需授权) ----
   window.addEventListener('message', function (e) {
     var d = e.data;
     if (!d || d.channel !== 'kb-plugin') return;
@@ -193,7 +193,7 @@
   });
   copyBtn.addEventListener('click', function () {
     if (!state.pwd) return;
-    bridge('copy', state.pwd);
+    bridge('clipboard.write', state.pwd);
     copyBtn.classList.add('copied');
     copyBtn.lastChild.textContent = ' 已复制';
     setTimeout(function () {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag, KnowledgeBacklinkItem } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinkContext, getKnowledgeManualLinks, addKnowledgeManualLink, removeKnowledgeManualLink, createKnowledgePage, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName } from '../../../lib/ipc'
@@ -43,7 +43,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [content, setContent] = useState('')
   const [fileType, setFileTypeState] = useState('')
   const [showLangMenu, setShowLangMenu] = useState(false)
-  const [preview, setPreview] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  // 知识库以阅读优先:md/txt 页面打开即预览(右上角眼睛或 Ctrl+/ 切回编辑)
+  const [preview, setPreview] = useState(true)
   const [backlinks, setBacklinks] = useState<KnowledgeBacklinkItem[]>([])
   // 手动关联（双向）
   const [manualLinks, setManualLinks] = useState<KnowledgePage[]>([])
@@ -167,6 +169,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           setAnnotation(anno); savedAnnotationRef.current = anno
           window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label }))
           onTitleChange?.(p.title)
+          // 种子 liveContent(大纲/导出依赖);列表已瘦身,活动页内容以编辑器装载为准
+          onContentChange?.(p.contentMd || '')
+          // 非 md/txt 类型(pdf/代码)强制编辑视图;md/txt 保持阅读优先
+          const ft = (p.fileType || 'md').toLowerCase()
+          setPreview(ft === 'md' || ft === '' || ft === 'txt')
         }
       }),
       getKnowledgeBacklinkContext(pageId).then(setBacklinks),
@@ -562,31 +569,6 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       {/* Toolbar — portaled into the tab bar row (merged layer 1 + 2) */}
       {toolbarSlot && createPortal(
         <>
-          <button
-            onClick={handleToggleStar}
-            className={`p-1.5 rounded ${page.isStarred ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'} hover:text-[var(--warning)] transition-colors`}
-            title="收藏"
-          >
-            <Star size={15} fill={page.isStarred ? '#c5a332' : 'none'} />
-          </button>
-          {/* 添加关联：始终可见的入口（右栏折叠时也能用） */}
-          <button
-            onClick={() => { setShowBacklinks(true); setLinkPickerOpen(true) }}
-            className="p-1.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
-            title="添加关联（连接到其他页面）"
-          >
-            <Link2 size={15} />
-          </button>
-          {/* 沉浸阅读入口：仅 md/txt */}
-          {(fileType === 'md' || fileType === 'txt') && (
-            <button
-              onClick={() => onRequestReading?.()}
-              className="p-1.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
-              title="沉浸阅读 (Ctrl+Shift+R)"
-            >
-              <BookOpen size={15} />
-            </button>
-          )}
           {!isPdfFile && (
             <div className="relative">
               <button onClick={() => setShowLangMenu(v => !v)}
@@ -618,21 +600,50 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             className={`w-2.5 h-2.5 rounded-full shrink-0 ${saving ? 'bg-[var(--warning)] animate-pulse' : 'bg-green-500'}`}
             title={saving ? '保存中…' : '已保存'}
           />
-          {!isCodeFile && !isPdfFile && (
-            <>
-              {!preview && (
-                <button onClick={() => imageInputRef.current?.click()} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="插入图片">
-                  <ImagePlus size={15} />
-                </button>
-              )}
-              <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title="Ctrl+/">
-                {preview ? <Edit3 size={15} /> : <Eye size={15} />}
-              </button>
-            </>
+          {!isCodeFile && !isPdfFile && !preview && (
+            <button onClick={() => imageInputRef.current?.click()} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="插入图片">
+              <ImagePlus size={15} />
+            </button>
           )}
-          <button onClick={handleDelete} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)] transition-colors" title="删除">
-            <Trash2 size={15} />
-          </button>
+          {!isCodeFile && !isPdfFile && (
+            <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title={preview ? '切换到编辑 (Ctrl+/)' : '切换到预览 (Ctrl+/)'}>
+              {preview ? <Edit3 size={15} /> : <Eye size={15} />}
+            </button>
+          )}
+          {/* 更多操作:收藏 / 关联 / 沉浸阅读 / 删除 */}
+          <div className="relative">
+            <button onClick={() => setShowMoreMenu(v => !v)}
+              className={`p-1.5 rounded transition-colors ${showMoreMenu ? 'text-[var(--text-primary)] bg-[var(--bg-hover)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+              title="更多操作">
+              <MoreHorizontal size={15} />
+            </button>
+            {showMoreMenu && (
+              <div className="absolute top-full right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl z-50 w-44 py-1"
+                onMouseLeave={() => setShowMoreMenu(false)}>
+                <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                  <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? '#c5a332' : 'none'} />
+                  {page.isStarred ? '取消收藏' : '收藏页面'}
+                </button>
+                <button onClick={() => { setShowBacklinks(true); setLinkPickerOpen(true); setShowMoreMenu(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                  <Link2 size={13} />添加关联
+                </button>
+                {(fileType === 'md' || fileType === 'txt') && onRequestReading && (
+                  <button onClick={() => { onRequestReading(); setShowMoreMenu(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                    <BookOpen size={13} />沉浸阅读
+                    <span className="ml-auto text-[10px] text-[var(--text-disabled)]">Ctrl+Shift+R</span>
+                  </button>
+                )}
+                <div className="my-1 border-t border-[var(--border-color)]" />
+                <button onClick={() => { setShowMoreMenu(false); handleDelete() }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] transition-colors">
+                  <Trash2 size={13} />删除页面
+                </button>
+              </div>
+            )}
+          </div>
         </>,
         toolbarSlot
       )}

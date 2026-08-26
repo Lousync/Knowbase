@@ -98,8 +98,8 @@ const api = {
     return () => { ipcRenderer.removeListener('update:download-progress', handler) }
   },
   pluginFetchRegistry: () => ipcRenderer.invoke('plugin:fetchRegistry'),
-  pluginInstall: (url: string) => ipcRenderer.invoke('plugin:install', url),
-  pluginInstallFromFile: () => ipcRenderer.invoke('plugin:installFromFile'),
+  pluginInstall: (url: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:install', url, grantedCapabilities),
+  pluginInstallFromFile: (grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installFromFile', grantedCapabilities),
   pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),
   pluginSetEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('plugin:setEnabled', id, enabled),
   pluginUninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
@@ -143,6 +143,18 @@ const api = {
   agentDeleteSession: (id: string) => ipcRenderer.invoke('agent:deleteSession', id),
   llmCcSwitchList: () => ipcRenderer.invoke('llm:ccswitch:list'),
   llmCcSwitchImport: (ids: string[]) => ipcRenderer.invoke('llm:ccswitch:import', ids),
+  // 插件安全分级 + 内容包导入
+  pluginSetGranted: (id: string, caps: string[]) => ipcRenderer.invoke('plugin:setGranted', id, caps),
+  pluginAuditList: (id?: string) => ipcRenderer.invoke('plugin:auditList', id),
+  pluginAuditClear: (id?: string) => ipcRenderer.invoke('plugin:auditClear', id),
+  pluginAuditWrite: (id: string, action: string, detail?: unknown) => ipcRenderer.invoke('plugin:auditWrite', id, action, detail),
+  knowledgePackGetState: (pluginId: string) => ipcRenderer.invoke('knowledgePack:getImportState', pluginId),
+  knowledgePackImport: (pluginId: string, overwriteModified: boolean) => ipcRenderer.invoke('knowledgePack:importPack', pluginId, overwriteModified),
+  onKnowledgePackProgress: (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => {
+    const handler = (_e: unknown, p: { pluginId: string; current: number; total: number; title: string }) => cb(p)
+    ipcRenderer.on('knowledgePack:progress', handler)
+    return () => { ipcRenderer.removeListener('knowledgePack:progress', handler) }
+  },
   showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
   executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),

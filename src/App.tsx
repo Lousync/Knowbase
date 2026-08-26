@@ -154,6 +154,13 @@ export default function App() {
     return () => window.removeEventListener('settings:open', handler)
   }, [])
 
+  // Listen for knowledge:open — navigate to knowledge tab(插件导入完成后「去知识库查看」)
+  useEffect(() => {
+    const handler = () => { setActiveTab('knowledge'); setSidebarOpen(true) }
+    window.addEventListener('knowledge:open', handler)
+    return () => window.removeEventListener('knowledge:open', handler)
+  }, [])
+
   // Listen for help:open — navigate to help tab
   useEffect(() => {
     const handler = () => { setActiveTab('help'); setSidebarOpen(true) }

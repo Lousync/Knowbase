@@ -244,7 +244,7 @@ function registerWindowHandlers(): void {
       const tables = [
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
-        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags', 'knowledge_manual_links',
+        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags', 'knowledge_manual_links', 'knowledge_pack_imports',
         'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'moments_albums', 'attachments',
         'blog_templates',
         'toolbox_passwords', 'toolbox_weight_records', 'pomodoro_sessions',
@@ -324,8 +324,11 @@ app.whenReady().then(async () => {
         headers: {
           'Content-Type': mimeMap[ext] || 'application/octet-stream',
           'Cache-Control': 'no-cache',
-          // 插件页面专用 CSP:允许内联脚本/样式与同源自取,断网、禁嵌套、禁表单提交
-          'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline' plugin:; style-src 'unsafe-inline' plugin:; img-src data: plugin:; font-src data: plugin:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+          // 插件页面专用 CSP:允许内联脚本/样式与同源自取,断网、禁嵌套、禁表单提交。
+          // anims/(内容包分步动画播放器)额外放行 unsafe-eval —— manim-web/MathJax 运行时需要
+          'Content-Security-Policy': (rel.startsWith('anims/')
+            ? "default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' plugin:; style-src 'unsafe-inline' plugin:; img-src data: plugin: blob:; font-src data: plugin:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+            : "default-src 'none'; script-src 'unsafe-inline' plugin:; style-src 'unsafe-inline' plugin:; img-src data: plugin:; font-src data: plugin:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"),
         },
       })
     } catch (e) {

@@ -288,10 +288,16 @@ export interface PluginRegistryEntry {
   author?: string
   downloadUrl: string
   iconUrl?: string
+  category?: string
+  riskLevel?: PluginRiskLevel
+  contributions?: string[]
+  capabilities?: string[]
   size?: number
   checksum?: string
   updatedAt?: string
 }
+
+export type PluginRiskLevel = 'S' | 'A' | 'B'
 
 export interface PluginSummary {
   id: string
@@ -302,6 +308,12 @@ export interface PluginSummary {
   description?: string
   type: string
   entry?: string
+  icon?: string
+  category?: string
+  riskLevel: PluginRiskLevel
+  capabilities: string[]
+  grantedCapabilities: string[]
+  legacyGrant?: boolean
   enabled: boolean
   installedAt: string
   builtin?: boolean
@@ -370,6 +382,9 @@ export interface AuditEntryInfo {
   detail: string
   createdAt: string
 }
+
+/** 插件审计条目（与 AI 工具审计同构，别名导出供插件模块消费） */
+export type PluginAuditEntry = AuditEntryInfo
 
 // ===== MCP 外部服务器（M2） =====
 
@@ -534,7 +549,6 @@ export interface AgentChatResult {
   trace: AgentTraceStep[]
 }
 
-
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
   copyImage: (src: { path?: string; dataUrl?: string }) => Promise<boolean>
@@ -612,12 +626,19 @@ export interface ElectronAPI {
   installUpdate: (filePath: string) => Promise<{ success: boolean; message?: string }>
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => () => void
   pluginFetchRegistry: () => Promise<{ ok: boolean; plugins: PluginRegistryEntry[]; updatedAt?: string; message?: string }>
-  pluginInstall: (url: string) => Promise<{ success: boolean; message?: string }>
-  pluginInstallFromFile: () => Promise<{ success: boolean; message?: string }>
+  pluginInstall: (url: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
+  pluginInstallFromFile: (grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   pluginListInstalled: () => Promise<PluginSummary[]>
   pluginSetEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; message?: string }>
   pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
   pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
+  pluginSetGranted: (id: string, caps: string[]) => Promise<{ success: boolean; message?: string }>
+  pluginAuditList: (id?: string) => Promise<PluginAuditEntry[]>
+  pluginAuditClear: (id?: string) => Promise<{ success: boolean }>
+  pluginAuditWrite: (id: string, action: string, detail?: unknown) => Promise<{ success: boolean }>
+  knowledgePackGetState: (pluginId: string) => Promise<{ ok: boolean; state?: 'not-imported' | 'imported' | 'update-available'; version?: string; chapters?: number; totalPages?: number; newPages?: number; changedPages?: number; lastImportedAt?: string; spaceId?: string | null; notebookCount?: number; spaceName?: string; message?: string }>
+  knowledgePackImport: (pluginId: string, overwriteModified: boolean) => Promise<{ ok: boolean; created?: number; updated?: number; skipped?: number; conflicts?: { title: string; reason: string }[]; spaceId?: string | null; message?: string }>
+  onKnowledgePackProgress: (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => () => void
   getAttachmentsPath: () => Promise<string>
   showImportDataDialog: () => Promise<string[]>
   readImportFile: (filePath: string) => Promise<string | null>

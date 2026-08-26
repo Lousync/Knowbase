@@ -314,17 +314,20 @@ export function registerKnowledgeHandlers(): void {
 
   // ===== Page handlers =====
   // 获取分类下的页面
-  ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
+  // 列表瘦身:不含 content_md / content_html / annotation_md(大字段,编辑器按需经 getPageById 取全量)
+const PAGE_LIST_COLUMNS = 'id, title, category_id, sort_order, file_type, is_starred, attachment_id, created_at, updated_at'
+
+ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
     let rows: PageRow[]
     if (categoryId) {
       rows = queryAll<PageRow>(
-        'SELECT * FROM knowledge_pages WHERE category_id = ? ORDER BY sort_order, updated_at DESC',
+        `SELECT ${PAGE_LIST_COLUMNS} FROM knowledge_pages WHERE category_id = ? ORDER BY sort_order, updated_at DESC`,
         [categoryId]
       )
     } else if (categoryId === null) {
       // 未分类的页面
       rows = queryAll<PageRow>(
-        'SELECT * FROM knowledge_pages WHERE category_id IS NULL ORDER BY sort_order, updated_at DESC'
+        `SELECT ${PAGE_LIST_COLUMNS} FROM knowledge_pages WHERE category_id IS NULL ORDER BY sort_order, updated_at DESC`
       )
     } else {
       // 全部页面
@@ -522,10 +525,15 @@ export function registerKnowledgeHandlers(): void {
       `SELECT * FROM knowledge_pages WHERE ${conds} ORDER BY updated_at DESC LIMIT 50`,
       params
     )
-    return rows.map(r => ({
-      ...mapPage(r),
-      excerpt: buildExcerpt(mdToPlain(r.content_md || ''), terms)
-    }))
+    // 搜索结果只回摘录,不回传大字段(避免 50 条 × 数百 KB 的 IPC 负载)
+    return rows.map(r => {
+      const { content_md: _cm, content_html: _ch, annotation_md: _am, ...slim } = r as Record<string, unknown>
+      void _cm; void _ch; void _am
+      return {
+        ...mapPage(slim as PageRow),
+        excerpt: buildExcerpt(mdToPlain(String(r.content_md || '')), terms)
+      }
+    })
   })
 
   // 收藏/取消收藏页面
@@ -538,7 +546,7 @@ export function registerKnowledgeHandlers(): void {
   // 获取收藏的页面
   ipcMain.handle('knowledge:getStarredPages', () => {
     const rows = queryAll<PageRow>(
-      'SELECT * FROM knowledge_pages WHERE is_starred = 1 ORDER BY updated_at DESC'
+      `SELECT ${PAGE_LIST_COLUMNS} FROM knowledge_pages WHERE is_starred = 1 ORDER BY updated_at DESC`
     )
     return rows.map(mapPage)
   })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
@@ -6,8 +6,9 @@ import { HabitTracker } from './components/habit-tracker'
 import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
 import { getPluginTools, type PluginTool } from '../../lib/pluginService'
-import { PluginIconImg } from '../../components/shared/PluginIconImg'
 import { showToast } from '../../lib/toast'
+import { PluginIconImg } from '../../components/shared/PluginIconImg'
+import { pluginAuditWrite } from '../../lib/ipc'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -197,8 +198,13 @@ export function ToolboxModule() {
                       onClick={() => setActivePluginTool(t)}
                       className="flex flex-col items-center gap-2.5 p-5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
                     >
-                      <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)]">
+                      <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)] relative">
                         <PluginIconImg src={t.icon} size={26} className="group-hover:opacity-90" />
+                        <span
+                          className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border border-[var(--bg-secondary)]"
+                          style={{ background: t.riskLevel === 'B' ? 'var(--danger)' : t.riskLevel === 'A' ? 'var(--warning)' : 'var(--success)' }}
+                          title={`安全等级 ${t.riskLevel}`}
+                        />
                       </div>
                       <div className="text-[13px] font-medium leading-tight text-[var(--text-primary)]">{t.name}</div>
                     </button>
@@ -213,25 +219,63 @@ export function ToolboxModule() {
   )
 }
 
-/** UI 插件宿主:sandbox iframe 加载 plugin:// 页面,postMessage 桥提供剪贴板等最小能力 */
+/** UI 插件宿主:sandbox iframe 加载 plugin:// 页面,postMessage 桥按授权白名单执行 */
 function PluginToolHost({ tool, onBack }: { tool: PluginTool; onBack: () => void }) {
   const src = `plugin://${tool.pluginId}/${tool.entry}`
+  const grantedRef = useRef(tool.grantedCapabilities)
 
+  // 桥接消息白名单:按已授权能力执行;未授权/未开放 → 回复 denied 并写审计
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const d = e.data
       if (!d || d.channel !== 'kb-plugin') return
-      if (d.action === 'copy' && typeof d.payload === 'string') {
-        navigator.clipboard.writeText(d.payload)
-          .then(() => showToast({ type: 'info', message: '已复制到剪贴板' }))
-          .catch(() => showToast({ type: 'error', message: '复制失败' }))
-      } else if (d.action === 'toast' && typeof d.payload === 'string') {
-        showToast({ type: 'info', message: d.payload })
+      const reply = (payload: unknown) => {
+        const iframe = document.querySelector<HTMLIFrameElement>('iframe[data-plugin-frame]')
+        iframe?.contentWindow?.postMessage({ channel: 'kb-plugin', action: d.action, payload }, '*')
+      }
+      const deny = (reason: string) => {
+        reply({ denied: true, reason })
+        void pluginAuditWrite(tool.pluginId, 'deny', { action: d.action, reason })
+        showToast({ type: 'warning', message: `插件请求被拒绝:${reason}` })
+      }
+      switch (d.action) {
+        case 'clipboard.write': {
+          if (!grantedRef.current.includes('clipboard')) { deny('未授予剪贴板能力'); return }
+          if (typeof d.payload !== 'string') return
+          navigator.clipboard.writeText(d.payload)
+            .then(() => showToast({ type: 'info', message: '已复制到剪贴板' }))
+            .catch(() => showToast({ type: 'error', message: '复制失败' }))
+          break
+        }
+        case 'theme.apply': {
+          if (!grantedRef.current.includes('theme')) { deny('未授予主题能力'); return }
+          // 复用消毒逻辑:仅允许 CSS 变量形式,关闭宿主即恢复
+          const vars = (d.payload && typeof d.payload === 'object') ? d.payload.vars ?? d.payload : null
+          if (!vars || typeof vars !== 'object') return
+          for (const [k, v] of Object.entries(vars as Record<string, unknown>)) {
+            if (!/^--[a-zA-Z0-9-]{1,64}$/.test(k) || typeof v !== 'string' || v.length > 200) continue
+            if (/url\s*\(|expression|@|{|}|<|>/i.test(v)) continue
+            document.documentElement.style.setProperty(k, v)
+          }
+          reply({ denied: false })
+          break
+        }
+        case 'data.query':
+        case 'data.write': {
+          deny('数据通道本期未开放')
+          break
+        }
+        case 'toast': {
+          if (typeof d.payload === 'string') showToast({ type: 'info', message: d.payload })
+          break
+        }
+        default:
+          deny(`未知消息类型: ${String(d.action)}`)
       }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [])
+  }, [tool.pluginId])
 
   // iframe 加载完成后下发主题变量(插件据此适配深浅色)
   const sendInit = () => {

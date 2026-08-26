@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { LifeBuoy } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { loadHelpDocs, type HelpDoc } from './docsLoader'
@@ -36,7 +36,7 @@ export function HelpModule() {
   const [docs, setDocs] = useState<HelpDoc[]>([])
   const [activeDoc, setActiveDoc] = useState<string>('键盘快捷键')
 
-  useEffect(() => {
+  const loadDocs = useCallback(() => {
     loadHelpDocs().then(docs => {
       setDocs(docs)
       const target = pendingDocId
@@ -46,6 +46,14 @@ export function HelpModule() {
       pendingDocId = null
     })
   }, [])
+
+  useEffect(() => { loadDocs() }, [loadDocs])
+
+  // 插件模块安装/启禁/卸载帮助文档类插件后同步刷新
+  useEffect(() => {
+    window.addEventListener('plugins-changed', loadDocs)
+    return () => window.removeEventListener('plugins-changed', loadDocs)
+  }, [loadDocs])
 
   const categories = groupByCategory(docs)
   const activeEntry = docs.find(d => d.id === activeDoc)

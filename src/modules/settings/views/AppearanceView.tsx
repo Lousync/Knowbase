@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Sun, Moon, Puzzle } from 'lucide-react'
+import { Sun, Moon, Puzzle, CheckCircle2, ChevronRight } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon } from '../../../components/shared/ModuleIcons'
@@ -17,9 +17,14 @@ const THEME_DESCS: Record<string, string> = {
 export function AppearanceView() {
   const { s, update } = useSettings()
   const [pluginThemes, setPluginThemes] = useState<PluginThemeWithVars[]>([])
+  const [themeListOpen, setThemeListOpen] = useState(true)
 
   useEffect(() => {
     ensurePluginThemeStyles().then(setPluginThemes).catch(() => {})
+    // 插件模块安装/启禁/卸载主题插件后同步刷新
+    const refresh = () => { ensurePluginThemeStyles().then(setPluginThemes).catch(() => {}) }
+    window.addEventListener('plugins-changed', refresh)
+    return () => window.removeEventListener('plugins-changed', refresh)
   }, [])
 
   const allThemes: { id: string; label: string; desc: string; icon: React.ReactNode }[] = [
@@ -33,31 +38,43 @@ export function AppearanceView() {
       <p className="text-[12px] text-[var(--text-muted)] mb-6">自定义应用的外观和主题</p>
 
       <div className="mb-8">
-        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">主题</h3>
-        <div className="grid grid-cols-2 gap-3 max-w-md">
-          {allThemes.map(t => (
+        <button
+          onClick={() => setThemeListOpen(v => !v)}
+          className="w-full flex items-center gap-1.5 mb-3 group"
+        >
+          <ChevronRight size={12} className={`text-[var(--text-muted)] transition-transform ${themeListOpen ? 'rotate-90' : ''}`} />
+          <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide group-hover:text-[var(--text-primary)]">主题</h3>
+          <span className="text-[10px] text-[var(--text-disabled)]">({allThemes.length})</span>
+        </button>
+        {themeListOpen && (
+          <div className="space-y-1.5 max-w-md">
+            {allThemes.map(t => (
             <button
               key={t.id}
               onClick={() => {
                 update('theme', t.id)
                 applyThemeClass(t.id)
               }}
-              className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
                 s.theme === t.id
                   ? 'border-[var(--accent)] bg-[var(--bg-selected)]'
-                  : 'border-[var(--border-color)] hover:border-[var(--text-muted)]'
+                  : 'border-[var(--border-color)] hover:bg-[var(--bg-hover)]'
               }`}
             >
-              <span className={s.theme === t.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}>
+              <span className={`shrink-0 ${s.theme === t.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`}>
                 {t.icon}
               </span>
-              <span className={`text-[13px] font-medium ${s.theme === t.id ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
-                {t.label}
+              <span className="flex-1 min-w-0">
+                <span className={`block text-[13px] font-medium truncate ${s.theme === t.id ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+                  {t.label}
+                </span>
+                <span className="block text-[11px] text-[var(--text-muted)] truncate">{t.desc}</span>
               </span>
-              <span className="text-[10px] text-[var(--text-muted)] text-center">{t.desc}</span>
+              {s.theme === t.id && <CheckCircle2 size={15} className="text-[var(--accent)] shrink-0" />}
             </button>
           ))}
         </div>
+      )}
       </div>
 
       <div className="mb-8">

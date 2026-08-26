@@ -1,7 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import { Copy } from 'lucide-react'
 import { showToast } from '../../lib/toast'
 import { copyImageUrlToClipboard } from '../../lib/ipc'
@@ -47,6 +50,30 @@ interface Props {
 }
 
 /** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
+/** 折叠块(kb-import-408.md 2.2 节):```spoiler-answer 围栏 → 答案/解析默认收起,内部走完整 Markdown 管线 */
+function SpoilerBlock({ content }: { content: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="my-2.5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] transition-colors select-none ${
+          open
+            ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10'
+            : 'border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]'
+        }`}
+      >
+        {open ? '收起答案 ▴' : '显示答案 ▸'}
+      </button>
+      {open && (
+        <div className="mt-1.5 px-3 py-2 rounded-md border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+          <MarkdownPreview content={content} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles }: Props) {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
@@ -68,10 +95,17 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
   return (
     <div className="prose-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]}
         urlTransform={safeUrlTransform}
         components={{
+          // 折叠块/动画 fence 不包 <pre>
+          pre({ children }) {
+            const child = Array.isArray(children) ? children[0] : children
+            const cls = (React.isValidElement(child) && ((child.props as { className?: string }).className || '')) || ''
+            if (/language-(spoiler|anim)/.test(cls)) return <>{children}</>
+            return <pre>{children}</pre>
+          },
           // Override ul/ol to restore list-style killed by Tailwind reset
           ul({ children }) {
             return <ul className="list-disc pl-6 my-1.5">{children}</ul>
@@ -114,6 +148,14 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
             )
           },
           code({ className, children, node, ...props }) {
+            // 内容包折叠块 fence:spoiler-answer → 答案/解析默认收起(内部递归完整管线)
+            if (/(?:^|\s)language-spoiler/.test(className || '')) {
+              return <SpoilerBlock content={String(children).replace(/\n$/, '')} />
+            }
+            // 内容包动画 fence:anim@<pluginId>:<blockId> → 沙箱 iframe 播放器
+            // (rehype-highlight 会在 className 前加 "hljs ",故不用锚定匹配)
+            const anim = /language-anim@([a-z0-9][a-z0-9._-]*):([A-Za-z0-9._-]+)/.exec(className || '')
+            if (anim) return <AnimEmbed pluginId={anim[1]} animId={anim[2]} label={String(children).trim().split('\n')[0]} />
             const match = /language-(\w+)/.exec(className || '')
             const lang = match ? match[1] : ''
             const isBlock = node?.tagName === 'code' && className?.includes('language-')
@@ -230,4 +272,32 @@ function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string)
     }
     return child
   })
+}
+
+/** 内容包分步动画播放器(plugin:// 沙箱 iframe,manim-web 单运行时) */
+function AnimEmbed({ pluginId, animId, label }: { pluginId: string; animId: string; label: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    return (
+      <div className="my-3 px-3 py-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-muted)]">
+        【交互式动画】{label || animId}(播放器加载失败,插件可能已被卸载)
+      </div>
+    )
+  }
+  return (
+    <figure className="my-3">
+      <iframe
+        src={`plugin://${pluginId}/anims/player.html?id=${encodeURIComponent(animId)}`}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        title={label || animId}
+        onError={() => setFailed(true)}
+        style={{ width: '100%', aspectRatio: '16 / 10', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', background: '#fff' }}
+      />
+      <figcaption className="text-[11px] text-[var(--text-muted)] mt-1 text-center select-none">
+        分步动画{label ? ` · ${label}` : ''}(使用下方控件逐步播放)
+      </figcaption>
+    </figure>
+  )
 }

@@ -207,6 +207,10 @@ export function buildAllData(moduleIds?: string[]) {
     recycleBin: {
       items: recycleItems.map(r => ({ id: r.id, originalId: r.original_id, module: r.module, title: r.title, data: r.data, deletedAt: r.deleted_at }))
     },
+    // 内容型插件导入映射(换机恢复后「检查更新」不产生重复页面)
+    knowledgePackImports: queryAll<{ plugin_id: string; external_id: string; page_id: string; content_hash: string; pack_version: string; space_id: string | null; imported_at: string }>(
+      'SELECT plugin_id, external_id, page_id, content_hash, pack_version, space_id, imported_at FROM knowledge_pack_imports'
+    ).map(r => ({ ...r })),
   }
 }
 

@@ -155,6 +155,8 @@ export const SETTINGS = {
 
   // ---- 模型标记 ----
   aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },
+  // ---- 插件安全分级 ----
+  pluginAllowedLevels: { default: 'S,A,B', desc: '允许安装/启用的插件安全等级(S/A/B 逗号分隔)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

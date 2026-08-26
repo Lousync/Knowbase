@@ -37,6 +37,17 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 
+  /* ===== sketch 基建(theme-handdrawn.md 第四节)=====
+     默认值与既有视觉完全一致;主题包可覆写实现手绘线条效果。
+     消费点:.prose-content 内的容器/分隔/链接/引用(见下方 prose 区)。 */
+  --radius-card: 8px;
+  --radius-btn: 6px;
+  --shadow-card: none;
+  --divider-style: 1px solid var(--border-color);
+  --heading-rule: 1px solid var(--bg-tertiary);
+  --link-hover-deco: underline;
+  --quote-bar: 3px solid var(--accent);
+
 }
 
 /* ===== 主题覆写（通过 html.theme-<id> 控制，新增主题只需加一个同名块）===== */
@@ -131,8 +142,8 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* ===== Markdown 预览样式 ===== */
-.prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: var(--text-primary); padding-bottom: 0.35rem; border-bottom: 1px solid var(--border-color); }
-.prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--text-primary); padding-bottom: 0.25rem; border-bottom: 1px solid var(--bg-tertiary); }
+.prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: var(--text-primary); padding-bottom: 0.35rem; border-bottom: var(--divider-style); }
+.prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--text-primary); padding-bottom: 0.25rem; border-bottom: var(--heading-rule); }
 .prose-content h3 { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.3rem; color: var(--text-primary); }
 .prose-content p { margin: 0.4rem 0; line-height: 1.75; }
 .prose-content strong { color: var(--text-primary); font-weight: 700; }
@@ -147,7 +158,7 @@ input:focus, textarea:focus, select:focus {
 .prose-content li { margin: 0.2rem 0; }
 .prose-content li > ol, .prose-content li > ul { padding-left: 1.25rem; }
 .prose-content blockquote {
-  border-left: 3px solid var(--accent);
+  border-left: var(--quote-bar);
   padding-left: 1rem; margin: 0.6rem 0;
   color: var(--text-secondary);
 }
@@ -158,13 +169,14 @@ input:focus, textarea:focus, select:focus {
 }
 .prose-content pre {
   background: var(--bg-primary); border: 1px solid var(--border-color);
-  padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.6rem 0;
+  padding: 1rem; border-radius: var(--radius-card); overflow-x: auto; margin: 0.6rem 0;
+  box-shadow: var(--shadow-card);
 }
 .prose-content pre code { background: none; padding: 0; }
-.prose-content img { max-width: 100%; border-radius: 6px; margin: 0.5rem 0; }
-.prose-content hr { border: none; border-top: 1px solid var(--border-color); margin: 1.2rem 0; }
+.prose-content img { max-width: 100%; border-radius: var(--radius-btn); margin: 0.5rem 0; }
+.prose-content hr { border: none; border-top: var(--divider-style); margin: 1.2rem 0; }
 .prose-content a { color: var(--accent); text-decoration: none; }
-.prose-content a:hover { text-decoration: underline; }
+.prose-content a:hover { text-decoration: var(--link-hover-deco); }
 .prose-content table { border-collapse: collapse; width: 100%; margin: 0.6rem 0; }
 .prose-content th, .prose-content td {
   border: 1px solid var(--border-color); padding: 0.4rem 0.6rem; text-align: left;

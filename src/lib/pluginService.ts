@@ -60,17 +60,22 @@ function sanitizeVars(colors: unknown): string[] {
 
 /** 注入/刷新所有插件主题的 <style>;返回可用插件主题列表(供设置 → 外观展示) */
 export async function ensurePluginThemeStyles(): Promise<PluginThemeWithVars[]> {
-  const list = await getEnabledContributions<Record<string, unknown>>('theme')
+  const list = await getEnabledContributions<Record<string, unknown> | Record<string, unknown>[]>('theme')
   const themes: PluginThemeWithVars[] = []
   const rules: string[] = []
   for (const item of list) {
-    const d = item.data as { name?: unknown; colors?: unknown }
-    const vars = sanitizeVars(d?.colors)
-    if (typeof d?.name !== 'string' || !d.name.trim() || vars.length === 0) continue
-    // CSS 类名消毒:插件 id 可能含 "."(如 sample.study-pack),点在类选择器里是分隔符,必须替换
-    const themeId = `plugin-${item.pluginId.replace(/[^a-zA-Z0-9_-]/g, '-')}`
-    themes.push({ id: themeId, name: d.name.trim(), pluginName: item.pluginName, colors: d.colors as Record<string, string> })
-    rules.push(`html.theme-${themeId} {\n${vars.join('\n')}\n}`)
+    // 兼容两种形态:单个主题对象,或主题数组(一个插件提供多套主题)
+    const arr = Array.isArray(item.data) ? item.data : [item.data]
+    arr.forEach((d, themeIdx) => {
+      const rec = d as Record<string, unknown>
+      const vars = sanitizeVars(rec?.colors)
+      if (typeof rec?.name !== 'string' || !rec.name.trim() || vars.length === 0) return
+      // CSS 类名消毒:插件 id 可能含 "."(如 sample.study-pack),点在类选择器里是分隔符,必须替换
+      // 单主题保持旧 id(兼容已保存的主题设置);多主题追加序号
+      const themeId = `plugin-${item.pluginId.replace(/[^a-zA-Z0-9_-]/g, '-')}` + (arr.length > 1 ? `-${themeIdx}` : '')
+      themes.push({ id: themeId, name: rec.name.trim(), pluginName: item.pluginName, colors: rec.colors as Record<string, string> })
+      rules.push(`html.theme-${themeId} {\n${vars.join('\n')}\n}`)
+    })
   }
   document.getElementById('kb-plugin-themes')?.remove()
   const style = document.createElement('style')
@@ -103,7 +108,7 @@ export async function getPluginPomodoroPresets(): Promise<PluginPomodoroPreset[]
 
 // ---------- 工具卡片(UI 插件) ----------
 
-export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string; icon?: string }
+export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string; icon?: string; riskLevel: 'S' | 'A' | 'B'; grantedCapabilities: string[] }
 
 export async function getPluginTools(): Promise<PluginTool[]> {
   let installed: PluginSummary[] = []
@@ -116,7 +121,7 @@ export async function getPluginTools(): Promise<PluginTool[]> {
       if (!r.ok || !Array.isArray(r.data)) continue
       for (const t of r.data as { id?: unknown; name?: unknown }[]) {
         if (typeof t?.id !== 'string' || typeof t?.name !== 'string') continue
-        out.push({ pluginId: p.id, toolId: t.id, name: t.name, entry: p.entry, icon: p.icon })
+        out.push({ pluginId: p.id, toolId: t.id, name: t.name, entry: p.entry, icon: p.icon, riskLevel: p.riskLevel, grantedCapabilities: p.grantedCapabilities })
       }
     } catch { /* 单个插件失败跳过 */ }
   }

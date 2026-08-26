@@ -580,6 +580,19 @@ export function executeImportData(data: any): { success: boolean; imported: numb
           imported++
         }
       }
+      // --- 知识内容包导入映射(保持「检查更新」幂等,不计入 imported 计数) ---
+      if (Array.isArray(data.knowledgePackImports)) {
+        for (const m of data.knowledgePackImports) {
+          if (!m || typeof m.plugin_id !== 'string' || typeof m.external_id !== 'string') continue
+          try {
+            db.run(
+              `INSERT OR REPLACE INTO knowledge_pack_imports (plugin_id, external_id, page_id, content_hash, pack_version, space_id, imported_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [m.plugin_id, m.external_id, m.page_id, m.content_hash || '', m.pack_version || '', m.space_id || null, m.imported_at || new Date().toISOString()]
+            )
+          } catch { /* 跳过非法条目 */ }
+        }
+      }
       db.run('COMMIT')
       // 导入的密码为明文 JSON,统一走一次加密(幂等)再落盘
       encryptExistingPasswords()
