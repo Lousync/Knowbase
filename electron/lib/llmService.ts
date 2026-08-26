@@ -125,6 +125,19 @@ function anthropicBase(p: ProviderConfig): string {
   return p.baseUrl.replace(/\/v1\/?$/, '') // 容忍用户粘贴带 /v1 的地址，适配器统一补版本路径
 }
 
+/** 上游错误 → 面向用户的中文提示（保留原始细节截断） */
+function friendlyHttpError(status: number, json: any): string {
+  const detail = String(json?.error?.message ?? json?.message ?? '').replace(/\s+/g, ' ').slice(0, 120)
+  const etype = String(json?.error?.type ?? '')
+  if (status === 429 || /RateLimit|FreeUsageLimit/i.test(etype + detail)) {
+    return `免费模型限频中，请稍后再试或换其他模型${detail ? `（${detail}）` : ''}`
+  }
+  if (status === 401 || status === 403) return `鉴权失败（${status}），请检查 API Key${detail ? `：${detail}` : ''}`
+  if (status === 404) return `接口路径不存在（404），请确认 Base URL 与供应商类型匹配${detail ? `：${detail}` : ''}`
+  if (status >= 500) return `上游模型暂时不可用（${status}），可稍后重试或换其他模型${detail ? `：${detail}` : ''}`
+  return `HTTP ${status}: ${detail || '请求失败'}`
+}
+
 function anthropicHeaders(p: ProviderConfig): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' }
   if (p.apiKeyEncrypted) {
@@ -168,7 +181,7 @@ const openAiCompatibleAdapter: Adapter = {
       body: JSON.stringify(body),
     })
     if (status !== 200 || !json) {
-      throw Object.assign(new Error(`HTTP ${status}: ${String(json?.error?.message ?? '').slice(0, 200) || '响应解析失败'}`), { latencyMs: Date.now() - started })
+      throw Object.assign(new Error(friendlyHttpError(status, json)), { latencyMs: Date.now() - started })
     }
     const msg = json.choices?.[0]?.message ?? {}
     const toolCalls = normalizeOpenAiToolCalls(msg.tool_calls)
