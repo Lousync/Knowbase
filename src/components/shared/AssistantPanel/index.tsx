@@ -157,12 +157,14 @@ export function AssistantPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, openPanel, closePanel])
 
-  // 检查是否有可用模型供应商（决定引导态）
+  // 检查是否有可用模型供应商（决定引导态）——每次打开面板时重新检查，
+  // 避免用户先开面板、后去设置配好模型回来仍显示「未配置」的过期状态
   useEffect(() => {
+    if (!open) return
     llmListProviders()
       .then(r => setProvidersOk(r.providers.some(p => p.enabled && p.models.length > 0)))
       .catch(() => setProvidersOk(false))
-  }, [])
+  }, [open])
 
     const refreshSessions = useCallback(async () => {
     try { setSessions(await agentSessions()) } catch { /* ignore */ }
@@ -462,7 +464,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                             {m.content}
                           </div>
                         )}
-                        {editing?.id === m.id ? (
+                        {editing != null && editing.id != null && editing.id === m.id ? (
                           <div className="ml-6 mt-1 space-y-1.5">
                             <textarea
                               value={editing.draft}
