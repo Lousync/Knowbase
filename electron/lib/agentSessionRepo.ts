@@ -83,3 +83,24 @@ export function getAgentMessages(sessionId: string): AgentMessageRow[] {
     [sessionId]
   )
 }
+
+export function getMessageById(id: string): AgentMessageRow | null {
+  const rows = queryAll<AgentMessageRow>('SELECT * FROM agent_messages WHERE id = ?', [id])
+  return rows.length > 0 ? rows[0] : null
+}
+
+/** 编辑消息内容（仅用于用户消息改写后重推） */
+export function updateMessageContent(id: string, content: string): void {
+  run('UPDATE agent_messages SET content = ?, trace_json = NULL WHERE id = ?', [content, id])
+}
+
+export function deleteMessage(id: string): void {
+  run('DELETE FROM agent_messages WHERE id = ?', [id])
+}
+
+/** 删除某条消息之后的所有消息（重新生成/编辑重推时清掉旧回复） */
+export function deleteMessagesAfter(sessionId: string, messageId: string): void {
+  const rows = queryAll<{ rowid: number }>('SELECT rowid FROM agent_messages WHERE id = ?', [messageId])
+  if (rows.length === 0) return
+  run('DELETE FROM agent_messages WHERE session_id = ? AND rowid > ?', [sessionId, rows[0].rowid])
+}

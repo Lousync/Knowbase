@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check, Square,
+  Pencil, RefreshCw,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
+import { MarkdownPreview } from '../MarkdownPreview'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, llmListProviders, copyText, agentAbort,
+  agentChat, agentRegenerate, agentEditMessage, agentDeleteMessage,
+  llmListProviders, copyText, agentAbort,
 } from '../../../lib/ipc'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo } from '../../../types'
 
@@ -18,6 +21,7 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContext
  */
 
 interface UiMessage {
+  id?: string
   role: 'user' | 'assistant'
   content: string
   trace?: AgentTraceStep[]
@@ -28,6 +32,17 @@ function nowLocal(): string {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/** 落库消息 → UI 消息（保留 id 供编辑/删除/重新生成定位） */
+function toUi(m: AgentStoredMessage): UiMessage {
+  return {
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    createdAt: m.createdAt,
+    trace: m.traceJson ? (() => { try { return JSON.parse(m.traceJson) as AgentTraceStep[] } catch { return undefined } })() : undefined,
+  }
 }
 
 /** 'YYYY-MM-DD HH:MM:SS' → 今天只显示 HH:mm，更早显示 MM-DD HH:mm */
@@ -59,6 +74,8 @@ export function AssistantPanel() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [dragW, setDragW] = useState<number | null>(null)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  /** 行内编辑用户消息：目标消息 id + 草稿 */
+  const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null)
   /** 选中文本即问：浮动按钮状态与一次性选中上下文 */
   const [selFloat, setSelFloat] = useState<{ x: number; y: number; text: string } | null>(null)
   const [selCtx, setSelCtx] = useState<AgentContextInfo | null>(null)
@@ -154,17 +171,21 @@ export function AssistantPanel() {
 useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, pending, drawerShown])
 
+  /** 以会话库为准刷新消息（发送/重新生成/编辑/删除后统一走这里，拿到落库 id 与 trace） */
+  const refreshMessages = useCallback(async (sid: string) => {
+    if (activeIdRef.current !== sid) return
+    try {
+      const rows: AgentStoredMessage[] = await agentMessages(sid)
+      if (activeIdRef.current === sid) setMessages(rows.map(toUi))
+    } catch { /* keep current */ }
+  }, [])
+
   const loadSession = useCallback(async (id: string) => {
     setActiveId(id)
     closeDrawer()
     try {
       const rows: AgentStoredMessage[] = await agentMessages(id)
-      setMessages(rows.map(m => ({
-        role: m.role,
-        content: m.content,
-        createdAt: m.createdAt,
-        trace: m.traceJson ? (() => { try { return JSON.parse(m.traceJson) as AgentTraceStep[] } catch { return undefined } })() : undefined,
-      })))
+      setMessages(rows.map(toUi))
     } catch { setMessages([]) }
   }, [])
 
@@ -264,18 +285,65 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
         return
       }
       if (r.ok && r.reply !== undefined) {
-        setMessages(prev => [...prev, { role: 'assistant', content: r.reply!, createdAt: nowLocal(), trace: r.trace }])
         if (selCtx) setSelCtx(null) // 选中上下文一次性消费
       } else if (r.code === 'ABORTED') {
         showToast({ type: 'info', message: '已停止生成' })
       } else {
         showToastSafe(`AI 调用失败：${r.error ?? '未知错误'}`)
       }
+      // 以会话库为准刷新（拿到落库 id/trace；中止时仅剩用户消息也保持一致）
+      await refreshMessages(sid)
     } finally {
       setPending(false)
       void refreshSessions()
     }
-  }, [input, pending, activeId, refreshSessions, selCtx])
+  }, [input, pending, activeId, refreshSessions, selCtx, refreshMessages])
+
+  /** 重新生成最后一条回复（末条为助手消息时可用） */
+  const runRegenerate = useCallback(async () => {
+    const sid = activeId
+    if (!sid || pending) return
+    if (messages.length === 0 || messages[messages.length - 1].role !== 'assistant') return
+    setPending(true)
+    const cid = crypto.randomUUID()
+    chatIdRef.current = cid
+    try {
+      const r = await agentRegenerate(sid, getAssistantContext() ?? undefined, cid)
+      if (r.code === 'ABORTED') showToast({ type: 'info', message: '已停止生成' })
+      else if (!r.ok) showToastSafe(`重新生成失败：${r.error ?? '未知错误'}`)
+      await refreshMessages(sid)
+    } finally {
+      setPending(false)
+      void refreshSessions()
+    }
+  }, [activeId, pending, messages, refreshMessages, refreshSessions])
+
+  /** 改写用户消息并重推其后回复 */
+  const runEdit = useCallback(async (messageId: string, content: string) => {
+    const sid = activeId
+    if (!sid || pending) return
+    setEditing(null)
+    setPending(true)
+    const cid = crypto.randomUUID()
+    chatIdRef.current = cid
+    try {
+      const r = await agentEditMessage(sid, messageId, content, getAssistantContext() ?? undefined, cid)
+      if (r.code === 'ABORTED') showToast({ type: 'info', message: '已停止生成' })
+      else if (!r.ok) showToastSafe(`修改失败：${r.error ?? '未知错误'}`)
+      await refreshMessages(sid)
+    } finally {
+      setPending(false)
+      void refreshSessions()
+    }
+  }, [activeId, pending, refreshMessages, refreshSessions])
+
+  /** 删除单条消息（助手消息删除后可用「重新生成」补回） */
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    const sid = activeId
+    if (!sid) return
+    await agentDeleteMessage(messageId)
+    await refreshMessages(sid)
+  }, [activeId, refreshMessages])
 
   const ctx = open ? getAssistantContext() : null
 
@@ -384,24 +452,72 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                       </div>
                     )}
                     {messages.map((m, i) => (
-                      <div key={i} className="group/msg">
-                        <Bubble msg={m} />
-                        <div className={`flex items-center gap-1.5 px-1 mt-0.5 text-[10px] text-[var(--text-disabled)] ${m.role === 'user' ? 'justify-end ml-6' : 'justify-start mr-6'}`}>
-                          {m.createdAt && <span>{fmtTime(m.createdAt)}</span>}
-                          <button
-                            onClick={async () => {
-                              const okFlag = await copyText(m.content)
-                              if (okFlag) {
-                                setCopiedIdx(i)
-                                setTimeout(() => setCopiedIdx(cur => (cur === i ? null : cur)), 1500)
-                              } else showToastSafe('复制失败')
-                            }}
-                            className={`flex items-center gap-0.5 transition-opacity hover:text-[var(--text-primary)] ${copiedIdx === i ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'}`}
-                            title="复制">
-                            {copiedIdx === i ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
-                            {copiedIdx === i ? '已复制' : '复制'}
-                          </button>
-                        </div>
+                      <div key={m.id ?? `live-${i}`} className="group/msg">
+                        {m.role === 'assistant' ? (
+                          <div className="mr-6 px-3 py-2 rounded-lg text-[12px] leading-relaxed break-words select-text cursor-text bg-[var(--bg-secondary)] border border-[var(--border-color)] [&_.prose-content>:first-child]:mt-0 [&_.prose-content>:last-child]:mb-0 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_table]:block [&_table]:overflow-x-auto">
+                            <MarkdownPreview content={m.content} />
+                          </div>
+                        ) : (
+                          <div className="ml-6 px-3 py-2 rounded-lg text-[12px] leading-relaxed whitespace-pre-wrap break-words select-text cursor-text bg-[var(--bg-selected)] border border-[var(--border-color)]">
+                            {m.content}
+                          </div>
+                        )}
+                        {editing?.id === m.id ? (
+                          <div className="ml-6 mt-1 space-y-1.5">
+                            <textarea
+                              value={editing.draft}
+                              onChange={e => setEditing({ ...editing, draft: e.target.value })}
+                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (editing.draft.trim()) void runEdit(m.id!, editing.draft.trim()) } }}
+                              rows={3}
+                              autoFocus
+                              className="w-full px-2.5 py-2 rounded-md border border-[var(--accent)] bg-[var(--input-bg)] text-[12px] resize-none outline-none"
+                            />
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => { if (editing.draft.trim()) void runEdit(m.id!, editing.draft.trim()) }}
+                                className="px-2 py-0.5 rounded text-[11px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">保存并重新生成</button>
+                              <button onClick={() => setEditing(null)}
+                                className="px-2 py-0.5 rounded text-[11px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">取消</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`flex items-center gap-1.5 px-1 mt-0.5 text-[10px] text-[var(--text-disabled)] ${m.role === 'user' ? 'justify-end ml-6' : 'justify-start mr-6'}`}>
+                            {m.createdAt && <span>{fmtTime(m.createdAt)}</span>}
+                            <button
+                              onClick={async () => {
+                                const okFlag = await copyText(m.content)
+                                if (okFlag) {
+                                  setCopiedIdx(i)
+                                  setTimeout(() => setCopiedIdx(cur => (cur === i ? null : cur)), 1500)
+                                } else showToastSafe('复制失败')
+                              }}
+                              className={`flex items-center gap-0.5 transition-opacity hover:text-[var(--text-primary)] ${copiedIdx === i ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'}`}
+                              title="复制">
+                              {copiedIdx === i ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                              {copiedIdx === i ? '已复制' : '复制'}
+                            </button>
+                            {m.role === 'user' && m.id && !pending && (
+                              <button onClick={() => setEditing({ id: m.id!, draft: m.content })}
+                                className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
+                                title="编辑并重新生成">
+                                <Pencil size={10} /> 编辑
+                              </button>
+                            )}
+                            {m.role === 'assistant' && i === messages.length - 1 && !pending && m.id && (
+                              <button onClick={() => { void runRegenerate() }}
+                                className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
+                                title="重新生成">
+                                <RefreshCw size={10} /> 重新生成
+                              </button>
+                            )}
+                            {m.role === 'assistant' && m.id && !pending && (
+                              <button onClick={() => { void handleDeleteMessage(m.id!) }}
+                                className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:text-red-400"
+                                title="删除该回复">
+                                <Trash2 size={10} /> 删除
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {m.trace && m.trace.length > 0 && <TraceBlock steps={m.trace} />}
                       </div>
                     ))}
@@ -507,18 +623,6 @@ function NoProviderHint({ onGoSettings }: { onGoSettings: () => void }) {
           去配置模型
         </button>
       </div>
-    </div>
-  )
-}
-
-function Bubble({ msg }: { msg: UiMessage }) {
-  return (
-    <div className={`px-3 py-2 rounded-lg text-[12px] leading-relaxed whitespace-pre-wrap break-words select-text cursor-text ${
-      msg.role === 'user'
-        ? 'ml-6 bg-[var(--bg-selected)] border border-[var(--border-color)]'
-        : 'mr-6 bg-[var(--bg-secondary)] border border-[var(--border-color)]'
-    }`}>
-      {msg.content}
     </div>
   )
 }

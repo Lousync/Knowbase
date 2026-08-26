@@ -6,6 +6,7 @@ import { invokeLlmInternal } from './llmService'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
+  getMessageById, updateMessageContent, deleteMessage, deleteMessagesAfter,
 } from './agentSessionRepo'
 
 /**
@@ -121,7 +122,7 @@ function buildSystemPrompt(context?: AgentContextInfo): string {
     '\n用户的问题大概率与该上下文相关；若需要更多数据仍应调用工具。'
 }
 
-async function agentChat(req: AgentChatRequest, signal: AbortSignal, chatId: string): Promise<AgentChatResult> {
+async function agentChat(req: AgentChatRequest, signal: AbortSignal, _chatId: string): Promise<AgentChatResult> {
   const trace: AgentTraceStep[] = []
   const message = String(req?.message ?? '').trim()
   if (!message) return { ok: false, error: '消息不能为空', trace }
@@ -135,18 +136,31 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, chatId: str
   appendAgentMessage(sessionId, 'user', message)
   ensureSessionTitle(sessionId, message)
 
+  return runAgentLoop(sessionId, req.context, signal, trace)
+}
+
+/** 从会话库当前内容直接推理（不追加新用户消息）——重新生成/编辑重推共用 */
+async function runAgentLoop(
+  sessionId: string,
+  context: AgentContextInfo | undefined,
+  signal: AbortSignal,
+  trace: AgentTraceStep[]
+): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
   const history = getAgentMessages(sessionId)
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-40)
     .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  if (history.length === 0 || history[history.length - 1].role !== 'user') {
+    return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
+  }
 
   const { payload: toolPayload, nameMap, deniedModules } = buildToolsPayload()
   const deniedHint = deniedModules.size > 0
     ? `\n\n【权限提示】以下模块用户尚未授权 AI 操作：${[...deniedModules].join('、')}。若用户请求这些模块的操作，请如实说明当前未授权，并提示可在 设置 → AI 工具 → 权限 中开启后重试。`
     : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(req.context) + deniedHint },
+    { role: 'system', content: buildSystemPrompt(context) + deniedHint },
     ...history,
   ]
 
@@ -197,16 +211,52 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, chatId: str
   return { ok: false, sessionId, error: `已达最大推理轮数（${MAX_ITERATIONS}），请缩小问题范围后重试`, code: 'MAX_ITERATIONS', trace }
 }
 
+/** 重新生成最后一条回复：删掉末尾助手消息后按原用户消息重推 */
+async function agentRegenerate(req: AgentChatRequest, signal: AbortSignal): Promise<AgentChatResult> {
+  const trace: AgentTraceStep[] = []
+  const sessionId = String(req?.sessionId ?? '')
+  if (!sessionId || !sessionExists(sessionId)) return { ok: false, error: '会话不存在', trace }
+  const msgs = getAgentMessages(sessionId)
+  const lastUser = [...msgs].reverse().find(m => m.role === 'user')
+  if (!lastUser) return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
+  deleteMessagesAfter(sessionId, lastUser.id)
+  return runAgentLoop(sessionId, req.context, signal, trace)
+}
+
+/** 改写某条用户消息并重新生成其后的回复 */
+async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, signal: AbortSignal): Promise<AgentChatResult> {
+  const trace: AgentTraceStep[] = []
+  const sessionId = String(req?.sessionId ?? '')
+  const content = String(req?.message ?? '').trim()
+  if (!content) return { ok: false, error: '内容不能为空', trace }
+  if (!sessionId || !sessionExists(sessionId)) return { ok: false, error: '会话不存在', trace }
+  const msg = getMessageById(String(req.messageId ?? ''))
+  if (!msg || msg.session_id !== sessionId) return { ok: false, sessionId, error: '消息不存在', trace }
+  if (msg.role !== 'user') return { ok: false, sessionId, error: '只能编辑用户消息', trace }
+  updateMessageContent(msg.id, content)
+  deleteMessagesAfter(sessionId, msg.id)
+  return runAgentLoop(sessionId, req.context, signal, trace)
+}
+
 export function registerAgentHandlers(): void {
-  ipcMain.handle('agent:chat', async (_e, req: AgentChatRequest) => {
-    const chatId = String(req?.chatId ?? '') || randomUUID()
+  const withAbort = async (chatId: string, fn: (signal: AbortSignal) => Promise<AgentChatResult>) => {
     const ctrl = new AbortController()
     activeChats.set(chatId, ctrl)
     try {
-      return await agentChat(req, ctrl.signal, chatId)
+      return await fn(ctrl.signal)
     } finally {
       activeChats.delete(chatId)
     }
+  }
+  ipcMain.handle('agent:chat', async (_e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentChat(req, signal, String(req?.chatId ?? ''))))
+  ipcMain.handle('agent:regenerate', async (_e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentRegenerate(req, signal)))
+  ipcMain.handle('agent:editMessage', async (_e, req: AgentChatRequest & { messageId: string }) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentEditAndRegen(req, signal)))
+  ipcMain.handle('agent:deleteMessage', (_e, messageId: string) => {
+    deleteMessage(String(messageId ?? ''))
+    return true
   })
   ipcMain.handle('agent:abort', (_e, chatId: string) => {
     activeChats.get(String(chatId ?? ''))?.abort()
