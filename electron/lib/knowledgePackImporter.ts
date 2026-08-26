@@ -238,7 +238,7 @@ export function getPackState(pluginId: string): {
       return { ok: true, state: 'not-imported', version: parsed.version, chapters: chapterTotal, totalPages, notebookCount: pack.notebooks.length, spaceName: pack.spaceBase }
     }
 
-    // 与当前包内容比对:新增页 / 内容变化页
+    // 与当前包内容比对:新增页 / 内容变化页(映射存在但页面已被删除 → 计入待重建)
     let newPages = 0, changedPages = 0
     let spaceId: string | null = null
     let lastImportedAt = ''
@@ -249,6 +249,8 @@ export function getPackState(pluginId: string): {
           const hash = 'buf' in buf ? hashOf(buf.buf) : ''
           const row = mapping.get(page.externalId)
           if (!row) { newPages++; continue }
+          const alive = getDatabase().exec('SELECT 1 FROM knowledge_pages WHERE id = ?', [row.page_id])
+          if (alive.length === 0) { newPages++; continue }
           if (row.content_hash !== hash) changedPages++
           if (!lastImportedAt || row.imported_at > lastImportedAt) lastImportedAt = row.imported_at
           spaceId = row.space_id || spaceId
@@ -348,14 +350,20 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
         done++
         pushProgress(pluginId, done, total, page.title)
         const row = mapping.get(page.externalId)
+        // 映射存在但页面已被用户删除 → 视为全新导入(否则会误判"无变化"而跳过)
+        let livePageId: string | null = null
+        if (row) {
+          const alive = getDatabase().exec('SELECT 1 FROM knowledge_pages WHERE id = ?', [row.page_id])
+          if (alive.length > 0) livePageId = row.page_id
+        }
         const mdRes = readPageMd(pluginDir, page.file)
         if ('error' in mdRes) { conflicts.push({ title: page.title, reason: mdRes.error }); skipped++; continue }
         const hash = hashOf(mdRes.buf)
 
-        if (row) {
+        if (row && livePageId) {
           if (row.content_hash === hash) { skipped++; continue }
           // 用户本地改过(updated_at 晚于上次导入)→ 默认跳过
-          const pageRow = getDatabase().exec('SELECT updated_at FROM knowledge_pages WHERE id = ?', [row.page_id])
+          const pageRow = getDatabase().exec('SELECT updated_at FROM knowledge_pages WHERE id = ?', [livePageId])
           const userModified = pageRow.length > 0 && String(pageRow[0].values[0][0]) > row.imported_at
           if (userModified && !overwriteModified) {
             conflicts.push({ title: page.title, reason: '本地已修改' })
@@ -363,16 +371,16 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
             continue
           }
           // 覆盖/静默更新
-          const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), row.page_id, stagedFiles)
+          const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), livePageId, stagedFiles)
           stagedAttachmentIds.push(...attachmentIds)
           db.run(
             'UPDATE knowledge_pages SET content_md = ?, updated_at = ? WHERE id = ?',
-            [md, now, row.page_id]
+            [md, now, livePageId]
           )
           db.run(
             `INSERT OR REPLACE INTO knowledge_pack_imports (plugin_id, external_id, page_id, content_hash, pack_version, space_id, imported_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [pluginId, page.externalId, row.page_id, hash, packVersion, spaceId, now]
+            [pluginId, page.externalId, livePageId, hash, packVersion, spaceId, now]
           )
           updated++
           continue
