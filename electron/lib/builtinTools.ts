@@ -159,8 +159,8 @@ function ruleSummary(ruleType: string, ruleDays: number[], weeklyTarget: number)
 const SEARCH_LIMIT_SCHEMA = {
   type: 'object',
   properties: {
-    query: { type: 'string', description: '搜索关键词，多个词用空格分隔（AND 语义）' },
-    limit: { type: 'number', description: '返回条数上限，默认 8，最大 50' },
+    query: { type: 'string', description: '关键词, 空格分隔为 AND' },
+    limit: { type: 'number', description: '上限, 默认8' },
   },
   required: ['query'],
 } satisfies ToolJsonSchema
@@ -171,7 +171,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.knowledge.search',
     title: '搜索知识库页面',
-    description: '在个人知识库中按关键词搜索页面（匹配标题与正文），返回标题、命中摘录与页面 id。用 readKnowledgePage 阅读全文。',
+    description: '关键词搜索知识库页面, 返回 id/标题/摘录',
     inputSchema: SEARCH_LIMIT_SCHEMA,
     source: 'builtin',
     enabled: true,
@@ -202,12 +202,12 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.knowledge.read',
     title: '阅读知识库页面',
-    description: '按页面 id 读取知识库页面的 Markdown 全文。超长内容会截断（truncated=true 时可用 maxChars 参数分段读取）。',
+    description: '按 id 读页面 Markdown 全文, 超长截断',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: '页面 id（来自 search 工具结果）' },
-        maxChars: { type: 'number', description: '正文最多返回字符数，默认 8000，最大 50000' },
+        id: { type: 'string', description: '页面 id' },
+        maxChars: { type: 'number', description: '最多返回字符, 默认8000' },
       },
       required: ['id'],
     },
@@ -240,7 +240,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.habits.list',
     title: '列出打卡习惯',
-    description: '列出所有习惯及今日计划状态（今天是否计划打卡、是否已打卡）。配合 habits.stats 可查询连续天数与完成率。',
+    description: '列出全部习惯与今日打卡状态',
     inputSchema: { type: 'object', properties: {} },
     source: 'builtin',
     enabled: true,
@@ -269,12 +269,12 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.habits.stats',
     title: '习惯统计数据',
-    description: '查询习惯的当前连续天数、最长连续、区间完成率与累计次数。不传 habitId 则返回全部习惯。',
+    description: '习惯连续天数/最长连续/完成率/累计次数',
     inputSchema: {
       type: 'object',
       properties: {
-        habitId: { type: 'string', description: '习惯 id（来自 habits.list）；缺省统计全部' },
-        days: { type: 'number', description: '完成率统计窗口天数，默认 30，最大 365' },
+        habitId: { type: 'string', description: '习惯 id, 缺省全部' },
+        days: { type: 'number', description: '统计窗口天数, 默认30' },
       },
     },
     source: 'builtin',
@@ -313,7 +313,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.bookmarks.search',
     title: '搜索书签',
-    description: '在网址导航中按关键词搜索书签（匹配标题、URL 与描述），返回标题、链接与所属分类。',
+    description: '关键词搜索书签, 返回标题/URL/分类',
     inputSchema: SEARCH_LIMIT_SCHEMA,
     source: 'builtin',
     enabled: true,
@@ -345,11 +345,11 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.pomodoro.summary',
     title: '番茄钟专注统计',
-    description: '统计最近 N 天（默认 7）每日专注分钟数与场次，以及窗口内合计。',
+    description: '近 N 天每日专注分钟与场次',
     inputSchema: {
       type: 'object',
       properties: {
-        days: { type: 'number', description: '统计最近多少天（含今天），默认 7，最大 365' },
+        days: { type: 'number', description: '最近天数, 默认7' },
       },
     },
     source: 'builtin',
@@ -386,7 +386,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.schedule.list-todos',
     title: '查询日程待办',
-    description: '按日期区间（含端点，本地时区 YYYY-MM-DD）查询待办事项，返回标题/日期/优先级/完成状态。',
+    description: '按日期区间查询待办',
     inputSchema: {
       type: 'object',
       properties: {
@@ -427,13 +427,13 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.knowledge.create-page',
     title: '创建知识库页面',
-    description: '在知识库新建一个 Markdown 页面。可指定已有分类名（精确匹配），缺省放入未分类。',
+    description: '新建知识库页面(可指定分类名)',
     inputSchema: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: '页面标题' },
+        title: { type: 'string', description: '标题' },
         contentMd: { type: 'string', description: 'Markdown 正文' },
-        categoryName: { type: 'string', description: '可选：目标章节/文件夹名（精确匹配）' },
+        categoryName: { type: 'string', description: '分类名(精确, 可选)' },
       },
       required: ['title', 'contentMd'],
     },
@@ -465,13 +465,13 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.knowledge.append-page',
     title: '追加内容到知识库页面',
-    description: '向已有页面末尾追加 Markdown 文本（不覆盖原内容）。支持按 id 或精确标题定位。',
+    description: '向页面末尾追加文本(按 id 或标题定位)',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: '页面 id（与 title 二选一）' },
-        title: { type: 'string', description: '页面精确标题（与 id 二选一）' },
-        text: { type: 'string', description: '要追加的 Markdown 文本' },
+        id: { type: 'string', description: '页面 id(与title二选一)' },
+        title: { type: 'string', description: '精确标题(与id二选一)' },
+        text: { type: 'string', description: '追加的文本' },
       },
       required: ['text'],
     },
@@ -500,13 +500,13 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.blog.create-entry',
     title: '写一篇日记',
-    description: '在博客模块新建一篇日记。日期缺省为今天。',
+    description: '新建日记(日期默认今天,每天一篇)',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string', description: '日记标题（可为空字符串）' },
         contentMd: { type: 'string', description: 'Markdown 正文' },
-        date: { type: 'string', description: '日期 YYYY-MM-DD，默认今天' },
+        date: { type: 'string', description: 'YYYY-MM-DD, 默认今天' },
       },
       required: ['contentMd'],
     },
@@ -533,14 +533,14 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.schedule.create-todo',
     title: '创建日程待办',
-    description: '在日程模块创建一条待办事项。',
+    description: '创建待办',
     inputSchema: {
       type: 'object',
       properties: {
-        date: { type: 'string', description: '日期 YYYY-MM-DD，默认今天' },
+        date: { type: 'string', description: 'YYYY-MM-DD, 默认今天' },
         title: { type: 'string', description: '待办内容' },
-        quadrant: { type: 'number', description: '四象限：0=紧急重要 1=重要不紧急 2=紧急不重要 3=不重要不紧急，默认 1' },
-        time: { type: 'string', description: '可选 HH:mm' },
+        quadrant: { type: 'number', description: '0紧急重要/1重要不紧急/2紧急不重要/3不重要, 默认1' },
+        time: { type: 'string', description: 'HH:mm 可选' },
       },
       required: ['title'],
     },
@@ -567,11 +567,11 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.checkin.check-habit',
     title: '习惯打卡',
-    description: '按名称为今天的习惯打卡（名称不区分大小写，支持部分匹配；已打卡则原样返回）。',
+    description: '按名称为今天打卡(支持部分匹配,幂等)',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: '习惯名称（或其一部分）' },
+        name: { type: 'string', description: '习惯名(可部分匹配)' },
       },
       required: ['name'],
     },

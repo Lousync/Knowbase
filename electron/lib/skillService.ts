@@ -92,7 +92,7 @@ export function refreshSkillRegistrations(): void {
     registerTool({
       name: s.registryName,
       title: s.title,
-      description: `[Skill] ${s.description || s.title}（来自插件 ${s.pluginName}）`,
+      description: `[Skill] ${s.description || s.title}（变量: ${s.variables.join(', ') || '无'}）`,
       inputSchema: { type: 'object', properties, required: s.variables },
       source: 'skill',
       enabled: true,

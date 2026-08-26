@@ -414,6 +414,8 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       provider: provider.name,
       model: finalModel,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
+      promptTokens: r.usage.promptTokens,
+      completionTokens: r.usage.completionTokens,
       durationMs: Date.now() - started,
       ok: true,
     })
