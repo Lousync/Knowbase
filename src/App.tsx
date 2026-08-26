@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { Toast } from './components/shared/Toast'
@@ -24,6 +24,7 @@ import { LockScreen } from './components/shared/LockScreen'
 import { Onboarding } from './components/shared/Onboarding'
 import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
+import { AssistantPanel } from './components/shared/AssistantPanel'
 
 export default function App() {
   // Fill popup mode: render standalone popup instead of full app
@@ -275,6 +276,8 @@ export default function App() {
             {renderTab('user', <UserModule />)}
             <PomodoroPanel />
           </main>
+      {/* 全局 AI 助手侧栏 */}
+      <AssistantPanel />
         </div>
         <StatusBar encoding={encoding} />
       </PomodoroProvider>

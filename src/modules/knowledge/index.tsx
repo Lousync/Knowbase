@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { FileText, Folder, ListTree, X } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
+import { registerAssistantContext } from '../../lib/assistantContext'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
   getKnowledgePages, getKnowledgePageById, createKnowledgePage, deleteKnowledgePage,
@@ -81,6 +82,21 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [activePageId])
   useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
+
+  // AI 助手上下文：当前打开的页面（供全局侧栏"边看边问"）
+  useEffect(() => {
+    return registerAssistantContext(() => {
+      const pid = activePageIdRef.current
+      if (!pid) return null
+      const p = allPages.find(x => x.id === pid)
+      if (!p) return null
+      return {
+        type: 'knowledge.page',
+        label: `知识库页面「${p.title || '无标题'}」`,
+        data: { id: p.id, title: p.title, contentMd: (p.contentMd || '').slice(0, 8000) },
+      }
+    })
+  }, [allPages])
 
   useEffect(() => {
     if (sidebarOpen) {

@@ -149,6 +149,9 @@ export const SETTINGS = {
 
   // ---- AI 模块权限 ----
   aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","bookmarks":"read","pomodoro":"read"}', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写(JSON)' },
+
+  // ---- AI 助手侧栏 ----
+  assistantWidth: { default: 380, desc: 'AI 助手侧栏宽度(px)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

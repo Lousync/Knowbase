@@ -1,4 +1,4 @@
-/* eslint-disable */
+﻿/* eslint-disable */
 /**
  * M2 全链路验收驱动：拉起构建产物(带 CDP 端口) → 通过 CDP 在页面上下文执行验收步骤 → 输出结果 → 清理。
  * 用法: node .e2e-mcp.cjs
@@ -391,18 +391,32 @@ async function main() {
     await run('seed-habit', `
       return window.api.createHabit({ name:'E2E打卡习惯' }).then(h => ({ id:h.id, name:h.name }))
     `)
-    const habitSeed = await run('agent-chat-full', `
-      return window.api.agentChat({ messages:[{ role:'user', content:'看看我的打卡情况，不要编造' }] }).then(r => ({
-        ok: r.ok,
-        replyHit: (r.reply||'').includes('E2E打卡习惯'),
-        llmSteps: r.trace.filter(t=>t.kind==='llm').length,
-        toolSteps: r.trace.filter(t=>t.kind==='tool' && t.name==='builtin.habits.list' && t.ok).length,
-        error: r.error,
-      }))
+    // 21b. 会话留存 + Agent 全链路：落库→还原→级联删除，回复引用真实习惯名
+    const chatRes = await run('session-persistence', `
+      return window.api.agentNewSession().then(async s1 => {
+        const r = await window.api.agentChat({ sessionId: s1.id, message: '看看我的打卡情况，不要编造' })
+        const msgs = await window.api.agentMessages(s1.id)
+        const list = await window.api.agentSessions()
+        const found = list.find(x => x.id === s1.id)
+        await window.api.agentDeleteSession(s1.id)
+        const after = await window.api.agentMessages(s1.id).catch(() => [])
+        const afterList = await window.api.agentSessions()
+        const gone = (after.length || 0) === 0
+        return {
+          ok:r.ok,
+          sessionIdMatch:r.sessionId===s1.id,
+          replyHit:(r.reply||'').includes('E2E打卡习惯'),
+          llmSteps:r.trace.filter(t=>t.kind==='llm').length,
+          toolSteps:r.trace.filter(t=>t.kind==='tool'&&t.name==='builtin.habits.list'&&t.ok).length,
+          userStored: msgs.some(m=>m.role==='user'&&m.content.includes('打卡情况')),
+          assistantStored: msgs.some(m=>m.role==='assistant'),
+          titleAuto: !!(found && found.title.includes('打卡')),
+          cascadeDeleted: gone && !afterList.some(x=>x.id===s1.id),
+          error:r.error,
+        }
+      })
     `)
-    if (!(habitSeed.value || {}).replyHit) throw new Error('Agent 回复未引用工具返回的真实数据: ' + JSON.stringify(habitSeed))
-
-    // 22. token 记账 + 审计不含消息正文/明文
+    if (!((chatRes.value || {}).replyHit)) throw new Error('Agent 回复未引用真实数据/会话链路异常: ' + JSON.stringify(chatRes.value))
     await run('llm-audit-clean', `
       return window.api.llmGetUsage().then(u =>
         window.api.aiToolsGetRecentAudit(30).then(list => ({

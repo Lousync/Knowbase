@@ -535,6 +535,17 @@ export function registerLlmHandlers(deps: {
     }
   })
 
+  ipcMain.handle('llm:addModel', (_e, id: string, model: string) => {
+    const list = getProviders()
+    const p = list.find(x => x.id === id)
+    if (!p) return { ok: false, error: '供应商不存在', models: [] }
+    const m = String(model ?? '').trim()
+    if (!m) return { ok: false, error: '模型 ID 不能为空', models: [] }
+    if (!p.models.includes(m)) p.models.push(m)
+    deps.setSettingValue('modelProviders', JSON.stringify(list))
+    return { ok: true, models: p.models }
+  })
+
   ipcMain.handle('llm:setDefaultModel', (_e, value: string) => {
     if (typeof value !== 'string') return { ok: false, error: '参数非法' }
     deps.setSettingValue('defaultChatModel', value)

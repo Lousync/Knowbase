@@ -502,8 +502,32 @@ export interface AgentChatMessage {
   content: string
 }
 
+export interface AgentContextInfo {
+  type: string
+  label: string
+  data?: Record<string, unknown>
+}
+
+export interface AgentSessionInfo {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** 会话内消息（trace 仅 assistant 消息携带） */
+export interface AgentStoredMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  /** JSON 字符串（原始行格式），前端自行解析 */
+  traceJson?: string | null
+  createdAt: string
+}
+
 export interface AgentChatResult {
   ok: boolean
+  sessionId?: string
   reply?: string
   error?: string
   code?: string
@@ -740,9 +764,15 @@ export interface ElectronAPI {
   llmToggleProvider: (id: string, enabled: boolean) => Promise<{ ok: boolean }>
   llmTestConnection: (draft: { type: LlmProviderType; baseUrl: string; apiKey?: string }) => Promise<LlmTestResultInfo>
   llmRefreshModels: (id: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
+  llmAddModel: (id: string, model: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
   llmGetUsage: () => Promise<LlmUsageInfo>
-  agentChat: (req: { messages: AgentChatMessage[] }) => Promise<AgentChatResult>
+  agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo }) => Promise<AgentChatResult>
+  agentSessions: () => Promise<AgentSessionInfo[]>
+  agentNewSession: (title?: string) => Promise<AgentSessionInfo>
+  agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>
+  agentRenameSession: (id: string, title: string) => Promise<boolean>
+  agentDeleteSession: (id: string) => Promise<boolean>
   llmCcSwitchList: () => Promise<CcSwitchScanResult>
   llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>
 }

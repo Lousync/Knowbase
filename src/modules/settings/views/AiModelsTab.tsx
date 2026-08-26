@@ -4,7 +4,7 @@ import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
-  llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage,
+  llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel,
   llmCcSwitchList, llmCcSwitchImport, openExternal,
 } from '../../../lib/ipc'
 import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, CcSwitchItem } from '../../../types'
@@ -141,6 +141,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
   const [confirming, setConfirming] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<LlmTestResultInfo | null>(null)
+  const [manualModel, setManualModel] = useState('')
 
   return (
     <div className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
@@ -158,6 +159,17 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
       <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
         {p.models.length > 0 ? `${p.models.length} 个模型` : '未拉取模型'} · {p.hasKey ? '已配置 Key' : '无 Key'}
       </p>
+      <div className="flex items-center gap-1 mt-1.5">
+        <input value={manualModel} onChange={e => setManualModel(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && manualModel.trim()) { void llmAddModel(p.id, manualModel.trim()).then(r => { if (r.ok) { setManualModel(''); showToast({ type: 'info', message: `已添加模型 ${manualModel}` }); return onChanged() } }) } }}
+          placeholder="手动填模型 ID"
+          className="flex-1 min-w-0 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[11px] font-mono outline-none focus:border-[var(--accent)]" />
+        <button disabled={!manualModel.trim()} title="添加模型"
+          onClick={() => { void llmAddModel(p.id, manualModel.trim()).then((r: { ok: boolean; error?: string }) => { if (r.ok) { setManualModel(''); showToast({ type: 'info', message: '已添加模型' }); return onChanged() } else showToast({ type: 'error', message: r.error ?? '失败' }) }) }}
+          className="shrink-0 px-2 py-1 rounded text-[11px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-40 transition-colors">
+          添加
+        </button>
+      </div>
       <div className="flex items-center gap-2 mt-2 flex-wrap">
         <button onClick={() => { void llmRefreshModels(p.id).then(r => { showToast(r.ok ? { type: 'info', message: `发现 ${r.models.length} 个模型` } : { type: 'error', message: `刷新失败：${r.error}` }); return onChanged() }) }}
           className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">

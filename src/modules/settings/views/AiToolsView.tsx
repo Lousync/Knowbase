@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Bot, Gauge, RefreshCw, ShieldCheck, Server, Plus, Plug, Trash2, AlertTriangle, Loader2, Sparkles, Store, Copy, Cpu, MessageSquare } from 'lucide-react'
+import { Bot, Gauge, RefreshCw, ShieldCheck, Server, Plus, Plug, Trash2, AlertTriangle, Loader2, Sparkles, Store, Copy, Cpu } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import {
@@ -8,7 +8,6 @@ import {
   aiToolsListSkills, aiToolsCopySkillPrompt,
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
-import { AiChatTab } from './AiChatTab'
 import { AiPermissionsTab } from './AiPermissionsTab'
 import type { AgentToolInfo, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpTestResult, SkillInfo } from '../../../types'
 
@@ -18,7 +17,7 @@ const SOURCE_LABEL: Record<AgentToolInfo['source'], string> = {
   skill: 'Skill',
 }
 
-type AiTab = 'builtin' | 'mcp' | 'skill' | 'models' | 'chat' | 'perms'
+type AiTab = 'builtin' | 'mcp' | 'skill' | 'models' | 'perms'
 
 /** 设置 → AI 工具：月度用量汇总 + 内置工具清单 + MCP 外部服务器管理 + Skill 提示词资产 */
 export function AiToolsView() {
@@ -44,7 +43,6 @@ export function AiToolsView() {
           ['mcp', 'MCP', <Server key="m" size={14} />],
           ['skill', 'Skill', <Sparkles key="s" size={14} />],
           ['models', '模型', <Cpu key="c" size={14} />],
-          ['chat', '对话', <MessageSquare key="d" size={14} />],
           ['perms', '权限', <ShieldCheck key="p" size={14} />],
         ] as const).map(([id, label, icon]) => (
           <button
@@ -62,18 +60,14 @@ export function AiToolsView() {
         ))}
       </div>
 
-      {/* 汇总条（对话页签不显示，保持聊天区高度） */}
-      {tab !== 'chat' && <UsageSummary usage={usage} />}
+      {/* 汇总条 */}
+      <UsageSummary usage={usage} />
 
       {tab === 'builtin' && <BuiltinToolsTab usage={usage} onUsageChange={setUsage} monthlyLimit={s.aiToolMonthlyLimit ?? 0} />}
       {tab === 'mcp' && <McpServersTab onInvoked={refreshUsage} />}
       {tab === 'skill' && <SkillsTab />}
       {tab === 'models' && <AiModelsTab />}
-      {tab === 'chat' && (
-        <div className="h-[calc(100vh-320px)] min-h-[360px]">
-          <AiChatTab goModels={() => setTab('models')} />
-        </div>
-      )}
+
       {tab === 'perms' && <AiPermissionsTab />}
     </div>
   )

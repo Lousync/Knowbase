@@ -251,7 +251,7 @@ function registerWindowHandlers(): void {
         'habits', 'habit_records',
         'bookmark_categories', 'bookmarks',
         'supervise_log', 'supervise_config',
-        'plugin_audit_log', 'mcp_servers',
+        'plugin_audit_log', 'mcp_servers', 'agent_sessions', 'agent_messages',
       ]
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
