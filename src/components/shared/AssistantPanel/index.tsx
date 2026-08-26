@@ -394,7 +394,7 @@ function NoProviderHint({ onGoSettings }: { onGoSettings: () => void }) {
 
 function Bubble({ msg }: { msg: UiMessage }) {
   return (
-    <div className={`px-3 py-2 rounded-lg text-[12px] leading-relaxed whitespace-pre-wrap break-words ${
+    <div className={`px-3 py-2 rounded-lg text-[12px] leading-relaxed whitespace-pre-wrap break-words select-text cursor-text ${
       msg.role === 'user'
         ? 'ml-6 bg-[var(--bg-selected)] border border-[var(--border-color)]'
         : 'mr-6 bg-[var(--bg-secondary)] border border-[var(--border-color)]'
