@@ -167,6 +167,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           setAnnotation(anno); savedAnnotationRef.current = anno
           window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label }))
           onTitleChange?.(p.title)
+          // 内容含附件示意图或内嵌动画的页面(如知识包导入)默认进入阅读预览
+          if (p.fileType === 'md' && /(attachment:\/\/|language-anim@)/.test(p.contentMd || '')) setPreview(true)
         }
       }),
       getKnowledgeBacklinkContext(pageId).then(setBacklinks),
