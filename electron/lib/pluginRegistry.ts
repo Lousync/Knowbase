@@ -165,22 +165,39 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
         const kp = (raw.contributes as Record<string, unknown>).knowledgePages
         if (!kp || typeof kp !== 'object' || Array.isArray(kp)) return { error: 'knowledgePages 必须是对象' }
         const k = kp as Record<string, unknown>
-        if (typeof k.notebook !== 'string' || !k.notebook.trim() || k.notebook.length > 50) return { error: 'knowledgePages.notebook 缺失或过长' }
-        if (k.coverColor !== undefined && (typeof k.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(k.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
-        if (!Array.isArray(k.chapters) || k.chapters.length === 0 || k.chapters.length > 50) return { error: 'chapters 需为 1-50 个章节' }
+        // v2(空间优先多笔记本):{ space, notebooks:[{ name, coverColor?, chapters[] }] }
+        // v1(单笔记本):{ notebook, coverColor?, chapters[] }
+        let chapterLists: unknown[][] = []
+        if (Array.isArray(k.notebooks)) {
+          if (k.notebooks.length === 0 || k.notebooks.length > 20) return { error: 'notebooks 需为 1-20 个笔记本' }
+          for (const nb of k.notebooks as Record<string, unknown>[]) {
+            if (!nb || typeof nb !== 'object') return { error: '笔记本条目非法' }
+            if (typeof nb.name !== 'string' || !nb.name.trim() || nb.name.length > 50) return { error: '笔记本 name 缺失或过长' }
+            if (nb.coverColor !== undefined && (typeof nb.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(nb.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
+            chapterLists.push(nb.chapters)
+          }
+          if (k.space !== undefined && (typeof k.space !== 'string' || !k.space.trim() || k.space.length > 60)) return { error: 'space 缺失或过长(≤60 字符)' }
+        } else {
+          if (typeof k.notebook !== 'string' || !k.notebook.trim() || k.notebook.length > 50) return { error: 'knowledgePages.notebook 缺失或过长' }
+          if (k.coverColor !== undefined && (typeof k.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(k.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
+          chapterLists = [k.chapters]
+        }
         let pageTotal = 0
-        for (const ch of k.chapters as Record<string, unknown>[]) {
-          if (!ch || typeof ch !== 'object') return { error: '章节条目非法' }
-          if (typeof ch.name !== 'string' || !ch.name.trim() || ch.name.length > 50) return { error: '章节 name 缺失或过长' }
-          if (!Array.isArray(ch.pages) || ch.pages.length === 0 || ch.pages.length > 500) return { error: `章节「${ch.name}」页面数需为 1-500` }
-          for (const pg of ch.pages as Record<string, unknown>[]) {
-            pageTotal++
-            if (pageTotal > 1500) return { error: '页面总数超出限制(最大 1500),请拆包' }
-            if (!pg || typeof pg !== 'object') return { error: '页面条目非法' }
-            if (typeof pg.file !== 'string' || !/^[\w][\w\-./ ]{0,150}\.md$/i.test(pg.file) || String(pg.file).includes('..')) return { error: `页面 file 路径非法: ${String(pg.file)}` }
-            if (typeof pg.title !== 'string' || !pg.title.trim() || pg.title.length > 100) return { error: '页面 title 缺失或过长' }
-            if (typeof pg.externalId !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(pg.externalId)) return { error: '页面 externalId 缺失或非法' }
-            if (pg.tags !== undefined && (!Array.isArray(pg.tags) || pg.tags.length > 10 || pg.tags.some((t: unknown) => typeof t !== 'string' || String(t).length > 20))) return { error: '页面 tags 非法(最多 10 个、每个 20 字符)' }
+        for (const chapters of chapterLists) {
+          if (!Array.isArray(chapters) || chapters.length === 0 || chapters.length > 50) return { error: 'chapters 需为 1-50 个章节' }
+          for (const ch of chapters as Record<string, unknown>[]) {
+            if (!ch || typeof ch !== 'object') return { error: '章节条目非法' }
+            if (typeof ch.name !== 'string' || !ch.name.trim() || ch.name.length > 50) return { error: '章节 name 缺失或过长' }
+            if (!Array.isArray(ch.pages) || ch.pages.length === 0 || ch.pages.length > 500) return { error: `章节「${ch.name}」页面数需为 1-500` }
+            for (const pg of ch.pages as Record<string, unknown>[]) {
+              pageTotal++
+              if (pageTotal > 1500) return { error: '页面总数超出限制(最大 1500),请拆包' }
+              if (!pg || typeof pg !== 'object') return { error: '页面条目非法' }
+              if (typeof pg.file !== 'string' || !/^[\w][\w\-./ ]{0,150}\.md$/i.test(pg.file) || String(pg.file).includes('..')) return { error: `页面 file 路径非法: ${String(pg.file)}` }
+              if (typeof pg.title !== 'string' || !pg.title.trim() || pg.title.length > 100) return { error: '页面 title 缺失或过长' }
+              if (typeof pg.externalId !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(pg.externalId)) return { error: '页面 externalId 缺失或非法' }
+              if (pg.tags !== undefined && (!Array.isArray(pg.tags) || pg.tags.length > 10 || pg.tags.some((t: unknown) => typeof t !== 'string' || String(t).length > 20))) return { error: '页面 tags 非法(最多 10 个、每个 20 字符)' }
+            }
           }
         }
       }

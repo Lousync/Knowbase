@@ -111,6 +111,16 @@ export function PluginsModule() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [importedKeys, setImportedKeys] = useState<Set<string>>(new Set())
   const [consent, setConsent] = useState<ConsentState | null>(null)
+  const [consentPackInfo, setConsentPackInfo] = useState<{ spaceName?: string; notebookCount?: number; totalPages?: number } | null>(null)
+
+  useEffect(() => {
+    setConsentPackInfo(null)
+    if (consent && (consent.entry.contributions || []).includes('knowledgePages')) {
+      knowledgePackGetState(consent.entry.id).then(r => {
+        if (r.ok) setConsentPackInfo({ spaceName: r.spaceName, notebookCount: r.notebookCount, totalPages: r.totalPages })
+      }).catch(() => { /* ignore */ })
+    }
+  }, [consent])
   const [auditRows, setAuditRows] = useState<PluginAuditEntry[]>([])
 
   // 内容型插件(knowledgePages)导入状态
@@ -430,6 +440,14 @@ export function PluginsModule() {
           <div className="px-5 py-4 space-y-3 text-[12px] text-[var(--text-secondary)] leading-relaxed">
             {level === 'A' && (
               <>
+                {(entry.contributions || []).includes('knowledgePages') && (
+                  <p className="p-2.5 rounded-md border border-[var(--warning)]/40 bg-[var(--warning)]/10 text-[var(--text-primary)]">
+                    此插件将在知识库中<strong>新建学习空间</strong>
+                    {consentPackInfo?.spaceName ? <>《{consentPackInfo.spaceName}》</> : null}
+                    {consentPackInfo ? <>(含 {consentPackInfo.notebookCount ?? 1} 个笔记本 · {consentPackInfo.totalPages ?? '?'} 页)</> : null}
+                    ,不会写入你已有空间的任何层级;卸载插件后已导入内容全部保留。
+                  </p>
+                )}
                 <p>该插件的数据导入功能将写入以下模块:</p>
                 <ul className="space-y-1">
                   {dataTargets.map(k => (

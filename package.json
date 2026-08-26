@@ -15,6 +15,7 @@
     "heic-to": "^1.5.2",
     "highlight.js": "^11.11.1",
     "iconv-lite": "^0.7.2",
+    "katex": "^0.18.4",
     "lucide-react": "^1.0.0",
     "monaco-editor": "^0.55.1",
     "pdfjs-dist": "^3.11.174",
@@ -22,7 +23,9 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "sql.js": "^1.12.0",
     "trash": "^10.1.1"
   },
@@ -47,7 +50,7 @@
         "to": "builtin-plugins"
       }
     ],
-    "directories":  {
+    "directories": {
       "output": "dist-electron"
     },
     "files": [

@@ -1,6 +1,6 @@
-import { app, BrowserWindow } from 'electron'
+﻿import { app, BrowserWindow } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, rmSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, dirname, resolve } from 'path'
 import { randomUUID, createHash } from 'crypto'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../database/connection'
 import { getPluginsRoot, auditWrite } from './pluginRegistry'
@@ -16,7 +16,18 @@ const PAGE_MAX_BYTES = 512 * 1024
 
 interface KPPage { file: string; title: string; externalId: string; tags?: string[] }
 interface KPChapter { name: string; pages: KPPage[] }
-interface KPPack { notebook: string; coverColor?: string; chapters: KPChapter[] }
+/** v2 多笔记本形态 */
+interface KPNotebook { name: string; coverColor?: string; chapters: KPChapter[] }
+/**
+ * 兼容两种 manifest 形态:
+ * - v1(单笔记本):{ notebook, coverColor?, chapters[] }
+ * - v2(空间优先,多笔记本):{ space, notebooks:[{ name, chapters[] }] }
+ * 解析后统一为 { spaceBase, notebooks }
+ */
+interface KPPackNormalized { spaceBase: string; notebooks: KPNotebook[] }
+type KPPackRaw = {
+  notebook?: unknown; space?: unknown; coverColor?: unknown; chapters?: unknown; notebooks?: unknown
+}
 
 interface MappingRow { external_id: string; page_id: string; content_hash: string; imported_at: string; space_id?: string }
 
@@ -24,10 +35,30 @@ function pluginDebugLog(line: string): void {
   try { appendFileSync(join(app.getPath('userData'), 'plugin-debug.log'), new Date().toISOString().slice(11, 23) + ' ' + line + '\n') } catch { /* ignore */ }
 }
 
-function parsePack(mf: { knowledgePages?: unknown }): KPPack | null {
-  const kp = mf.knowledgePages as KPPack | undefined
-  if (!kp || typeof kp !== 'object' || typeof kp.notebook !== 'string' || !Array.isArray(kp.chapters)) return null
-  return kp
+function parsePack(mf: { knowledgePages?: unknown }): KPPackNormalized | null {
+  const kp = mf.knowledgePages as KPPackRaw | undefined
+  if (!kp || typeof kp !== 'object') return null
+  const isChapterArr = (v: unknown): v is KPChapter[] =>
+    Array.isArray(v) && v.length > 0 && v.every(c => c && typeof c === 'object' && typeof (c as KPChapter).name === 'string' && Array.isArray((c as KPChapter).pages))
+  // v2:space + notebooks[]
+  if (Array.isArray(kp.notebooks) && kp.notebooks.length > 0) {
+    const notebooks: KPNotebook[] = []
+    for (const nb of kp.notebooks as unknown[]) {
+      const n = nb as KPNotebook
+      if (!n || typeof n !== 'object' || typeof n.name !== 'string' || !isChapterArr(n.chapters)) {
+        pluginDebugLog(`[knowledgePack] 笔记本校验失败: name=${(n as KPNotebook)?.name} nameType=${typeof (n as KPNotebook)?.name} chaptersIsArr=${Array.isArray(n?.chapters)} chLen=${Array.isArray(n?.chapters) ? n.chapters.length : -1}`)
+        return null
+      }
+      notebooks.push({ name: n.name, coverColor: typeof n.coverColor === 'string' ? n.coverColor : undefined, chapters: n.chapters })
+    }
+    const spaceBase = (typeof kp.space === 'string' && kp.space.trim()) || notebooks[0].name
+    return { spaceBase, notebooks }
+  }
+  // v1:单笔记本
+  if (typeof kp.notebook === 'string' && isChapterArr(kp.chapters)) {
+    return { spaceBase: kp.notebook, notebooks: [{ name: kp.notebook, coverColor: typeof kp.coverColor === 'string' ? kp.coverColor : undefined, chapters: kp.chapters }] }
+  }
+  return null
 }
 
 function readMapping(pluginId: string): Map<string, MappingRow> {
@@ -93,8 +124,27 @@ function sanitizeSvgText(content: string): string {
   return content.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
 }
 
-/** md 中的图片/内联 svg → 附件上传,返回改写后的 md 与附件 id 列表 */
-function processImages(md: string, pluginDir: string, ownerId: string, stagedFiles: string[]): { md: string; attachmentIds: string[] } {
+/**
+ * 动画占位符 ```anim:<blockId>``` 处理。
+ * M2 资产服务就绪前降级为提示引用块;后续版本将改写为沙箱 iframe 内嵌播放。
+ */
+function transformAnimPlaceholders(md: string): string {
+  return md.replace(/```anim:([A-Za-z0-9._-]+)[ \t]*\n([\s\S]*?)```/g, (_m, id: string, body: string) => {
+    const label = String(body).trim().split('\n')[0] || id
+    return `> 【交互式动画】${label}\n> 动画演示(块 ${id})暂以内嵌网页形式提供,请参考配套网站或等待插件更新内嵌播放。`
+  })
+}
+
+/** 页面正文导入前的统一预处理 */
+function preprocessPageMd(raw: string): string {
+  return transformAnimPlaceholders(raw)
+}
+
+/**
+ * md 中的图片/内联 svg → 附件上传,返回改写后的 md 与附件 id 列表。
+ * assetBaseDir = 页面 md 所在目录(相对引用以其为基准解析),最终仍受插件根目录约束。
+ */
+function processImages(md: string, pluginDir: string, pageFileDir: string, ownerId: string, stagedFiles: string[]): { md: string; attachmentIds: string[] } {
   const attachmentIds: string[] = []
   const attachmentsDir = getAttachmentsDir()
 
@@ -105,7 +155,8 @@ function processImages(md: string, pluginDir: string, ownerId: string, stagedFil
       buf = Buffer.from(contentOverride, 'utf-8')
       fileName = basename(assetRel)
     } else {
-      const src = safePathInside(pluginDir, assetRel)
+      // 相对引用基于 md 文件目录解析;再校验仍在插件目录内(防穿越)
+      const src = safePathInside(pluginDir, join(pageFileDir, assetRel))
       if (!src || !existsSync(src)) return null
       buf = readFileSync(src)
       fileName = basename(src)
@@ -139,8 +190,8 @@ function processImages(md: string, pluginDir: string, ownerId: string, stagedFil
     out = out.replace(`](${item.name})`, `](attachment://${id})`)
   }
 
-  // 2) 既有 assets 引用改写为 attachment://
-  out = out.replace(/(!\[[^\]]*\]\()(assets\/[^)]+)(\))/g, (_m, pre, assetRel: string, post) => {
+  // 2) 既有 assets 引用改写为 attachment://(支持 pages/<book>/ 下形如 ../../assets/<book>/x.svg 的相对引用)
+  out = out.replace(/(!\[[^\]]*\]\()((?:\.\.\/)*assets\/[^)]+)(\))/g, (_m, pre: string, assetRel: string, post: string) => {
     const id = uploadAsset(assetRel)
     if (!id) return `${pre}${assetRel}${post}` // 找不到文件原样保留
     return `${pre}attachment://${id}${post}`
@@ -167,6 +218,8 @@ export function getPackState(pluginId: string): {
   changedPages?: number
   lastImportedAt?: string
   spaceId?: string | null
+  notebookCount?: number
+  spaceName?: string
   message?: string
 } {
   try {
@@ -176,39 +229,45 @@ export function getPackState(pluginId: string): {
     const parsed = readPackManifest(pluginDir)
     if ('error' in parsed) return { ok: false, message: parsed.error }
     const pack = parsed.pack
-    const totalPages = pack.chapters.reduce((n, c) => n + c.pages.length, 0)
+    const totalPages = pack.notebooks.reduce((n, nb) => n + nb.chapters.reduce((m, c) => m + c.pages.length, 0), 0)
+    const chapterTotal = pack.notebooks.reduce((n, nb) => n + nb.chapters.length, 0)
 
     const mapping = readMapping(pluginId)
-    if (mapping.size === 0) return { ok: true, state: 'not-imported', version: parsed.version, chapters: pack.chapters.length, totalPages }
+    if (mapping.size === 0) {
+      return { ok: true, state: 'not-imported', version: parsed.version, chapters: chapterTotal, totalPages, notebookCount: pack.notebooks.length, spaceName: pack.spaceBase }
+    }
 
     // 与当前包内容比对:新增页 / 内容变化页
     let newPages = 0, changedPages = 0
     let spaceId: string | null = null
     let lastImportedAt = ''
-    for (const chapter of pack.chapters) {
-      for (const page of chapter.pages) {
-        const buf = readPageMd(pluginDir, page.file)
-        const hash = 'buf' in buf ? hashOf(buf.buf) : ''
-        const row = mapping.get(page.externalId)
-        if (!row) { newPages++; continue }
-        if (row.content_hash !== hash) changedPages++
-        if (!lastImportedAt || row.imported_at > lastImportedAt) lastImportedAt = row.imported_at
-        spaceId = row.space_id || spaceId
+    for (const notebook of pack.notebooks) {
+      for (const chapter of notebook.chapters) {
+        for (const page of chapter.pages) {
+          const buf = readPageMd(pluginDir, page.file)
+          const hash = 'buf' in buf ? hashOf(buf.buf) : ''
+          const row = mapping.get(page.externalId)
+          if (!row) { newPages++; continue }
+          if (row.content_hash !== hash) changedPages++
+          if (!lastImportedAt || row.imported_at > lastImportedAt) lastImportedAt = row.imported_at
+          spaceId = row.space_id || spaceId
+        }
       }
     }
     const state = newPages > 0 || changedPages > 0 ? 'update-available' : 'imported'
-    return { ok: true, state, version: parsed.version, chapters: pack.chapters.length, totalPages, newPages, changedPages, lastImportedAt, spaceId }
+    return { ok: true, state, version: parsed.version, chapters: chapterTotal, totalPages, newPages, changedPages, lastImportedAt, spaceId, notebookCount: pack.notebooks.length, spaceName: pack.spaceBase }
   } catch (e: any) {
     return { ok: false, message: e?.message || String(e) }
   }
 }
 
-function readPackManifest(pluginDir: string): { pack: KPPack; version: string } | { error: string } {
+function readPackManifest(pluginDir: string): { pack: KPPackNormalized; version: string } | { error: string } {
   const mfPath = join(pluginDir, 'plugin.json')
   if (!existsSync(mfPath)) return { error: 'plugin.json 缺失' }
   let mf: any
   try { mf = JSON.parse(readFileSync(mfPath, 'utf-8')) } catch { return { error: 'plugin.json 解析失败' } }
-  const pack = parsePack(mf)
+  // 注意:parsePack 接收 contributes 子对象,knowledgePages 声明在 contributes 下
+  const pack = parsePack((mf.contributes ?? {}) as { knowledgePages?: unknown })
   if (!pack) return { error: 'manifest 缺少有效的 knowledgePages 贡献' }
   return { pack, version: String(mf.version || '') }
 }
@@ -235,9 +294,9 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
   const stagedAttachmentIds: string[] = []
   const now = new Date().toISOString()
 
-  // 展平页面用于进度
+  // 展平页面用于进度(跨全部笔记本)
   const flat: { chapter: KPChapter; page: KPPage }[] = []
-  for (const ch of pack.chapters) for (const pg of ch.pages) flat.push({ chapter: ch, page: pg })
+  for (const nb of pack.notebooks) for (const ch of nb.chapters) for (const pg of ch.pages) flat.push({ chapter: ch, page: pg })
   const total = flat.length
 
   db.run('BEGIN')
@@ -245,14 +304,14 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
   const conflicts: { title: string; reason: string }[] = []
   let spaceId: string | null = null
   try {
-    // 1) 顶层空间(同名已存在时追加后缀)
+    // 1) 顶层空间(空间优先原则:导入第一步永远是新建学习空间;同名已存在时追加后缀)
     const pluginName = getPluginName(pluginId)
-    let spaceName = pack.notebook
+    let spaceName = pack.spaceBase
     const spaceExists = (name: string) => getDatabase().exec(
       `SELECT id FROM knowledge_categories WHERE name = '${name.replace(/'/g, "''")}' AND category_type = 'space' AND parent_id IS NULL LIMIT 1`
     ).length > 0
     let suffix = 0
-    while (spaceExists(spaceName)) { suffix++; spaceName = suffix === 1 ? `${pack.notebook}(${pluginName})` : `${pack.notebook}(${pluginName}-${suffix})` }
+    while (spaceExists(spaceName)) { suffix++; spaceName = suffix === 1 ? `${pack.spaceBase}(${pluginName})` : `${pack.spaceBase}(${pluginName}-${suffix})` }
     spaceId = randomUUID()
     const maxOrder = getDatabase().exec("SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS NULL")
     db.run(
@@ -260,20 +319,20 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
       [spaceId, spaceName, (maxOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'space']
     )
 
-    // 2) 笔记本
-    const notebookId = randomUUID()
-    const nbOrder = getDatabase().exec(
-      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
-      [spaceId]
-    )
-    db.run(
-      'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
-      [notebookId, pack.notebook, spaceId, (nbOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'notebook']
-    )
-
-    // 3) 章节 + 页面
+    // 2) 笔记本(v2 支持多笔记本)+ 章节 + 页面
     let done = 0
-    for (const chapter of pack.chapters) {
+    for (const notebook of pack.notebooks) {
+      const notebookId = randomUUID()
+      const nbOrder = getDatabase().exec(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
+        [spaceId]
+      )
+      db.run(
+        'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+        [notebookId, notebook.name, spaceId, (nbOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'notebook']
+      )
+
+      for (const chapter of notebook.chapters) {
       const chapterId = randomUUID()
       const chOrder = getDatabase().exec(
         'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
@@ -303,7 +362,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
             continue
           }
           // 覆盖/静默更新
-          const { md, attachmentIds } = processImages(mdRes.buf.toString('utf-8'), pluginDir, row.page_id, stagedFiles)
+          const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8')), pluginDir, dirname(page.file), row.page_id, stagedFiles)
           stagedAttachmentIds.push(...attachmentIds)
           db.run(
             'UPDATE knowledge_pages SET content_md = ?, updated_at = ? WHERE id = ?',
@@ -320,7 +379,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
 
         // 新页面(先预生成 pageId,附件直接归属)
         const pageId = randomUUID()
-        const { md, attachmentIds } = processImages(mdRes.buf.toString('utf-8'), pluginDir, pageId, stagedFiles)
+        const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8')), pluginDir, dirname(page.file), pageId, stagedFiles)
         stagedAttachmentIds.push(...attachmentIds)
         const pgOrder = getDatabase().exec(
           'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id = ?',
@@ -346,6 +405,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
           [pluginId, page.externalId, pageId, hash, packVersion, spaceId, now]
         )
         created++
+      }
       }
     }
 

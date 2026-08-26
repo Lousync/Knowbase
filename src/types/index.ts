@@ -415,7 +415,7 @@ export interface ElectronAPI {
   pluginAuditList: (id?: string) => Promise<PluginAuditEntry[]>
   pluginAuditClear: (id?: string) => Promise<{ success: boolean }>
   pluginAuditWrite: (id: string, action: string, detail?: unknown) => Promise<{ success: boolean }>
-  knowledgePackGetState: (pluginId: string) => Promise<{ ok: boolean; state?: 'not-imported' | 'imported' | 'update-available'; version?: string; chapters?: number; totalPages?: number; newPages?: number; changedPages?: number; lastImportedAt?: string; spaceId?: string | null; message?: string }>
+  knowledgePackGetState: (pluginId: string) => Promise<{ ok: boolean; state?: 'not-imported' | 'imported' | 'update-available'; version?: string; chapters?: number; totalPages?: number; newPages?: number; changedPages?: number; lastImportedAt?: string; spaceId?: string | null; notebookCount?: number; spaceName?: string; message?: string }>
   knowledgePackImport: (pluginId: string, overwriteModified: boolean) => Promise<{ ok: boolean; created?: number; updated?: number; skipped?: number; conflicts?: { title: string; reason: string }[]; spaceId?: string | null; message?: string }>
   onKnowledgePackProgress: (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => () => void
   getAttachmentsPath: () => Promise<string>

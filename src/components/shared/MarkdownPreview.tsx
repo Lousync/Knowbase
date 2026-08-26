@@ -1,7 +1,10 @@
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import { Copy } from 'lucide-react'
 import { showToast } from '../../lib/toast'
 import { copyImageUrlToClipboard } from '../../lib/ipc'
@@ -68,8 +71,8 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
   return (
     <div className="prose-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]}
         urlTransform={safeUrlTransform}
         components={{
           // Override ul/ol to restore list-style killed by Tailwind reset
