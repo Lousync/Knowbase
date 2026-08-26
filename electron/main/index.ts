@@ -360,6 +360,14 @@ app.whenReady().then(async () => {
     try { if (typeof text === 'string' && text && clipboard.readText() === text) clipboard.writeText('') } catch { /* ignore */ }
     return true
   })
+  // 通用文本复制（AI 消息复制等）；限制单次 1MB 防滥用
+  ipcMain.handle('clipboard:writeText', (_e, text: string) => {
+    try {
+      if (typeof text !== 'string' || text.length > 1024 * 1024) return false
+      clipboard.writeText(text)
+      return true
+    } catch { return false }
+  })
   ipcMain.handle('clipboard:copyImage', (_e, src: { path?: string; dataUrl?: string }) => {
     try {
       let img: Electron.NativeImage | null = null

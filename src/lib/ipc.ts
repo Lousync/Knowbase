@@ -5,6 +5,7 @@ const a = () => { if (!window.api) throw new Error('Electron API not available.'
 
 export const getPathForFile = (file: File): string => a().getPathForFile(file)
 export const copyImage = (src: { path?: string; dataUrl?: string }): Promise<boolean> => a().copyImage(src)
+export const copyText = (text: string): Promise<boolean> => a().copyText(text)
 
 // ===== Typed settings =====
 

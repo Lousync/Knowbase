@@ -9,6 +9,7 @@ const api = {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   copyImage: (src: { path?: string; dataUrl?: string }) => ipcRenderer.invoke('clipboard:copyImage', src),
   clearClipboardIfEqual: (text: string) => ipcRenderer.invoke('clipboard:clearIfEqual', text),
+  copyText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),
   minimize: () => ipcRenderer.invoke('window:minimize'),
   maximize: () => ipcRenderer.invoke('window:maximize'),
   close: () => ipcRenderer.invoke('window:close'),

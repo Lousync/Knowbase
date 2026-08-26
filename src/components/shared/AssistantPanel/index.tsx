@@ -1,25 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText,
+  Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, llmListProviders,
+  agentChat, llmListProviders, copyText,
 } from '../../../lib/ipc'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep } from '../../../types'
 
 /**
  * 全局 AI 助手侧栏（方案 B）：任意界面 Ctrl+J / 右下角按钮唤起，
  * 会话留存 + 上下文感知（正在查看的知识库页面自动附带）。
+ * 拖拽左缘调宽；拖到 320px 以下松手 = 整体关闭（snap），不会误触下层模块侧栏。
  */
 
 interface UiMessage {
   role: 'user' | 'assistant'
   content: string
   trace?: AgentTraceStep[]
+  createdAt?: string
+}
+
+function nowLocal(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/** 'YYYY-MM-DD HH:MM:SS' → 今天只显示 HH:mm，更早显示 MM-DD HH:mm */
+function fmtTime(raw?: string | null): string {
+  if (!raw) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(raw)
+  if (!m) return raw.slice(5, 16)
+  const d = new Date()
+  const sameDay = Number(m[1]) === d.getFullYear() && Number(m[2]) === d.getMonth() + 1 && Number(m[3]) === d.getDate()
+  return sameDay ? `${m[4]}:${m[5]}` : `${m[2]}-${m[3]} ${m[4]}:${m[5]}`
 }
 
 export function AssistantPanel() {
@@ -33,10 +51,15 @@ export function AssistantPanel() {
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [dragW, setDragW] = useState<number | null>(null)
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ctxVersionRef = useRef(0)
 
-  const width = Math.min(520, Math.max(320, Number(s.assistantWidth ?? 380)))
+  const savedWidth = Math.min(520, Math.max(320, Number(s.assistantWidth ?? 380)))
+  // 拖拽中的实时宽度；低于 320 属于"拖拽关闭"区间，松手即关
+  const width = dragW ?? savedWidth
+  const snapClosing = dragW !== null && dragW < 320
 
   const refreshSessions = useCallback(async () => {
     try { setSessions(await agentSessions()) } catch { /* ignore */ }
@@ -72,6 +95,7 @@ export function AssistantPanel() {
       setMessages(rows.map(m => ({
         role: m.role,
         content: m.content,
+        createdAt: m.createdAt,
         trace: m.traceJson ? (() => { try { return JSON.parse(m.traceJson) as AgentTraceStep[] } catch { return undefined } })() : undefined,
       })))
     } catch { setMessages([]) }
@@ -109,14 +133,14 @@ export function AssistantPanel() {
       setActiveId(sid)
     }
     const ctx = getAssistantContext()
-    setMessages(prev => [...prev, { role: 'user', content: text }])
+    setMessages(prev => [...prev, { role: 'user', content: text, createdAt: nowLocal() }])
     setInput('')
     setPending(true)
     ctxVersionRef.current++
     try {
       const r = await agentChat(sid, text, ctx ?? undefined)
       if (r.ok && r.reply !== undefined) {
-        setMessages(prev => [...prev, { role: 'assistant', content: r.reply!, trace: r.trace }])
+        setMessages(prev => [...prev, { role: 'assistant', content: r.reply!, createdAt: nowLocal(), trace: r.trace }])
       } else {
         showToastSafe(`AI 调用失败：${r.error ?? '未知错误'}`)
       }
@@ -144,7 +168,7 @@ export function AssistantPanel() {
       {/* 侧栏面板 */}
       {open && (
         <div
-          className="fixed z-40 top-[48px] bottom-10 right-0 flex flex-col bg-[var(--bg-primary)] border-l border-[var(--border-color)] shadow-2xl"
+          className={`fixed z-40 top-[48px] bottom-10 right-0 flex flex-col bg-[var(--bg-primary)] border-l border-[var(--border-color)] shadow-2xl transition-opacity ${snapClosing ? 'opacity-60' : ''}`}
           style={{ width }}
         >
           {/* 头部 */}
@@ -177,7 +201,10 @@ export function AssistantPanel() {
                       className={`group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors ${
                         activeId === sess.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                       }`}>
-                      <span className="flex-1 min-w-0 truncate">{sess.title}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{sess.title}</span>
+                        <span className="block text-[10px] text-[var(--text-disabled)]">{fmtTime(sess.updatedAt)}</span>
+                      </span>
                       <button
                         onClick={e => { e.stopPropagation(); void removeSession(sess.id) }}
                         className={`shrink-0 p-0.5 rounded ${deletingId === sess.id ? 'text-red-400' : 'text-[var(--text-disabled)] opacity-0 group-hover:opacity-100 hover:text-red-400'}`}
@@ -207,8 +234,24 @@ export function AssistantPanel() {
                       </div>
                     )}
                     {messages.map((m, i) => (
-                      <div key={i}>
+                      <div key={i} className="group/msg">
                         <Bubble msg={m} />
+                        <div className={`flex items-center gap-1.5 px-1 mt-0.5 text-[10px] text-[var(--text-disabled)] ${m.role === 'user' ? 'justify-end ml-6' : 'justify-start mr-6'}`}>
+                          {m.createdAt && <span>{fmtTime(m.createdAt)}</span>}
+                          <button
+                            onClick={async () => {
+                              const okFlag = await copyText(m.content)
+                              if (okFlag) {
+                                setCopiedIdx(i)
+                                setTimeout(() => setCopiedIdx(cur => (cur === i ? null : cur)), 1500)
+                              } else showToastSafe('复制失败')
+                            }}
+                            className={`flex items-center gap-0.5 transition-opacity hover:text-[var(--text-primary)] ${copiedIdx === i ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'}`}
+                            title="复制">
+                            {copiedIdx === i ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                            {copiedIdx === i ? '已复制' : '复制'}
+                          </button>
+                        </div>
                         {m.trace && m.trace.length > 0 && <TraceBlock steps={m.trace} />}
                       </div>
                     ))}
@@ -251,18 +294,30 @@ export function AssistantPanel() {
             </div>
           </div>
 
-          {/* 宽度拖拽条 */}
+          {/* 宽度拖拽条：向左拖缩小；低于 320px 松手 = 整体关闭（snap）
+              面板为悬浮层且置顶，打开期间本拖拽条独占该边缘，
+              不会误触下层（如知识库大纲侧栏）的拖拽条 */}
           <div
             className="absolute top-0 left-[-3px] w-1.5 h-full cursor-ew-resize hover:bg-[var(--accent)]/30"
             onMouseDown={e => {
               e.preventDefault()
               const startX = e.clientX
-              const startW = width
+              const startW = savedWidth
+              let latest = startW
               const move = (ev: MouseEvent) => {
-                const w = Math.min(520, Math.max(320, startW + (startX - ev.clientX)))
-                void update('assistantWidth', w)
+                latest = Math.min(520, Math.max(260, startW + (startX - ev.clientX)))
+                setDragW(latest)
               }
-              const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+              const up = () => {
+                window.removeEventListener('mousemove', move)
+                window.removeEventListener('mouseup', up)
+                setDragW(null)
+                if (latest < 320) {
+                  setOpen(false) // snap 关闭
+                } else {
+                  void update('assistantWidth', latest)
+                }
+              }
               window.addEventListener('mousemove', move)
               window.addEventListener('mouseup', up)
             }}
