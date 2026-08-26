@@ -125,19 +125,20 @@ function sanitizeSvgText(content: string): string {
 }
 
 /**
- * 动画占位符 ```anim:<blockId>``` 处理。
- * M2 资产服务就绪前降级为提示引用块;后续版本将改写为沙箱 iframe 内嵌播放。
+ * 动画占位符 ```anim:<blockId>``` 处理(M2):
+ * 改写为携带插件 id 的 fence —— 渲染层据此构造 plugin://<pid>/anims/player.html?id=<bid>
+ * 沙箱 iframe 内嵌播放。首行文本作为 ariaLabel 说明保留。
  */
-function transformAnimPlaceholders(md: string): string {
+function transformAnimPlaceholders(md: string, pluginId: string): string {
   return md.replace(/```anim:([A-Za-z0-9._-]+)[ \t]*\n([\s\S]*?)```/g, (_m, id: string, body: string) => {
     const label = String(body).trim().split('\n')[0] || id
-    return `> 【交互式动画】${label}\n> 动画演示(块 ${id})暂以内嵌网页形式提供,请参考配套网站或等待插件更新内嵌播放。`
+    return '```anim@' + pluginId + ':' + id + '\n' + label + '\n```'
   })
 }
 
 /** 页面正文导入前的统一预处理 */
-function preprocessPageMd(raw: string): string {
-  return transformAnimPlaceholders(raw)
+function preprocessPageMd(raw: string, pluginId: string): string {
+  return transformAnimPlaceholders(raw, pluginId)
 }
 
 /**
@@ -362,7 +363,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
             continue
           }
           // 覆盖/静默更新
-          const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8')), pluginDir, dirname(page.file), row.page_id, stagedFiles)
+          const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), row.page_id, stagedFiles)
           stagedAttachmentIds.push(...attachmentIds)
           db.run(
             'UPDATE knowledge_pages SET content_md = ?, updated_at = ? WHERE id = ?',
@@ -379,7 +380,7 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
 
         // 新页面(先预生成 pageId,附件直接归属)
         const pageId = randomUUID()
-        const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8')), pluginDir, dirname(page.file), pageId, stagedFiles)
+        const { md, attachmentIds } = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), pageId, stagedFiles)
         stagedAttachmentIds.push(...attachmentIds)
         const pgOrder = getDatabase().exec(
           'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id = ?',
