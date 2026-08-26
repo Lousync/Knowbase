@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ArrowLeft, FolderSearch, FolderInput, Link2Off, Copy, Scissors, FileOutput } from 'lucide-react'
+import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ChevronRight, ArrowLeft, FolderSearch, FolderInput, Link2Off, Copy, Scissors, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
