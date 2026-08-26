@@ -51,7 +51,7 @@ export function StatusBar({
   }, [pom])
 
   return (
-    <div className="flex items-center justify-between h-6 bg-[#0e639c] text-white text-[12px] select-none shrink-0 px-1">
+    <div className="flex items-center justify-between h-6 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-t border-[var(--border-color)] text-[12px] select-none shrink-0 px-1">
       <div className="flex items-center gap-0">
         <StatusItem>📅 {today}</StatusItem>
       </div>
@@ -60,8 +60,8 @@ export function StatusBar({
         {ps.visible && (
           <button
             onClick={() => pom.setState(s => ({ ...s, expanded: !s.expanded }))}
-            className={`h-full flex items-center gap-1.5 px-2 hover:bg-[#ffffff20] transition-colors cursor-pointer text-[11px] font-medium ${
-              ps.expanded ? 'bg-[#ffffff20]' : ''
+            className={`h-full flex items-center gap-1.5 px-2 hover:bg-[var(--bg-hover)] transition-colors cursor-pointer text-[11px] font-medium ${
+              ps.expanded ? 'bg-[var(--bg-hover)]' : ''
             }`}
             title="番茄钟"
           >
@@ -81,7 +81,7 @@ export function StatusBar({
 
 function StatusItem({ children }: { children: React.ReactNode }) {
   return (
-    <span className="px-2 h-full flex items-center hover:bg-[#ffffff20] cursor-default transition-colors">
+    <span className="px-2 h-full flex items-center hover:bg-[var(--bg-hover)] cursor-default transition-colors">
       {children}
     </span>
   )
