@@ -24,7 +24,7 @@
 - **knowledgePages schema v2**:支持 `space`(显式空间名)+ `notebooks[]` 多笔记本形态(v1 单笔记本完全兼容);空间优先原则强化——导入第一步永远是新建学习空间,同名自动加后缀,绝不写入用户已有层级
 - **授权弹窗增强**:内容型插件安装前明示「将在知识库中新建学习空间《X》(含 N 笔记本 · M 页)」
 - **KaTeX 数学公式渲染**:知识库/博客等所有 Markdown 预览支持 $行内$ 与 $$块级$$ 公式(remark-math + rehype-katex)
-- **主题合集 v1.2.0**:新增「**手绘线条**」主题(米纸底 + 炭字 + 红蜡笔强调色,英文 Segoe Print / 中文楷体手写字体栈);合集插件打包源收编入仓库 `resources/market-plugins/themes-collection/`
+- **主题合集 v1.3.0 · 手绘线条 v2 重绘**:落地 sketch 变量基建(--radius-card/--radius-btn/--shadow-card/--divider-style 等,默认值与既有视觉一致零回归);新效果=纸面提亮 + 石墨线框 + 蜡笔红强调 + 8 值抖动圆角 + 偏移铅笔阴影 + 虚线分隔/标题线 + 波浪链接下划线 + 双线引用条 + 记号笔黄警示底;合集源收编于 `resources/market-plugins/themes-collection/`
 - **408 知识包 v1.0.1 · 分步动画内嵌播放**:manim-web 全部 39 个动画打包为单一播放器(anims/player.html,2.8MB),导入后页面内以沙箱 iframe 直出,重置/上一步/下一步/进度条与原网站一致;复用 plugin:// 协议免本地端口服务
 - **修复三个导入器缺陷**:`parsePack` 入参错误导致所有内容包导入失败(根因);图片相对引用改以 md 文件目录为基准解析(修复深层目录包图片全部丢失);补 `resolve` 导入;动画占位符 ```anim:<id>``` 导入期降级为提示块(M2 换 iframe 内嵌)
 

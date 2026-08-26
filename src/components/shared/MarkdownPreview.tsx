@@ -260,7 +260,7 @@ function AnimEmbed({ pluginId, animId, label }: { pluginId: string; animId: stri
         loading="lazy"
         title={label || animId}
         onError={() => setFailed(true)}
-        style={{ width: '100%', aspectRatio: '16 / 10', border: '1px solid var(--border-color)', borderRadius: 6, background: '#fff' }}
+        style={{ width: '100%', aspectRatio: '16 / 10', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', background: '#fff' }}
       />
       <figcaption className="text-[11px] text-[var(--text-muted)] mt-1 text-center select-none">
         分步动画{label ? ` · ${label}` : ''}(使用下方控件逐步播放)
