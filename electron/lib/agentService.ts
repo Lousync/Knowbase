@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { randomUUID } from 'crypto'
 import { listTools, invokeToolInternal, getSettingReader, checkModulePermission } from './aiTools'
 import type { ToolDescription } from './aiTools'
 import { invokeLlmInternal } from './llmService'
@@ -51,6 +52,8 @@ export interface AgentChatRequest {
   message: string
   /** 渲染层附带的当前上下文（如正在查看的知识库页面） */
   context?: AgentContextInfo
+  /** 渲染层生成的调用标识——配合 agent:abort 实现停止生成 */
+  chatId?: string
 }
 
 export interface AgentChatResult {
@@ -61,6 +64,9 @@ export interface AgentChatResult {
   code?: string
   trace: AgentTraceStep[]
 }
+
+/** 进行中的对话 → 中断控制器（用户点击停止时触发） */
+const activeChats = new Map<string, AbortController>()
 
 function buildToolsPayload(): { payload: unknown[]; nameMap: Map<string, string> } {
   const reader = getSettingReader()
@@ -114,7 +120,7 @@ function buildSystemPrompt(context?: AgentContextInfo): string {
     '\n用户的问题大概率与该上下文相关；若需要更多数据仍应调用工具。'
 }
 
-async function agentChat(req: AgentChatRequest): Promise<AgentChatResult> {
+async function agentChat(req: AgentChatRequest, signal: AbortSignal, chatId: string): Promise<AgentChatResult> {
   const trace: AgentTraceStep[] = []
   const message = String(req?.message ?? '').trim()
   if (!message) return { ok: false, error: '消息不能为空', trace }
@@ -142,8 +148,9 @@ async function agentChat(req: AgentChatRequest): Promise<AgentChatResult> {
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // ---- LLM 轮 ----
+    if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
     const t0 = Date.now()
-    const r = await invokeLlmInternal({ messages: convo, tools: toolPayload })
+    const r = await invokeLlmInternal({ messages: convo, tools: toolPayload, signal })
     trace.push({
       kind: 'llm',
       ok: r.ok,
@@ -160,6 +167,7 @@ async function agentChat(req: AgentChatRequest): Promise<AgentChatResult> {
     // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----
     convo.push(r.assistantMessage)
     for (const tc of r.toolCalls) {
+      if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
       const realName = nameMap.get(tc.name) ?? tc.name.replace(/__/g, '.')
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
@@ -186,7 +194,20 @@ async function agentChat(req: AgentChatRequest): Promise<AgentChatResult> {
 }
 
 export function registerAgentHandlers(): void {
-  ipcMain.handle('agent:chat', (_e, req: AgentChatRequest) => agentChat(req))
+  ipcMain.handle('agent:chat', async (_e, req: AgentChatRequest) => {
+    const chatId = String(req?.chatId ?? '') || randomUUID()
+    const ctrl = new AbortController()
+    activeChats.set(chatId, ctrl)
+    try {
+      return await agentChat(req, ctrl.signal, chatId)
+    } finally {
+      activeChats.delete(chatId)
+    }
+  })
+  ipcMain.handle('agent:abort', (_e, chatId: string) => {
+    activeChats.get(String(chatId ?? ''))?.abort()
+    return true
+  })
   ipcMain.handle('agent:sessions', () => listAgentSessions())
   ipcMain.handle('agent:newSession', (_e, title?: string) =>
     createAgentSession(typeof title === 'string' && title.trim() ? title.trim() : '新会话'))

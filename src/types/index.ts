@@ -768,7 +768,8 @@ export interface ElectronAPI {
   llmAddModel: (id: string, model: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
   llmGetUsage: () => Promise<LlmUsageInfo>
-  agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo }) => Promise<AgentChatResult>
+  agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
+  agentAbort: (chatId: string) => Promise<boolean>
   agentSessions: () => Promise<AgentSessionInfo[]>
   agentNewSession: (title?: string) => Promise<AgentSessionInfo>
   agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>

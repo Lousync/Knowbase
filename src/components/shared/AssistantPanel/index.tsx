@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check,
+  Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check, Square,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, llmListProviders, copyText,
+  agentChat, llmListProviders, copyText, agentAbort,
 } from '../../../lib/ipc'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep } from '../../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo } from '../../../types'
 
 /**
  * 全局 AI 助手侧栏（方案 B）：任意界面 Ctrl+J / 右下角按钮唤起，
@@ -59,6 +59,11 @@ export function AssistantPanel() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [dragW, setDragW] = useState<number | null>(null)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  /** 选中文本即问：浮动按钮状态与一次性选中上下文 */
+  const [selFloat, setSelFloat] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [selCtx, setSelCtx] = useState<AgentContextInfo | null>(null)
+  const chatIdRef = useRef<string>('')
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ctxVersionRef = useRef(0)
 
@@ -158,6 +163,51 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     if (activeId === id) { setActiveId(null); setMessages([]) }
   }
 
+  // 选中文本即问：mouseup 捕获主内容区（面板外）的非折叠选区 → 浮动按钮
+  useEffect(() => {
+    const onMouseUp = () => {
+      setTimeout(() => {
+        try {
+          const sel = window.getSelection()
+          const text = sel?.toString().trim() ?? ''
+          if (!sel || sel.isCollapsed || !text || text.length < 2 || text.length > 2000) { setSelFloat(null); return }
+          // 面板内部的选择不触发
+          const anchorEl = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
+          if (anchorEl?.closest('#assistant-panel-root')) { setSelFloat(null); return }
+          const rect = sel.getRangeAt(0).getBoundingClientRect()
+          if (!rect || (rect.width === 0 && rect.height === 0)) { setSelFloat(null); return }
+          setSelFloat({
+            x: Math.min(rect.right + 8, window.innerWidth - 96),
+            y: Math.min(rect.bottom + 6, window.innerHeight - 44),
+            text,
+          })
+        } catch { setSelFloat(null) }
+      }, 10)
+    }
+    const onClear = (e?: Event) => {
+      const target = e?.target as Element | undefined
+      if (target?.closest?.('[data-sel-float]')) return // 点浮动按钮本身不清除
+      setSelFloat(null)
+    }
+    document.addEventListener('mouseup', onMouseUp)
+    document.addEventListener('mousedown', onClear as EventListener)
+    window.addEventListener('scroll', onClear, true)
+    return () => {
+      document.removeEventListener('mouseup', onMouseUp)
+      document.removeEventListener('mousedown', onClear as EventListener)
+      window.removeEventListener('scroll', onClear, true)
+    }
+  }, [])
+
+  /** 从选中片段发起提问 */
+  const askSelection = useCallback((text: string) => {
+    window.getSelection()?.removeAllRanges()
+    setSelFloat(null)
+    setSelCtx({ type: 'selection', label: `选中片段「${text.slice(0, 24)}${text.length > 24 ? '…' : ''}」`, data: { text } })
+    openPanel()
+    setTimeout(() => inputRef.current?.focus(), 120)
+  }, [openPanel])
+
   const send = useCallback(async () => {
     const text = input.trim()
     if (!text || pending) return
@@ -168,15 +218,20 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       sid = sRow.id
       setActiveId(sid)
     }
-    const ctx = getAssistantContext()
+    const ctx = selCtx ?? getAssistantContext()
     setMessages(prev => [...prev, { role: 'user', content: text, createdAt: nowLocal() }])
     setInput('')
     setPending(true)
     ctxVersionRef.current++
+    const cid = crypto.randomUUID()
+    chatIdRef.current = cid
     try {
-      const r = await agentChat(sid, text, ctx ?? undefined)
+      const r = await agentChat(sid, text, ctx ?? undefined, cid)
       if (r.ok && r.reply !== undefined) {
         setMessages(prev => [...prev, { role: 'assistant', content: r.reply!, createdAt: nowLocal(), trace: r.trace }])
+        if (selCtx) setSelCtx(null) // 选中上下文一次性消费
+      } else if (r.code === 'ABORTED') {
+        showToast({ type: 'info', message: '已停止生成' })
       } else {
         showToastSafe(`AI 调用失败：${r.error ?? '未知错误'}`)
       }
@@ -184,7 +239,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       setPending(false)
       void refreshSessions()
     }
-  }, [input, pending, activeId, refreshSessions])
+  }, [input, pending, activeId, refreshSessions, selCtx])
 
   const ctx = open ? getAssistantContext() : null
 
@@ -201,9 +256,23 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
         </button>
       )}
 
+      {/* 选中文本浮动按钮：主内容区框选任意文字后出现 */}
+      {selFloat && (
+        <button
+          data-sel-float
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => askSelection(selFloat.text)}
+          className="fixed z-50 flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--accent)] text-white text-[11px] shadow-lg hover:opacity-90 transition-opacity"
+          style={{ left: selFloat.x, top: selFloat.y }}
+        >
+          <Sparkles size={11} /> 问 AI
+        </button>
+      )}
+
       {/* 侧栏面板 */}
       {open && (
         <div
+          id="assistant-panel-root"
           className={`fixed z-40 top-[48px] bottom-10 right-0 flex flex-col bg-[var(--bg-primary)] border-l border-[var(--border-color)] shadow-2xl transition-opacity ${snapClosing ? 'opacity-60' : ''}`}
           style={{ width }}
         >
@@ -303,19 +372,32 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                     ))}
                     {pending && (
                       <div className="mr-6 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
-                        <Loader2 size={13} className="animate-spin" /> 思考与调用工具中…
+                        <Loader2 size={13} className="animate-spin" />
+                        <span className="flex-1">思考与调用工具中…</span>
+                        <button
+                          onClick={() => { void agentAbort(chatIdRef.current) }}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors shrink-0"
+                          title="中断当前请求与工具循环">
+                          <Square size={9} className="fill-current" /> 停止
+                        </button>
                       </div>
                     )}
                     <div ref={bottomRef} />
                   </div>
 
-                  {/* 上下文徽章 */}
-                  {ctx && (
+                  {/* 上下文徽章（选中文本优先，可清除） */}
+                  {(selCtx || ctx) && (
                     <div className="px-3 pb-1 shrink-0">
                       <span className="inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-md bg-[var(--bg-selected)] border border-[var(--border-color)] text-[11px] text-[var(--text-secondary)]">
                         <FileText size={10} className="shrink-0 text-[var(--accent)]" />
-                        <span className="truncate">{ctx.label}</span>
+                        <span className="truncate">{(selCtx ?? ctx)!.label}</span>
                         <span className="text-[var(--text-disabled)]">·将随提问附带</span>
+                        {selCtx && (
+                          <button onClick={() => setSelCtx(null)} title="移除选中上下文"
+                            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                            <X size={10} />
+                          </button>
+                        )}
                       </span>
                     </div>
                   )}
@@ -323,6 +405,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                   {/* 输入区 */}
                   <div className="p-2.5 shrink-0 flex items-end gap-2 border-t border-[var(--border-color)]">
                     <textarea
+                      ref={inputRef}
                       value={input}
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}

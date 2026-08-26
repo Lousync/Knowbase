@@ -45,6 +45,8 @@ interface ChatRequest {
   messages: ChatMessage[]
   tools?: unknown[] // OpenAI function 格式
   maxTokens: number
+  /** 外部中断信号（用户点击停止） */
+  signal?: AbortSignal
 }
 
 interface ChatResult {
@@ -100,10 +102,12 @@ interface Adapter {
   chat(p: ProviderConfig, req: ChatRequest): Promise<ChatResult>
 }
 
-async function httpJson(url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<{ status: number; json: any }> {
+async function httpJson(url: string, init: { method: string; headers: Record<string, string>; body?: string }, externalSignal?: AbortSignal): Promise<{ status: number; json: any }> {
+  const signals: AbortSignal[] = [AbortSignal.timeout(TOTAL_TIMEOUT_MS)]
+  if (externalSignal) signals.push(externalSignal)
   const res = await net.fetch(url, {
     ...init,
-    signal: AbortSignal.any([AbortSignal.timeout(TOTAL_TIMEOUT_MS)]),
+    signal: AbortSignal.any(signals),
   })
   const text = await res.text()
   let json: any = null
@@ -179,7 +183,7 @@ const openAiCompatibleAdapter: Adapter = {
       method: 'POST',
       headers: authHeaders(p),
       body: JSON.stringify(body),
-    })
+    }, req.signal)
     if (status !== 200 || !json) {
       throw Object.assign(new Error(friendlyHttpError(status, json)), { latencyMs: Date.now() - started })
     }
@@ -222,7 +226,7 @@ const ollamaAdapter: Adapter = {
       method: 'POST',
       headers: {},
       body: JSON.stringify(body),
-    })
+    }, req.signal)
     if (status !== 200 || !json) throw new Error(`HTTP ${status}`)
     const msg = json.message ?? {}
     const toolCalls = (msg.tool_calls ?? []).map((tc: any, i: number) => ({
@@ -355,6 +359,8 @@ export interface LlmInvokeRequest {
   modelId?: string
   messages: ChatMessage[]
   tools?: unknown[]
+  /** 外部中断信号（用户点击停止） */
+  signal?: AbortSignal
 }
 
 export type LlmInvokeResponse = {
@@ -409,6 +415,7 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       messages: req.messages,
       tools: req.tools,
       maxTokens,
+      signal: req.signal,
     })
     appendAudit(provider.id, 'llm.invoke', {
       provider: provider.name,
