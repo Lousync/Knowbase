@@ -347,6 +347,8 @@ export function PluginsModule() {
     setKpBusy(false); setKpProgress(null)
     if (r.ok) {
       showToast({ type: 'success', message: `导入完成:新建 ${r.created || 0} 页,更新 ${r.updated || 0} 页${r.skipped ? `,跳过 ${r.skipped}` : ''}` })
+      // 通知知识库模块刷新目录(模块常驻挂载,不会自行感知导入结果)
+      window.dispatchEvent(new CustomEvent('data-imported', { detail: { module: 'knowledge' } }))
       knowledgePackGetState(p.id).then(s => setKpState(s.ok ? { state: s.state!, chapters: s.chapters, totalPages: s.totalPages, newPages: s.newPages, changedPages: s.changedPages, lastImportedAt: s.lastImportedAt } : null)).catch(() => {})
       pluginAuditList(p.id).then(setAuditRows).catch(() => {})
     } else {

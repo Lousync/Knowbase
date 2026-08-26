@@ -302,49 +302,96 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
   for (const nb of pack.notebooks) for (const ch of nb.chapters) for (const pg of ch.pages) flat.push({ chapter: ch, page: pg })
   const total = flat.length
 
+  // ===== 预扫描:缓存包内 md、统计待处理页、探测可复用的既有导入空间 =====
+  const rawCache = new Map<string, { buf?: Buffer; error?: string }>()
+  let liveSpaceId: string | null = null
+  let pendingCount = 0
+  const esc = (s: string) => s.replace(/'/g, "''")
+  for (const f of flat) {
+    const r0 = readPageMd(pluginDir, f.page.file)
+    if ('error' in r0) { rawCache.set(f.page.externalId, { error: r0.error }); continue }
+    rawCache.set(f.page.externalId, { buf: r0.buf })
+    const row0 = mapping.get(f.page.externalId)
+    if (!row0) { pendingCount++; continue }
+    const alive = getDatabase().exec('SELECT 1 FROM knowledge_pages WHERE id = ?', [row0.page_id])
+    if (alive.length === 0) { pendingCount++; continue }
+    if (row0.content_hash !== hashOf(r0.buf)) { pendingCount++; continue }
+    // 记录一个仍然存在的既往空间(供复用)
+    if (!liveSpaceId && row0.space_id) {
+      const sp = getDatabase().exec(
+        `SELECT 1 FROM knowledge_categories WHERE id = '${esc(row0.space_id)}' AND category_type = 'space' LIMIT 1`
+      )
+      if (sp.length > 0) liveSpaceId = row0.space_id
+    }
+  }
+
   db.run('BEGIN')
   let created = 0, updated = 0, skipped = 0
   const conflicts: { title: string; reason: string }[] = []
   let spaceId: string | null = null
   try {
-    // 1) 顶层空间(空间优先原则:导入第一步永远是新建学习空间;同名已存在时追加后缀)
-    const pluginName = getPluginName(pluginId)
-    let spaceName = pack.spaceBase
-    const spaceExists = (name: string) => getDatabase().exec(
-      `SELECT id FROM knowledge_categories WHERE name = '${name.replace(/'/g, "''")}' AND category_type = 'space' AND parent_id IS NULL LIMIT 1`
-    ).length > 0
-    let suffix = 0
-    while (spaceExists(spaceName)) { suffix++; spaceName = suffix === 1 ? `${pack.spaceBase}(${pluginName})` : `${pack.spaceBase}(${pluginName}-${suffix})` }
-    spaceId = randomUUID()
-    const maxOrder = getDatabase().exec("SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS NULL")
-    db.run(
-      'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, NULL, ?, ?)',
-      [spaceId, spaceName, (maxOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'space']
-    )
+    // 无任何待处理页 → 不再新建空壳空间,直接返回
+    if (pendingCount === 0) {
+      db.run('COMMIT')
+      return { ok: true, created: 0, updated: 0, skipped: total, conflicts, spaceId: liveSpaceId }
+    }
 
-    // 2) 笔记本(v2 支持多笔记本)+ 章节 + 页面
+    // 1) 顶层空间:
+    //    - 既有导入的空间仍存在 → 复用(更新语义:内容落入同一空间,不产生重复壳)
+    //    - 否则新建(空间优先原则;同名已存在时追加后缀)
+    if (liveSpaceId) {
+      spaceId = liveSpaceId
+    } else {
+      const pluginName = getPluginName(pluginId)
+      let spaceName = pack.spaceBase
+      const spaceExists = (name: string) => getDatabase().exec(
+        `SELECT id FROM knowledge_categories WHERE name = '${esc(name)}' AND category_type = 'space' AND parent_id IS NULL LIMIT 1`
+      ).length > 0
+      let suffix = 0
+      while (spaceExists(spaceName)) { suffix++; spaceName = suffix === 1 ? `${pack.spaceBase}(${pluginName})` : `${pack.spaceBase}(${pluginName}-${suffix})` }
+      spaceId = randomUUID()
+      const maxOrder = getDatabase().exec("SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS NULL")
+      db.run(
+        'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, NULL, ?, ?)',
+        [spaceId, spaceName, (maxOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'space']
+      )
+    }
+
+    // 2) 笔记本(v2 支持多笔记本)+ 章节 + 页面;复用空间时按名称挂靠既有结构
+    const findChild = (parentId: string, name: string, type: string): string | null => {
+      const hit = getDatabase().exec(
+        `SELECT id FROM knowledge_categories WHERE parent_id = '${esc(parentId)}' AND name = '${esc(name)}' AND category_type = '${type}' LIMIT 1`
+      )
+      return hit.length > 0 ? String(hit[0].values[0][0]) : null
+    }
     let done = 0
     for (const notebook of pack.notebooks) {
-      const notebookId = randomUUID()
-      const nbOrder = getDatabase().exec(
-        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
-        [spaceId]
-      )
-      db.run(
-        'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
-        [notebookId, notebook.name, spaceId, (nbOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'notebook']
-      )
+      let notebookId = findChild(spaceId!, notebook.name, 'notebook')
+      if (!notebookId) {
+        notebookId = randomUUID()
+        const nbOrder = getDatabase().exec(
+          'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
+          [spaceId]
+        )
+        db.run(
+          'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+          [notebookId, notebook.name, spaceId, (nbOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'notebook']
+        )
+      }
 
       for (const chapter of notebook.chapters) {
-      const chapterId = randomUUID()
-      const chOrder = getDatabase().exec(
-        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
-        [notebookId]
-      )
-      db.run(
-        'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
-        [chapterId, chapter.name, notebookId, (chOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'folder']
-      )
+        let chapterId = findChild(notebookId, chapter.name, 'folder')
+        if (!chapterId) {
+          chapterId = randomUUID()
+          const chOrder = getDatabase().exec(
+            'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id = ?',
+            [notebookId]
+          )
+          db.run(
+            'INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type) VALUES (?, ?, ?, ?, ?)',
+            [chapterId, chapter.name, notebookId, (chOrder[0]?.values?.[0]?.[0] as number) ?? 0, 'folder']
+          )
+        }
 
       for (const page of chapter.pages) {
         done++
