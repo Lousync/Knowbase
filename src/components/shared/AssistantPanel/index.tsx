@@ -43,7 +43,13 @@ function fmtTime(raw?: string | null): string {
 export function AssistantPanel() {
   const { s, update } = useSettings()
   const [open, setOpen] = useState(false)
+  // 动画三态: mounted=DOM 存在(含退场动画期间), shown=滑入到位
+  const [mounted, setMounted] = useState(false)
+  const [shown, setShown] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // 抽屉动画三态
+  const [drawerMounted, setDrawerMounted] = useState(false)
+  const [drawerShown, setDrawerShown] = useState(false)
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([])
   const [providersOk, setProvidersOk] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -61,9 +67,47 @@ export function AssistantPanel() {
   const width = dragW ?? savedWidth
   const snapClosing = dragW !== null && dragW < 320
 
-  const refreshSessions = useCallback(async () => {
-    try { setSessions(await agentSessions()) } catch { /* ignore */ }
+  const openPanel = useCallback(() => {
+    setMounted(true)
+    setOpen(true)
+    // 双 rAF 确保首帧以关闭位渲染, 再过渡到打开位
+    requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)))
+    setDrawerOpen(false); setDrawerMounted(false); setDrawerShown(false)
   }, [])
+
+  const closePanel = useCallback(() => {
+    setOpen(false)
+    setShown(false) // onTransitionEnd 后卸载 DOM
+  }, [])
+
+  const openDrawer = useCallback(() => {
+    setDrawerMounted(true)
+    setDrawerOpen(true)
+    requestAnimationFrame(() => requestAnimationFrame(() => setDrawerShown(true)))
+  }, [])
+
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false)
+    setDrawerShown(false) // onTransitionEnd 后卸载 DOM
+  }, [])
+
+  const toggleDrawer = useCallback(() => {
+    if (drawerOpen) closeDrawer()
+    else openDrawer()
+  }, [drawerOpen, openDrawer, closeDrawer])
+
+  // Ctrl+J 全局开关
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') {
+        e.preventDefault()
+        if (open) closePanel()
+        else openPanel()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, openPanel, closePanel])
 
   // 检查是否有可用模型供应商（决定引导态）
   useEffect(() => {
@@ -72,24 +116,16 @@ export function AssistantPanel() {
       .catch(() => setProvidersOk(false))
   }, [])
 
-  useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, pending, drawerOpen])
-
-  // Ctrl+J 全局开关
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') {
-        e.preventDefault()
-        setOpen(v => !v)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const refreshSessions = useCallback(async () => {
+    try { setSessions(await agentSessions()) } catch { /* ignore */ }
   }, [])
+
+useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, pending, drawerShown])
 
   const loadSession = useCallback(async (id: string) => {
     setActiveId(id)
-    setDrawerOpen(false)
+    closeDrawer()
     try {
       const rows: AgentStoredMessage[] = await agentMessages(id)
       setMessages(rows.map(m => ({
@@ -107,7 +143,7 @@ export function AssistantPanel() {
     setSessions(prev => [sRow, ...prev])
     setActiveId(sRow.id)
     setMessages([])
-    setDrawerOpen(false)
+    closeDrawer()
   }, [])
 
   const removeSession = async (id: string) => {
@@ -173,7 +209,7 @@ export function AssistantPanel() {
         >
           {/* 头部 */}
           <div className="h-9 shrink-0 px-2.5 flex items-center gap-1 border-b border-[var(--border-color)]">
-            <button onClick={() => setDrawerOpen(v => !v)} title="会话列表"
+            <button onClick={toggleDrawer} title="会话列表"
               className={`p-1.5 rounded-md transition-colors ${drawerOpen ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
               <Menu size={14} />
             </button>
@@ -188,8 +224,18 @@ export function AssistantPanel() {
 
           <div className="flex-1 min-h-0 relative flex">
             {/* 会话抽屉 */}
-            {drawerOpen && (
-              <div className="absolute inset-y-0 left-0 w-52 z-10 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col">
+            {/* 遮罩：点击空白处收起抽屉 */}
+            {drawerMounted && (
+              <div
+                className={`absolute inset-0 z-[5] bg-black/20 transition-opacity duration-200 ${drawerShown ? 'opacity-100' : 'opacity-0'}`}
+                onClick={closeDrawer}
+              />
+            )}
+            {drawerMounted && (
+              <div
+                className={`absolute inset-y-0 left-0 w-52 z-10 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col transition-transform duration-200 ease-out ${drawerShown ? 'translate-x-0' : '-translate-x-full'}`}
+                onTransitionEnd={e => { if (e.propertyName === 'transform' && !drawerShown) setDrawerMounted(false) }}
+              >
                 <button onClick={() => { void newSession() }}
                   className="flex items-center gap-1.5 m-2 px-2.5 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
                   <Plus size={12} /> 新会话
