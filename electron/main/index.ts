@@ -388,6 +388,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   // 启动自测:验证 plugin:// 管线(仅内置插件存在时),结果写 userData/plugin-debug.log
+
+  // 启动自测:验证 plugin:// 管线(仅内置插件存在时),结果写 userData/plugin-debug.log
   {
     const builtinDirDev = join(app.getAppPath(), 'resources', 'builtin-plugins')
     const builtinDir = app.isPackaged ? join(process.resourcesPath, 'builtin-plugins') : builtinDirDev
