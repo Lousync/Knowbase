@@ -4,28 +4,41 @@
  * 维护约定：上游改名/上新时更新此表；未知 ID 回退到机械美化，不会显示错误信息。
  */
 
-/** 实测确认的免费模型（截图对照 CC Switch） */
+/** 实测确认的免费模型（2026-08 对照 opencode Zen/Go 双端点 /models 数据） */
 const KNOWN_FREE = new Set([
-  'ox-alpha-free',
-  'mimo-v2.5',
-  'hy3',
-  'hy3-preview',
-  'muse-spark-1.2-contributor',
-  'nemotron-3.5-lightning',
+  // Zen 主端点专属的 -free 后缀族
+  'hy3-free',
+  'mimo-v2.5-free',
+  'muse-spark-1.2-contributor-free',
   'nemotron-3.5-lightning-free',
+  'nemotron-3-ultra-free',
+  'deepseek-v4-flash-free',
+  'laguna-s-2.1-free',
+  'x-preview-f-free',
+  // Go 端点专属免费
+  'ox-alpha-free',
 ])
 
 /** 手工维护的美化名（仅放无法机械推导或官方写法特殊的条目） */
 const PRETTY_OVERRIDES: Record<string, string> = {
-  'hy3': 'Hy3 Free',
-  'hy3-preview': 'Hy3 Preview Free',
-  'mimo-v2.5': 'MiMo V2.5 Free',
+  // Zen 免费族
+  'hy3-free': 'Hy3 Free',
+  'mimo-v2.5-free': 'MiMo V2.5 Free',
+  'muse-spark-1.2-contributor-free': 'Muse Spark 1.2 Free',
+  'nemotron-3.5-lightning-free': 'Nemotron 3.5 Lightning Free',
+  'nemotron-3-ultra-free': 'Nemotron 3 Ultra Free',
+  'deepseek-v4-flash-free': 'DeepSeek V4 Flash Free',
+  'laguna-s-2.1-free': 'Laguna S 2.1 Free',
+  'x-preview-f-free': 'X Preview F Free',
+  // Go 端点（注意：不带 -free 后缀的是付费版，勿标免费）
+  'hy3': 'Hy3',
+  'hy3-preview': 'Hy3 Preview',
+  'mimo-v2.5': 'MiMo V2.5',
   'mimo-v2.5-pro': 'MiMo V2.5 Pro',
   'mimo-v2.5-omni': 'MiMo V2.5 Omni',
-  'muse-spark-1.2-contributor': 'Muse Spark 1.2 Free',
+  'muse-spark-1.2-contributor': 'Muse Spark 1.2 Contributor',
+  'muse-spark-1.2': 'Muse Spark 1.2',
   'ox-alpha-free': 'Ox Alpha Free (Unlimited)',
-  'nemotron-3.5-lightning': 'Nemotron 3.5 Lightning Free',
-  'nemotron-3.5-lightning-free': 'Nemotron 3.5 Lightning Free',
   'longcat-2.0': 'LongCat 2.0',
   'gpt-5.6-luna': 'GPT-5.6 Luna',
 }
