@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { Toast } from './components/shared/Toast'

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
+import { registerAssistantContext } from '../../lib/assistantContext'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags, getScheduleSubtasks,
@@ -42,6 +43,22 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   const [viewMode, setViewMode] = useState<ViewMode>('date')
   const [monthTodos, setMonthTodos] = useState<ScheduleTodo[]>([])
   const [subtasksMap, setSubtasksMap] = useState<Record<string, ScheduleTodo[]>>({})
+
+  // AI 助手上下文：当前选中的日期及其待办
+  useEffect(() => {
+    return registerAssistantContext(() => {
+      if (!selectedDate) return null
+      const todos = monthTodos.filter(t => t.date === selectedDate)
+      return {
+        type: 'schedule.day',
+        label: `日程 ${selectedDate}（${todos.length} 条待办）`,
+        data: {
+          date: selectedDate,
+          todos: todos.slice(0, 30).map(t => ({ id: t.id, title: t.title, status: t.status, time: t.time ?? null })),
+        },
+      }
+    })
+  }, [selectedDate, monthTodos])
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ScheduleTodo | null>(null)

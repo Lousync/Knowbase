@@ -4,6 +4,7 @@ import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
+import { registerAssistantContext } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
@@ -40,6 +41,21 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   const thisMonth = today.slice(0, 7)
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)   // null = thisMonth only; string = YYYY-MM filter; 'showAll' = everything
   const [filterTagId, setFilterTagId] = useState<string | null>(null)        // null = all tags
+
+  // AI 助手上下文：正在编辑/查看的日记
+  useEffect(() => {
+    return registerAssistantContext(() => {
+      if (!selectedId) return null
+      const e = entries.find(x => x.id === selectedId)
+      if (!e) return null
+      const content = (liveContent && liveContent.length > 0 ? liveContent : e.contentMd) || ''
+      return {
+        type: 'blog.entry',
+        label: `正在编辑的日记「${e.title || e.date}」`,
+        data: { id: e.id, date: e.date, title: e.title, contentMd: content.slice(0, 8000) },
+      }
+    })
+  }, [selectedId, entries, liveContent])
 
   const loadEntries = useCallback(async () => {
     try {

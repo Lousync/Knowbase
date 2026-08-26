@@ -63,17 +63,22 @@ const pageErrors = []
     await ev(`window.dispatchEvent(new CustomEvent('settings:open')); return true`)
     await new Promise(r => setTimeout(r, 800))
 
-    // 找到「AI 工具」设置入口并点开
-    const opened = await ev(`
-      const btns=[...document.querySelectorAll('button')];
-      const ai=btns.find(b=>b.textContent.trim()==='AI 工具');
-      if(ai){ai.click();return true} return false
-    `)
-    console.log('进入 AI 工具页:', JSON.stringify(opened.result?.value))
+    // 找到「AI 工具」设置入口并点开（轮询等待渲染，防首启慢）
+    let opened = false
+    for (let i = 0; i < 10 && !opened; i++) {
+      const r = await ev(`
+        const btns=[...document.querySelectorAll('button')];
+        const ai=btns.find(b=>b.textContent.trim()==='AI 工具');
+        if(ai){ai.click();return true} return false
+      `)
+      opened = r.result?.value === true
+      if (!opened) await new Promise(r => setTimeout(r, 800))
+    }
+    console.log('进入 AI 工具页:', opened)
     await new Promise(r => setTimeout(r, 600))
 
     // 六个页签逐个点击，每处停留后检查 DOM 是否仍有根节点（白屏检测）
-    for (const label of ['内置工具', 'MCP', 'Skill', '模型', '对话', '权限']) {
+    for (const label of ['内置工具', 'MCP', 'Skill', '模型', '权限']) {
       const r = await ev(`
         const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='${label}');
         if(b){b.click();return 'clicked'} return 'not-found'
@@ -83,12 +88,12 @@ const pageErrors = []
       console.log(`页签[${label}]: ${r.result?.value} | root存活: ${alive.result?.value}`)
     }
 
-    // 对话页空状态/输入框交互冒烟（无供应商场景已在测试库清空过；有供应商则走正常态）
+    // 全局助手面板冒烟：Ctrl+J 唤起 → FAB/面板 DOM 出现
     await ev(`
-      const ta=document.querySelector('textarea');
-      if(ta){ta.focus()}
+      window.dispatchEvent(new KeyboardEvent('keydown',{key:'j',ctrlKey:true,bubbles:true}));
       return true
     `)
+    await new Promise(r => setTimeout(r, 500))
 
     // 主题切换触发 editorTheme 观察器
     await ev(`
