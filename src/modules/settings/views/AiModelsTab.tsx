@@ -9,6 +9,19 @@ import {
 } from '../../../lib/ipc'
 import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, CcSwitchItem } from '../../../types'
 
+/** 免费=用户手动标记 ∪ id 含 free（上游不提供该元数据，双轨启发式） */
+export function parseFreeSet(raw: string): Set<string> {
+  try {
+    const arr = JSON.parse(raw || '[]')
+    return new Set(Array.isArray(arr) ? arr.map((x: unknown) => String(x)) : [])
+  } catch { return new Set() }
+}
+
+export function isFreeModel(modelId: string, custom: Set<string>): boolean {
+  if (custom.has(modelId)) return true
+  return /(^|[-._])free([-._]|$)/i.test(modelId)
+}
+
 const TYPE_LABEL: Record<LlmProviderType, string> = {
   'openai-compatible': 'OpenAI 兼容',
   ollama: 'Ollama 本地',
@@ -40,6 +53,7 @@ export function AiModelsTab() {
   useEffect(() => { void refresh() }, [refresh])
 
   const pct = usage.budget > 0 ? Math.min(100, Math.round((usage.monthTokens / usage.budget) * 100)) : 0
+  const freeSet = parseFreeSet(s.aiFreeModelIds ?? '[]')
 
   return (
     <div className="space-y-8">
@@ -115,6 +129,9 @@ export function AiModelsTab() {
         </div>
       </div>
 
+      {/* 免费模型标记 */}
+      <FreeModelMarker providers={providers} />
+
       {/* 默认模型 */}
       {providers.some(p => p.enabled && p.models.length > 0) && (
         <div>
@@ -124,7 +141,7 @@ export function AiModelsTab() {
             className="w-full max-w-md px-2.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] outline-none focus:border-[var(--accent)]">
             <option value="">未设置</option>
             {providers.filter(p => p.enabled).flatMap(p =>
-              p.models.map(m => <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>{p.name} · {m}</option>)
+              p.models.map(m => <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>{isFreeModel(m, freeSet) ? '[免费] ' : ''}{p.name} · {m}</option>)
             )}
           </select>
         </div>
@@ -363,6 +380,61 @@ function CcSwitchImportModal({ onClose, onImported }: { onClose: () => void; onI
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+// ===== 免费模型标记管理 =====
+
+function FreeModelMarker({ providers }: { providers: LlmProviderInfo[] }) {
+  const { s, update } = useSettings()
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const allIds = [...new Set(providers.flatMap(p => p.models))]
+  const freeSet = parseFreeSet(s.aiFreeModelIds ?? '[]')
+
+  const openEditor = () => {
+    setText([...freeSet].join('\n'))
+    setOpen(true)
+  }
+
+  const save = () => {
+    const ids = text.split('\n').map(l => l.trim()).filter(Boolean)
+    void update('aiFreeModelIds', JSON.stringify([...new Set(ids)]))
+    showToast({ type: 'info', message: `已保存免费标记（当前 ${ids.length} 个）` })
+    setOpen(false)
+  }
+
+  return (
+    <div className="max-w-md">
+      <button onClick={() => (open ? setOpen(false) : openEditor())}
+        className="text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+        免费模型标记（{freeSet.size} 个自定义 · 上游不区分，手动维护）
+      </button>
+      {open && (
+        <div className="mt-2 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] space-y-2">
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+            每行一个模型 ID。保存后下拉列表中会带 [免费] 前缀；id 自含 free 字样的自动识别，无需填写。
+          </p>
+          <textarea value={text} onChange={e => setText(e.target.value)} rows={4}
+            placeholder={'ox-alpha-free\nglm-5.2-air'}
+            className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono resize-none outline-none focus:border-[var(--accent)]" />
+          {allIds.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {allIds.filter(id => !freeSet.has(id) && /free/i.test(id)).map(id => (
+                <button key={id} onClick={() => setText(t => (t.trim() ? t.replace(/\s*$/, '') + '\n' + id : id))}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  title="点击加入清单">
+                  + {id}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button onClick={save} className="px-3 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">保存</button>
+            <button onClick={() => setOpen(false)} className="px-3 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">取消</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -152,6 +152,9 @@ export const SETTINGS = {
 
   // ---- AI 助手侧栏 ----
   assistantWidth: { default: 380, desc: 'AI 助手侧栏宽度(px)' },
+
+  // ---- 模型标记 ----
+  aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====
