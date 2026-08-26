@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import {
   Puzzle, RefreshCw, Search, FolderOpen, Download, Loader2,
   CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield,
@@ -86,10 +86,6 @@ function LevelBadge({ level, size = 'sm' }: { level: PluginRiskLevel; size?: 'sm
   )
 }
 
-function LevelDot({ level }: { level: PluginRiskLevel }) {
-  return <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: LEVEL_META[level].bg }} title={`${level} 级`} />
-}
-
 type MarketSelection = { kind: 'installed'; plugin: PluginSummary } | { kind: 'market'; plugin: PluginRegistryEntry & { iconUrl?: string; riskLevel?: PluginRiskLevel; contributions?: string[]; capabilities?: string[] } }
 
 interface ConsentState {
@@ -105,7 +101,6 @@ export function PluginsModule() {
   const { s, update } = useSettings()
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
   const [search, setSearch] = useState('')
-  const [levelFilter, setLevelFilter] = useState<'' | PluginRiskLevel>('')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [installed, setInstalled] = useState<PluginSummary[]>([])
   const [market, setMarket] = useState<PluginRegistryEntry[]>([])
@@ -164,9 +159,6 @@ export function PluginsModule() {
       setKpProgress({ current: p.current, total: p.total, title: p.title })
     }
   }), [selected])
-
-  const allowedLevels: PluginRiskLevel[] = (s.pluginAllowedLevels || 'S,A,B')
-    .split(',').map(x => x.trim().toUpperCase()).filter((x): x is PluginRiskLevel => ['S', 'A', 'B'].includes(x))
 
   // ---------- 安装(含分级授权流程) ----------
 
@@ -356,12 +348,10 @@ export function PluginsModule() {
 
   const installedIds: Record<string, string> = Object.fromEntries(installed.map(p => [p.id, p.version]))
   const q = search.trim().toLowerCase()
-  const matchLevel = (l: PluginRiskLevel) => !levelFilter || levelFilter === l
   const matchText = (name: string, desc: string | undefined, id: string) =>
     !q || name.toLowerCase().includes(q) || (desc || '').toLowerCase().includes(q) || id.includes(q)
-  const filteredInstalled = installed.filter(p => matchLevel(p.riskLevel) && matchText(p.name, p.description, p.id) && (!categoryFilter || (p.category || '其他') === categoryFilter))
-  const marketCategories: string[] = [...new Set(market.map(p => p.category || '其他'))]
-  const filteredMarket = market.filter(p => matchLevel((p.riskLevel || 'S') as PluginRiskLevel) && matchText(p.name, p.description, p.id) && (!categoryFilter || (p.category || '其他') === categoryFilter))
+  const filteredInstalled = installed.filter(p => matchText(p.name, p.description, p.id))
+  const filteredMarket = market.filter(p => matchText(p.name, p.description, p.id) && (!categoryFilter || (p.category || '其他') === categoryFilter))
 
   // ---------- 列表项 ----------
 
@@ -384,7 +374,6 @@ export function PluginsModule() {
         <PluginIconImg src={p.icon} size={15} className={`shrink-0 mt-0.5 ${p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <LevelDot level={p.riskLevel} />
             <span className={`text-[13px] font-medium truncate ${p.enabled ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{p.name}</span>
             <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v{p.version}</span>
             {p.builtin && <span className="text-[9px] px-1 py-px rounded bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">内置</span>}
@@ -405,7 +394,6 @@ export function PluginsModule() {
         <PluginIconImg src={p.iconUrl} size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <LevelDot level={(p.riskLevel || 'S') as PluginRiskLevel} />
             <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">{p.name}</span>
             <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v{p.version}</span>
             {installedVer && <span className="text-[10px] text-[var(--success)] shrink-0">✓</span>}
@@ -826,23 +814,8 @@ export function PluginsModule() {
           )}
         </div>
 
-        {/* 等级筛选 */}
-        <div className="px-2 pb-2 flex gap-1 shrink-0">
-          {(['', 'S', 'A', 'B'] as const).map(l => (
-            <button
-              key={l || 'all'}
-              onClick={() => setLevelFilter(l)}
-              className={`flex-1 px-1.5 py-1 text-[10px] rounded transition-colors ${
-                levelFilter === l ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              {l === '' ? '全部' : `${l} 级`}
-            </button>
-          ))}
-        </div>
-
-        {/* 分类筛选(市场) */}
-        {tab === 'market' && marketCategories.length > 1 && (
+        {/* 分类筛选(市场):外观 / 工具 / 知识包 */}
+        {tab === 'market' && (
           <div className="px-2 pb-2 flex flex-wrap gap-1 shrink-0">
             <button
               onClick={() => setCategoryFilter('')}
@@ -852,7 +825,7 @@ export function PluginsModule() {
             >
               全部分类
             </button>
-            {marketCategories.map(c => (
+            {(['外观', '工具', '知识包'] as const).map(c => (
               <button
                 key={c}
                 onClick={() => setCategoryFilter(categoryFilter === c ? '' : c)}
@@ -866,34 +839,12 @@ export function PluginsModule() {
           </div>
         )}
 
-        {/* 策略开关 */}
-        <div className="px-2 pb-2 shrink-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md">
-            <ShieldCheck size={11} className="text-[var(--text-disabled)] shrink-0" />
-            <span className="text-[10px] text-[var(--text-muted)] shrink-0">允许等级</span>
-            <div className="flex-1 flex gap-0.5 justify-end">
-              {(['S,A,B', 'S,A', 'S'] as const).map(v => (
-                <button
-                  key={v}
-                  onClick={() => update('pluginAllowedLevels', v)}
-                  className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
-                    s.pluginAllowedLevels === v ? 'bg-[var(--accent)]/20 text-[var(--accent)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-muted)]'
-                  }`}
-                  title={`允许安装 ${v.split(',').join('/')} 级插件`}
-                >
-                  {v === 'S,A,B' ? '全部' : v === 'S,A' ? '≤A' : '仅S'}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
         {/* 列表 */}
         <div className="flex-1 overflow-y-auto">
           {tab === 'installed' ? (
             filteredInstalled.length === 0 ? (
               <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
-                {q || levelFilter ? '没有匹配的插件' : (
+                {q ? '没有匹配的插件' : (
                   <>还没有安装插件<br />
                     <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-1">去市场逛逛 →</button>
                   </>
@@ -911,7 +862,7 @@ export function PluginsModule() {
               <div><button onClick={() => loadMarket(true)} className="text-[var(--accent)] hover:underline mt-1">重试</button></div>
             </div>
           ) : filteredMarket.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)]">{q || levelFilter ? '没有匹配的插件' : '插件仓库还没有上架任何插件'}</div>
+            <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)]">{q ? '没有匹配的插件' : '插件仓库还没有上架任何插件'}</div>
           ) : filteredMarket.map(marketItem)}
         </div>
 
