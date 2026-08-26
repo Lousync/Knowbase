@@ -68,10 +68,21 @@ export interface AgentChatResult {
 /** 进行中的对话 → 中断控制器（用户点击停止时触发） */
 const activeChats = new Map<string, AbortController>()
 
-function buildToolsPayload(): { payload: unknown[]; nameMap: Map<string, string> } {
+function buildToolsPayload(): {
+  payload: unknown[]
+  nameMap: Map<string, string>
+  /** 因模块权限被过滤掉的工具所属模块（用于 system prompt 给出可操作指引） */
+  deniedModules: Set<string>
+} {
   const reader = getSettingReader()
   // 按模块权限预过滤：AI 无权使用的操作不进入其视野（invoke 处另有硬校验兜底）
-  const tools: ToolDescription[] = listTools().filter(t => t.enabled && !checkModulePermission(t, reader))
+  const all = listTools().filter(t => t.enabled)
+  const deniedModules = new Set<string>()
+  const tools: ToolDescription[] = all.filter(t => {
+    const denied = checkModulePermission(t, reader)
+    if (denied && t.module) deniedModules.add(t.module)
+    return !denied
+  })
   const payload = tools.map(t => ({
     type: 'function',
     function: {
@@ -82,7 +93,7 @@ function buildToolsPayload(): { payload: unknown[]; nameMap: Map<string, string>
   }))
   const nameMap = new Map<string, string>()
   for (const t of tools) nameMap.set(toFnName(t.name), t.name)
-  return { payload, nameMap }
+  return { payload, nameMap, deniedModules }
 }
 
 const SYSTEM_PROMPT = [
@@ -140,9 +151,12 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, chatId: str
     .slice(-40)
     .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-  const { payload: toolPayload, nameMap } = buildToolsPayload()
+  const { payload: toolPayload, nameMap, deniedModules } = buildToolsPayload()
+  const deniedHint = deniedModules.size > 0
+    ? `\n\n【权限提示】以下模块用户尚未授权 AI 操作：${[...deniedModules].join('、')}。若用户请求这些模块的操作，请如实说明当前未授权，并提示可在 设置 → AI 工具 → 权限 中开启后重试。`
+    : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(req.context) },
+    { role: 'system', content: buildSystemPrompt(req.context) + deniedHint },
     ...history,
   ]
 

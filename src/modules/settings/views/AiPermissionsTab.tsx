@@ -56,6 +56,7 @@ export function AiPermissionsTab() {
         <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
           控制 AI 助手对各模块的能力边界：<b>禁止</b>=工具完全不可见；<b>只读</b>=仅查询类操作；
           <b>读写</b>=允许写入类操作。所有 AI 操作均留有审计记录，写入实时生效。
+          <span className="text-[var(--text-secondary)]">修改即时生效，无需重启。</span>
         </p>
         {anyWrite && (
           <div className="flex items-start gap-2 mt-3 px-3 py-2.5 rounded-md bg-yellow-500/10 border border-yellow-600/40 max-w-md">
