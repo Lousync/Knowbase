@@ -62,6 +62,8 @@ export function AssistantPanel() {
   /** 选中文本即问：浮动按钮状态与一次性选中上下文 */
   const [selFloat, setSelFloat] = useState<{ x: number; y: number; text: string } | null>(null)
   const [selCtx, setSelCtx] = useState<AgentContextInfo | null>(null)
+  /** 会话抽屉卸载兜底定时器（closeDrawer 240ms 后触发） */
+  const drawerTimerRef = useRef<number | null>(null)
   const chatIdRef = useRef<string>('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -83,12 +85,19 @@ export function AssistantPanel() {
     setDrawerOpen(false); setDrawerMounted(false); setDrawerShown(false)
   }, [])
 
-  const closePanel = useCallback(() => {
-    setOpen(false)
-    setShown(false) // onTransitionEnd 后卸载 DOM
+  // 卸载时清理抽屉定时器
+  useEffect(() => {
+    return () => {
+      if (drawerTimerRef.current !== null) window.clearTimeout(drawerTimerRef.current)
+    }
   }, [])
 
   const openDrawer = useCallback(() => {
+    // 取消尚未触发的关闭卸载定时器，避免重开抽屉被旧定时器卸载
+    if (drawerTimerRef.current !== null) {
+      window.clearTimeout(drawerTimerRef.current)
+      drawerTimerRef.current = null
+    }
     setDrawerMounted(true)
     setDrawerOpen(true)
     requestAnimationFrame(() => requestAnimationFrame(() => setDrawerShown(true)))
@@ -96,8 +105,22 @@ export function AssistantPanel() {
 
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false)
-    setDrawerShown(false) // onTransitionEnd 后卸载 DOM
+    setDrawerShown(false) // 滑出动画后卸载 DOM
+    // Tailwind v4 用 translate 属性过渡，transitionend 的 propertyName 是
+    // 'translate' 而非 'transform'，依赖事件卸载会永久残留（透明遮罩挡住消息区
+    // 导致滚轮/点击失效），改用定时器兜底卸载
+    if (drawerTimerRef.current !== null) window.clearTimeout(drawerTimerRef.current)
+    drawerTimerRef.current = window.setTimeout(() => {
+      setDrawerMounted(false)
+      drawerTimerRef.current = null
+    }, 240)
   }, [])
+
+  const closePanel = useCallback(() => {
+    setOpen(false)
+    setShown(false) // onTransitionEnd 后卸载 DOM
+    closeDrawer()
+  }, [closeDrawer])
 
   const toggleDrawer = useCallback(() => {
     if (drawerOpen) closeDrawer()
@@ -323,7 +346,6 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                     {drawerMounted && (
                       <div
                         className={`absolute inset-y-0 left-0 w-52 z-10 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col transition-transform duration-200 ease-out ${drawerShown ? 'translate-x-0' : '-translate-x-full'}`}
-                        onTransitionEnd={e => { if (e.propertyName === 'transform' && !drawerShown) setDrawerMounted(false) }}
                       >
                         <button onClick={() => { void newSession() }}
                           className="flex items-center gap-1.5 m-2 px-2.5 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
