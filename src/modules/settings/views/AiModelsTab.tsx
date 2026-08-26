@@ -8,6 +8,7 @@ import {
   llmCcSwitchList, llmCcSwitchImport, openExternal,
 } from '../../../lib/ipc'
 import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, CcSwitchItem } from '../../../types'
+import { prettyModelName, isOpenCodeFree } from '../../../lib/modelNames'
 
 /** 免费=用户手动标记 ∪ id 含 free（上游不提供该元数据，双轨启发式） */
 export function parseFreeSet(raw: string): Set<string> {
@@ -141,7 +142,10 @@ export function AiModelsTab() {
             className="w-full max-w-md px-2.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] outline-none focus:border-[var(--accent)]">
             <option value="">未设置</option>
             {providers.filter(p => p.enabled).flatMap(p =>
-              p.models.map(m => <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>{isFreeModel(m, freeSet) ? '[免费] ' : ''}{p.name} · {m}</option>)
+              p.models.map(m => {
+                const free = isFreeModel(m, freeSet)
+                return <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>{free ? '[免费] ' : ''}{prettyModelName(m)}{free ? '' : ` · ${m}`}</option>
+              })
             )}
           </select>
         </div>
@@ -420,7 +424,7 @@ function FreeModelMarker({ providers }: { providers: LlmProviderInfo[] }) {
             className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono resize-none outline-none focus:border-[var(--accent)]" />
           {allIds.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {allIds.filter(id => !freeSet.has(id) && /free/i.test(id)).map(id => (
+              {allIds.filter(id => !freeSet.has(id) && (/free/i.test(id) || isOpenCodeFree(id))).map(id => (
                 <button key={id} onClick={() => setText(t => (t.trim() ? t.replace(/\s*$/, '') + '\n' + id : id))}
                   className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                   title="点击加入清单">
