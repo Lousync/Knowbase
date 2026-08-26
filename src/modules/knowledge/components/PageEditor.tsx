@@ -43,7 +43,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [content, setContent] = useState('')
   const [fileType, setFileTypeState] = useState('')
   const [showLangMenu, setShowLangMenu] = useState(false)
-  const [preview, setPreview] = useState(false)
+  // 知识库以阅读优先:md/txt 页面打开即预览(右上角眼睛或 Ctrl+/ 切回编辑)
+  const [preview, setPreview] = useState(true)
   const [backlinks, setBacklinks] = useState<KnowledgeBacklinkItem[]>([])
   // 手动关联（双向）
   const [manualLinks, setManualLinks] = useState<KnowledgePage[]>([])
@@ -167,8 +168,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           setAnnotation(anno); savedAnnotationRef.current = anno
           window.dispatchEvent(new CustomEvent('status-filetype', { detail: getFileTypeInfo(p.fileType || '').label }))
           onTitleChange?.(p.title)
-          // 内容含附件示意图或内嵌动画的页面(如知识包导入)默认进入阅读预览
-          if (p.fileType === 'md' && /(attachment:\/\/|language-anim@)/.test(p.contentMd || '')) setPreview(true)
+          // 非 md/txt 类型(pdf/代码)强制编辑视图;md/txt 保持阅读优先
+          const ft = (p.fileType || 'md').toLowerCase()
+          setPreview(ft === 'md' || ft === '' || ft === 'txt')
         }
       }),
       getKnowledgeBacklinkContext(pageId).then(setBacklinks),
