@@ -347,17 +347,16 @@ async function main() {
     if ((wrongKey.value || {}).ok !== false) throw new Error('错误 Key 未被拒绝: ' + JSON.stringify(wrongKey.value))
 
     // 18. 正确保存供应商 + 连通性测试发现 2 个模型
-    await run('llm-save-and-test', `
+    const savedProv = await run('llm-save-and-test', `
       return window.api.llmSaveProvider({ name:'mock', type:'openai-compatible', baseUrl:'http://127.0.0.1:${MOCK_PORT}', apiKey:'mock-key' })
         .then(async s => {
           const list = await window.api.llmListProviders()
           const p = list.providers.find(x => x.id === s.id)
           const test = await window.api.llmTestConnection({ type:'openai-compatible', baseUrl:'http://127.0.0.1:${MOCK_PORT}', apiKey:'mock-key' })
-          return { saved:s.ok, hasKey:p.hasKey, models:p.models.length, testOk:test.ok, testModels:(test.models||[]).length }
+          return { saved:s.ok, id:s.id, hasKey:p.hasKey, models:p.models.length, testOk:test.ok, testModels:(test.models||[]).length }
         })
     `)
-    const provList = await run('llm-provider-id', 'return window.api.llmListProviders().then(r => r.providers.map(p=>p.id))')
-    const providerId = (provList.value || [])[0]
+    const providerId = (savedProv.value || {}).id
     if (!providerId) throw new Error('provider id missing')
 
     // 19. 设默认模型

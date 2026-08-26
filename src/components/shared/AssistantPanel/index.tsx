@@ -66,6 +66,9 @@ export function AssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ctxVersionRef = useRef(0)
+  /** 当前会话 id 的实时镜像：回复返回时判断用户是否已切换会话 */
+  const activeIdRef = useRef<string | null>(null)
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
 
   const savedWidth = Math.min(520, Math.max(320, Number(s.assistantWidth ?? 380)))
   // 拖拽中的实时宽度；低于 320 属于"拖拽关闭"区间，松手即关
@@ -210,7 +213,12 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
 
   const send = useCallback(async () => {
     const text = input.trim()
-    if (!text || pending) return
+    if (!text) return
+    // 排队请求不静默丢弃：明确告知正在回复中（可点停止）
+    if (pending) {
+      showToastSafe('正在回复上一条消息，请等待完成或点击「停止」', 'info')
+      return
+    }
     let sid = activeId
     if (!sid) {
       const sRow = await agentNewSession().catch(() => null)
@@ -227,6 +235,11 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     chatIdRef.current = cid
     try {
       const r = await agentChat(sid, text, ctx ?? undefined, cid)
+      // 用户在等待期间切换了会话：回复已落库，但不注入当前视图
+      if (activeIdRef.current !== sid) {
+        showToastSafe('回复已保存到原会话，可在会话列表中查看', 'info')
+        return
+      }
       if (r.ok && r.reply !== undefined) {
         setMessages(prev => [...prev, { role: 'assistant', content: r.reply!, createdAt: nowLocal(), trace: r.trace }])
         if (selCtx) setSelCtx(null) // 选中上下文一次性消费
@@ -292,56 +305,56 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
           </div>
 
           <div className="flex-1 min-h-0 relative flex">
-            {/* 会话抽屉 */}
-            {/* 遮罩：点击空白处收起抽屉 */}
-            {drawerMounted && (
-              <div
-                className={`absolute inset-0 z-[5] bg-black/20 transition-opacity duration-200 ${drawerShown ? 'opacity-100' : 'opacity-0'}`}
-                onClick={closeDrawer}
-              />
-            )}
-            {drawerMounted && (
-              <div
-                className={`absolute inset-y-0 left-0 w-52 z-10 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col transition-transform duration-200 ease-out ${drawerShown ? 'translate-x-0' : '-translate-x-full'}`}
-                onTransitionEnd={e => { if (e.propertyName === 'transform' && !drawerShown) setDrawerMounted(false) }}
-              >
-                <button onClick={() => { void newSession() }}
-                  className="flex items-center gap-1.5 m-2 px-2.5 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
-                  <Plus size={12} /> 新会话
-                </button>
-                <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
-                  {sessions.map(sess => (
-                    <div key={sess.id}
-                      onClick={() => { void loadSession(sess.id) }}
-                      className={`group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors ${
-                        activeId === sess.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                      }`}>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{sess.title}</span>
-                        <span className="block text-[10px] text-[var(--text-disabled)]">{fmtTime(sess.updatedAt)}</span>
-                      </span>
-                      <button
-                        onClick={e => { e.stopPropagation(); void removeSession(sess.id) }}
-                        className={`shrink-0 p-0.5 rounded ${deletingId === sess.id ? 'text-red-400' : 'text-[var(--text-disabled)] opacity-0 group-hover:opacity-100 hover:text-red-400'}`}
-                        title={deletingId === sess.id ? '再点一次确认删除' : '删除会话'}>
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
-                  {sessions.length === 0 && (
-                    <p className="text-[11px] text-[var(--text-muted)] text-center pt-3">暂无历史会话</p>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* 消息区 */}
             <div className="flex-1 min-w-0 flex flex-col">
               {providersOk === false ? (
                 <NoProviderHint onGoSettings={() => { setOpen(false); window.dispatchEvent(new CustomEvent('settings:open')) }} />
               ) : (
                 <>
-                  <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+                  {/* 抽屉容器：仅包住消息列表，不遮挡上下文徽章与输入框 */}
+                  <div className="flex-1 min-h-0 relative">
+                    {/* 遮罩：点击空白处收起抽屉 */}
+                    {drawerMounted && (
+                      <div
+                        className={`absolute inset-0 z-[5] bg-black/20 transition-opacity duration-200 ${drawerShown ? 'opacity-100' : 'opacity-0'}`}
+                        onClick={closeDrawer}
+                      />
+                    )}
+                    {drawerMounted && (
+                      <div
+                        className={`absolute inset-y-0 left-0 w-52 z-10 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col transition-transform duration-200 ease-out ${drawerShown ? 'translate-x-0' : '-translate-x-full'}`}
+                        onTransitionEnd={e => { if (e.propertyName === 'transform' && !drawerShown) setDrawerMounted(false) }}
+                      >
+                        <button onClick={() => { void newSession() }}
+                          className="flex items-center gap-1.5 m-2 px-2.5 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
+                          <Plus size={12} /> 新会话
+                        </button>
+                        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
+                          {sessions.map(sess => (
+                            <div key={sess.id}
+                              onClick={() => { void loadSession(sess.id) }}
+                              className={`group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors ${
+                                activeId === sess.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                              }`}>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate">{sess.title}</span>
+                                <span className="block text-[10px] text-[var(--text-disabled)]">{fmtTime(sess.updatedAt)}</span>
+                              </span>
+                              <button
+                                onClick={e => { e.stopPropagation(); void removeSession(sess.id) }}
+                                className={`shrink-0 p-0.5 rounded ${deletingId === sess.id ? 'text-red-400' : 'text-[var(--text-disabled)] opacity-0 group-hover:opacity-100 hover:text-red-400'}`}
+                                title={deletingId === sess.id ? '再点一次确认删除' : '删除会话'}>
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          ))}
+                          {sessions.length === 0 && (
+                            <p className="text-[11px] text-[var(--text-muted)] text-center pt-3">暂无历史会话</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div className="h-full overflow-y-auto px-3 py-3 space-y-2">
                     {messages.length === 0 && !pending && (
                       <div className="pt-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed px-4">
                         在这里可以直接询问你正在查看的内容。<br />
@@ -383,6 +396,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                       </div>
                     )}
                     <div ref={bottomRef} />
+                    </div>
                   </div>
 
                   {/* 上下文徽章（选中文本优先，可清除） */}
@@ -513,6 +527,6 @@ function SendIcon() {
   )
 }
 
-function showToastSafe(message: string): void {
-  showToast({ type: 'error', message })
+function showToastSafe(message: string, type: 'error' | 'info' = 'error'): void {
+  showToast({ type, message })
 }
