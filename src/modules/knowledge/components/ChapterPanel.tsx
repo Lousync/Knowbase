@@ -62,6 +62,9 @@ export function ChapterPanel({
   // 新建页面：先命名再创建
   const [showNewPage, setShowNewPage] = useState(false)
   const [newPageName, setNewPageName] = useState('')
+  // 章节/页面列表可折叠(章节过多时收起,页面区不被挤压)
+  const [chaptersOpen, setChaptersOpen] = useState(true)
+  const [pgOpen, setPgOpen] = useState(true)
 
   const commitNewPage = () => {
     const name = newPageName.trim()
@@ -207,7 +210,7 @@ export function ChapterPanel({
       {/* Chapters — hidden when focusing a single chapter */}
       {!focusChapter && (
       <div
-        className="px-2 py-1 border-b border-[var(--border-color)]"
+        className="px-2 py-1 border-b border-[var(--border-color)] shrink-0"
         onDragOver={e => {
           const d = dragRef.current
           if (!d) return
@@ -235,7 +238,20 @@ export function ChapterPanel({
           }
         }}
       >
-        <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-1 mb-1">章节</div>
+        <button
+          onClick={() => setChaptersOpen(o => !o)}
+          className="w-full flex items-center justify-between px-1 mb-1 group/toggle"
+          title={chaptersOpen ? '收起章节列表' : '展开章节列表'}
+        >
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+            {chaptersOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            章节
+          </span>
+          <span className="text-[10px] text-[var(--text-muted)]">{chapters.length}</span>
+        </button>
+        {chaptersOpen && (
+        <>
+        <div className="max-h-[38vh] overflow-y-auto">
         {chapters.map(ch => (
           <div key={ch.id} data-chapter-id={ch.id}>
             {editingId === ch.id ? (
@@ -297,12 +313,15 @@ export function ChapterPanel({
             <Plus size={13} />新建章节
           </button>
         )}
+        </div>
+        </>
+        )}
       </div>
       )}
 
       {/* Pages in selected chapter */}
       <div
-        className={`flex-1 overflow-y-auto px-2 py-1 transition-colors ${dragOverNotebookArea ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)] outline-offset-[-2px]' : ''}`}
+        className={`${pgOpen ? 'flex-1 overflow-y-auto' : 'shrink-0'} px-2 py-1 transition-colors ${dragOverNotebookArea ? 'bg-[var(--accent)]/10 outline outline-2 outline-dashed outline-[var(--accent)] outline-offset-[-2px]' : ''}`}
         onDragOver={e => {
           const d = dragRef.current
           if (!d) return
@@ -386,10 +405,19 @@ export function ChapterPanel({
           }
         }}
       >
-        <div className="flex items-center justify-between px-1 mb-1">
-          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">页面</span>
+        <button
+          onClick={() => setPgOpen(o => !o)}
+          className="w-full flex items-center justify-between px-1 mb-1"
+          title={pgOpen ? '收起页面列表' : '展开页面列表'}
+        >
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+            {pgOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            页面
+          </span>
           <span className="text-[10px] text-[var(--text-muted)]">{pages.length}</span>
-        </div>
+        </button>
+        {pgOpen && (
+        <>
         {pages.length === 0 ? (
           <p className="px-1 py-4 text-[11px] text-[var(--text-disabled)] italic text-center">
             {focusChapter ? '暂无页面' : '暂未选中章节'}
@@ -487,6 +515,8 @@ export function ChapterPanel({
               </button>
             </div>
           </>
+        )}
+        </>
         )}
       </div>
 
