@@ -4,7 +4,7 @@ import { Palette, ChevronRight, ChevronDown, Check, Download } from 'lucide-reac
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
-import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, ExportIcon, RecycleIcon, UserIcon, SettingsIcon, PluginIcon } from './ModuleIcons'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, RecycleIcon, UserIcon, SettingsIcon, PluginIcon } from './ModuleIcons'
 
 /** All draggable module tabs (excluding user/settings; 帮助已在用户菜单内,侧边栏不再单列) */
 const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.ReactNode }[] = [
@@ -14,7 +14,6 @@ const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.R
   { id: 'moments',   label: '说说',   icon: s => <MomentsIcon size={s} /> },
   { id: 'toolbox',   label: '工具箱', icon: s => <ToolboxIcon size={s} /> },
   { id: 'plugins',   label: '插件',   icon: s => <PluginIcon size={s} /> },
-  { id: 'export',    label: '导出',   icon: s => <ExportIcon size={s} /> },
   { id: 'recycle',   label: '回收站', icon: s => <RecycleIcon size={s} /> },
 ]
 
@@ -44,7 +43,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const { s, update } = useSettings()
 
-  const allOrder: string[] = safeParse(s.activityBarOrder, ['blog','schedule','knowledge','toolbox','export','recycle'])
+  const allOrder: string[] = safeParse(s.activityBarOrder, ['blog','schedule','knowledge','toolbox','recycle'])
   const hidden: string[] = safeParse(s.activityBarHidden, [])
 
   // Compute ordered visible modules

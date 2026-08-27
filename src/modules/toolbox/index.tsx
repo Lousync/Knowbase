@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle } from 'lucide-react'
+import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
 import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
+import { ExportTool } from './components/export/ExportTool'
 import { getPluginTools, type PluginTool } from '../../lib/pluginService'
 import { showToast } from '../../lib/toast'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
@@ -35,6 +36,12 @@ const DATA_TOOLS: ToolDefinition[] = [
     id: 'bookmark-nav',
     name: '网址导航',
     icon: <Globe size={26} strokeWidth={1.5} />,
+    available: true,
+  },
+  {
+    id: 'data-export',
+    name: '数据导出',
+    icon: <Archive size={26} strokeWidth={1.5} />,
     available: true,
   },
 ]
@@ -102,6 +109,8 @@ export function ToolboxModule() {
         return <RemoteSupervise onBack={() => setActiveTool(null)} />
       case 'bookmark-nav':
         return <BookmarkNav onBack={() => setActiveTool(null)} />
+      case 'data-export':
+        return <ExportTool onBack={() => setActiveTool(null)} />
       default:
         return null
     }

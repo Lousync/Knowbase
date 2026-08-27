@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react'
-import { Upload, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles, CalendarCheck2, Globe } from 'lucide-react'
-import { exportBackupToZip, showExportSaveDialog } from '../../lib/ipc'
-import { SETTINGS_DEFAULTS } from '../../lib/settings'
-import { ProgressPanel } from './components/ProgressPanel'
+import { Upload, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles, CalendarCheck2, Globe, ArrowLeft } from 'lucide-react'
+import { exportBackupToZip, showExportSaveDialog } from '../../../../lib/ipc'
+import { SETTINGS_DEFAULTS } from '../../../../lib/settings'
+import { ProgressPanel } from './ProgressPanel'
 
 // ---- types ----
 interface ModuleOption {
@@ -56,7 +56,7 @@ async function runBackupExport(moduleIds: string[]): Promise<ExportResult> {
   return { cancelled: false, filePath, fileCount: r.fileCount, totalSize: r.totalSize }
 }
 
-export function ExportModule() {
+export function ExportTool({ onBack }: { onBack: () => void }) {
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set(['blog', 'schedule', 'knowledge', 'moments']))
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [statusMessage, setStatusMessage] = useState('')
@@ -119,7 +119,14 @@ export function ExportModule() {
     : null
 
   return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"><ArrowLeft size={15} /> 返回</button>
+        <div className="w-px h-4 bg-[var(--border-color)]" />
+        <Upload size={15} className="text-[var(--accent)]" /><h2 className="text-[14px] font-semibold text-[var(--text-primary)]">数据导出</h2>
+      </div>
+      <div className="flex flex-1 min-h-0">
       {/* Left: Config panel */}
       <div className="w-56 shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col overflow-y-auto">
         <div className="px-4 py-3 border-b border-[var(--border-color)]">
@@ -223,6 +230,7 @@ export function ExportModule() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

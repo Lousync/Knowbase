@@ -12,10 +12,10 @@ const MODULES = [
   { icon: CalendarDays, name: '任务', desc: '日程安排与四象限管理' },
   { icon: Network, name: '知识库', desc: '双链笔记、PDF 与知识网络' },
   { icon: MessageCircle, name: '说说', desc: '轻量动态与相册记录' },
-  { icon: Wrench, name: '工具箱', desc: '番茄钟、习惯打卡等 7 个小工具' },
+  { icon: Wrench, name: '工具箱', desc: '番茄钟、习惯打卡、数据导出等 8 个工具' },
   { icon: Bot, name: 'AI 助手', desc: '本地模型驱动，边看边问（Ctrl+J）' },
   { icon: Puzzle, name: '插件', desc: '主题 / 预设 / 知识包官方市场' },
-  { icon: Archive, name: '导出 · 回收站', desc: '一键备份与误删恢复' },
+  { icon: Archive, name: '回收站', desc: '误删恢复，一键还原' },
 ]
 
 const SHORTCUTS = [
