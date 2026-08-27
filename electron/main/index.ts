@@ -429,7 +429,7 @@ app.whenReady().then(async () => {
   registerSummaryHandlers()
   registerBlogTemplateHandlers()
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
-  registerPluginHandlers()
+  registerPluginHandlers({ getSettingValue: (key) => settingsCache[key] })
   // AI 工具注册表（M1 地基）：内置只读工具 + 审计 + 月度调用上限
   registerAiToolHandlers({ getSettingValue: (key) => settingsCache[key] })
   registerBuiltinTools()

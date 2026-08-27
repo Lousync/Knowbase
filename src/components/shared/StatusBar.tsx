@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
-import { Timer } from 'lucide-react'
+import { useState, useEffect, useSyncExternalStore } from 'react'
+import { Timer, ArrowDownToLine } from 'lucide-react'
 import { usePomodoro } from '../../modules/toolbox/hooks/PomodoroContext'
 import { localToday } from '../../lib/date'
+import { subscribePluginDownloads, getPluginDownloads } from '../../lib/pluginDownloadBus'
 
 interface StatusBarProps {
   date?: string
@@ -50,10 +51,25 @@ export function StatusBar({
     return () => window.removeEventListener('pomodoro:activate', handler)
   }, [pom])
 
+  // ---- 插件后台下载全局指示(总线快照订阅,组件无关页面存活) ----
+  const pluginDls = useSyncExternalStore(subscribePluginDownloads, getPluginDownloads)
+  const activeDls = pluginDls.filter(d => d.status === 'downloading' || d.status === 'finishing')
+
   return (
     <div className="flex items-center justify-between h-6 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-t border-[var(--border-color)] text-[12px] select-none shrink-0 px-1">
       <div className="flex items-center gap-0">
-        <StatusItem>📅 {today}</StatusItem>
+        <StatusItem>馃搮 {today}</StatusItem>
+        {activeDls.map((d, i) => (
+          <StatusItem key={d.key} className={i > 0 ? 'border-l border-[var(--border-color)]' : ''}>
+            <span data-plugin-dl={d.name} className="flex items-center gap-1" title={`插件后台下载中:${d.name}${d.host ? `(经 ${d.host})` : ''}`}>
+              <ArrowDownToLine size={11} className="inline-block animate-pulse" />
+              <span className="max-w-[140px] truncate">{d.name}</span>
+              <span className="font-mono ml-0.5">
+                {d.pct > 0 || d.receivedMb <= 0 ? `${d.pct}%` : `${d.receivedMb}MB`}
+              </span>
+            </span>
+          </StatusItem>
+        ))}
       </div>
       <div className="flex items-center gap-0">
         {/* Pomodoro pill — click opens full-screen panel */}
@@ -79,9 +95,9 @@ export function StatusBar({
   )
 }
 
-function StatusItem({ children }: { children: React.ReactNode }) {
+function StatusItem({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className="px-2 h-full flex items-center hover:bg-[var(--bg-hover)] cursor-default transition-colors">
+    <span className={`px-2 h-full flex items-center hover:bg-[var(--bg-hover)] cursor-default transition-colors ${className}`}>
       {children}
     </span>
   )

@@ -99,6 +99,11 @@ const api = {
   },
   pluginFetchRegistry: () => ipcRenderer.invoke('plugin:fetchRegistry'),
   pluginInstall: (url: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:install', url, grantedCapabilities),
+  onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => {
+    const handler = (_e: unknown, p: { key: string; received: number; total: number; percent: number; host?: string }) => cb(p)
+    ipcRenderer.on('plugin:download-progress', handler)
+    return () => { ipcRenderer.removeListener('plugin:download-progress', handler) }
+  },
   pluginInstallFromFile: (grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installFromFile', grantedCapabilities),
   pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),
   pluginSetEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('plugin:setEnabled', id, enabled),

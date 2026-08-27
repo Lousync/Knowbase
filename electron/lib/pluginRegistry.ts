@@ -14,7 +14,22 @@ import { getPackState, importPack } from './knowledgePackImporter'
  * 判级由主进程强算(防骗标);code 类型在清单校验阶段拒收。
  */
 
+/** 插件下载/registry 镜像默认值 — 与 src/lib/settings.ts updateMirror 及 updateService 保持一致 */
+const DEFAULT_PLUGIN_MIRROR = 'https://gh.dpik.top'
+let pluginSettingReader: (key: string) => unknown = () => undefined
+
+/** 用户配置的 ghproxy 前缀镜像(gh.dpik.top 等);未配置过用默认,显式空串=不用 */
+function userGhMirror(): string | null {
+  const raw = pluginSettingReader('updateMirror')
+  let s: string
+  if (raw === undefined || raw === null) s = DEFAULT_PLUGIN_MIRROR
+  else { s = String(raw).trim().replace(/\/+$/, ''); if (!s) return null }
+  return /^https:\/\/[\w.-]+(:\d+)?$/.test(s) ? s : null
+}
+
+// registry 拉取顺序:ghproxy 节点(实时性好,jsDelivr CDN 缓存可达 24h 会给陈旧列表) → raw → jsDelivr
 const REGISTRY_MIRRORS = [
+  `${DEFAULT_PLUGIN_MIRROR}/https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json`,
   'https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json',
   'https://cdn.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
   'https://fastly.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
@@ -335,27 +350,66 @@ async function fetchWithTimeout(url: string, headers: Record<string, string>): P
 
 /** raw.githubusercontent URL → jsDelivr 镜像候选列表 */
 function mirrorCandidates(url: string): string[] {
-  const list = [url]
-  const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(url)
-  if (m) {
-    const [, owner, repo, branch, path] = m
+  const list: string[] = []
+  const m = userGhMirror()
+  if (m) list.push(`${m}/${url}`) // ghproxy 前缀协议,raw 与 release 资产均适用
+  list.push(url)
+  const r = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(url)
+  if (r) {
+    const [, owner, repo, branch, path] = r
     list.push(`https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${path}`)
     list.push(`https://fastly.jsdelivr.net/gh/${owner}/${repo}@${branch}/${path}`)
   }
   return list
 }
 
-/** 依次尝试所有镜像,任一成功即返回;全部失败抛最后一个错误 */
-async function fetchBufferWithMirrors(url: string, headers: Record<string, string>): Promise<Buffer> {
-  let lastErr: unknown = null
-  for (const u of mirrorCandidates(url)) {
-    try {
-      const res = await fetchWithTimeout(u, headers)
-      if (!res.ok) { lastErr = new Error(`${new URL(u).hostname} 返回 ${res.status}`); continue }
-      return Buffer.from(await res.arrayBuffer())
-    } catch (e) { lastErr = e }
+/**
+ * 流式下载插件包:连接超时 20 秒、正文不限总时长(60 秒无数据看门狗防死挂),
+ * 下载进度经 onChunk 上报 —— 大内容包不再被"整请求 15 秒超时"误杀。
+ */
+async function downloadZipStreaming(
+  url: string,
+  headers: Record<string, string>,
+  onProgress: (received: number, total: number) => void
+): Promise<Buffer> {
+  const ctrl = new AbortController()
+  // 连接阶段超时:响应头到达即解除(正文交给空闲看门狗);30s 宽容慢节点
+  let connectTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => ctrl.abort(), 30000)
+  const res = await net.fetch(url, { headers, signal: ctrl.signal })
+  try { if (connectTimer) { clearTimeout(connectTimer); connectTimer = null } } catch { /* ignore */ }
+  if (!res.ok || !res.body) throw new Error(`${new URL(url).hostname} 返回 ${res.status}`)
+  if (/text\/html/i.test(String(res.headers.get('content-type') || ''))) throw new Error(`${new URL(url).hostname} 返回网页而非文件`)
+
+  const total = Number(res.headers.get('content-length') || 0)
+  const chunks: Buffer[] = []
+  let received = 0
+  let lastEmit = Date.now()
+  // 正文空闲看门狗:每次收到数据重置;60 秒无数据判定为死链
+  let idleTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => ctrl.abort(), 60000)
+  const touchIdle = () => {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null }
+    idleTimer = setTimeout(() => ctrl.abort(), 60000)
   }
-  throw lastErr ?? new Error('所有下载源均不可达')
+  try {
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      const buf = Buffer.from(chunk)
+      chunks.push(buf)
+      received += buf.length
+      touchIdle()
+      // 进度节流:≥1% 或 ≥300ms 推一次;结束必推
+      const now = Date.now()
+      const pct = total > 0 ? (received / total) * 100 : -1
+      if (now - lastEmit >= 300 || pct >= 100) {
+        lastEmit = now
+        onProgress(received, total)
+      }
+    }
+  } finally {
+    if (connectTimer) clearTimeout(connectTimer)
+    if (idleTimer) clearTimeout(idleTimer)
+  }
+  onProgress(received, total)
+  return Buffer.concat(chunks)
 }
 
 async function fetchRegistryRaw(): Promise<any> {
@@ -490,7 +544,8 @@ function notifyPluginsChanged(): void {
 
 // ---------- IPC ----------
 
-export function registerPluginHandlers(): void {
+export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) => unknown }): void {
+  if (deps?.getSettingValue) pluginSettingReader = deps.getSettingValue
   ipcMain.handle('plugin:fetchRegistry', async () => {
     try {
       const now = Date.now()
@@ -511,7 +566,37 @@ export function registerPluginHandlers(): void {
   ipcMain.handle('plugin:install', async (_e, url: string, grantedCapabilities?: unknown) => {
     try {
       if (typeof url !== 'string' || !isTrustedUrl(url)) return { success: false, message: '下载地址不受信任(仅允许 GitHub)' }
-      const buf = await fetchBufferWithMirrors(url, { 'User-Agent': 'Knowbase-App' })
+      const push = (received: number, total: number, host = '') => {
+        const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : -1
+        for (const w of BrowserWindow.getAllWindows()) {
+          if (!w.isDestroyed()) w.webContents.send('plugin:download-progress', { key: url, received, total, percent: pct, host })
+        }
+      }
+      push(0, 0)
+      // 大包友好:流式下载(连接 30s/空闲 60s 看门狗),镜像候选含 ghproxy 前缀节点;
+      // 区域性瞬时拦截常表现为全候选连续 404/RESET → 整轮退避重试(间隔 2s/6s)
+      let buf: Buffer | null = null
+      const diag: string[] = []
+      let usedHost = ''
+      outer:
+      for (let round = 0; round < 3 && !buf; round++) {
+        if (round > 0) await new Promise(r => setTimeout(r, round === 1 ? 2000 : 6000))
+        for (const u of mirrorCandidates(url)) {
+          try {
+            buf = await downloadZipStreaming(u, { 'User-Agent': 'Knowbase-App' }, (r, t) => {
+              try { push(r, t, new URL(u).hostname) } catch { /* ignore */ }
+            })
+            usedHost = new URL(u).hostname
+            break outer
+          } catch (e) {
+            const msg = `${new URL(u).hostname}: ${String(e?.message || e).slice(0, 60)}`
+            if (!diag.includes(msg)) diag.push(msg)
+            push(0, 0, usedHost) /* 切换下一候选,进度归零 */
+          }
+        }
+      }
+      if (!buf) throw new Error(`所有下载源均失败(已重试 3 轮) —— ${diag.join('; ')}`)
+      push(buf.length, buf.length, usedHost)
       const grants = Array.isArray(grantedCapabilities) ? grantedCapabilities.filter((c): c is string => typeof c === 'string') : undefined
       return installFromBuffer(buf, grants)
     } catch (e: any) {

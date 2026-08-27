@@ -13,6 +13,7 @@ import {
 } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { showToast } from '../../lib/toast'
+import { startBackgroundPluginInstall } from '../../lib/pluginDownloadBus'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
 import type { PluginSummary, PluginRegistryEntry, PluginAuditEntry, PluginRiskLevel } from '../../types'
 
@@ -203,20 +204,24 @@ export function PluginsModule() {
     doInstall(p, undefined)
   }
 
-  const doInstall = async (p: PluginRegistryEntry, granted?: string[]) => {
-    setBusy(true)
-    const r = await pluginInstall(p.downloadUrl, granted)
-    setBusy(false)
+  const doInstall = (p: PluginRegistryEntry, granted?: string[]) => {
+    // 后台安装:立即返回,下载/解压经总线分发进度,切页不中断(全局 StatusBar 有指示)
     setConsent(null)
-    if (r.success) {
-      showToast({ type: 'success', message: `「${p.name}」安装成功` })
-      window.dispatchEvent(new CustomEvent('plugins-changed'))
-      await refreshInstalled()
-      const fresh = (await pluginListInstalled()).find(x => x.id === p.id)
-      if (fresh) { setSelected({ kind: 'installed', plugin: fresh }); setTab('installed') }
-    } else {
-      showToast({ type: 'error', message: r.message || '安装失败' })
-    }
+    startBackgroundPluginInstall({
+      url: p.downloadUrl,
+      name: p.name,
+      granted,
+      invoke: (url, g) => pluginInstall(url, g),
+      onSettled: r => {
+        if (r.success) {
+          showToast({ type: 'success', message: `「${p.name}」安装成功` })
+          window.dispatchEvent(new CustomEvent('plugins-changed'))
+          void refreshInstalled()
+        } else {
+          showToast({ type: 'error', message: r.message || '安装失败' })
+        }
+      },
+    })
   }
 
   const handleInstallFromFile = async () => {
