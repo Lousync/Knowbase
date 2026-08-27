@@ -20,8 +20,10 @@ const SOURCE_LABEL: Record<AgentToolInfo['source'], string> = {
 type AiTab = 'builtin' | 'mcp' | 'skill' | 'models' | 'perms'
 
 /** 设置 → AI 工具：月度用量汇总 + 内置工具清单 + MCP 外部服务器管理 + Skill 提示词资产 */
-export function AiToolsView() {
-  const [tab, setTab] = useState<AiTab>('builtin')
+export function AiToolsView({ initialTab }: { initialTab?: AiTab } = {}) {
+  const [tab, setTab] = useState<AiTab>(initialTab ?? 'builtin')
+  // 深链变化(面板再次"去配置模型"时组件可能仍挂载)同步切换
+  useEffect(() => { if (initialTab) setTab(initialTab) }, [initialTab])
   const { s } = useSettings()
   const [usage, setUsage] = useState<AiToolUsage>({ used: 0, limit: 0 })
 

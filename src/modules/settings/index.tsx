@@ -31,14 +31,25 @@ const SECTIONS: SectionDef[] = [
 
 // Module-level target for cross-component navigation (toast "查看详情" etc.)
 let pendingSection: SettingsSection | null = null
+// AI 工具页内部页签直达(如助手"去配置模型"→ models)
+let pendingAiTab: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms' | null = null
 
-export function navigateToSettingsSection(section: SettingsSection) {
+// 模块评估期即捕获事件:设置模块未挂载时 dispatch 的 detail 不会丢(组件内监听器来不及注册)
+window.addEventListener('settings:open', (e: Event) => {
+  const detail = (e as CustomEvent).detail as { section?: SettingsSection; aiTab?: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms' } | undefined
+  if (detail?.section) pendingSection = detail.section
+  if (detail?.aiTab) pendingAiTab = detail.aiTab
+})
+
+export function navigateToSettingsSection(section: SettingsSection, aiTab?: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms') {
   pendingSection = section
+  pendingAiTab = aiTab ?? null
   window.dispatchEvent(new CustomEvent('settings:open'))
 }
 
 export function SettingsModule() {
   const [section, setSection] = useState<SettingsSection>('appearance')
+  const [aiTabOverride, setAiTabOverride] = useState<'builtin' | 'mcp' | 'skill' | 'models' | 'perms' | undefined>(undefined)
   const [query, setQuery] = useState('')
 
   // Consume pending section on mount
@@ -46,7 +57,22 @@ export function SettingsModule() {
     if (pendingSection) {
       setSection(pendingSection)
       pendingSection = null
+      setAiTabOverride((pendingAiTab as never) ?? undefined)
+      pendingAiTab = null
     }
+    // 模块常驻保活:后续跳转经事件 detail/pending 到达,这里同步消费
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { section?: SettingsSection; aiTab?: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms' } | undefined
+      const target = detail?.section ?? pendingSection
+      if (!target) return
+      pendingSection = null
+      if (detail?.aiTab) pendingAiTab = detail.aiTab
+      setSection(target)
+      setAiTabOverride(target === 'aiTools' ? ((pendingAiTab as never) ?? undefined) : undefined)
+      pendingAiTab = null
+    }
+    window.addEventListener('settings:open', onOpen)
+    return () => window.removeEventListener('settings:open', onOpen)
   }, [])
 
   const visibleSections = useMemo(() => {
@@ -125,7 +151,7 @@ export function SettingsModule() {
           {section === 'editor' && <EditorView />}
           {section === 'blog' && <BlogView />}
           {section === 'export' && <ExportSettingsView />}
-          {section === 'aiTools' && <AiToolsView />}
+          {section === 'aiTools' && <AiToolsView initialTab={aiTabOverride} />}
           {section === 'advanced' && <AdvancedView />}
           {section === 'shortcuts' && <ShortcutsView />}
           {section === 'reminder' && <ReminderView />}

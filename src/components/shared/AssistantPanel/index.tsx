@@ -401,7 +401,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
             {/* 消息区 */}
             <div className="flex-1 min-w-0 flex flex-col">
               {providersOk === false ? (
-                <NoProviderHint onGoSettings={() => { setOpen(false); window.dispatchEvent(new CustomEvent('settings:open')) }} />
+                <NoProviderHint onGoSettings={() => { setOpen(false); window.dispatchEvent(new CustomEvent('settings:open', { detail: { section: 'aiTools', aiTab: 'models' } })) }} />
               ) : (
                 <>
                   {/* 抽屉容器：仅包住消息列表，不遮挡上下文徽章与输入框 */}
