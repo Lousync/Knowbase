@@ -1,0 +1,65 @@
+{
+  "id": "knowbase.markdown-guide",
+  "name": "Markdown使用指南",
+  "version": "1.0.0",
+  "author": "Knowbase",
+  "description": "Markdown 基本语法完整指南(markdown.com.cn 教程系列总结):概览 / 标题 / 段落 / 换行 / 强调 / 引用块 / 列表 / 代码 / 分隔线 / 链接 / 图片 / 转义字符 / 内嵌 HTML,逐章附语法示例与最佳实践。安装后一键导入知识库新建学习空间《Markdown 使用指南》。",
+  "type": "declarative",
+  "icon": "icon.svg",
+  "category": "知识包",
+  "riskLevel": "S",
+  "activation": ["startup"],
+  "contributes": {
+    "knowledgePages": {
+      "space": "Markdown 使用指南",
+      "notebooks": [
+        {
+          "name": "基础语法",
+          "chapters": [
+            { "name": "概览", "pages": [
+              { "file": "pages/overview.md", "title": "Markdown 基本语法概览", "externalId": "md-overview", "tags": ["Markdown"] }
+            ] },
+            { "name": "标题", "pages": [
+              { "file": "pages/headings.md", "title": "标题语法", "externalId": "md-headings", "tags": ["Markdown", "标题"] }
+            ] },
+            { "name": "段落与换行", "pages": [
+              { "file": "pages/paragraphs.md", "title": "段落语法", "externalId": "md-paragraphs", "tags": ["Markdown", "段落"] },
+              { "file": "pages/line-breaks.md", "title": "换行语法", "externalId": "md-line-breaks", "tags": ["Markdown", "换行"] }
+            ] },
+            { "name": "强调", "pages": [
+              { "file": "pages/emphasis.md", "title": "强调语法(粗体与斜体)", "externalId": "md-emphasis", "tags": ["Markdown", "强调"] }
+            ] },
+            { "name": "引用块", "pages": [
+              { "file": "pages/blockquotes.md", "title": "引用块语法", "externalId": "md-blockquotes", "tags": ["Markdown", "引用"] }
+            ] },
+            { "name": "列表", "pages": [
+              { "file": "pages/lists.md", "title": "列表语法(有序/无序/嵌套)", "externalId": "md-lists", "tags": ["Markdown", "列表"] }
+            ] },
+            { "name": "代码", "pages": [
+              { "file": "pages/code.md", "title": "代码语法", "externalId": "md-code", "tags": ["Markdown", "代码"] }
+            ] },
+            { "name": "分隔线", "pages": [
+              { "file": "pages/horizontal-rules.md", "title": "分隔线语法", "externalId": "md-horizontal-rules", "tags": ["Markdown", "分隔线"] }
+            ] },
+            { "name": "链接", "pages": [
+              { "file": "pages/links.md", "title": "链接语法", "externalId": "md-links", "tags": ["Markdown", "链接"] }
+            ] },
+            { "name": "图片", "pages": [
+              { "file": "pages/images.md", "title": "图片语法", "externalId": "md-images", "tags": ["Markdown", "图片"] }
+            ] },
+            { "name": "转义字符", "pages": [
+              { "file": "pages/escaping-characters.md", "title": "转义字符语法", "externalId": "md-escaping-characters", "tags": ["Markdown", "转义"] }
+            ] },
+            { "name": "内嵌 HTML", "pages": [
+              { "file": "pages/html-overview.md", "title": "何时在 Markdown 中使用 HTML", "externalId": "md-html-overview", "tags": ["Markdown", "HTML"] },
+              { "file": "pages/html-inline-tags.md", "title": "行级内联标签", "externalId": "md-html-inline", "tags": ["Markdown", "HTML"] },
+              { "file": "pages/html-block-tags.md", "title": "区块标签", "externalId": "md-html-block", "tags": ["Markdown", "HTML"] },
+              { "file": "pages/html-best-practices.md", "title": "HTML 用法最佳实践", "externalId": "md-html-best-practices", "tags": ["Markdown", "HTML"] },
+              { "file": "pages/html-security.md", "title": "安全注意事项与渲染器差异", "externalId": "md-html-security", "tags": ["Markdown", "HTML", "安全"] }
+            ] }
+          ]
+        }
+      ]
+    }
+  }
+}

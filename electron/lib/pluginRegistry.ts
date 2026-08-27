@@ -760,6 +760,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     const builtinDir = builtinCandidates.find(p => existsSync(p))
     if (builtinDir) {
       const idx = readIndex()
+      const builtinIds = new Set<string>()
       let changed = false
       for (const ent of readdirSync(builtinDir, { withFileTypes: true })) {
         if (!ent.isDirectory()) continue
@@ -768,6 +769,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
         const parsed = readManifestFromBuffer(readFileSync(mfPath))
         if ('error' in parsed) { console.warn(`[Plugins] 内置插件清单非法(${ent.name}):`, parsed.error); continue }
         const id = parsed.manifest.id
+        builtinIds.add(id)
         if (idx[id]?.userRemoved) continue          // 用户明确卸载过,不再自动恢复
         const dest = join(getPluginsRoot(), id)
         // 未安装 → 复制;已安装但内置版本更新 → 覆盖升级(内置插件随应用发版更新)
@@ -785,6 +787,14 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
         }
         changed = true
         console.log(`[Plugins] 内置插件已就位: ${id}@${parsed.manifest.version}${existsSync(dest) ? '(升级)' : ''}`)
+      }
+      // 存量清理:已不再随应用分发的内置插件,降级为普通插件(解锁卸载,如强密码生成器转市场)
+      for (const [id, entry] of Object.entries(idx)) {
+        if (entry.builtin && !builtinIds.has(id)) {
+          idx[id] = { ...entry, builtin: false }
+          changed = true
+          console.log(`[Plugins] 内置插件已转为普通插件(可卸载): ${id}`)
+        }
       }
       if (changed) writeIndex(idx)
       if (changed) notifyPluginsChanged()

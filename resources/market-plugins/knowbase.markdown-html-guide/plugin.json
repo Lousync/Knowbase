@@ -1,0 +1,39 @@
+{
+  "id": "knowbase.markdown-html-guide",
+  "name": "Markdown 内嵌 HTML 速查",
+  "version": "1.0.0",
+  "author": "Knowbase",
+  "description": "Markdown 内嵌 HTML 语法速查(Markdown 教程·基本语法 HTML 章总结):行级内联标签 / 区块标签 / 最佳实践 / 安全注意事项,附 Knowbase 渲染差异说明。安装后一键导入知识库新建学习空间《Markdown 语法速查》。",
+  "type": "declarative",
+  "icon": "icon.svg",
+  "category": "知识包",
+  "riskLevel": "S",
+  "activation": ["startup"],
+  "contributes": {
+    "knowledgePages": {
+      "space": "Markdown 语法速查",
+      "notebooks": [
+        {
+          "name": "内嵌 HTML",
+          "chapters": [
+            {
+              "name": "基础",
+              "pages": [
+                { "file": "pages/overview.md", "title": "何时在 Markdown 中使用 HTML", "externalId": "md-html-overview", "tags": ["Markdown", "HTML"] },
+                { "file": "pages/inline-tags.md", "title": "行级内联标签", "externalId": "md-html-inline", "tags": ["Markdown", "HTML"] },
+                { "file": "pages/block-tags.md", "title": "区块标签", "externalId": "md-html-block", "tags": ["Markdown", "HTML"] }
+              ]
+            },
+            {
+              "name": "实践与安全",
+              "pages": [
+                { "file": "pages/best-practices.md", "title": "HTML 用法最佳实践", "externalId": "md-html-best-practices", "tags": ["Markdown", "HTML"] },
+                { "file": "pages/security.md", "title": "安全注意事项与渲染器差异", "externalId": "md-html-security", "tags": ["Markdown", "HTML", "安全"] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
