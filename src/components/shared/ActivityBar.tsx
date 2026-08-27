@@ -229,12 +229,6 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
               设置
             </button>
 
-            <button onClick={() => { onChange('help'); setMenuOpen(false) }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-              <HelpIcon size={15} className="text-[var(--text-muted)]" />
-              帮助
-            </button>
-
             <div className="border-t border-[var(--border-color)] my-0.5" />
 
             <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new CustomEvent('open-import-modal')) }}
