@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
-  Archive, ArrowLeft, ArrowRight, BellRing, BookOpen, CalendarDays, Check,
-  Database, Keyboard, Lock, MessageCircle, Moon, Network, ShieldCheck,
+  Archive, ArrowLeft, ArrowRight, BellRing, Bot, BookOpen, CalendarDays, Check,
+  Database, Keyboard, Lock, MessageCircle, Moon, Network, Puzzle, ShieldCheck,
   Sparkles, Sun, Wrench,
 } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
@@ -13,11 +13,14 @@ const MODULES = [
   { icon: Network, name: '知识库', desc: '双链笔记、PDF 与知识网络' },
   { icon: MessageCircle, name: '说说', desc: '轻量动态与相册记录' },
   { icon: Wrench, name: '工具箱', desc: '番茄钟、习惯打卡等 7 个小工具' },
+  { icon: Bot, name: 'AI 助手', desc: '本地模型驱动，边看边问（Ctrl+J）' },
+  { icon: Puzzle, name: '插件', desc: '主题 / 预设 / 知识包官方市场' },
   { icon: Archive, name: '导出 · 回收站', desc: '一键备份与误删恢复' },
 ]
 
 const SHORTCUTS = [
   { keys: 'Ctrl N', desc: '当前模块新建（日志 / 任务 / 知识页）' },
+  { keys: 'Ctrl J', desc: '唤起 / 收起 AI 助手侧栏' },
   { keys: 'Ctrl B', desc: '展开 / 收起侧边栏' },
   { keys: 'Ctrl 滚轮', desc: '缩放界面（设置中可调）' },
   { keys: 'Ctrl Alt P', desc: '密码本快速填充悬浮窗' },
@@ -27,7 +30,7 @@ const SHORTCUTS = [
 export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void; onSwitchTab: (tab: TabName) => void }) {
   const { s, update } = useSettings()
   const [step, setStep] = useState(0)
-  const total = 5
+  const total = 6
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -77,7 +80,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
 
           {step === 1 && (
             <div>
-              <StepTitle icon={<Sparkles size={15} />} title="六大模块，各司其职" />
+              <StepTitle icon={<Sparkles size={15} />} title="核心功能一览" />
               <div className="grid grid-cols-2 gap-2.5">
                 {MODULES.map(m => (
                   <div key={m.name} className="flex items-start gap-2.5 p-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
@@ -93,6 +96,20 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
           )}
 
           {step === 2 && (
+            <div>
+              <StepTitle icon={<Bot size={15} />} title="AI 助手与插件" />
+              <div className="space-y-2.5">
+                <InfoRow icon={<Bot size={14} />} title="AI 助手 · 边看边问"
+                  desc="Ctrl+J 随时唤起；设置 → AI 工具 中配置本地（Ollama）或在线模型，支持 CC Switch 一键导入。对话可调用本地工具并全程留痕" />
+                <InfoRow icon={<Puzzle size={14} />} title="插件 · 官方市场"
+                  desc="插件页一键安装主题、番茄预设与知识包（如 408 考研学习空间，一键导入 148 页学习内容）；S/A/B 三级安全审核" />
+                <InfoRow icon={<ShieldCheck size={14} />} title="按模块授权"
+                  desc="设置 → AI 工具 → 权限 中按模块控制 AI 能力边界（禁止 / 只读 / 读写），未授权模块 AI 完全无法触达" />
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
             <div>
               <StepTitle icon={<Sparkles size={15} />} title="按喜好快速设置" />
               <div className="space-y-4">
@@ -122,7 +139,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
             </div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div>
               <StepTitle icon={<ShieldCheck size={15} />} title="数据与安全" />
               <div className="space-y-2.5">
@@ -136,7 +153,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div>
               <StepTitle icon={<Keyboard size={15} />} title="快捷键加速，准备出发" />
               <div className="space-y-2 mb-6">
