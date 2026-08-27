@@ -246,6 +246,10 @@ export function PluginsModule() {
     if (r.success) {
       await refreshInstalled()
       setSelected(s => s?.kind === 'installed' ? { kind: 'installed', plugin: { ...s.plugin, enabled: !p.enabled } } : s)
+      // 知识包插件的导入状态随启停联动(禁用 → 锁定不可导入/更新)
+      if (p.contributions.includes('knowledgePages')) {
+        knowledgePackGetState(p.id).then(rs => setKpState(rs.ok ? { state: rs.state!, chapters: rs.chapters, totalPages: rs.totalPages, newPages: rs.newPages, changedPages: rs.changedPages, lastImportedAt: rs.lastImportedAt } : null)).catch(() => {})
+      }
       import('../../lib/pluginService').then(m => m.ensurePluginThemeStyles()).catch(() => {})
       window.dispatchEvent(new CustomEvent('plugins-changed'))
       showToast({ type: 'success', message: p.enabled ? '插件已禁用' : '插件已启用' })
@@ -692,6 +696,7 @@ export function PluginsModule() {
                         <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
                           {kpBusy && kpProgress
                             ? `正在导入 ${kpProgress.current}/${kpProgress.total}${kpProgress.title ? `:${kpProgress.title}` : ''}`
+                            : st === 'disabled' ? '插件已禁用,启用后才能导入与更新'
                             : st === 'not-imported' ? '未导入,导入后成为知识库中的完整笔记本'
                             : st === 'update-available' ? `有可用更新(新增 ${kpState?.newPages || 0} 页,变化 ${kpState?.changedPages || 0} 页)`
                             : st === 'imported' ? `已导入${kpState?.lastImportedAt ? ` · ${kpState.lastImportedAt}` : ''}`
@@ -702,7 +707,7 @@ export function PluginsModule() {
                         <Loader2 size={14} className="animate-spin text-[var(--accent)] shrink-0" />
                       ) : (
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {st !== 'not-imported' && (
+                          {st !== 'not-imported' && st !== 'disabled' && (
                             <button
                               onClick={() => window.dispatchEvent(new CustomEvent('knowledge:open'))}
                               className="px-2.5 py-1.5 text-[11px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
@@ -713,9 +718,11 @@ export function PluginsModule() {
                           )}
                           <button
                             onClick={() => setKpConfirm({ overwrite: false })}
-                            className="px-3 py-1.5 text-[11px] font-medium text-white bg-[var(--accent)] rounded hover:bg-[var(--accent-hover)] transition-colors"
+                            disabled={st === 'disabled'}
+                            className="px-3 py-1.5 text-[11px] font-medium text-white bg-[var(--accent)] rounded hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={st === 'disabled' ? '启用插件后可导入' : undefined}
                           >
-                            {st === 'not-imported' ? '导入到知识库' : st === 'update-available' ? '检查更新' : '重新导入'}
+                            {st === 'disabled' ? '已禁用' : st === 'not-imported' ? '导入到知识库' : st === 'update-available' ? '检查更新' : '重新导入'}
                           </button>
                         </div>
                       )}

@@ -740,8 +740,19 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
   })
 
   // 内容型插件(knowledgePages):导入状态与执行
-  ipcMain.handle('knowledgePack:getImportState', (_e, pluginId: string) => getPackState(pluginId))
+  ipcMain.handle('knowledgePack:getImportState', (_e, pluginId: string) => {
+    // 禁用即停:禁用态下导入状态锁定为 disabled,更新通道一并关闭
+    const idx = readIndex()
+    if (idx[pluginId] && !idx[pluginId].enabled) {
+      return { ok: true, state: 'disabled', message: '插件已禁用,请先在插件页启用' }
+    }
+    return getPackState(pluginId)
+  })
   ipcMain.handle('knowledgePack:importPack', (_e, pluginId: string, overwriteModified: boolean, forceExternalIds?: unknown) => {
+    const idx = readIndex()
+    if (idx[pluginId] && !idx[pluginId].enabled) {
+      return { ok: false, message: '插件已禁用,请先启用后再导入' }
+    }
     const r = importPack(pluginId, Boolean(overwriteModified), Array.isArray(forceExternalIds) ? forceExternalIds.map(String) : undefined)
     return r
   })
