@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Palette, Type, FileDown, Wrench, Info, Search, Keyboard, PencilLine, BellRing, Bot } from 'lucide-react'
+import { getAppVersion } from '../../lib/ipc'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
 import { ExportSettingsView } from './views/ExportSettingsView'
@@ -51,6 +52,9 @@ export function SettingsModule() {
   const [section, setSection] = useState<SettingsSection>('appearance')
   const [aiTabOverride, setAiTabOverride] = useState<'builtin' | 'mcp' | 'skill' | 'models' | 'perms' | undefined>(undefined)
   const [query, setQuery] = useState('')
+  const [appVersion, setAppVersion] = useState('')
+
+  useEffect(() => { getAppVersion().then(setAppVersion).catch(() => {}) }, [])
 
   // Consume pending section on mount
   useEffect(() => {
@@ -117,7 +121,7 @@ export function SettingsModule() {
         <div className="mt-auto pt-2 border-t border-[var(--border-color)] px-4">
           <span className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
             <Info size={13} />
-            Knowbase v1.3.0
+            Knowbase v{appVersion}
           </span>
         </div>
       </div>
