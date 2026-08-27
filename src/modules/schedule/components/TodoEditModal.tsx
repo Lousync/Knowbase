@@ -172,7 +172,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                 className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[var(--warning)] bg-[var(--warning-bg)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >⚡ 琐碎</button>
               <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >📋 计划类</button>
               <button onClick={() => {
                 const n = new Date()
@@ -181,7 +181,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                 setDStr({ year: String(dp.year), month: String(dp.month), day: String(dp.day), hour: String(dp.hour), minute: String(dp.minute) })
                 setForm(f => ({ ...f, taskType: 'deadline', time: t }))
               }}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
+                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'deadline' ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >⏰ 截止类</button>
             </div>
           </Field>
@@ -241,7 +241,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
                       <div key={st.id} className={`flex items-center gap-2 px-2 py-1.5 rounded text-[12px] group ${isDone ? 'opacity-50' : ''}`}>
                         <button
                           onClick={() => onToggleSubtask?.(st.id)}
-                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isDone ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-[#5a5a5a] hover:border-[var(--accent)]'}`}
+                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isDone ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-[var(--border-color)] hover:border-[var(--accent)]'}`}
                           title="切换完成状态"
                         >
                           {isDone && <Check size={10} strokeWidth={3} className="text-white" />}
@@ -297,7 +297,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
               <div className="flex gap-2">
                 {QUADRANTS.map(q => (
                   <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
-                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
+                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
                   >{q.label}</button>
                 ))}
               </div>

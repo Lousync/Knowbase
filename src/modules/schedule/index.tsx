@@ -397,7 +397,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
           <div className="flex items-center gap-2">
             <div className="relative" ref={sizeMenuRef}>
               <button onClick={() => setSizeMenuOpen(v => !v)}
-                className={`px-2 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[#4a4a4a] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1`}
+                className={`px-2 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[var(--border-color)] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1`}
                 title="卡片大小">
                 <Maximize2 size={INPUT_SZ[iconSize].metaIcon + 3} /> {iconSizeLabel}
               </button>
@@ -413,7 +413,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
               )}
             </div>
             <button onClick={() => setTagManageOpen(true)}
-              className={`px-3 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[#4a4a4a] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors`}>
+              className={`px-3 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[var(--border-color)] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors`}>
               管理标签
             </button>
             <button onClick={() => { setEditTarget(null); setModalOpen(true) }}
@@ -451,11 +451,11 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                     <span className="flex-1 truncate line-through">{t.title}</span>
                     <span className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)]`}>{t.date.slice(5)}</span>
                     <button onClick={() => handleMigrateDaily(t.id)}
-                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[var(--accent)] hover:bg-[#007acc20] rounded flex items-center gap-0.5`}>
+                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[var(--accent)] hover:bg-[var(--accent)]/10 rounded flex items-center gap-0.5`}>
                       <RotateCcw size={INPUT_SZ[iconSize].metaIcon} /> 迁移
                     </button>
                     <button onClick={() => handleDelete(t.id)}
-                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[#e8112320] rounded flex items-center gap-0.5`}>
+                      className={`px-1.5 py-0.5 ${INPUT_SZ[iconSize].meta} text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded flex items-center gap-0.5`}>
                       <Trash2 size={INPUT_SZ[iconSize].metaIcon} /> 丢弃
                     </button>
                   </div>
@@ -483,7 +483,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                 )}
                 {dateRegular.length > 0 && (
                   <div>
-                    {dateDaily.length > 0 && <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#569cd6] mb-2`}>📋 正式任务 · {dateRegular.length}</h4>}
+                    {dateDaily.length > 0 && <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--accent)] mb-2`}>📋 正式任务 · {dateRegular.length}</h4>}
                     <div className="space-y-2">
                       {dateRegular.map(todo => (
                         <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
@@ -516,7 +516,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
               {/* 即将截止 */}
               {deadlineUpcoming.length > 0 && (
                 <div>
-                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[#569cd6] mb-2`}>⏰ 即将截止 ({deadlineUpcoming.length})</h4>
+                  <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--accent)] mb-2`}>⏰ 即将截止 ({deadlineUpcoming.length})</h4>
                   <div className="space-y-2">
                     {deadlineUpcoming.map(todo => (
                       <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
@@ -580,7 +580,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
               <span className="flex items-center gap-2">
                 <button
                   onClick={e => { e.stopPropagation(); handleClearDone() }}
-                  className={`px-2 py-1 ${INPUT_SZ[iconSize].meta} text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors`}
+                  className={`px-2 py-1 ${INPUT_SZ[iconSize].meta} text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded transition-colors`}
                   title="一键清除所有已完成任务"
                 >
                   <Trash2 size={INPUT_SZ[iconSize].metaIcon + 4} className="inline mr-0.5" />全部清除

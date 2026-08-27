@@ -97,7 +97,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
           style={{ width: s.check, height: s.check }}
           className={`
             rounded border-2 flex items-center justify-center shrink-0 transition-colors
-            ${isDone ? 'bg-[var(--accent)] border-[var(--accent)] hover:bg-[var(--accent-hover)]' : 'border-[#5a5a5a] hover:border-[var(--accent)]'}
+            ${isDone ? 'bg-[var(--accent)] border-[var(--accent)] hover:bg-[var(--accent-hover)]' : 'border-[var(--border-color)] hover:border-[var(--accent)]'}
           `}
           title={isDone ? '恢复任务' : '完成任务'}
         >
@@ -127,7 +127,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
           {!isDaily && hasSubs && (
             <button
               onClick={e => { e.stopPropagation(); setSubOpen(v => !v) }}
-              className="flex items-center gap-1 mt-1.5 text-[11px] text-[var(--accent)] hover:text-[#4fc1ff] transition-colors"
+              className="flex items-center gap-1 mt-1.5 text-[11px] text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
             >
               {subOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               子任务 {subDone}/{subtasks.length} 完成
@@ -171,7 +171,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
                 <button
                   onClick={e => { e.stopPropagation(); onToggleSubtask?.(st.id) }}
                   style={{ width: s.check, height: s.check }}
-                  className={`rounded border flex items-center justify-center shrink-0 transition-colors ${stDone ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-[#5a5a5a] hover:border-[var(--accent)]'}`}
+                  className={`rounded border flex items-center justify-center shrink-0 transition-colors ${stDone ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-[var(--border-color)] hover:border-[var(--accent)]'}`}
                   title="切换完成状态"
                 >
                   {stDone && <Check size={s.checkIcon} strokeWidth={3} className="text-white" />}

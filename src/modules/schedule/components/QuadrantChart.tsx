@@ -65,12 +65,12 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
           <div className="relative w-full" style={{ height: '460px' }}>
             {/* Y-axis arrow: 重要 ▲  */}
             <div className="absolute -top-1 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
-              <span className="text-[12px] font-medium text-[#569cd6]">▲ 重要</span>
+              <span className="text-[12px] font-medium text-[var(--accent)]">▲ 重要</span>
             </div>
 
             {/* X-axis arrow: 紧急 ▶ */}
             <div className="absolute -bottom-1 right-2 flex items-center z-10">
-              <span className="text-[12px] font-medium text-[#d16969]">紧急 ▶</span>
+              <span className="text-[12px] font-medium text-[var(--danger)]">紧急 ▶</span>
             </div>
 
             {/* X-axis opposite */}
@@ -84,8 +84,8 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
             </div>
 
             {/* Axes */}
-            <div className="absolute top-5 bottom-5 left-1/2 border-l border-[#4a4a4a] z-0" style={{ width: 0 }} />
-            <div className="absolute left-10 right-10 top-1/2 border-t border-[#4a4a4a] z-0" style={{ height: 0 }} />
+            <div className="absolute top-5 bottom-5 left-1/2 border-l border-[var(--border-color)] z-0" style={{ width: 0 }} />
+            <div className="absolute left-10 right-10 top-1/2 border-t border-[var(--border-color)] z-0" style={{ height: 0 }} />
 
             {/* Origin dot */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] z-10" />
@@ -120,7 +120,7 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
                             {tg && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tg.color }} />}
                             <span className="text-[var(--text-primary)] truncate">{t.title}</span>
                             {t.taskType === 'deadline' && t.time && (
-                              <span className="text-[9px] text-[#569cd6] shrink-0 ml-auto">⏰{t.time.slice(0, 10)}</span>
+                              <span className="text-[9px] text-[var(--accent)] shrink-0 ml-auto">⏰{t.time.slice(0, 10)}</span>
                             )}
                           </div>
                         )

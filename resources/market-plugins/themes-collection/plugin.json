@@ -1,14 +1,16 @@
 {
   "id": "knowbase.themes-collection",
   "name": "主题合集",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "author": "Knowbase",
   "description": "六套精选主题一键装:GitHub Dark / GitHub Light / 护眼米白纸感 / 赛博朋克夜城 / 手绘线条 v2(纸面+石墨线框+抖动圆角+偏移铅笔阴影+波浪链接)。安装后到 设置 → 外观 切换。",
   "type": "declarative",
   "icon": "icon.svg",
   "category": "外观",
   "riskLevel": "S",
-  "activation": ["startup"],
+  "activation": [
+    "startup"
+  ],
   "contributes": {
     "theme": [
       {
@@ -32,7 +34,8 @@
           "--accent-hover": "#539bf5",
           "--accent": "#2f81f7",
           "--border-color": "#30363d",
-          "--bg-hover": "#292e36"
+          "--bg-hover": "#292e36",
+          "--warning-bg": "#2b2213"
         }
       },
       {
@@ -56,7 +59,8 @@
           "--accent-hover": "#0550ae",
           "--accent": "#0969da",
           "--border-color": "#d0d7de",
-          "--bg-hover": "#eaeef2"
+          "--bg-hover": "#eaeef2",
+          "--warning-bg": "#fff3d4"
         }
       },
       {
@@ -80,7 +84,8 @@
           "--accent-hover": "#3d6a4b",
           "--accent": "#4a7c59",
           "--border-color": "#ddd3b8",
-          "--bg-hover": "#e3dac2"
+          "--bg-hover": "#e3dac2",
+          "--warning-bg": "#f3ead1"
         }
       },
       {
@@ -104,7 +109,8 @@
           "--accent-hover": "#66f5ff",
           "--accent": "#00f0ff",
           "--border-color": "#2a3070",
-          "--bg-hover": "#232a52"
+          "--bg-hover": "#232a52",
+          "--warning-bg": "#2c2508"
         }
       },
       {
