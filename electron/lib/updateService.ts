@@ -19,10 +19,19 @@ const RELEASES_PAGE = `https://github.com/${REPO}/releases`
 /** 设置读取器(registerUpdateHandlers 注入) */
 let getSettingValue: (key: string) => unknown = () => undefined
 
+/**
+ * 镜像默认值 — 与 src/lib/settings.ts 的 updateMirror 默认值保持一致。
+ * 主进程读的是原始 settings.json 缓存,未写过该 key 时拿不到渲染层注册表的默认值,
+ * 故此处兜底;用户显式置空字符串 = 强制直连。
+ */
+const DEFAULT_UPDATE_MIRROR = 'https://gh.dpik.top'
+
 /** 规范化用户配置的镜像前缀:非法返回 null(空串视为直连) */
-function normalizeMirror(raw: unknown): string | null {
-  const s = String(raw ?? '').trim().replace(/\/+$/, '')
-  if (!s) return null
+function resolveMirror(): string | null {
+  const raw = getSettingValue('updateMirror')
+  let s: string
+  if (raw === undefined || raw === null) s = DEFAULT_UPDATE_MIRROR // 从未配置过 → 用默认镜像
+  else { s = String(raw).trim().replace(/\/+$/, ''); if (!s) return null } // 显式空串 = 直连
   if (!/^https:\/\/[\w.-]+(:\d+)?$/.test(s)) return null
   return s
 }
@@ -32,7 +41,7 @@ function normalizeMirror(raw: unknown): string | null {
  * [镜像前缀..., 直连] —— 镜像在前保速度,直连兜底保可用。
  */
 function downloadCandidates(url: string): string[] {
-  const mirror = normalizeMirror(getSettingValue('updateMirror'))
+  const mirror = resolveMirror()
   const list: string[] = []
   if (mirror) list.push(`${mirror}/${url}`)
   list.push(url)
