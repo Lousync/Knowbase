@@ -1,5 +1,5 @@
 import { useState, useEffect, useSyncExternalStore } from 'react'
-import { Timer, ArrowDownToLine } from 'lucide-react'
+import { Timer, ArrowDownToLine, Calendar } from 'lucide-react'
 import { usePomodoro } from '../../modules/toolbox/hooks/PomodoroContext'
 import { localToday } from '../../lib/date'
 import { subscribePluginDownloads, getPluginDownloads } from '../../lib/pluginDownloadBus'
@@ -58,7 +58,7 @@ export function StatusBar({
   return (
     <div className="flex items-center justify-between h-6 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-t border-[var(--border-color)] text-[12px] select-none shrink-0 px-1">
       <div className="flex items-center gap-0">
-        <StatusItem>馃搮 {today}</StatusItem>
+        <StatusItem><Calendar size={11} className="inline-block mr-1 text-[var(--text-muted)]" />{today}</StatusItem>
         {activeDls.map((d, i) => (
           <StatusItem key={d.key} className={i > 0 ? 'border-l border-[var(--border-color)]' : ''}>
             <span data-plugin-dl={d.name} className="flex items-center gap-1" title={`插件后台下载中:${d.name}${d.host ? `(经 ${d.host})` : ''}`}>

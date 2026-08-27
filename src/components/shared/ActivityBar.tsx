@@ -4,9 +4,9 @@ import { Palette, ChevronRight, ChevronDown, Check, Download } from 'lucide-reac
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
-import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, ExportIcon, RecycleIcon, HelpIcon, UserIcon, SettingsIcon, PluginIcon } from './ModuleIcons'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, ExportIcon, RecycleIcon, UserIcon, SettingsIcon, PluginIcon } from './ModuleIcons'
 
-/** All draggable module tabs (excluding user/settings) */
+/** All draggable module tabs (excluding user/settings; 帮助已在用户菜单内,侧边栏不再单列) */
 const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.ReactNode }[] = [
   { id: 'blog',      label: '博客',   icon: s => <BlogIcon size={s} /> },
   { id: 'schedule',  label: '日程',   icon: s => <ScheduleIcon size={s} /> },
@@ -16,7 +16,6 @@ const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.R
   { id: 'plugins',   label: '插件',   icon: s => <PluginIcon size={s} /> },
   { id: 'export',    label: '导出',   icon: s => <ExportIcon size={s} /> },
   { id: 'recycle',   label: '回收站', icon: s => <RecycleIcon size={s} /> },
-  { id: 'help',      label: '帮助',   icon: s => <HelpIcon size={s} /> },
 ]
 
 const THEME_CHOICES = [
