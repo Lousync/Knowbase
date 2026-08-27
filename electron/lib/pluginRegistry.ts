@@ -656,8 +656,8 @@ export function registerPluginHandlers(): void {
 
   // 内容型插件(knowledgePages):导入状态与执行
   ipcMain.handle('knowledgePack:getImportState', (_e, pluginId: string) => getPackState(pluginId))
-  ipcMain.handle('knowledgePack:importPack', (_e, pluginId: string, overwriteModified: boolean) => {
-    const r = importPack(pluginId, Boolean(overwriteModified))
+  ipcMain.handle('knowledgePack:importPack', (_e, pluginId: string, overwriteModified: boolean, forceExternalIds?: unknown) => {
+    const r = importPack(pluginId, Boolean(overwriteModified), Array.isArray(forceExternalIds) ? forceExternalIds.map(String) : undefined)
     return r
   })
 

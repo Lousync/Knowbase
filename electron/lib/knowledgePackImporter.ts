@@ -291,9 +291,9 @@ function readPackManifest(pluginDir: string): { pack: KPPackNormalized; version:
 
 // ---------- 导入 ----------
 
-export function importPack(pluginId: string, overwriteModified: boolean): {
+export function importPack(pluginId: string, overwriteModified: boolean, forceExternalIds?: string[]): {
   ok: boolean
-  created?: number; updated?: number; skipped?: number; conflicts?: { title: string; reason: string }[]
+  created?: number; updated?: number; skipped?: number; conflicts?: { title: string; reason: string; externalId: string }[]
   spaceId?: string | null
   message?: string
 } {
@@ -340,7 +340,9 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
 
   db.run('BEGIN')
   let created = 0, updated = 0, skipped = 0
-  const conflicts: { title: string; reason: string }[] = []
+  // 选择性强制覆盖:仅这些页面无视"本地已修改"保护(冲突面板勾选直通)
+  const forceIds = new Set(Array.isArray(forceExternalIds) ? forceExternalIds : [])
+  const conflicts: { title: string; reason: string; externalId: string }[] = []
   let spaceId: string | null = null
   try {
     // 无任何待处理页 → 不再新建空壳空间,直接返回
@@ -417,16 +419,16 @@ export function importPack(pluginId: string, overwriteModified: boolean): {
           if (alive.length > 0) livePageId = row.page_id
         }
         const mdRes = readPageMd(pluginDir, page.file)
-        if ('error' in mdRes) { conflicts.push({ title: page.title, reason: mdRes.error }); skipped++; continue }
+        if ('error' in mdRes) { conflicts.push({ title: page.title, reason: mdRes.error, externalId: page.externalId }); skipped++; continue }
         const hash = hashOf(mdRes.buf)
 
         if (row && livePageId) {
           if (row.content_hash === hash) { skipped++; continue }
-          // 用户本地改过(updated_at 晚于上次导入)→ 默认跳过
+          // 用户本地改过(updated_at 晚于上次导入)→ 默认跳过;冲突面板勾选的页面(forceIds)无视保护
           const pageRow = getDatabase().exec('SELECT updated_at FROM knowledge_pages WHERE id = ?', [livePageId])
           const userModified = pageRow.length > 0 && String(pageRow[0].values[0][0]) > row.imported_at
-          if (userModified && !overwriteModified) {
-            conflicts.push({ title: page.title, reason: '本地已修改' })
+          if (userModified && !overwriteModified && !forceIds.has(page.externalId)) {
+            conflicts.push({ title: page.title, reason: '本地已修改', externalId: page.externalId })
             skipped++
             continue
           }

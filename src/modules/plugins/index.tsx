@@ -129,6 +129,9 @@ export function PluginsModule() {
   const [kpBusy, setKpBusy] = useState(false)
   const [kpProgress, setKpProgress] = useState<{ current: number; total: number; title: string } | null>(null)
   const [kpConfirm, setKpConfirm] = useState<{ overwrite: boolean } | null>(null)
+  // 冲突管理面板:本次导入因"本地已修改"等被跳过的页面清单 + 勾选强制覆盖
+  const [kpConflicts, setKpConflicts] = useState<{ title: string; reason: string; externalId: string }[] | null>(null)
+  const [kpForceSel, setKpForceSel] = useState<Set<string>>(new Set())
 
   const refreshInstalled = useCallback(async () => {
     try { setInstalled(await pluginListInstalled()) } catch { /* 忽略 */ }
@@ -339,14 +342,20 @@ export function PluginsModule() {
     } else showToast({ type: 'error', message: '没有可导入的书签' })
   }
 
-  const doImportPack = async (overwrite: boolean) => {
+  const doImportPack = async (overwrite: boolean, forceIds?: string[]) => {
     if (selected?.kind !== 'installed') return
     const p = selected.plugin
-    setKpBusy(true); setKpConfirm(null); setKpProgress({ current: 0, total: kpState?.totalPages || 0, title: '' })
-    const r = await knowledgePackImport(p.id, overwrite)
+    setKpBusy(true); setKpConfirm(null); setKpConflicts(null); setKpForceSel(new Set()); setKpProgress({ current: 0, total: kpState?.totalPages || 0, title: '' })
+    const r = await knowledgePackImport(p.id, overwrite, forceIds)
     setKpBusy(false); setKpProgress(null)
     if (r.ok) {
-      showToast({ type: 'success', message: `导入完成:新建 ${r.created || 0} 页,更新 ${r.updated || 0} 页${r.skipped ? `,跳过 ${r.skipped}` : ''}` })
+      const conflictNote = (forceIds?.length || 0) > 0 ? `,已覆盖所选 ${forceIds!.length} 页` : ''
+      showToast({ type: 'success', message: `导入完成:新建 ${r.created || 0} 页,更新 ${r.updated || 0} 页${r.skipped ? `,跳过 ${r.skipped}` : ''}${conflictNote}` })
+      // 冲突清单可视化:有被保护性跳过的页面时弹出独立面板
+      if (r.conflicts && r.conflicts.length > 0) {
+        setKpConflicts(r.conflicts)
+        setKpForceSel(new Set(r.conflicts.map(c => c.externalId)))
+      }
       // 通知知识库模块刷新目录(模块常驻挂载,不会自行感知导入结果)
       window.dispatchEvent(new CustomEvent('data-imported', { detail: { module: 'knowledge' } }))
       knowledgePackGetState(p.id).then(s => setKpState(s.ok ? { state: s.state!, chapters: s.chapters, totalPages: s.totalPages, newPages: s.newPages, changedPages: s.changedPages, lastImportedAt: s.lastImportedAt } : null)).catch(() => {})
@@ -354,6 +363,12 @@ export function PluginsModule() {
     } else {
       showToast({ type: 'error', message: r.message || '导入失败' })
     }
+  }
+
+  /** 冲突面板:仅覆盖勾选的页面(不带全局 overwrite) */
+  const overwriteSelected = async () => {
+    if (kpForceSel.size === 0) { setKpConflicts(null); return }
+    await doImportPack(false, [...kpForceSel])
   }
 
   // ---------- 派生与筛选 ----------
@@ -948,6 +963,66 @@ export function PluginsModule() {
               >
                 {kpBusy ? <Loader2 size={12} className="animate-spin" /> : '确认导入'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 冲突管理面板:导入跳过清单可视化 */}
+      {kpConflicts && !kpBusy && (
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-6" onClick={() => setKpConflicts(null)}>
+          <div
+            className="w-[520px] max-w-full max-h-[80vh] bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 pt-4 pb-3 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={15} className="text-[var(--warning)] shrink-0" />
+                <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{kpConflicts.length} 个页面已跳过</h3>
+              </div>
+              <p className="text-[11.5px] text-[var(--text-muted)] mt-1 leading-relaxed">
+                这些页面在知识库中被你修改过或读取失败,导入时默认跳过以保护本地内容。勾选需要放弃本地改动、以插件内容覆盖的页面。
+              </p>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-2">
+              {kpConflicts.map(c => (
+                <label key={c.externalId} className="flex items-center gap-2.5 py-1.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={kpForceSel.has(c.externalId)}
+                    onChange={() => {
+                      const next = new Set(kpForceSel)
+                      if (next.has(c.externalId)) next.delete(c.externalId)
+                      else next.add(c.externalId)
+                      setKpForceSel(next)
+                    }}
+                    className="accent-[var(--accent)] shrink-0"
+                  />
+                  <span className="text-[12.5px] text-[var(--text-primary)] truncate flex-1 min-w-0" title={c.title}>{c.title}</span>
+                  <span className={`shrink-0 text-[10px] px-1.5 py-px rounded ${c.reason === '本地已修改' ? 'bg-[var(--warning)]/10 text-[var(--warning)]' : 'bg-[var(--danger)]/10 text-[var(--danger)]'}`}>{c.reason}</span>
+                </label>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-[var(--border-color)] flex items-center justify-between gap-2">
+              <label className="flex items-center gap-1.5 text-[11.5px] text-[var(--text-secondary)] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={kpForceSel.size > 0 && kpForceSel.size === kpConflicts.length}
+                  onChange={() => setKpForceSel(kpForceSel.size === kpConflicts.length ? new Set() : new Set(kpConflicts.map(c => c.externalId)))}
+                  className="accent-[var(--accent)]"
+                />
+                {kpForceSel.size === kpConflicts.length ? '取消全选' : '全选'}
+              </label>
+              <div className="flex gap-2">
+                <button onClick={() => setKpConflicts(null)} className="px-3.5 py-2 text-[12px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors">保留我的修改</button>
+                <button
+                  onClick={() => { void overwriteSelected() }}
+                  disabled={kpForceSel.size === 0 || kpBusy}
+                  className="px-4 py-2 text-[12px] font-medium text-white bg-[var(--warning)] rounded-md hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  覆盖所选({kpForceSel.size})
+                </button>
+              </div>
             </div>
           </div>
         </div>

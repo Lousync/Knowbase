@@ -149,7 +149,7 @@ const api = {
   pluginAuditClear: (id?: string) => ipcRenderer.invoke('plugin:auditClear', id),
   pluginAuditWrite: (id: string, action: string, detail?: unknown) => ipcRenderer.invoke('plugin:auditWrite', id, action, detail),
   knowledgePackGetState: (pluginId: string) => ipcRenderer.invoke('knowledgePack:getImportState', pluginId),
-  knowledgePackImport: (pluginId: string, overwriteModified: boolean) => ipcRenderer.invoke('knowledgePack:importPack', pluginId, overwriteModified),
+  knowledgePackImport: (pluginId: string, overwriteModified: boolean, forceExternalIds?: string[]) => ipcRenderer.invoke('knowledgePack:importPack', pluginId, overwriteModified, forceExternalIds ?? []),
   onKnowledgePackProgress: (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => {
     const handler = (_e: unknown, p: { pluginId: string; current: number; total: number; title: string }) => cb(p)
     ipcRenderer.on('knowledgePack:progress', handler)
