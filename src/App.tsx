@@ -23,6 +23,7 @@ import { LockScreen } from './components/shared/LockScreen'
 import { Onboarding } from './components/shared/Onboarding'
 import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
+import { useHabitAutoCheckinToast } from './lib/useHabitAutoCheckin'
 import { AssistantPanel } from './components/shared/AssistantPanel'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
@@ -41,6 +42,7 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   const { s, update, ready: settingsReady } = useSettings()
   useCheckinReminder()
+  useHabitAutoCheckinToast()
   const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
@@ -182,8 +184,18 @@ export default function App() {
   useEffect(() => {
     if (import.meta.env.DEV) {
       import('./modules/devtools').then(m => setDevtoolsNode(() => m.DevToolsModule))
+      // AI 测试桥:安装渲染层日志采集(console / error / rejection → 主进程)
+      import('./devbridge/collector').then(m => m.installRendererCollector()).catch(() => { /* 桥未启用 */ })
     }
   }, [])
+
+  // AI 测试桥:上报当前激活模块,使 GET /state 能反映真实路由
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    import('./devbridge/collector')
+      .then(m => m.reportUiState({ activeModule: activeTab }))
+      .catch(() => { /* 桥未启用 */ })
+  }, [activeTab])
 
   // First-run onboarding — show once after load & unlock; re-openable from settings
   // 依赖 settingsReady:等真实设置到位后再判断,避免默认值 onboardingDone:false 造成的竞态弹出

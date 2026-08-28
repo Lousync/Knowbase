@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { notifyCheckin } from '../../lib/pushService'
+import type { LinkSource } from '../../lib/habitLinkService'
 
 interface HabitRow {
   id: string; name: string; color: string; icon: string
@@ -10,14 +11,19 @@ interface HabitRow {
   created_at: string; updated_at: string
 }
 
-interface RecordRow { id: string; habit_id: string; date: string }
+interface RecordRow { id: string; habit_id: string; date: string; source: string }
+
+interface LinkRow { habit_id: string; source: string; threshold: number; enabled: number }
 
 export interface HabitDto {
   id: string; name: string; color: string
   ruleType: 'daily' | 'weekdays' | 'flexible'
   ruleDays: number[]; weeklyTarget: number
   sortOrder: number; archived: boolean; createdAt: string
+  link?: { source: LinkSource; threshold: number; enabled: boolean } | null
 }
+
+const LINK_SOURCES: LinkSource[] = ['blog', 'pomodoro', 'schedule', 'knowledge']
 
 function parseDays(json: string): number[] {
   try { const v = JSON.parse(json); if (Array.isArray(v)) return v.map(Number) } catch { /* ignore */ }
@@ -57,9 +63,17 @@ export function registerCheckinHandlers(): void {
 
   ipcMain.handle('habit:getAll', () => {
     const habits = queryAll<HabitRow>('SELECT * FROM habits ORDER BY sort_order ASC, created_at ASC').map(rowToHabit)
-    const records = queryAll<RecordRow>('SELECT id, habit_id, date FROM habit_records').map(r => ({
-      id: r.id, habitId: r.habit_id, date: r.date,
+    const records = queryAll<RecordRow>('SELECT id, habit_id, date, source FROM habit_records').map(r => ({
+      id: r.id, habitId: r.habit_id, date: r.date, source: r.source,
     }))
+    // 联动规则随习惯一起下发,前端编辑器据此回显
+    const links = queryAll<LinkRow>('SELECT habit_id, source, threshold, enabled FROM habit_links')
+    const linkMap = new Map(links.map(l => [l.habit_id, {
+      source: l.source as LinkSource,
+      threshold: l.threshold,
+      enabled: l.enabled === 1,
+    }]))
+    for (const h of habits) h.link = linkMap.get(h.id) ?? null
     return { habits, records }
   })
 
@@ -106,6 +120,7 @@ export function registerCheckinHandlers(): void {
 
   ipcMain.handle('habit:delete', (_e, id: string) => {
     run('DELETE FROM habit_records WHERE habit_id = ?', [id])
+    run('DELETE FROM habit_links WHERE habit_id = ?', [id])
     run('DELETE FROM habits WHERE id = ?', [id])
   })
 
@@ -119,7 +134,7 @@ export function registerCheckinHandlers(): void {
       return { checked: false }
     }
     run(
-      'INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)',
+      "INSERT INTO habit_records (id, habit_id, date, source) VALUES (?, ?, ?, 'manual')",
       [randomUUID(), habitId, date]
     )
     // 远程监督：打卡成功后异步推送（静默失败，不影响打卡本身）
@@ -132,5 +147,26 @@ export function registerCheckinHandlers(): void {
     orderedIds.forEach((id, i) => {
       run('UPDATE habits SET sort_order = ? WHERE id = ?', [i + now - orderedIds.length, id])
     })
+  })
+
+  // 联动规则:link 为 null 表示解除绑定;UNIQUE(habit_id) → 一个习惯至多一条规则
+  ipcMain.handle('habitLink:save', (_e, habitId: string, link: { source: LinkSource; threshold: number; enabled: boolean } | null) => {
+    if (link === null) {
+      run('DELETE FROM habit_links WHERE habit_id = ?', [habitId])
+      return
+    }
+    if (!LINK_SOURCES.includes(link.source)) throw new Error(`未知的联动来源: ${link.source}`)
+    const habit = queryAll<HabitRow>('SELECT id FROM habits WHERE id = ?', [habitId])
+    if (habit.length === 0) throw new Error('习惯不存在')
+    const threshold = Math.max(1, Math.round(link.threshold || 1))
+    run('DELETE FROM habit_links WHERE habit_id = ?', [habitId])
+    run(
+      'INSERT INTO habit_links (id, habit_id, source, threshold, enabled) VALUES (?, ?, ?, ?, ?)',
+      [randomUUID(), habitId, link.source, threshold, link.enabled ? 1 : 0]
+    )
+  })
+
+  ipcMain.handle('habitLink:remove', (_e, habitId: string) => {
+    run('DELETE FROM habit_links WHERE habit_id = ?', [habitId])
   })
 }

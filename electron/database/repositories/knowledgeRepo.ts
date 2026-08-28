@@ -5,6 +5,7 @@ import { join } from 'path'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
 import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 import { buildUpdateSet } from '../../lib/safeUpdate'
+import { recordActivity } from '../../lib/habitLinkService'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
@@ -359,9 +360,10 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 创建页面
-  ipcMain.handle('knowledge:createPage', (_e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
+  ipcMain.handle('knowledge:createPage', (e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
     const id = randomUUID()
-    const now = new Date().toISOString()
+    const now = new Date()
+    const nowIso = now.toISOString()
     assertPageContainer(data.categoryId ?? null)
     const maxOrder = queryAll<{ m: number }>(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_pages WHERE category_id IS ?',
@@ -371,9 +373,14 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
     run(
       `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, sort_order, file_type, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, ft, now, now]
+      [id, data.title || '新页面', data.contentMd || '', data.contentHtml || '', data.categoryId || null, maxOrder[0]?.m ?? 0, ft, nowIso, nowIso]
     )
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
+
+    // 联动:当天新建页面数达标则自动打卡(现值由 habitLinkService 反查)
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    void recordActivity({ source: 'knowledge', date: localDate, refId: id }, e.sender)
+
     return mapPage(rows[0])
   })
 

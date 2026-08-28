@@ -46,6 +46,7 @@ import { m044PluginAuditLogMigration } from './044_plugin_audit_log'
 import { m045McpServersMigration } from './045_mcp_servers'
 import { m046AgentSessionsMigration } from './046_agent_sessions'
 import { m047KnowledgePackImportsMigration } from './047_knowledge_pack_imports'
+import { m048HabitLinksMigration } from './048_habit_links'
 
 /**
  * 迁移执行顺序表 —— 顺序即语义，只允许追加，不允许重排或改名。
@@ -105,4 +106,5 @@ export const MIGRATIONS: Migration[] = [
   m045McpServersMigration,
   m046AgentSessionsMigration,
   m047KnowledgePackImportsMigration,
+  m048HabitLinksMigration,
 ]

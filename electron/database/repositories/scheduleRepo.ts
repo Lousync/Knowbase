@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { buildUpdateSet } from '../../lib/safeUpdate'
+import { recordActivity } from '../../lib/habitLinkService'
 
 // ---- types ----
 interface TodoRow {
@@ -118,11 +119,16 @@ export function registerScheduleHandlers(): void {
   })
 
   // 更新待办
-  ipcMain.handle('schedule:updateTodo', (_e, id: string, data: {
+  ipcMain.handle('schedule:updateTodo', (e, id: string, data: {
     title?: string; description?: string; date?: string; time?: string | null
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
     status?: string; endCriteria?: string; parentId?: string | null
   }) => {
+    // 联动需要状态跃迁判定:先取旧状态,只有 pending → done 才算"完成"事件
+    // (改标题/象限等普通编辑也走本 handler,不能每次都触发)
+    const prevStatus = data.status !== undefined
+      ? queryAll<{ status: string }>('SELECT status FROM schedule_todos WHERE id = ?', [id])[0]?.status
+      : undefined
     // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
     const { sets, params } = buildUpdateSet(
       data,
@@ -132,6 +138,10 @@ export function registerScheduleHandlers(): void {
     params.push(id)
     run(`UPDATE schedule_todos SET ${sets.join(', ')} WHERE id = ?`, params)
     const rows = queryAll<TodoRow>('SELECT * FROM schedule_todos WHERE id = ?', [id])
+
+    if (prevStatus !== undefined && prevStatus !== 'done' && data.status === 'done' && rows.length > 0) {
+      void recordActivity({ source: 'schedule', date: rows[0].date }, e.sender)
+    }
     return rowToTodo(rows[0])
   })
 

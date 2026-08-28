@@ -2,6 +2,12 @@ import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
+import { recordActivity } from '../../lib/habitLinkService'
+
+/** 博文字数:去空白后的字符数(中英混排统一口径,与 habitLinkService 一致) */
+function countWords(md: string): number {
+  return md.replace(/\s/g, '').length
+}
 
 interface EntryRow {
   id: string
@@ -147,7 +153,7 @@ export function registerEntryHandlers(): void {
   })
 
   // 创建博文
-  ipcMain.handle('db:createEntry', (_event, data: {
+  ipcMain.handle('db:createEntry', (event, data: {
     title?: string
     contentMd?: string
     contentHtml?: string
@@ -174,7 +180,7 @@ export function registerEntryHandlers(): void {
     run(
       `INSERT INTO entries (id, title, content_md, content_html, date, created_at, updated_at, word_count, states)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.title || '', data.contentMd || '', data.contentHtml || '', data.date, now, now, 0, data.states || '']
+      [id, data.title || '', data.contentMd || '', data.contentHtml || '', data.date, now, now, countWords(data.contentMd || ''), data.states || '']
     )
 
     if (data.tags && data.tags.length > 0) {
@@ -184,11 +190,15 @@ export function registerEntryHandlers(): void {
     }
 
     const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
+
+    // 字数阈值联动:新建即判定(值由 habitLinkService 从源表反查)
+    void recordActivity({ source: 'blog', date: rows[0].date, refId: id }, event.sender)
+
     return rowToEntry(rows[0])
   })
 
   // 更新博文
-  ipcMain.handle('db:updateEntry', (_event, id: string, data: {
+  ipcMain.handle('db:updateEntry', (event, id: string, data: {
     title?: string
     contentMd?: string
     contentHtml?: string
@@ -217,6 +227,9 @@ export function registerEntryHandlers(): void {
     if (data.contentMd !== undefined) {
       sets.push('content_md = ?')
       params.push(data.contentMd)
+      // 同步维护字数(此前恒为 0,统计与自动打卡都依赖它)
+      sets.push('word_count = ?')
+      params.push(countWords(data.contentMd))
     }
     if (data.contentHtml !== undefined) {
       sets.push('content_html = ?')
@@ -251,6 +264,12 @@ export function registerEntryHandlers(): void {
     }
 
     const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
+
+    // 字数阈值联动:内容或日期变化后重新判定(值由 habitLinkService 从源表反查,此处只上报事件)
+    if (data.contentMd !== undefined || data.date !== undefined) {
+      void recordActivity({ source: 'blog', date: rows[0].date, refId: id }, event.sender)
+    }
+
     return rowToEntry(rows[0])
   })
 

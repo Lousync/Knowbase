@@ -523,9 +523,20 @@ export function executeImportData(data: any): { success: boolean; imported: numb
         for (const r of data.checkin.records || []) {
           if (exists('habit_records', r.id)) { skipped++; continue }
           try {
-            db.run('INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)', [r.id, r.habitId, r.date])
+            db.run("INSERT INTO habit_records (id, habit_id, date, source) VALUES (?, ?, ?, ?)", [r.id, r.habitId, r.date, r.source === 'auto' ? 'auto' : 'manual'])
             imported++
           } catch { skipped++ } // UNIQUE(habit_id, date) 冲突兜底
+        }
+        // 联动规则(旧备份包无此字段,自然跳过)
+        for (const l of data.checkin.links || []) {
+          if (exists('habit_links', l.habitId)) { skipped++; continue }
+          try {
+            db.run(
+              'INSERT INTO habit_links (id, habit_id, source, threshold, enabled) VALUES (?, ?, ?, ?, ?)',
+              [l.habitId, l.habitId, l.source, Math.max(1, Math.round(l.threshold || 1)), l.enabled === false ? 0 : 1]
+            )
+            imported++
+          } catch { skipped++ }
         }
       }
       // --- Bookmark Nav（网址导航）---

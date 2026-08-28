@@ -152,7 +152,8 @@ export function buildAllData(moduleIds?: string[]) {
 
   // Checkin（习惯打卡）+ Bookmark Nav（网址导航）
   const habitRows = sel('checkin') ? queryAll<HabitRow>('SELECT * FROM habits ORDER BY sort_order, created_at') : []
-  const habitRecordRows = sel('checkin') ? queryAll<{ id: string; habit_id: string; date: string }>('SELECT id, habit_id, date FROM habit_records') : []
+  const habitRecordRows = sel('checkin') ? queryAll<{ id: string; habit_id: string; date: string; source: string }>('SELECT id, habit_id, date, source FROM habit_records') : []
+  const habitLinkRows = sel('checkin') ? queryAll<{ habit_id: string; source: string; threshold: number; enabled: number }>('SELECT habit_id, source, threshold, enabled FROM habit_links') : []
   const bmCatRows = sel('bookmarkNav') ? queryAll<BookmarkCategoryRow>('SELECT * FROM bookmark_categories ORDER BY sort_order, created_at') : []
   const bmItemRows = sel('bookmarkNav') ? queryAll<BookmarkItemRow>('SELECT * FROM bookmarks ORDER BY category_id, sort_order, created_at') : []
 
@@ -194,7 +195,8 @@ export function buildAllData(moduleIds?: string[]) {
     },
     checkin: {
       habits: habitRows.map(mapHabit),
-      records: habitRecordRows.map(r => ({ id: r.id, habitId: r.habit_id, date: r.date }))
+      records: habitRecordRows.map(r => ({ id: r.id, habitId: r.habit_id, date: r.date, source: (r.source === 'auto' ? 'auto' : 'manual') as 'manual' | 'auto' })),
+      links: habitLinkRows.map(l => ({ habitId: l.habit_id, source: l.source as 'blog' | 'pomodoro' | 'schedule' | 'knowledge', threshold: l.threshold, enabled: l.enabled === 1 }))
     },
     bookmarkNav: {
       categories: bmCatRows.map(c => ({ id: c.id, name: c.name, color: c.color, sortOrder: c.sort_order ?? 0, createdAt: c.created_at })),

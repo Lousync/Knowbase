@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { recordActivity } from '../../lib/habitLinkService'
 
 /**
  * 周期总结支持服务 ——
@@ -21,7 +22,7 @@ function queryOne<T>(sql: string, params: unknown[] = []): T {
 export function registerSummaryHandlers(): void {
 
   // 番茄钟：记录一次完成的专注（fire-and-forget，失败不影响计时）
-  ipcMain.handle('pomodoro:createSession', (_e, minutes: number) => {
+  ipcMain.handle('pomodoro:createSession', (e, minutes: number) => {
     try {
       const mins = Math.max(1, Math.round(minutes || 0))
       const now = new Date()
@@ -31,6 +32,8 @@ export function registerSummaryHandlers(): void {
         [randomUUID(), mins, date]
       )
       saveToDisk()
+      // 联动:当天场次累计达标则自动打卡(现值由 habitLinkService 反查)
+      void recordActivity({ source: 'pomodoro', date }, e.sender)
       return true
     } catch (err) {
       console.error('[summary] 记录番茄钟失败:', err)
