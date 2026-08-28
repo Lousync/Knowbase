@@ -543,6 +543,27 @@ export function registerLlmHandlers(deps: {
     }
   })
 
+  // 模型级可用性测试:与 testConnection 的「列表接口探活」不同——模型可能未开通/无权限/
+  // ID 拼写错误,只有对指定模型真实完成一次最小补全(max_tokens=1)才算可用
+  ipcMain.handle('llm:testModel', async (_e, payload: { providerId: string; model: string }) => {
+    const p = getProviders().find(x => x.id === payload?.providerId)
+    if (!p) return { ok: false, error: '供应商不存在', latencyMs: 0 }
+    const model = String(payload?.model ?? '').trim()
+    if (!model) return { ok: false, error: '模型 ID 不能为空', latencyMs: 0 }
+    if (!p.enabled) return { ok: false, error: '供应商已禁用', latencyMs: 0 }
+    const started = Date.now()
+    try {
+      const res = await getAdapter(p.type).chat(p, {
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        maxTokens: 1,
+      })
+      return { ok: true, latencyMs: Date.now() - started, replyPreview: String(res.content ?? '').replace(/\s+/g, ' ').slice(0, 40) }
+    } catch (err) {
+      return { ok: false, latencyMs: Date.now() - started, error: String((err as Error)?.message ?? err) }
+    }
+  })
+
   ipcMain.handle('llm:refreshModels', async (_e, id: string) => {
     const list = getProviders()
     const p = list.find(x => x.id === id)

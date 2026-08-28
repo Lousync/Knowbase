@@ -4,10 +4,10 @@ import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
-  llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel,
+  llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel, llmTestModel,
   llmCcSwitchList, llmCcSwitchImport, openExternal,
 } from '../../../lib/ipc'
-import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, CcSwitchItem } from '../../../types'
+import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, CcSwitchItem } from '../../../types'
 import { prettyModelName, isOpenCodeFree } from '../../../lib/modelNames'
 
 /** 免费=用户手动标记 ∪ id 含 free（上游不提供该元数据，双轨启发式） */
@@ -38,6 +38,24 @@ export function AiModelsTab() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [ccsOpen, setCcsOpen] = useState(false)
+  // 模型级可用性测试(选中具体模型后实测,区别于供应商探活)
+  const [modelTesting, setModelTesting] = useState(false)
+  const [modelTestResult, setModelTestResult] = useState<LlmModelTestResultInfo | null>(null)
+
+  const testSelectedModel = async () => {
+    if (!defaultModel || modelTesting) return
+    const idx = defaultModel.indexOf(':')
+    const providerId = defaultModel.slice(0, idx)
+    const model = defaultModel.slice(idx + 1)
+    if (!providerId || !model) return
+    setModelTesting(true)
+    setModelTestResult(null)
+    try {
+      setModelTestResult(await llmTestModel(providerId, model))
+    } finally {
+      setModelTesting(false)
+    }
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -137,17 +155,33 @@ export function AiModelsTab() {
       {providers.some(p => p.enabled && p.models.length > 0) && (
         <div>
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">默认对话模型</h2>
-          <p className="text-[12px] text-[var(--text-muted)] mb-3">AI 对话未显式指定模型时使用此项。</p>
-          <select value={defaultModel} onChange={e => { void llmSetDefaultModel(e.target.value).then(refresh) }}
-            className="w-full max-w-md px-2.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] outline-none focus:border-[var(--accent)]">
-            <option value="">未设置</option>
-            {providers.filter(p => p.enabled).flatMap(p =>
-              p.models.map(m => {
-                const free = isFreeModel(m, freeSet)
-                return <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>{free ? '[免费] ' : ''}{prettyModelName(m)}{free ? '' : ` · ${m}`}</option>
-              })
-            )}
-          </select>
+          <p className="text-[12px] text-[var(--text-muted)] mb-3">AI 对话未显式指定模型时使用此项。选中具体模型后可实测该模型是否真正可用（发送一次最小补全请求）。</p>
+          <div className="flex items-start gap-2 max-w-md">
+            <select value={defaultModel}
+              onChange={e => { setModelTestResult(null); void llmSetDefaultModel(e.target.value).then(refresh) }}
+              className="flex-1 min-w-0 px-2.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] outline-none focus:border-[var(--accent)]">
+              <option value="">未设置</option>
+              {providers.filter(p => p.enabled).flatMap(p =>
+                p.models.map(m => {
+                  const free = isFreeModel(m, freeSet)
+                  return <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>{free ? '[免费] ' : ''}{prettyModelName(m)}{free ? '' : ` · ${m}`}</option>
+                })
+              )}
+            </select>
+            <button onClick={() => void testSelectedModel()} disabled={!defaultModel || modelTesting}
+              title="对该模型发送一次最小补全请求,验证其真实可用"
+              className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-md text-[12px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-40 transition-colors">
+              {modelTesting && <Loader2 size={12} className="animate-spin" />}
+              {modelTesting ? '测试中…' : '测试模型'}
+            </button>
+          </div>
+          {modelTestResult && (
+            <p className={`text-[11px] mt-1.5 ${modelTestResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+              {modelTestResult.ok
+                ? `✓ 模型可用（${modelTestResult.latencyMs}ms${modelTestResult.replyPreview ? `,回复「${modelTestResult.replyPreview}」` : ''}）`
+                : `✗ ${modelTestResult.error}`}
+            </p>
+          )}
         </div>
       )}
     </div>
