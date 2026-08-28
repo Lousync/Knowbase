@@ -90,7 +90,7 @@ const api = {
   openExternal: (filePath: string) => ipcRenderer.invoke('app:openExternal', filePath),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
-  downloadUpdate: (url: string, name: string) => ipcRenderer.invoke('update:download', url, name),
+  downloadUpdate: (url: string, name: string, size?: number) => ipcRenderer.invoke('update:download', url, name, size),
   installUpdate: (filePath: string) => ipcRenderer.invoke('update:install', filePath),
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => {
     const handler = (_e: unknown, p: { percent: number; receivedBytes: number; totalBytes: number }) => cb(p)

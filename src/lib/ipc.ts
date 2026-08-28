@@ -112,7 +112,7 @@ export const importFolder = (folderPath: string, parentCategoryId: string | null
 export const openExternal = (filePath: string) => a().openExternal(filePath)
 export const getAppVersion = () => a().getAppVersion()
 export const checkForUpdate = () => a().checkForUpdate()
-export const downloadUpdate = (url: string, name: string) => a().downloadUpdate(url, name)
+export const downloadUpdate = (url: string, name: string, size?: number) => a().downloadUpdate(url, name, size)
 export const installUpdate = (filePath: string) => a().installUpdate(filePath)
 export const onUpdateDownloadProgress = (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => a().onUpdateDownloadProgress(cb)
 export const pluginFetchRegistry = () => a().pluginFetchRegistry()

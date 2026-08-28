@@ -14,7 +14,7 @@ export function TitleBar() {
   // ---- 更新徽章:启动后静默检查一�?有新版显�?�?按钮,点击直接开始下�?----
   type UpdState = 'hidden' | 'available' | 'downloading' | 'downloaded'
   const [updState, setUpdState] = useState<UpdState>('hidden')
-  const [asset, setAsset] = useState<{ url: string; name: string } | null>(null)
+  const [asset, setAsset] = useState<{ url: string; name: string; size?: number } | null>(null)
   const [latestVersion, setLatestVersion] = useState('')
   const [progress, setProgress] = useState(0)
   const downloadedPathRef = useRef<string>('')
@@ -49,7 +49,7 @@ export function TitleBar() {
         const r = await checkForUpdate()
         if (!alive) return
         if (r.ok && r.hasUpdate && r.asset) {
-          setAsset({ url: r.asset.url, name: r.asset.name })
+          setAsset({ url: r.asset.url, name: r.asset.name, size: r.asset.size })
           setLatestVersion(r.latestVersion)
           setUpdState('available')
           return
@@ -80,7 +80,7 @@ export function TitleBar() {
     setProgress(0)
     busyRef.current = true
     try {
-      const r = await downloadUpdate(asset.url, asset.name)
+      const r = await downloadUpdate(asset.url, asset.name, asset.size)
       if (r.success && r.filePath) {
         downloadedPathRef.current = r.filePath
         setUpdState('downloaded')

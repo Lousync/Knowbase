@@ -53,7 +53,7 @@ export function AdvancedView() {
     if (!updResult?.asset) return
     setUpdState('downloading')
     setProgress({ percent: 0, receivedBytes: 0, totalBytes: updResult.asset.size })
-    const r = await downloadUpdate(updResult.asset.url, updResult.asset.name)
+    const r = await downloadUpdate(updResult.asset.url, updResult.asset.name, updResult.asset.size)
     if (r.success && r.filePath) { setDownloadedPath(r.filePath); setUpdState('downloaded') }
     else { setUpdError(r.message || '下载失败'); setUpdState('error') }
   }

@@ -622,7 +622,7 @@ export interface ElectronAPI {
   openExternal: (filePath: string) => Promise<void>
   getAppVersion: () => Promise<string>
   checkForUpdate: () => Promise<{ ok: boolean; hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; notes: string; asset: { name: string; url: string; size: number } | null; message?: string }>
-  downloadUpdate: (url: string, name: string) => Promise<{ success: boolean; filePath?: string; message?: string }>
+  downloadUpdate: (url: string, name: string, size?: number) => Promise<{ success: boolean; filePath?: string; message?: string }>
   installUpdate: (filePath: string) => Promise<{ success: boolean; message?: string }>
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => () => void
   pluginFetchRegistry: () => Promise<{ ok: boolean; plugins: PluginRegistryEntry[]; updatedAt?: string; message?: string }>

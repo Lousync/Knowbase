@@ -1,6 +1,7 @@
 import { app, ipcMain, shell, BrowserWindow, net } from 'electron'
-import { createWriteStream, existsSync, mkdirSync, unlinkSync } from 'fs'
+import { createWriteStream, existsSync, mkdirSync, statSync, unlinkSync } from 'fs'
 import { join, resolve } from 'path'
+import { createHash } from 'crypto'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 
@@ -36,14 +37,21 @@ function resolveMirror(): string | null {
   return s
 }
 
+/** 已知可用的 ghproxy 节点(下载速度与缓存健康度不定,作为用户镜像之后的兜底候选) */
+const FALLBACK_MIRRORS = ['https://gh.dpik.top', 'https://gh-proxy.com', 'https://cdn.gh-proxy.com']
+
 /**
  * 由已通过白名单校验的 GitHub URL 构造下载候选列表:
- * [镜像前缀..., 直连] —— 镜像在前保速度,直连兜底保可用。
+ * [用户镜像, 备用镜像..., 直连] —— 镜像在前保速度,直连兜底保可用;
+ * 配合下载后的 sha512 校验,任何节点返回坏字节都会被识别并自动换下一候选。
  */
 function downloadCandidates(url: string): string[] {
   const mirror = resolveMirror()
   const list: string[] = []
   if (mirror) list.push(`${mirror}/${url}`)
+  for (const m of FALLBACK_MIRRORS) {
+    if (m !== mirror) list.push(`${m}/${url}`)
+  }
   list.push(url)
   return list
 }
@@ -96,6 +104,96 @@ function pushProgress(percent: number, receivedBytes: number, totalBytes: number
   }
 }
 
+/** 慢速保护:15s 内收到的字节不足 2MB(≈136KB/s)判定为慢通道,放弃换下一候选 */
+const SLOW_WINDOW_MS = 15000
+const SLOW_MIN_BYTES = 2 * 1024 * 1024
+
+/** 从单通道下载到 dest,流式推送进度;失败抛出(由上层换通道) */
+async function downloadOne(candidate: string, dest: string, expectedSize?: number): Promise<void> {
+  const r = await net.fetch(candidate, { headers: { 'User-Agent': 'Knowbase-App' }, redirect: 'follow' })
+  const ctype = String(r.headers.get('content-type') || '')
+  if (!r.ok || !r.body) throw new Error(`${new URL(candidate).hostname} HTTP ${r.status}`)
+  if (/text\/html/i.test(ctype)) throw new Error(`${new URL(candidate).hostname} 返回的是网页而非文件`)
+  const total = Number(r.headers.get('content-length') || 0)
+  // 大小前置校验:content-length 与期望不符 → 直接判坏字节,避免白下载整包
+  if (expectedSize && total > 0 && total !== expectedSize) {
+    throw new Error(`文件大小不符(期望 ${expectedSize},实际 ${total}),疑似坏字节`)
+  }
+  const out = createWriteStream(dest)
+  let received = 0
+  let lastPct = -1
+  let slowTimer: NodeJS.Timeout | null = null
+  const reader = Readable.fromWeb(r.body as import('stream/web').ReadableStream)
+  reader.on('data', (chunk: Buffer) => {
+    received += chunk.length
+    const pct = total > 0 ? Math.round((received / total) * 100) : 0
+    if (pct !== lastPct) {
+      lastPct = pct
+      pushProgress(pct, received, total)
+    }
+  })
+  try {
+    await new Promise<void>((res, rej) => {
+      const host = new URL(candidate).hostname
+      const scheduleSlowCheck = () => {
+        slowTimer = setTimeout(() => {
+          if (received < SLOW_MIN_BYTES) {
+            reader.destroy()
+            rej(new Error(`${host} 下载过慢(15s 内不足 1MB),已切换通道`))
+          } else {
+            scheduleSlowCheck()
+          }
+        }, SLOW_WINDOW_MS)
+      }
+      scheduleSlowCheck()
+      pipeline(reader, out).then(res, e => { if (slowTimer) clearTimeout(slowTimer); rej(e) })
+    })
+  } finally {
+    if (slowTimer) clearTimeout(slowTimer)
+  }
+  // 流结束后的兜底校验:chunked/无 content-length 时服务器提前断流也会被截获
+  if (expectedSize && statSync(dest).size !== expectedSize) {
+    throw new Error(`文件大小不符(期望 ${expectedSize},实际 ${statSync(dest).size}),疑似坏字节`)
+  }
+}
+
+/** 下载文件完整性校验:size(若有) + latest.yml 的 sha512(若可取);任一不符即视为坏字节 */
+async function verifyInstaller(dest: string, expectedSize: number | undefined, assetUrl: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    if (expectedSize && statSync(dest).size !== expectedSize) {
+      return { ok: false, message: '文件大小不符,疑似坏字节' }
+    }
+    let sha512 = ''
+    try {
+      // latest.yml 与安装包同目录:镜像通道同样可用
+      const ymlUrl = assetUrl.replace(/\/[^/]+$/, '/latest.yml')
+      for (const candidate of downloadCandidates(ymlUrl)) {
+        try {
+          const r = await net.fetch(candidate, { headers: { 'User-Agent': 'Knowbase-App' }, redirect: 'follow' })
+          if (!r.ok || !r.body || /text\/html/i.test(String(r.headers.get('content-type') || ''))) continue
+          const txt = await r.text()
+          const m = /sha512:\s*([A-Za-z0-9+/=]+)/.exec(txt)
+          if (m) { sha512 = m[1]; break }
+        } catch { /* 换下一候选 */ }
+      }
+    } catch { /* 取不到 latest.yml → 退回仅 size 校验 */ }
+    if (sha512) {
+      const expected = Buffer.from(sha512, 'base64')
+      const hash = createHash('sha512')
+      const buf = await new Promise<Buffer>((res, rej) => {
+        const s = require('fs').createReadStream(dest)
+        s.on('data', c => hash.update(c))
+        s.on('end', () => res(hash.digest()))
+        s.on('error', rej)
+      })
+      if (!buf.equals(expected)) return { ok: false, message: '文件校验和(SHA512)不符,镜像可能返回了坏字节' }
+    }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, message: e?.message || String(e) }
+  }
+}
+
 export function registerUpdateHandlers(deps?: { getSettingValue?: (key: string) => unknown }): void {
   if (deps?.getSettingValue) getSettingValue = deps.getSettingValue
   ipcMain.handle('update:check', async (): Promise<UpdateCheckResult> => {
@@ -122,59 +220,41 @@ export function registerUpdateHandlers(deps?: { getSettingValue?: (key: string) 
     }
   })
 
-  let downloading = false
-  ipcMain.handle('update:download', async (_e, url: string, name: string) => {
+let downloading = false
+  ipcMain.handle('update:download', async (_e, url: string, name: string, expectedSize?: number) => {
     if (downloading) return { success: false, message: '已有下载任务进行中' }
-    // 下载地址仅信任 GitHub Releases 域,防渲染层被注入后借道下载任意文件
-    let u: URL
-    try { u = new URL(url) } catch { return { success: false, message: '下载地址无效' } }
-    const trusted = u.protocol === 'https:' &&
-      (u.hostname === 'github.com' || u.hostname.endsWith('.github.com') || u.hostname === 'objects.githubusercontent.com')
-    if (!trusted) return { success: false, message: '下载地址不受信任' }
-    // 文件名清洗:只取 basename,拒绝路径分隔符
+    try {
+      const parsed = new URL(url)
+      if (!/^https?:$/.test(parsed.protocol) || !/github\.com$/i.test(parsed.hostname)) {
+        return { success: false, message: 'URL 不受信任' }
+      }
+    } catch {
+      return { success: false, message: 'URL 非法' }
+    }
     const safeName = String(name || 'Knowbase-setup.exe').split(/[\\/]/).pop() || 'Knowbase-setup.exe'
-
     downloading = true
     const dir = app.getPath('downloads')
-    try { mkdirSync(dir, { recursive: true }) } catch { /* ignore */ }
+    try { if (!existsSync(dir)) mkdirSync(dir, { recursive: true }) } catch { /* ignore */ }
     const dest = join(dir, safeName)
+    let lastErr = ''
     try {
-      let res: Response | null = null
-      let lastErr = ''
-      // 镜像优先直连兜底:代理失效时返回的往往是 HTML 壳页(200 + text/html),
-      // 用 content-type 守卫识别并尝试下一候选
+      // 逐个候选通道:下载 → 完整性校验 → 通过才返回;坏字节自动换下一通道
       for (const candidate of downloadCandidates(url)) {
         try {
-          const r = await net.fetch(candidate, { headers: { 'User-Agent': 'Knowbase-App' }, redirect: 'follow' })
-          const ctype = String(r.headers.get('content-type') || '')
-          if (!r.ok || !r.body) { lastErr = `${new URL(candidate).hostname} HTTP ${r.status}`; continue }
-          if (/text\/html/i.test(ctype)) { lastErr = `${new URL(candidate).hostname} 返回的是网页而非文件`; continue }
-          res = r
-          break
+          await downloadOne(candidate, dest, expectedSize)
+          const check = await verifyInstaller(dest, expectedSize, url)
+          if (check.ok) {
+            pushProgress(100, statSync(dest).size, expectedSize || statSync(dest).size)
+            return { success: true, filePath: dest }
+          }
+          lastErr = check.message
+          try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
         } catch (e: any) {
           lastErr = e?.message || String(e)
+          try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
         }
       }
-      if (!res?.body) throw new Error(lastErr || '所有下载通道均失败')
-      const total = Number(res.headers.get('content-length') || 0)
-      const out = createWriteStream(dest)
-      let received = 0
-      let lastPct = -1
-      const reader = Readable.fromWeb(res.body as import('stream/web').ReadableStream)
-      reader.on('data', (chunk: Buffer) => {
-        received += chunk.length
-        const pct = total > 0 ? Math.round((received / total) * 100) : 0
-        if (pct !== lastPct) {
-          lastPct = pct
-          pushProgress(pct, received, total)
-        }
-      })
-      await pipeline(reader, out)
-      pushProgress(100, received, total)
-      return { success: true, filePath: dest }
-    } catch (e: any) {
-      try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
-      return { success: false, message: e?.message || String(e) }
+return { success: false, message: lastErr || '所有下载通道均失败' }
     } finally {
       downloading = false
     }
