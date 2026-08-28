@@ -11,6 +11,7 @@ Thumbs.db
 .env*
 *.log
 .claude/
+.workbuddy/
 .mcp.json
 运行指令
 建议与要求/
