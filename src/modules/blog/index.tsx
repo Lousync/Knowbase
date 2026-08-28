@@ -374,6 +374,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
         )}
         {view === 'editor' && selectedId && (
           <MarkdownEditor
+            key={selectedId}
             entryId={selectedId}
             showLineNumbers={showLineNumbers}
             zoom={zoom}

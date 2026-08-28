@@ -49,6 +49,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const dateRef = useRef(date)
   const isDirtyRef = useRef(false)
   const savedContentRef = useRef('')
+  const lastSaveErrorRef = useRef('')
   const skipDirtyRef = useRef(true) // skip first onChange (Monaco mount)
 
   // Tags & States
@@ -185,7 +186,13 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       isDirtyRef.current = false
       savedContentRef.current = c
       setLastSaved(new Date())
-    } catch (e) { console.error(e) } finally { setSaving(false) }
+      lastSaveErrorRef.current = ''
+    } catch (e) {
+      // 保存失败要可见(如日期撞车的防重拒绝),同一错误只提示一次,避免自动保存每 2 秒刷屏
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg !== lastSaveErrorRef.current) showToast({ type: 'error', message: msg })
+      lastSaveErrorRef.current = msg
+    } finally { setSaving(false) }
   }, [entryId])
 
   const handleChange = (v: string | undefined) => {

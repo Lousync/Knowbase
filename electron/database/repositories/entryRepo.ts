@@ -197,6 +197,15 @@ export function registerEntryHandlers(): void {
     tags?: string[]
     states?: string
   }) => {
+    // 防重:每天一篇。改日期时若目标日期已有其他条目则拒绝(与 createEntry 的创建防重对齐;
+    // 没有这道闸,快速切换博文时残留的自动保存会把日期写撞,出现同日双篇)
+    if (data.date !== undefined) {
+      const cur = queryAll<{ date: string }>('SELECT date FROM entries WHERE id = ?', [id])
+      if (cur.length > 0 && cur[0].date !== data.date) {
+        const dup = queryAll<{ id: string }>('SELECT id FROM entries WHERE date = ? AND id != ? LIMIT 1', [data.date, id])
+        if (dup.length > 0) throw new Error('该日期已存在日记(每天一篇),请换一个日期')
+      }
+    }
     const now = new Date().toISOString()
     const sets: string[] = ['updated_at = ?']
     const params: unknown[] = [now]

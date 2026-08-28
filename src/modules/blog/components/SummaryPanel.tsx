@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ScheduleTodo } from '../../../types'
 import {
-  getSetting, getBlogPeriodStats,
+  getBlogPeriodStats,
   getScheduleTags, createScheduleTag, createScheduleTodo, getScheduleTodos,
 } from '../../../lib/ipc'
 import type { PeriodStats } from '../../../lib/ipc'
 import { getSummaryWindow, type PeriodWindow, type MonthlyMode } from '../../../lib/summary'
+import { useSettings } from '../../../lib/SettingsContext'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 /** 与日程模块联动的专用标签 */
@@ -14,42 +15,32 @@ const LINK_TAG_NAME = '周期任务'
 /**
  * 周/月总结附页 —— 以"文档最后一节"的姿态渲染在 Markdown 内容之后，
  * 排版与正文一致（同宽、同字号、分隔线分节），而非悬浮工具条。
+ *
+ * 总结窗口实时跟随设置:周期总结日/模式在设置里改动后,已打开的面板立即按新窗口
+ * 重新计算并重拉统计,不存在"第一版写死"(stats 每次窗口变化都重新查询,绝不落库)。
  */
 export function SummaryPanel({ date }: { date: string }) {
-  const [weeklyDay, setWeeklyDay] = useState(0)
-  const [monthlyMode, setMonthlyMode] = useState<MonthlyMode>('last')
-  const [monthlyFixedDay, setMonthlyFixedDay] = useState(1)
-  const [cfgLoaded, setCfgLoaded] = useState(false)
+  const { s, ready: cfgLoaded } = useSettings()
+  const weeklyDay = Number(s.summaryWeeklyDay ?? 0)
+  const monthlyMode = (s.summaryMonthlyMode as MonthlyMode) || 'last'
+  const monthlyFixedDay = Number(s.summaryMonthlyFixedDay ?? 1)
 
   const [stats, setStats] = useState<PeriodStats | null>(null)
   const [taskTitle, setTaskTitle] = useState('')
   const [tasks, setTasks] = useState<ScheduleTodo[]>([])
   const [adding, setAdding] = useState(false)
 
-  // 加载配置
-  useEffect(() => {
-    void Promise.all([
-      getSetting('summaryWeeklyDay'),
-      getSetting('summaryMonthlyMode'),
-      getSetting('summaryMonthlyFixedDay'),
-    ]).then(([w, m, f]) => {
-      setWeeklyDay(Number(w ?? 0))
-      setMonthlyMode((m as MonthlyMode) || 'last')
-      setMonthlyFixedDay(Number(f ?? 1))
-      setCfgLoaded(true)
-    }).catch(console.error)
-  }, [])
-
-  // 计算当前日期命中的总结窗口
+  // 计算当前日期命中的总结窗口(设置变更即重算)
   const win: PeriodWindow | null = useMemo(
     () => (cfgLoaded && date ? getSummaryWindow(date, weeklyDay, monthlyMode, monthlyFixedDay) : null),
     [cfgLoaded, date, weeklyDay, monthlyMode, monthlyFixedDay]
   )
 
-  // 拉取区间统计
+  // 拉取区间统计(窗口变化即清空旧值,绝不展示上个窗口的数字)
   useEffect(() => {
     if (!win) { setStats(null); return }
     let alive = true
+    setStats(null)
     void getBlogPeriodStats(win.start, win.end)
       .then(s => { if (alive) setStats(s) })
       .catch(console.error)

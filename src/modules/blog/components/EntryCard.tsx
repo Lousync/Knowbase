@@ -1,6 +1,8 @@
 import { Star } from 'lucide-react'
 import { Entry } from '../../../types'
 import { formatEntryDate, localToday } from '../../../lib/date'
+import { getSummaryWindow, type MonthlyMode } from '../../../lib/summary'
+import { useSettings } from '../../../lib/SettingsContext'
 
 interface EntryCardProps {
   entry: Entry
@@ -19,9 +21,21 @@ export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCar
   const today = localToday()
   const isToday = entry.date === today
   const sz = SIZE_MAP[size]
+  const { s, ready: settingsReady } = useSettings()
 
   const tags = entry.tags || []
   const states = entry.states?.split(',').filter(Boolean) || []
+
+  // 该日期是否命中周期总结日(月总结优先,与 SummaryPanel 的面板判定同源同优先级;
+  // 实时读设置,改动总结日配置后卡片标注随之更新)
+  const summary = settingsReady
+    ? getSummaryWindow(
+        entry.date,
+        Number(s.summaryWeeklyDay ?? 0),
+        (s.summaryMonthlyMode as MonthlyMode) || 'last',
+        Number(s.summaryMonthlyFixedDay ?? 1),
+      )
+    : null
 
   return (
     <article
@@ -51,6 +65,14 @@ export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCar
         {/* Today badge */}
         {isToday && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)] text-white shrink-0">今天</span>
+        )}
+
+        {/* 周期总结日标注(月总结优先,与详情页总结面板一致) */}
+        {summary?.type === 'month' && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 shrink-0" title={summary.label}>月总结</span>
+        )}
+        {summary?.type === 'week' && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 shrink-0" title={summary.label}>周总结</span>
         )}
       </div>
 
