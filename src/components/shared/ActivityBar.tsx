@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { Palette, ChevronRight, ChevronDown, Check, Download } from 'lucide-react'
+import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
@@ -162,6 +162,23 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
 
       {/* User button */}
       <div className="mt-auto">
+        {/* 开发者工具 — 仅 DEV 渲染,打包构建时该分支被静态消除 */}
+        {import.meta.env.DEV && (
+          <button
+            onClick={() => onChange('devtools')}
+            className={`w-14 h-14 flex items-center justify-center relative rounded-2xl transition-all duration-150 ${
+              active === 'devtools'
+                ? 'text-[var(--accent)] bg-[var(--bg-hover)]/80 shadow-[inset_0_0_0_1px_var(--border-color)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/50'
+            }`}
+            title="开发者工具 (DEV)"
+          >
+            {active === 'devtools' && (
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-9 bg-[var(--accent)] rounded-r-full" />
+            )}
+            <FlaskConical size={26} />
+          </button>
+        )}
         <button
           onClick={() => onChange('user')}
           className={`w-14 h-14 flex items-center justify-center relative rounded-2xl transition-all duration-150 ${

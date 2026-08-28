@@ -24,7 +24,8 @@ import { Onboarding } from './components/shared/Onboarding'
 import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
 import { AssistantPanel } from './components/shared/AssistantPanel'
-
+// 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
+import type { DevToolsModuleProps } from './modules/devtools'
 export default function App() {
   // Fill popup mode: render standalone popup instead of full app
   if (window.api.isFillPopup) {
@@ -87,6 +88,7 @@ export default function App() {
       sidebarWidth_schedule: s.sidebarWidth_schedule,
       sidebarWidth_knowledgeCat: s.sidebarWidth_knowledgeCat,
       sidebarWidth_knowledgePages: s.sidebarWidth_knowledgePages,
+      sidebarWidth_devtools: s.sidebarWidth_devtools,
     })
     document.documentElement.style.fontSize = `${Math.min(s.zoomMax, Math.max(s.zoomMin, s.zoom)) * 16}px`
     setLoaded(true)
@@ -172,6 +174,15 @@ export default function App() {
     const handler = () => { setActiveTab('plugins'); setSidebarOpen(true) }
     window.addEventListener('plugins:open', handler)
     return () => window.removeEventListener('plugins:open', handler)
+  }, [])
+
+  // 开发者工具 — 仅 DEV 动态加载:打包构建时 import.meta.env.DEV 被静态替换为 false,
+  // 动态 import 随之被 tree-shaking 移除,devtools 模块代码不进入产物
+  const [DevToolsModuleDynamic, setDevtoolsNode] = useState<React.ComponentType<DevToolsModuleProps> | null>(null)
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      import('./modules/devtools').then(m => setDevtoolsNode(() => m.DevToolsModule))
+    }
   }, [])
 
   // First-run onboarding — show once after load & unlock; re-openable from settings
@@ -278,6 +289,7 @@ export default function App() {
             {renderTab('toolbox', <ToolboxModule />)}
             {renderTab('plugins', <PluginsModule />)}
             {renderTab('help', <HelpModule />)}
+            {DevToolsModuleDynamic && renderTab('devtools', <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
             {renderTab('user', <UserModule />)}
             <PomodoroPanel />
           </main>

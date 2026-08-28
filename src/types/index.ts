@@ -10,7 +10,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools'
 
 // toolbox
 export interface ToolboxScript {
@@ -475,6 +475,14 @@ export interface LlmTestResultInfo {
   error?: string
 }
 
+// 模型级可用性测试结果(真实最小补全,区别于供应商探活)
+export interface LlmModelTestResultInfo {
+  ok: boolean
+  latencyMs: number
+  replyPreview?: string
+  error?: string
+}
+
 export interface LlmUsageInfo {
   monthTokens: number
   budget: number
@@ -789,6 +797,7 @@ export interface ElectronAPI {
   llmRefreshModels: (id: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmAddModel: (id: string, model: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
+  llmTestModel: (providerId: string, model: string) => Promise<LlmModelTestResultInfo>
   llmGetUsage: () => Promise<LlmUsageInfo>
   agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
@@ -804,4 +813,19 @@ export interface ElectronAPI {
   llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>
 }
 
-declare global { interface Window { api: ElectronAPI } }
+// 开发者工具(仅 DEV 构建暴露,正式版 window.devtoolsApi 为 undefined)
+export interface DevtoolsHelpDocMeta {
+  fileName: string
+  title: string
+  category: string
+  icon: string
+}
+
+export interface DevtoolsAPI {
+  helpDocsList: () => Promise<{ docs: DevtoolsHelpDocMeta[]; dirty: string[] }>
+  helpDocsRead: (fileName: string) => Promise<DevtoolsHelpDocMeta & { body: string; dirty: boolean; error?: string }>
+  helpDocsWrite: (doc: { fileName: string; title: string; category: string; icon: string; body: string }) => Promise<{ ok?: boolean; fileName?: string; error?: string }>
+  helpDocsDelete: (fileName: string) => Promise<{ ok?: boolean; error?: string }>
+}
+
+declare global { interface Window { api: ElectronAPI; devtoolsApi?: DevtoolsAPI } }

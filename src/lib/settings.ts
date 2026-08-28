@@ -104,6 +104,8 @@ export const SETTINGS = {
   sidebarWidth_knowledgeCat:     { default: 240, desc: '知识库分类栏宽度' },
   sidebarWidth_knowledgePages:   { default: 240, desc: '知识库页面栏宽度' },
   sidebarWidth_knowledgeChapters:{ default: 240, desc: '知识库章节栏宽度' },
+  sidebarWidth_devtools:         { default: 176, desc: '开发者工具边栏宽度' },
+  sidebarWidth_devtoolsDocs:     { default: 208, desc: '开发者工具帮助文档列表栏宽度' },
 
   // ---- 行为参数 ----
   autoSaveDebounceMs:     { default: 2000, desc: '编辑器自动保存防抖(ms)' },
@@ -170,6 +172,8 @@ export const PANEL_CONSTRAINTS = {
   sidebarWidth_knowledgeCat:      { default: 240, min: 180, max: 400 },
   sidebarWidth_knowledgePages:    { default: 240, min: 180, max: 400 },
   sidebarWidth_knowledgeChapters: { default: 240, min: 180, max: 400 },
+  sidebarWidth_devtools:          { default: 176, min: 140, max: 320 },
+  sidebarWidth_devtoolsDocs:      { default: 208, min: 160, max: 360 },
 } as const
 
 // ===== 类型工具 =====

@@ -135,6 +135,7 @@ const api = {
   llmRefreshModels: (id: string) => ipcRenderer.invoke('llm:refreshModels', id),
   llmAddModel: (id: string, model: string) => ipcRenderer.invoke('llm:addModel', id, model),
   llmSetDefaultModel: (value: string) => ipcRenderer.invoke('llm:setDefaultModel', value),
+  llmTestModel: (providerId: string, model: string) => ipcRenderer.invoke('llm:testModel', { providerId, model }),
   llmGetUsage: () => ipcRenderer.invoke('llm:getUsage'),
   agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:chat', req),
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
@@ -292,4 +293,14 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld('api', api)
-export type ElectronAPI = typeof api
+
+// 开发者工具(仅 DEV):主进程侧对 app.isPackaged 守卫,打包版 handler 不存在,调用必然被拒
+const devtoolsApi = {
+  helpDocsList: () => ipcRenderer.invoke('devtools:helpDocs:list'),
+  helpDocsRead: (fileName: string) => ipcRenderer.invoke('devtools:helpDocs:read', fileName),
+  helpDocsWrite: (doc: { fileName: string; title: string; category: string; icon: string; body: string }) =>
+    ipcRenderer.invoke('devtools:helpDocs:write', doc),
+  helpDocsDelete: (fileName: string) => ipcRenderer.invoke('devtools:helpDocs:delete', fileName),
+}
+contextBridge.exposeInMainWorld('devtoolsApi', devtoolsApi)
+export type DevtoolsElectronAPI = typeof devtoolsApi

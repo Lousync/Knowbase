@@ -24,6 +24,7 @@ import { registerSummaryHandlers } from '../database/repositories/summaryRepo'
 import { registerBlogTemplateHandlers } from '../database/repositories/blogTemplateRepo'
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
+import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
 import { registerAiToolHandlers } from '../lib/aiTools'
@@ -428,6 +429,8 @@ app.whenReady().then(async () => {
   registerSuperviseHandlers()
   registerSummaryHandlers()
   registerBlogTemplateHandlers()
+  // 开发者工具(内部对 app.isPackaged 自行守卫,打包版不注册任何 handler)
+  registerDevtoolsHandlers()
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
   registerPluginHandlers({ getSettingValue: (key) => settingsCache[key] })
   // AI 工具注册表（M1 地基）：内置只读工具 + 审计 + 月度调用上限
