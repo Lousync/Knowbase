@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
   RotateCcw, Sparkles, RefreshCw, Download, ExternalLink, Play,
-  CheckCircle2, AlertTriangle, Loader2,
+  CheckCircle2, AlertTriangle, Loader2, Pause, X,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import {
   getAppVersion, checkForUpdate, downloadUpdate, installUpdate,
-  onUpdateDownloadProgress, openExternal,
+  onUpdateDownloadProgress, openExternal, updatePauseDownload, updateCancelDownload,
 } from '../../../lib/ipc'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 
-type UpdateState = 'idle' | 'checking' | 'uptodate' | 'available' | 'downloading' | 'downloaded' | 'error'
+type UpdateState = 'idle' | 'checking' | 'uptodate' | 'available' | 'downloading' | 'paused' | 'downloaded' | 'error'
 
 interface UpdateResult {
   ok: boolean
@@ -55,7 +55,17 @@ export function AdvancedView() {
     setProgress({ percent: 0, receivedBytes: 0, totalBytes: updResult.asset.size })
     const r = await downloadUpdate(updResult.asset.url, updResult.asset.name, updResult.asset.size)
     if (r.success && r.filePath) { setDownloadedPath(r.filePath); setUpdState('downloaded') }
+    else if (r.paused) setUpdState('paused') // 进度条保留在暂停时的值,继续下载会断点续传
+    else if (r.cancelled) { setUpdState('available'); setProgress({ percent: 0, receivedBytes: 0, totalBytes: 0 }) }
     else { setUpdError(r.message || '下载失败'); setUpdState('error') }
+  }
+
+  const handlePause = async () => { await updatePauseDownload() }
+
+  const handleCancel = async () => {
+    await updateCancelDownload()
+    setUpdState('available')
+    setProgress({ percent: 0, receivedBytes: 0, totalBytes: 0 })
   }
 
   const handleInstall = async () => {
@@ -94,7 +104,7 @@ export function AdvancedView() {
             className="w-full px-2.5 py-1.5 text-[12px] font-mono bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
           />
           <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-            以 <code>镜像/原始地址</code> 前缀方式加速安装包下载;镜像失效时自动回退直连。常用:{' '}
+            以 <code>镜像/原始地址</code> 前缀方式加速安装包下载;镜像失效时自动回退直连;下载中途更换镜像会自动切换通道并断点续传。常用:{' '}
             {[['gh.dpik.top', 'https://gh.dpik.top'], ['gh-proxy.com', 'https://gh-proxy.com'], ['cdn.gh-proxy.com', 'https://cdn.gh-proxy.com']].map(([name, url], i) => (
               <button key={url} onClick={() => update('updateMirror', url)} className="text-[var(--accent)] hover:underline font-mono" title={`使用 ${url}`}>
                 {name}{i < 2 ? ' / ' : ''}
@@ -114,7 +124,7 @@ export function AdvancedView() {
           </div>
         )}
 
-        {(updState === 'available' || updState === 'downloading' || updState === 'downloaded') && updResult && (
+        {(updState === 'available' || updState === 'downloading' || updState === 'paused' || updState === 'downloaded') && updResult && (
           <div className="border border-[var(--border-color)] rounded-lg p-3 max-w-md bg-[var(--bg-secondary)]">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles size={13} className="text-[var(--accent)]" />
@@ -127,14 +137,32 @@ export function AdvancedView() {
               </button>
             </div>
 
-            {updState === 'downloading' ? (
+            {(updState === 'downloading' || updState === 'paused') ? (
               <div>
                 <div className="h-1.5 bg-[var(--bg-tertiary)] rounded overflow-hidden mb-1.5">
-                  <div className="h-full bg-[var(--accent)] transition-all" style={{ width: `${progress.percent}%` }} />
+                  <div className={`h-full transition-all ${updState === 'paused' ? 'bg-[var(--warning)]' : 'bg-[var(--accent)]'}`} style={{ width: `${progress.percent}%` }} />
                 </div>
                 <div className="text-[11px] text-[var(--text-muted)]">
-                  正在下载 {updResult.asset?.name} — {progress.percent}%
+                  {updState === 'paused' ? '已暂停 ' : '正在下载 '}{updResult.asset?.name} — {progress.percent}%
                   {progress.totalBytes > 0 && `（${(progress.receivedBytes / 1048576).toFixed(1)} / ${(progress.totalBytes / 1048576).toFixed(1)} MB）`}
+                  {updState === 'paused' && ',继续下载将从断点续传'}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  {updState === 'downloading' ? (
+                    <button onClick={() => void handlePause()}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                      <Pause size={11} />暂停
+                    </button>
+                  ) : (
+                    <button onClick={() => void handleDownload()}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-white bg-[var(--accent)] rounded hover:bg-[var(--accent-hover)] transition-colors">
+                      <Download size={11} />继续下载
+                    </button>
+                  )}
+                  <button onClick={() => void handleCancel()}
+                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-red-400 hover:bg-[var(--bg-hover)] transition-colors">
+                    <X size={11} />取消下载
+                  </button>
                 </div>
               </div>
             ) : updState === 'downloaded' ? (

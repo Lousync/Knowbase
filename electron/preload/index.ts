@@ -92,6 +92,8 @@ const api = {
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: (url: string, name: string, size?: number) => ipcRenderer.invoke('update:download', url, name, size),
   installUpdate: (filePath: string) => ipcRenderer.invoke('update:install', filePath),
+  updatePauseDownload: () => ipcRenderer.invoke('update:pauseDownload'),
+  updateCancelDownload: () => ipcRenderer.invoke('update:cancelDownload'),
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => {
     const handler = (_e: unknown, p: { percent: number; receivedBytes: number; totalBytes: number }) => cb(p)
     ipcRenderer.on('update:download-progress', handler)

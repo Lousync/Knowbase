@@ -108,28 +108,65 @@ function pushProgress(percent: number, receivedBytes: number, totalBytes: number
 const SLOW_WINDOW_MS = 15000
 const SLOW_MIN_BYTES = 2 * 1024 * 1024
 
-/** 从单通道下载到 dest,流式推送进度;失败抛出(由上层换通道) */
-async function downloadOne(candidate: string, dest: string, expectedSize?: number): Promise<void> {
-  const r = await net.fetch(candidate, { headers: { 'User-Agent': 'Knowbase-App' }, redirect: 'follow' })
+function partialSize(dest: string): number {
+  try { return statSync(dest).size } catch { return 0 }
+}
+
+/** 候选 URL 使用的镜像前缀('' = 直连) — 供下载中镜像切换检测比对 */
+function mirrorPrefixOf(candidate: string): string {
+  const current = resolveMirror()
+  if (current && candidate.startsWith(current + '/')) return current
+  for (const m of FALLBACK_MIRRORS) {
+    if (candidate.startsWith(m + '/')) return m
+  }
+  return ''
+}
+
+/** 从单通道下载到 dest,流式推送进度;支持断点续传(Range)、外部中断与镜像切换感知;失败抛出(由上层换通道) */
+async function downloadOne(
+  candidate: string,
+  dest: string,
+  expectedSize: number | undefined,
+  signal: AbortSignal,
+  startOffset: number,
+  mirrorPrefix: string,
+): Promise<void> {
+  const headers: Record<string, string> = { 'User-Agent': 'Knowbase-App' }
+  if (startOffset > 0) headers['Range'] = `bytes=${startOffset}-`
+  const r = await net.fetch(candidate, { headers, redirect: 'follow', signal })
   const ctype = String(r.headers.get('content-type') || '')
   if (!r.ok || !r.body) throw new Error(`${new URL(candidate).hostname} HTTP ${r.status}`)
   if (/text\/html/i.test(ctype)) throw new Error(`${new URL(candidate).hostname} 返回的是网页而非文件`)
-  const total = Number(r.headers.get('content-length') || 0)
+
+  // 服务器不支持 Range(应答 200 而非 206)→ 只能从头重下
+  let offset = startOffset
+  if (offset > 0 && r.status !== 206) offset = 0
+  const segTotal = Number(r.headers.get('content-length') || 0)
+  const totalFull = r.status === 206 ? offset + segTotal : segTotal
   // 大小前置校验:content-length 与期望不符 → 直接判坏字节,避免白下载整包
-  if (expectedSize && total > 0 && total !== expectedSize) {
-    throw new Error(`文件大小不符(期望 ${expectedSize},实际 ${total}),疑似坏字节`)
+  if (expectedSize && totalFull > 0 && totalFull !== expectedSize) {
+    throw new Error(`文件大小不符(期望 ${expectedSize},实际 ${totalFull}),疑似坏字节`)
   }
-  const out = createWriteStream(dest)
+  const out = createWriteStream(dest, { flags: offset > 0 ? 'a' : 'w' })
   let received = 0
   let lastPct = -1
   let slowTimer: NodeJS.Timeout | null = null
+  let mirrorTimer: NodeJS.Timeout | null = null
   const reader = Readable.fromWeb(r.body as import('stream/web').ReadableStream)
+
+  // 镜像纠错:下载中用户更换代理源 → 2s 内感知,中止当前通道,由上层按新镜像重算候选断点续传
+  mirrorTimer = setInterval(() => {
+    if (resolveMirror() !== mirrorPrefix) reader.destroy(new Error('MIRROR_CHANGED'))
+  }, 2000)
+  mirrorTimer.unref?.()
+
   reader.on('data', (chunk: Buffer) => {
     received += chunk.length
-    const pct = total > 0 ? Math.round((received / total) * 100) : 0
+    const done = offset + received
+    const pct = totalFull > 0 ? Math.round((done / totalFull) * 100) : 0
     if (pct !== lastPct) {
       lastPct = pct
-      pushProgress(pct, received, total)
+      pushProgress(pct, done, totalFull)
     }
   })
   try {
@@ -139,7 +176,7 @@ async function downloadOne(candidate: string, dest: string, expectedSize?: numbe
         slowTimer = setTimeout(() => {
           if (received < SLOW_MIN_BYTES) {
             reader.destroy()
-            rej(new Error(`${host} 下载过慢(15s 内不足 1MB),已切换通道`))
+            rej(new Error(`${host} 下载过慢(15s 内不足 2MB),已切换通道`))
           } else {
             scheduleSlowCheck()
           }
@@ -147,9 +184,11 @@ async function downloadOne(candidate: string, dest: string, expectedSize?: numbe
       }
       scheduleSlowCheck()
       pipeline(reader, out).then(res, e => { if (slowTimer) clearTimeout(slowTimer); rej(e) })
+      signal.addEventListener('abort', () => { try { reader.destroy() } catch { /* ignore */ } }, { once: true })
     })
   } finally {
     if (slowTimer) clearTimeout(slowTimer)
+    if (mirrorTimer) clearInterval(mirrorTimer)
   }
   // 流结束后的兜底校验:chunked/无 content-length 时服务器提前断流也会被截获
   if (expectedSize && statSync(dest).size !== expectedSize) {
@@ -221,7 +260,13 @@ export function registerUpdateHandlers(deps?: { getSettingValue?: (key: string) 
   })
 
 let downloading = false
-  ipcMain.handle('update:download', async (_e, url: string, name: string, expectedSize?: number) => {
+// 下载控制:暂停(保留断点续传)/取消(清除断点)/镜像切换纠错
+let pauseRequested = false
+let cancelRequested = false
+let activeDownloadAbort: AbortController | null = null
+let lastDownloadDest = ''
+
+ipcMain.handle('update:download', async (_e, url: string, name: string, expectedSize?: number) => {
     if (downloading) return { success: false, message: '已有下载任务进行中' }
     try {
       const parsed = new URL(url)
@@ -233,31 +278,82 @@ let downloading = false
     }
     const safeName = String(name || 'Knowbase-setup.exe').split(/[\\/]/).pop() || 'Knowbase-setup.exe'
     downloading = true
+    pauseRequested = false
+    cancelRequested = false
+    activeDownloadAbort = new AbortController()
     const dir = app.getPath('downloads')
     try { if (!existsSync(dir)) mkdirSync(dir, { recursive: true }) } catch { /* ignore */ }
     const dest = join(dir, safeName)
+    lastDownloadDest = dest
     let lastErr = ''
     try {
-      // 逐个候选通道:下载 → 完整性校验 → 通过才返回;坏字节自动换下一通道
-      for (const candidate of downloadCandidates(url)) {
-        try {
-          await downloadOne(candidate, dest, expectedSize)
-          const check = await verifyInstaller(dest, expectedSize, url)
-          if (check.ok) {
-            pushProgress(100, statSync(dest).size, expectedSize || statSync(dest).size)
-            return { success: true, filePath: dest }
+      // 逐个候选通道:下载 → 完整性校验 → 通过才返回;坏字节自动换下一通道。
+      // 暂停=中止但保留断点(下次 download 从断点 Range 续传);取消=中止并清除断点;
+      // 下载中更换镜像 → downloadOne 2s 内感知抛 MIRROR_CHANGED → 重算候选列表断点续传。
+      let restarts = 0
+      let restart = true
+      while (restart && restarts < 5) {
+        restart = false
+        for (const candidate of downloadCandidates(url)) {
+          if (pauseRequested || cancelRequested) break
+          try {
+            await downloadOne(candidate, dest, expectedSize, activeDownloadAbort.signal, partialSize(dest), mirrorPrefixOf(candidate))
+            const check = await verifyInstaller(dest, expectedSize, url)
+            if (check.ok) {
+              pushProgress(100, statSync(dest).size, expectedSize || statSync(dest).size)
+              return { success: true, filePath: dest }
+            }
+            lastErr = check.message
+            try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
+          } catch (e: any) {
+            if (e?.name === 'AbortError' || pauseRequested || cancelRequested) {
+              if (cancelRequested) break
+              return { success: false, paused: true, receivedBytes: partialSize(dest), message: '下载已暂停,可随时继续' }
+            }
+            if (e?.message === 'MIRROR_CHANGED') {
+              // 换镜像纠错:断点保留,重算候选列表(新镜像优先)继续下
+              restart = true
+              restarts++
+              break
+            }
+            lastErr = e?.message || String(e)
+            try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
           }
-          lastErr = check.message
-          try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
-        } catch (e: any) {
-          lastErr = e?.message || String(e)
-          try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
         }
       }
-return { success: false, message: lastErr || '所有下载通道均失败' }
+      if (pauseRequested) {
+        return { success: false, paused: true, receivedBytes: partialSize(dest), message: '下载已暂停,可随时继续' }
+      }
+      if (cancelRequested) {
+        try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
+        return { success: false, cancelled: true, message: '下载已取消' }
+      }
+      return { success: false, message: lastErr || '所有下载通道均失败' }
     } finally {
       downloading = false
+      activeDownloadAbort = null
     }
+  })
+
+  ipcMain.handle('update:pauseDownload', () => {
+    if (!downloading) return { ok: false, message: '没有进行中的下载' }
+    pauseRequested = true
+    activeDownloadAbort?.abort()
+    return { ok: true }
+  })
+
+  ipcMain.handle('update:cancelDownload', () => {
+    if (downloading) {
+      cancelRequested = true
+      activeDownloadAbort?.abort()
+      return { ok: true }
+    }
+    // 暂停态取消:清理断点文件
+    if (lastDownloadDest && existsSync(lastDownloadDest)) {
+      try { unlinkSync(lastDownloadDest) } catch { /* ignore */ }
+      return { ok: true, removedPartial: true }
+    }
+    return { ok: false, message: '没有进行中的下载' }
   })
 
   ipcMain.handle('update:install', (_e, filePath: string) => {
