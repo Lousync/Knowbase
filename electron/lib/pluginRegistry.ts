@@ -46,7 +46,7 @@ const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons']
 /** Skill 变量名规则（提示词 {{var}} 占位符） */
 const SKILL_VAR_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,30}$/
 /** Skill 声明依赖的工具名（命名空间规则与 ToolRegistry 一致，一期仅展示不校验执行权） */
@@ -57,7 +57,7 @@ const LEVEL_RANK: Record<RiskLevel, number> = { S: 0, A: 1, B: 2 }
 // 数据级贡献键(命中即为 A 级)
 const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'knowledgePages']
 // 内容级贡献键(仅含这些为 S 级)
-const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills']
+const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons']
 // UI 插件能力白名单(一期发布值;data.* 预留语法本期不放行)
 const KNOWN_CAPABILITIES = ['theme', 'clipboard']
 

@@ -132,6 +132,7 @@ export const SETTINGS = {
   summaryWeeklyDay:      { default: 0, desc: '周总结日（0=周日 … 6=周六）' },
   summaryMonthlyMode:    { default: 'last', desc: '月总结日模式：first=每月第一天 / last=每月最后一天 / fixed=固定日' },
   summaryMonthlyFixedDay: { default: 1, desc: '固定月总结日的日期（1-28）' },
+  sidebarIconStyle:      { default: 'default', desc: '侧边栏图标风格（default=手绘 / classic140=1.4.0 细线 / plugin:<插件id>:<包id>）' },
 
   // ---- 打卡提醒 ----
   checkinReminderEnabled: { default: true,   desc: '启用打卡提醒' },

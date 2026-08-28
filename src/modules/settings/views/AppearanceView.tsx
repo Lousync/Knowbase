@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Sun, Moon, Puzzle, CheckCircle2, ChevronRight } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
-import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon } from '../../../components/shared/ModuleIcons'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, IconPreview } from '../../../components/shared/ModuleIcons'
 import { ensurePluginThemeStyles, type PluginThemeWithVars } from '../../../lib/pluginService'
+import { BUILTIN_ICON_PACKS, usePluginIconPacks, type IconModuleId } from '../../../lib/sidebarIcons'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={24} />,
@@ -18,6 +19,14 @@ export function AppearanceView() {
   const { s, update } = useSettings()
   const [pluginThemes, setPluginThemes] = useState<PluginThemeWithVars[]>([])
   const [themeListOpen, setThemeListOpen] = useState(true)
+  const pluginIconPacks = usePluginIconPacks()
+
+  const iconPacks = [
+    ...BUILTIN_ICON_PACKS.map(p => ({ id: p.id, label: p.label, desc: '' })),
+    ...pluginIconPacks.map(p => ({ id: p.id, label: p.label, desc: `来自插件「${p.pluginName}」` })),
+  ]
+  // 预览用的模块抽样
+  const PREVIEW_MODULES: IconModuleId[] = ['blog', 'schedule', 'knowledge', 'toolbox', 'moments']
 
   useEffect(() => {
     ensurePluginThemeStyles().then(setPluginThemes).catch(() => {})
@@ -75,6 +84,38 @@ export function AppearanceView() {
           ))}
         </div>
       )}
+      </div>
+
+      {/* 侧边栏图标风格(插件可通过 sidebarIcons 贡献追加,新包自动出现在列表末尾) */}
+      <div className="mb-8">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">侧边栏图标</h3>
+        <p className="text-[11px] text-[var(--text-muted)] mb-3">活动栏模块图标风格;安装带图标包的插件后会自动追加到列表末尾。</p>
+        <div className="space-y-1.5 max-w-md">
+          {iconPacks.map(pack => (
+            <button
+              key={pack.id}
+              onClick={() => update('sidebarIconStyle', pack.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                s.sidebarIconStyle === pack.id
+                  ? 'border-[var(--accent)] bg-[var(--bg-selected)]'
+                  : 'border-[var(--border-color)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              <span className="flex items-center gap-2.5 shrink-0 text-[var(--text-muted)]">
+                {PREVIEW_MODULES.map(m => (
+                  <IconPreview key={m} moduleId={m} packId={pack.id} size={20} />
+                ))}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className={`block text-[13px] font-medium truncate ${s.sidebarIconStyle === pack.id ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+                  {pack.label}
+                </span>
+                {pack.desc && <span className="block text-[11px] text-[var(--text-muted)] truncate">{pack.desc}</span>}
+              </span>
+              {s.sidebarIconStyle === pack.id && <CheckCircle2 size={15} className="text-[var(--accent)] shrink-0" />}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="mb-8">

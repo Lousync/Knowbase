@@ -1,4 +1,6 @@
 import React from 'react'
+import { useSettings } from '../../lib/SettingsContext'
+import { useSidebarIconNode, type IconModuleId } from '../../lib/sidebarIcons'
 
 /**
  * 统一风格的手绘模块图标（24px 视口、圆角描边）。
@@ -30,7 +32,7 @@ function Svg({ size = 24, className, children }: IconProps & { children: React.R
 }
 
 /** 博客：带折角的文档 + 两行文字 */
-export function BlogIcon(props: IconProps) {
+function BlogIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M6 3.5h7.2L17.5 7.8V19a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5Z" />
@@ -42,7 +44,7 @@ export function BlogIcon(props: IconProps) {
 }
 
 /** 日程：带对勾的日历 */
-export function ScheduleIcon(props: IconProps) {
+function ScheduleIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5Z" />
@@ -55,7 +57,7 @@ export function ScheduleIcon(props: IconProps) {
 }
 
 /** 知识库：文件夹 */
-export function KnowledgeIcon(props: IconProps) {
+function KnowledgeIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l1.8 2h8a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17V7.5Z" />
@@ -66,7 +68,7 @@ export function KnowledgeIcon(props: IconProps) {
 }
 
 /** 说说：微信风格气泡 + 三点 */
-export function MomentsIcon(props: IconProps) {
+function MomentsIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-3.5 3.2a.55.55 0 0 1-.94-.39V17H6.5A2.5 2.5 0 0 1 4 14.5v-8Z" />
@@ -78,7 +80,7 @@ export function MomentsIcon(props: IconProps) {
 }
 
 /** 工具箱：工具箱 */
-export function ToolboxIcon(props: IconProps) {
+function ToolboxIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M9 9V6.7c0-.8.5-1.45 1.2-1.75l2-.9c.65-.3 1.35.05 1.65.7l.7 1.5c.2.4.3.85.3 1.3V9" />
@@ -88,7 +90,7 @@ export function ToolboxIcon(props: IconProps) {
 }
 
 /** 导出：托盘 + 向上箭头 */
-export function ExportIcon(props: IconProps) {
+function ExportIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M12 4.5v9" />
@@ -99,7 +101,7 @@ export function ExportIcon(props: IconProps) {
 }
 
 /** 回收站：垃圾桶 */
-export function RecycleIcon(props: IconProps) {
+function RecycleIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M4.5 7h15" />
@@ -112,7 +114,7 @@ export function RecycleIcon(props: IconProps) {
 }
 
 /** 帮助：问号 */
-export function HelpIcon(props: IconProps) {
+function HelpIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <circle cx="12" cy="12" r="8.5" />
@@ -123,7 +125,7 @@ export function HelpIcon(props: IconProps) {
 }
 
 /** 用户：人像 */
-export function UserIcon(props: IconProps) {
+function UserIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <circle cx="12" cy="8.2" r="3.6" />
@@ -133,7 +135,7 @@ export function UserIcon(props: IconProps) {
 }
 
 /** 设置：调节滑杆 */
-export function SettingsIcon(props: IconProps) {
+function SettingsIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M4 21v-7" />
@@ -150,10 +152,55 @@ export function SettingsIcon(props: IconProps) {
 }
 
 /** 插件:拼图块 */
-export function PluginIcon(props: IconProps) {
+function PluginIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M9.5 4.5a2 2 0 1 1 4 0V6h3A1.5 1.5 0 0 1 18 7.5v3h1.5a2 2 0 1 1 0 4H18v3a1.5 1.5 0 0 1-1.5 1.5h-3v-1.5a2 2 0 1 0-4 0V19h-3A1.5 1.5 0 0 1 5 17.5v-3H3.5a2 2 0 1 1 0-4H5v-3A1.5 1.5 0 0 1 6.5 6h3V4.5Z" />
     </Svg>
   )
+}
+// ===== 风格感知包装(设置→外观→侧边栏图标;default 走上方手绘实现) =====
+
+function StyleAware({ moduleId, Fallback, size = 24, className }: IconProps & {
+  moduleId: IconModuleId
+  Fallback: (props: IconProps) => React.ReactElement
+}) {
+  const { s } = useSettings()
+  const node = useSidebarIconNode(s.sidebarIconStyle ?? 'default', moduleId, size, className)
+  if (node) return <>{node}</>
+  return <Fallback size={size} className={className} />
+}
+
+const HAND_DRAWN: Record<IconModuleId, (props: IconProps) => React.ReactElement> = {
+  blog: BlogIconHandDrawn,
+  schedule: ScheduleIconHandDrawn,
+  knowledge: KnowledgeIconHandDrawn,
+  moments: MomentsIconHandDrawn,
+  toolbox: ToolboxIconHandDrawn,
+  plugins: PluginIconHandDrawn,
+  recycle: RecycleIconHandDrawn,
+  help: HelpIconHandDrawn,
+  user: UserIconHandDrawn,
+  settings: SettingsIconHandDrawn,
+  export: ExportIconHandDrawn,
+}
+
+export function BlogIcon(props: IconProps) { return <StyleAware moduleId="blog" Fallback={BlogIconHandDrawn} {...props} /> }
+export function ScheduleIcon(props: IconProps) { return <StyleAware moduleId="schedule" Fallback={ScheduleIconHandDrawn} {...props} /> }
+export function KnowledgeIcon(props: IconProps) { return <StyleAware moduleId="knowledge" Fallback={KnowledgeIconHandDrawn} {...props} /> }
+export function MomentsIcon(props: IconProps) { return <StyleAware moduleId="moments" Fallback={MomentsIconHandDrawn} {...props} /> }
+export function ToolboxIcon(props: IconProps) { return <StyleAware moduleId="toolbox" Fallback={ToolboxIconHandDrawn} {...props} /> }
+export function ExportIcon(props: IconProps) { return <StyleAware moduleId="export" Fallback={ExportIconHandDrawn} {...props} /> }
+export function RecycleIcon(props: IconProps) { return <StyleAware moduleId="recycle" Fallback={RecycleIconHandDrawn} {...props} /> }
+export function HelpIcon(props: IconProps) { return <StyleAware moduleId="help" Fallback={HelpIconHandDrawn} {...props} /> }
+export function UserIcon(props: IconProps) { return <StyleAware moduleId="user" Fallback={UserIconHandDrawn} {...props} /> }
+export function SettingsIcon(props: IconProps) { return <StyleAware moduleId="settings" Fallback={SettingsIconHandDrawn} {...props} /> }
+export function PluginIcon(props: IconProps) { return <StyleAware moduleId="plugins" Fallback={PluginIconHandDrawn} {...props} /> }
+
+/** 任意包预览:设置→外观 的图标选择器用它渲染每个包的效果 */
+export function IconPreview({ moduleId, packId, size = 24, className }: { moduleId: IconModuleId; packId: string } & IconProps) {
+  const node = useSidebarIconNode(packId, moduleId, size, className)
+  if (node) return <>{node}</>
+  const Fallback = HAND_DRAWN[moduleId]
+  return Fallback ? <Fallback size={size} className={className} /> : null
 }
