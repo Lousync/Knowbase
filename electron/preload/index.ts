@@ -252,6 +252,13 @@ const api = {
   deleteHabit: (id: string) => ipcRenderer.invoke('habit:delete', id),
   toggleHabitCheck: (habitId: string, date: string) => ipcRenderer.invoke('habit:toggleCheck', habitId, date),
   reorderHabits: (orderedIds: string[]) => ipcRenderer.invoke('habit:reorder', orderedIds),
+  habitLinkSave: (habitId: string, link: unknown) => ipcRenderer.invoke('habitLink:save', habitId, link),
+  habitLinkRemove: (habitId: string) => ipcRenderer.invoke('habitLink:remove', habitId),
+  onHabitAutoChecked: (cb: (items: unknown) => void) => {
+    const listener = (_e: unknown, items: unknown) => cb(items)
+    ipcRenderer.on('habit:autoChecked', listener)
+    return () => ipcRenderer.removeListener('habit:autoChecked', listener)
+  },
   // bookmark nav
   bookmarkGetAll: () => ipcRenderer.invoke('bookmark:getAll'),
   createBookmarkCategory: (data: unknown) => ipcRenderer.invoke('bookmark:createCategory', data),
@@ -306,3 +313,11 @@ const devtoolsApi = {
 }
 contextBridge.exposeInMainWorld('devtoolsApi', devtoolsApi)
 export type DevtoolsElectronAPI = typeof devtoolsApi
+
+// AI 测试桥上报通道(仅 DEV):与 devtoolsApi 同款约定 —— 打包版主进程侧
+// 不注册 handler(app.isPackaged 守卫),调用必然被拒,不影响生产行为。
+const devbridgeApi = {
+  report: (payload: unknown) => ipcRenderer.invoke('devbridge:report', payload),
+}
+contextBridge.exposeInMainWorld('devbridgeApi', devbridgeApi)
+export type DevbridgeElectronAPI = typeof devbridgeApi

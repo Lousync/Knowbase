@@ -409,6 +409,17 @@ app.whenReady().then(async () => {
     }
   })
   await initDatabase()
+  // AI 测试桥(构建期由 __DEV_BRIDGE__ 消除, 运行期再以 app.isPackaged 兜底)。
+  // installCapture 同步安装采集, 必须早于下方各 Repository 注册 handler,
+  // 否则 IPC 追踪一个通道都覆盖不到; HTTP 服务改为异步启动, 不阻塞启动流程。
+  if (__DEV_BRIDGE__ && !app.isPackaged) {
+    const bridge = await import('../devbridge')
+    bridge.installCapture()
+    void bridge.startBridge({
+      getMainWindow: () => mainWindow,
+      getSettingValue: (key) => settingsCache[key],
+    })
+  }
   registerWindowHandlers()
   registerEntryHandlers()
   registerTagHandlers()

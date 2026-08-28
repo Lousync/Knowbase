@@ -11,6 +11,9 @@ const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 
 if (mode === 'dev') {
+  // AI 测试桥:dev 默认开启(显式设 KNOWBASE_DEV_BRIDGE=0 可关闭)。
+  // 生产构建不经过本分支,因此无论环境变量如何都不会打包该能力。
+  if (env.KNOWBASE_DEV_BRIDGE === undefined) env.KNOWBASE_DEV_BRIDGE = '1'
   const child = process.platform === 'win32'
     ? spawn('cmd.exe', ['/c', 'npx', 'electron-vite', 'dev'], {
         env, cwd: path.join(__dirname, '..'), stdio: 'inherit', shell: false

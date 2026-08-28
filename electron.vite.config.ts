@@ -6,6 +6,11 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
+    // AI 测试桥开关：构建期静态替换。为 false 时 main 中的动态 import 会被
+    // tree-shake 掉，devbridge 整个 chunk 不进产物（生产零残留）。
+    define: {
+      __DEV_BRIDGE__: JSON.stringify(process.env.KNOWBASE_DEV_BRIDGE === '1')
+    },
     build: {
       outDir: 'out/main',
       rollupOptions: {
