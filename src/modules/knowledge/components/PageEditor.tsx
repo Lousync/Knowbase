@@ -68,6 +68,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [showTagInput, setShowTagInput] = useState(false)
   // Wiki link disambiguation: when multiple pages share the same title
   const [wikiPicker, setWikiPicker] = useState<{ title: string; candidates: KnowledgePage[] } | null>(null)
+  // 空链接建页确认(应用内 ConfirmDialog — Electron 原生 confirm 会破坏键盘焦点,禁止使用)
+  const [wikiCreateTitle, setWikiCreateTitle] = useState<string | null>(null)
   const [showBacklinks, setShowBacklinks] = useState(true)
   // Toolbar portals: render the editor toolbar into the tab bar row (merged layer 1 + 2)
   const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
@@ -544,7 +546,13 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       setWikiPicker({ title, candidates: matches })
       return true
     }
-    if (!window.confirm(`知识库中还没有「${title}」这个页面，是否现在创建？`)) return false
+    // 0 匹配 → 弹应用内确认对话框,确认后建页(不能用 window.confirm,会破坏键盘焦点)
+    setWikiCreateTitle(title)
+    return true
+  }
+
+  const createPageFromWikiLink = (title: string) => {
+    setWikiCreateTitle(null)
     void (async () => {
       try {
         const created = await createKnowledgePage({
@@ -561,7 +569,6 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         showToast({ type: 'error', message: '创建失败，请重试' })
       }
     })()
-    return true
   }
 
   return (
@@ -938,6 +945,17 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           if (unsavedAction) { const a = unsavedAction; setUnsavedAction(null); a() }
         }}
         onCancel={() => { setShowUnsavedConfirm(false); setUnsavedAction(null) }}
+      />
+
+      {/* Wiki 空链接建页确认 */}
+      <ConfirmDialog
+        open={wikiCreateTitle !== null}
+        title="页面不存在"
+        message={`知识库中还没有「${wikiCreateTitle ?? ''}」这个页面，是否现在创建？`}
+        confirmLabel="创建"
+        showCheckbox={false}
+        onConfirm={() => { if (wikiCreateTitle) createPageFromWikiLink(wikiCreateTitle) }}
+        onCancel={() => setWikiCreateTitle(null)}
       />
 
       {/* Delete confirm dialog */}

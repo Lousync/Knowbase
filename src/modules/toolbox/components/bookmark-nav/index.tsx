@@ -6,6 +6,7 @@ import {
   deleteBookmarkCategory, openBookmarkUrl, pickBookmarkImportFile,
 } from '../../../../lib/ipc'
 import { showToast } from '../../../../lib/toast'
+import { ConfirmDialog } from '../../../../components/shared'
 import { buildJsonExport, buildHtmlExport, parseJsonImport, domainOf } from './io'
 import { CategorySidebar } from './components/CategorySidebar'
 import { BookmarkEditModal, CategoryEditModal } from './components/BookmarkModals'
@@ -76,24 +77,37 @@ export function BookmarkNav({ onBack }: Props) {
     }).catch(() => {})
   }, [])
 
-  const handleDeleteBookmark = useCallback(async (b: BookmarkItem) => {
-    if (!window.confirm(`确定删除书签「${b.title}」？`)) return
-    try {
-      await deleteBookmarkItem(b.id)
-      setBookmarks(cur => cur.filter(x => x.id !== b.id))
-    } catch (e) { console.error('删除书签失败', e) }
+  // 删除确认(应用内 ConfirmDialog — Electron 原生 confirm 会破坏键盘焦点,禁止使用)
+  const [confirmDelete, setConfirmDelete] = useState<
+    { kind: 'bookmark'; item: BookmarkItem } | { kind: 'category'; item: BookmarkCategory; count: number } | null
+  >(null)
+
+  const handleDeleteBookmark = useCallback((b: BookmarkItem) => {
+    setConfirmDelete({ kind: 'bookmark', item: b })
   }, [])
 
-  const handleDeleteCategory = useCallback(async (c: BookmarkCategory) => {
+  const handleDeleteCategory = useCallback((c: BookmarkCategory) => {
     const n = bookmarks.filter(b => b.categoryId === c.id).length
-    if (!window.confirm(`确定删除分类「${c.name}」？${n > 0 ? `其中 ${n} 个书签将移入未分类。` : ''}`)) return
+    setConfirmDelete({ kind: 'category', item: c, count: n })
+  }, [bookmarks])
+
+  const performConfirmedDelete = useCallback(async () => {
+    if (!confirmDelete) return
     try {
-      await deleteBookmarkCategory(c.id)
-      setCategories(cur => cur.filter(x => x.id !== c.id))
-      setBookmarks(cur => cur.map(b => (b.categoryId === c.id ? { ...b, categoryId: '' } : b)))
-      if (selected === c.id) setSelected('all')
-    } catch (e) { console.error('删除分类失败', e) }
-  }, [bookmarks, selected])
+      if (confirmDelete.kind === 'bookmark') {
+        await deleteBookmarkItem(confirmDelete.item.id)
+        setBookmarks(cur => cur.filter(x => x.id !== confirmDelete.item.id))
+      } else {
+        const c = confirmDelete.item
+        await deleteBookmarkCategory(c.id)
+        setCategories(cur => cur.filter(x => x.id !== c.id))
+        setBookmarks(cur => cur.map(b => (b.categoryId === c.id ? { ...b, categoryId: '' } : b)))
+        if (selected === c.id) setSelected('all')
+      }
+    } catch (e) { console.error('删除失败', e) } finally {
+      setConfirmDelete(null)
+    }
+  }, [confirmDelete, selected])
 
   // ---- 导出 ----
   const dateTag = () => localToday()
@@ -347,6 +361,19 @@ export function BookmarkNav({ onBack }: Props) {
           onSaved={() => { setCategoryEditor(null); void refresh() }}
         />
       )}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={confirmDelete?.kind === 'category' ? '删除分类' : '删除书签'}
+        message={
+          confirmDelete?.kind === 'category'
+            ? `确定删除分类「${confirmDelete.item.name}」？${confirmDelete.count > 0 ? `其中 ${confirmDelete.count} 个书签将移入未分类。` : ''}`
+            : `确定删除书签「${confirmDelete?.item.title ?? ''}」？`
+        }
+        confirmLabel="删除"
+        showCheckbox={false}
+        onConfirm={() => void performConfirmedDelete()}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   )
 }

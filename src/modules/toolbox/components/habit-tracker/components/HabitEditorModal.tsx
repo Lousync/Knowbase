@@ -3,6 +3,7 @@ import { X, Trash2 } from 'lucide-react'
 import type { Habit, HabitRuleType } from '../../../../../types'
 import { createHabit, updateHabit, deleteHabit } from '../../../../../lib/ipc'
 import { showToast } from '../../../../../lib/toast'
+import { ConfirmDialog } from '../../../../../components/shared'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -34,6 +35,9 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
   const [ruleDays, setRuleDays] = useState<number[]>(habit?.ruleDays ?? [1, 2, 3, 4, 5])
   const [weeklyTarget, setWeeklyTarget] = useState<number>(habit?.weeklyTarget ?? 3)
   const [saving, setSaving] = useState(false)
+  // 删除确认用应用内 ConfirmDialog — Electron 的 window.confirm 会破坏渲染进程键盘焦点,
+  // 确认后全应用输入框都无法输入,只能重启(历史 bug),禁止再引入原生对话框
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
   const canSave = name.trim().length > 0 && (ruleType !== 'weekdays' || ruleDays.length > 0)
 
@@ -62,9 +66,9 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
 
   const handleDelete = async () => {
     if (!habit) return
-    if (!window.confirm(`确定删除习惯「${habit.name}」？其所有打卡记录将一并删除。`)) return
     try {
       await deleteHabit(habit.id)
+      setConfirmDeleteOpen(false)
       onSaved()
     } catch (e) {
       console.error('删除习惯失败', e)
@@ -73,6 +77,7 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[420px] shadow-2xl"
         onClick={e => e.stopPropagation()}>
@@ -163,7 +168,7 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
         {/* 底部 */}
         <div className="flex items-center px-5 py-3 border-t border-[var(--border-color)]">
           {mode === 'edit' ? (
-            <button onClick={() => void handleDelete()}
+            <button onClick={() => setConfirmDeleteOpen(true)}
               className="p-1.5 rounded text-[var(--text-muted)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
               title="删除习惯">
               <Trash2 size={15} />
@@ -182,5 +187,15 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
         </div>
       </div>
     </div>
+    <ConfirmDialog
+      open={confirmDeleteOpen}
+      title="删除习惯"
+      message={`确定删除习惯「${habit?.name ?? ''}」？其所有打卡记录将一并删除。`}
+      confirmLabel="删除"
+      showCheckbox={false}
+      onConfirm={() => void handleDelete()}
+      onCancel={() => setConfirmDeleteOpen(false)}
+    />
+    </>
   )
 }
