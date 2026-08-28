@@ -62,7 +62,9 @@ Knowbase/
 │   ├── main/index.ts          # 窗口管理 + IPC 调度 + 安全策略
 │   ├── main/passwordFiller.ts # 密码快速填充悬浮窗
 │   ├── preload/index.ts       # contextBridge 安全 API 桥接
-│   ├── database/connection.ts # sql.js 初始化 / 迁移（事务化）/ 原子持久化
+│   ├── database/connection.ts # sql.js 初始化 / 迁移调度（单事务）/ 原子持久化
+│   ├── database/migrations/   # 逐版本迁移：一文件一迁移 NNN_name.ts + index.ts 顺序表
+│   ├── database/paths.ts      # 附件目录等路径解析（供迁移复用，避免循环依赖）
 │   ├── database/repositories/ # 各模块 Repository（SQL 全参数化）
 │   └── lib/                   # 推送服务、ZIP、路径防护、更新检查等
 ├── src/
