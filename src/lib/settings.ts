@@ -141,6 +141,9 @@ export const SETTINGS = {
   // ---- 新手引导 ----
   onboardingDone: { default: false, desc: '已完成新手引导' },
 
+  // ---- 彩蛋 ----
+  badgeEggActivated: { default: false, desc: '彩蛋：标题栏角标变为 YHAz（外观页底部无标注输入框输入 YHAz 激活）' },
+
   // ---- AI 工具 ----
   aiToolMonthlyLimit: { default: 0, desc: 'AI 工具月度调用上限（0=不限）' },
 

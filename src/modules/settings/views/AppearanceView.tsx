@@ -19,6 +19,9 @@ export function AppearanceView() {
   const { s, update } = useSettings()
   const [pluginThemes, setPluginThemes] = useState<PluginThemeWithVars[]>([])
   const [themeListOpen, setThemeListOpen] = useState(true)
+  const [eggInput, setEggInput] = useState('')
+  // 彩蛋:输入正确口令激活角标;输入其他值确认则还原(隐式开关),界面无任何标注
+  const applyEgg = () => { update('badgeEggActivated', eggInput === 'YHAz'); setEggInput('') }
   const pluginIconPacks = usePluginIconPacks()
 
   const iconPacks = [
@@ -167,6 +170,21 @@ export function AppearanceView() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          value={eggInput}
+          onChange={e => setEggInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') applyEgg() }}
+          className="w-32 px-2 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        />
+        <button
+          onClick={applyEgg}
+          className="px-3 py-1 text-[11px] rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+        >
+          确定
+        </button>
       </div>
     </div>
   )

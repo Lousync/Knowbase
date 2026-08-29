@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSettings } from '../../lib/SettingsContext'
 import { Minus, Square, X, Copy, Pin, Lock, ArrowDownToLine, Loader2, Play } from 'lucide-react'
 import { checkForUpdate, downloadUpdate, installUpdate, onUpdateDownloadProgress } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
@@ -8,6 +9,8 @@ function showToastSafe(message: string): void {
 }
 
 export function TitleBar() {
+  const { s: settings } = useSettings()
+  const badgeEgg = settings.badgeEggActivated
   const [isMaximized, setIsMaximized] = useState(false)
   const [isPinned, setIsPinned] = useState(false)
 
@@ -102,11 +105,11 @@ export function TitleBar() {
       <div className="flex-1" />
 
       {/* 开发版角标：dev server �?http://，打包版�?file:// */}
-      {typeof location !== 'undefined' && location.protocol === 'http:' && (
+      {(typeof location !== 'undefined' && location.protocol === 'http:') || badgeEgg ? (
         <span className="absolute left-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 no-drag select-none">
-          DEV
+          {badgeEgg ? 'YHAz' : 'DEV'}
         </span>
-      )}
+      ) : null}
 
       {/* VS Code 风格居中搜索�?�?absolute centering */}
       <div className="absolute left-1/2 -translate-x-1/2 no-drag" style={{ width: 'min(100% - 180px, 560px)' }}>
