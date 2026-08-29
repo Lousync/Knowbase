@@ -275,8 +275,9 @@ export function startServer(preferredPort = DEFAULT_PORT): Promise<StartedServer
 
     const tryListen = (port: number) => {
       server.once('error', (err: NodeJS.ErrnoException) => {
-        // EACCES 同样顺延:Windows 上端口落在系统保留段(Hyper-V/WSL 排除范围)时抛 EACCES 而非 EADDRINUSE
-        if ((err.code === 'EADDRINUSE' || err.code === 'EACCES') && attempt < 10) {
+        // Windows 系统保留段(Hyper-V/WSL 动态排除)是连续整块(实测本机 7465 起约 25+ 个端口全部 EACCES),
+        // 步进 1 时必须跨过整块才能落点,故尝试上限取 120(7465→7585)而非小步数
+        if ((err.code === 'EADDRINUSE' || err.code === 'EACCES') && attempt < 120) {
           attempt++
           tryListen(port + 1)
           return
