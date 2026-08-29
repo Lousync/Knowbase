@@ -1,0 +1,628 @@
+{
+  "id": "knowbase.english-reading-pack",
+  "name": "英语阅读材料包",
+  "version": "1.0.0",
+  "author": "Knowbase",
+  "description": "英语阅读材料：考研英语一历年真题精读（原文+题目+答案解析）、四六级真题阅读理解、VOA 慢速英语分级短文（公有领域）。配合划词翻译与生词本使用，仅供个人学习交流。",
+  "type": "declarative",
+  "icon": "icon.svg",
+  "category": "知识包",
+  "riskLevel": "A",
+  "contributes": {
+    "knowledgePages": {
+      "space": "英语阅读",
+      "notebooks": [
+        {
+          "name": "考研英语一精读",
+          "coverColor": "#2c3e70",
+          "chapters": [
+            {
+              "name": "2017 真题",
+              "pages": [
+                {
+                  "file": "pages/kaoyan/2017-text-1.md",
+                  "title": "2017 Text 1",
+                  "externalId": "eng-ky1-2017-t1",
+                  "tags": [
+                    "考研英语",
+                    "2017",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2017-text-2.md",
+                  "title": "2017 Text 2",
+                  "externalId": "eng-ky1-2017-t2",
+                  "tags": [
+                    "考研英语",
+                    "2017",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2017-text-3.md",
+                  "title": "2017 Text 3",
+                  "externalId": "eng-ky1-2017-t3",
+                  "tags": [
+                    "考研英语",
+                    "2017",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2017-text-4.md",
+                  "title": "2017 Text 4",
+                  "externalId": "eng-ky1-2017-t4",
+                  "tags": [
+                    "考研英语",
+                    "2017",
+                    "阅读精读"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "2018 真题",
+              "pages": [
+                {
+                  "file": "pages/kaoyan/2018-text-1.md",
+                  "title": "2018 Text 1",
+                  "externalId": "eng-ky1-2018-t1",
+                  "tags": [
+                    "考研英语",
+                    "2018",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2018-text-2.md",
+                  "title": "2018 Text 2",
+                  "externalId": "eng-ky1-2018-t2",
+                  "tags": [
+                    "考研英语",
+                    "2018",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2018-text-3.md",
+                  "title": "2018 Text 3",
+                  "externalId": "eng-ky1-2018-t3",
+                  "tags": [
+                    "考研英语",
+                    "2018",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2018-text-4.md",
+                  "title": "2018 Text 4",
+                  "externalId": "eng-ky1-2018-t4",
+                  "tags": [
+                    "考研英语",
+                    "2018",
+                    "阅读精读"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "2019 真题",
+              "pages": [
+                {
+                  "file": "pages/kaoyan/2019-text-1.md",
+                  "title": "2019 Text 1",
+                  "externalId": "eng-ky1-2019-t1",
+                  "tags": [
+                    "考研英语",
+                    "2019",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2019-text-2.md",
+                  "title": "2019 Text 2",
+                  "externalId": "eng-ky1-2019-t2",
+                  "tags": [
+                    "考研英语",
+                    "2019",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2019-text-3.md",
+                  "title": "2019 Text 3",
+                  "externalId": "eng-ky1-2019-t3",
+                  "tags": [
+                    "考研英语",
+                    "2019",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2019-text-4.md",
+                  "title": "2019 Text 4",
+                  "externalId": "eng-ky1-2019-t4",
+                  "tags": [
+                    "考研英语",
+                    "2019",
+                    "阅读精读"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "2021 真题",
+              "pages": [
+                {
+                  "file": "pages/kaoyan/2021-text-1.md",
+                  "title": "2021 Text 1",
+                  "externalId": "eng-ky1-2021-t1",
+                  "tags": [
+                    "考研英语",
+                    "2021",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2021-text-2.md",
+                  "title": "2021 Text 2",
+                  "externalId": "eng-ky1-2021-t2",
+                  "tags": [
+                    "考研英语",
+                    "2021",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2021-text-3.md",
+                  "title": "2021 Text 3",
+                  "externalId": "eng-ky1-2021-t3",
+                  "tags": [
+                    "考研英语",
+                    "2021",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2021-text-4.md",
+                  "title": "2021 Text 4",
+                  "externalId": "eng-ky1-2021-t4",
+                  "tags": [
+                    "考研英语",
+                    "2021",
+                    "阅读精读"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "2022 真题",
+              "pages": [
+                {
+                  "file": "pages/kaoyan/2022-text-2.md",
+                  "title": "2022 Text 2",
+                  "externalId": "eng-ky1-2022-t2",
+                  "tags": [
+                    "考研英语",
+                    "2022",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2022-text-3.md",
+                  "title": "2022 Text 3",
+                  "externalId": "eng-ky1-2022-t3",
+                  "tags": [
+                    "考研英语",
+                    "2022",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2022-text-4.md",
+                  "title": "2022 Text 4",
+                  "externalId": "eng-ky1-2022-t4",
+                  "tags": [
+                    "考研英语",
+                    "2022",
+                    "阅读精读"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "2023 真题",
+              "pages": [
+                {
+                  "file": "pages/kaoyan/2023-text-1.md",
+                  "title": "2023 Text 1",
+                  "externalId": "eng-ky1-2023-t1",
+                  "tags": [
+                    "考研英语",
+                    "2023",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2023-text-2.md",
+                  "title": "2023 Text 2",
+                  "externalId": "eng-ky1-2023-t2",
+                  "tags": [
+                    "考研英语",
+                    "2023",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2023-text-3.md",
+                  "title": "2023 Text 3",
+                  "externalId": "eng-ky1-2023-t3",
+                  "tags": [
+                    "考研英语",
+                    "2023",
+                    "阅读精读"
+                  ]
+                },
+                {
+                  "file": "pages/kaoyan/2023-text-4.md",
+                  "title": "2023 Text 4",
+                  "externalId": "eng-ky1-2023-t4",
+                  "tags": [
+                    "考研英语",
+                    "2023",
+                    "阅读精读"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "四六级真题阅读",
+          "coverColor": "#1a7a4c",
+          "chapters": [
+            {
+              "name": "四级 2023年6月",
+              "pages": [
+                {
+                  "file": "pages/cet/CET4-2023.06-1.md",
+                  "title": "2023年6月 大学英语四级 阅读理解（第 1 套）",
+                  "externalId": "eng-cet-CET4-2023.06-1",
+                  "tags": [
+                    "四级",
+                    "2023年6月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET4-2023.06-2.md",
+                  "title": "2023年6月 大学英语四级 阅读理解（第 2 套）",
+                  "externalId": "eng-cet-CET4-2023.06-2",
+                  "tags": [
+                    "四级",
+                    "2023年6月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET4-2023.06-3.md",
+                  "title": "2023年6月 大学英语四级 阅读理解（第 3 套）",
+                  "externalId": "eng-cet-CET4-2023.06-3",
+                  "tags": [
+                    "四级",
+                    "2023年6月",
+                    "阅读理解"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "四级 2023年12月",
+              "pages": [
+                {
+                  "file": "pages/cet/CET4-2023.12-1.md",
+                  "title": "2023年12月 大学英语四级 阅读理解（第 1 套）",
+                  "externalId": "eng-cet-CET4-2023.12-1",
+                  "tags": [
+                    "四级",
+                    "2023年12月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET4-2023.12-2.md",
+                  "title": "2023年12月 大学英语四级 阅读理解（第 2 套）",
+                  "externalId": "eng-cet-CET4-2023.12-2",
+                  "tags": [
+                    "四级",
+                    "2023年12月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET4-2023.12-3.md",
+                  "title": "2023年12月 大学英语四级 阅读理解（第 3 套）",
+                  "externalId": "eng-cet-CET4-2023.12-3",
+                  "tags": [
+                    "四级",
+                    "2023年12月",
+                    "阅读理解"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "六级 2023年6月",
+              "pages": [
+                {
+                  "file": "pages/cet/CET6-2023.06-1.md",
+                  "title": "2023年6月 大学英语六级 阅读理解（第 1 套）",
+                  "externalId": "eng-cet-CET6-2023.06-1",
+                  "tags": [
+                    "六级",
+                    "2023年6月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET6-2023.06-2.md",
+                  "title": "2023年6月 大学英语六级 阅读理解（第 2 套）",
+                  "externalId": "eng-cet-CET6-2023.06-2",
+                  "tags": [
+                    "六级",
+                    "2023年6月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET6-2023.06-3.md",
+                  "title": "2023年6月 大学英语六级 阅读理解（第 3 套）",
+                  "externalId": "eng-cet-CET6-2023.06-3",
+                  "tags": [
+                    "六级",
+                    "2023年6月",
+                    "阅读理解"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "六级 2023年12月",
+              "pages": [
+                {
+                  "file": "pages/cet/CET6-2023.12-1.md",
+                  "title": "2023年12月 大学英语六级 阅读理解（第 1 套）",
+                  "externalId": "eng-cet-CET6-2023.12-1",
+                  "tags": [
+                    "六级",
+                    "2023年12月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET6-2023.12-2.md",
+                  "title": "2023年12月 大学英语六级 阅读理解（第 2 套）",
+                  "externalId": "eng-cet-CET6-2023.12-2",
+                  "tags": [
+                    "六级",
+                    "2023年12月",
+                    "阅读理解"
+                  ]
+                },
+                {
+                  "file": "pages/cet/CET6-2023.12-3.md",
+                  "title": "2023年12月 大学英语六级 阅读理解（第 3 套）",
+                  "externalId": "eng-cet-CET6-2023.12-3",
+                  "tags": [
+                    "六级",
+                    "2023年12月",
+                    "阅读理解"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "VOA 慢速英语",
+          "coverColor": "#8e5a1a",
+          "chapters": [
+            {
+              "name": "科技前沿",
+              "pages": [
+                {
+                  "file": "pages/voa/at-is-the-world-s-largest-plant-_6600354.md",
+                  "title": "What Is the World’s Largest Plant?",
+                  "externalId": "eng-voa-at-is-the-world-s-largest-plant-_6600354",
+                  "tags": [
+                    "VOA慢速",
+                    "科技前沿"
+                  ]
+                },
+                {
+                  "file": "pages/voa/discovered-under-paris-cathedral_6489314.md",
+                  "title": "Ancient Burial Discovered Under Paris Cathedral",
+                  "externalId": "eng-voa-discovered-under-paris-cathedral_6489314",
+                  "tags": [
+                    "VOA慢速",
+                    "科技前沿"
+                  ]
+                },
+                {
+                  "file": "pages/voa/r-sickening-california-sea-lions_7731778.md",
+                  "title": "Algae Blamed for Sickening California Sea Lions",
+                  "externalId": "eng-voa-r-sickening-california-sea-lions_7731778",
+                  "tags": [
+                    "VOA慢速",
+                    "科技前沿"
+                  ]
+                },
+                {
+                  "file": "pages/voa/a_earth-oxygen_3444163.md",
+                  "title": "Ancient Earth Had More Oxygen than Scientists Thought",
+                  "externalId": "eng-voa-a_earth-oxygen_3444163",
+                  "tags": [
+                    "VOA慢速",
+                    "科技前沿"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "健康生活",
+              "pages": [
+                {
+                  "file": "pages/voa/rotect-yourself-from-coronavirus_5313111.md",
+                  "title": "WHO’s Advice to Protect Yourself from Coronavirus",
+                  "externalId": "eng-voa-rotect-yourself-from-coronavirus_5313111",
+                  "tags": [
+                    "VOA慢速",
+                    "健康生活"
+                  ]
+                },
+                {
+                  "file": "pages/voa/mealworms-now-sold-as-food-in-eu_5889326.md",
+                  "title": "Mealworms Now Sold as Food in EU",
+                  "externalId": "eng-voa-mealworms-now-sold-as-food-in-eu_5889326",
+                  "tags": [
+                    "VOA慢速",
+                    "健康生活"
+                  ]
+                },
+                {
+                  "file": "pages/voa/a_one-minute-excercise_3306957.md",
+                  "title": "One Minute of Exercise May Be All You Need",
+                  "externalId": "eng-voa-a_one-minute-excercise_3306957",
+                  "tags": [
+                    "VOA慢速",
+                    "健康生活"
+                  ]
+                },
+                {
+                  "file": "pages/voa/-chicken-and-plant-based-protein_3460293.md",
+                  "title": "Study: To Live Longer, Eat More Chicken and Plant-Based Protein",
+                  "externalId": "eng-voa--chicken-and-plant-based-protein_3460293",
+                  "tags": [
+                    "VOA慢速",
+                    "健康生活"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "教育文化",
+              "pages": [
+                {
+                  "file": "pages/voa/a_6760526.md",
+                  "title": "Iraqi Artist Recreates Ancient Artwork",
+                  "externalId": "eng-voa-a_6760526",
+                  "tags": [
+                    "VOA慢速",
+                    "教育文化"
+                  ]
+                },
+                {
+                  "file": "pages/voa/-marilyn-painting-sells-for-195m_6565537.md",
+                  "title": "Warhol’s ‘Marilyn’ Painting Sells for $195M",
+                  "externalId": "eng-voa--marilyn-painting-sells-for-195m_6565537",
+                  "tags": [
+                    "VOA慢速",
+                    "教育文化"
+                  ]
+                },
+                {
+                  "file": "pages/voa/-soul-aretha-franklin-dead-at-76_4531400.md",
+                  "title": "‘Queen of Soul’ Aretha Franklin Dead at 76",
+                  "externalId": "eng-voa--soul-aretha-franklin-dead-at-76_4531400",
+                  "tags": [
+                    "VOA慢速",
+                    "教育文化"
+                  ]
+                },
+                {
+                  "file": "pages/voa/a_4372912.md",
+                  "title": "Four Shows Competing for the Tony for Best Musical",
+                  "externalId": "eng-voa-a_4372912",
+                  "tags": [
+                    "VOA慢速",
+                    "教育文化"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "经济商业",
+              "pages": [
+                {
+                  "file": "pages/voa/s-west-coast-ports-working-again_2660702.md",
+                  "title": "US West Coast Ports Working Again",
+                  "externalId": "eng-voa-s-west-coast-ports-working-again_2660702",
+                  "tags": [
+                    "VOA慢速",
+                    "经济商业"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "美国故事",
+              "pages": [
+                {
+                  "file": "pages/voa/-morgue-edgar-allen-poe-part-two_4015911.md",
+                  "title": "'The Murders in the Rue Morgue,' by Edgar Allen Poe, Part Two",
+                  "externalId": "eng-voa--morgue-edgar-allen-poe-part-two_4015911",
+                  "tags": [
+                    "VOA慢速",
+                    "美国故事"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "社会万象",
+              "pages": [
+                {
+                  "file": "pages/voa/a_2884395.md",
+                  "title": "Afghan Government: Taliban Leader Mullah Omar Died in 2013",
+                  "externalId": "eng-voa-a_2884395",
+                  "tags": [
+                    "VOA慢速",
+                    "社会万象"
+                  ]
+                },
+                {
+                  "file": "pages/voa/a_3125855.md",
+                  "title": "Suicide Attack Kills 26 in Pakistan",
+                  "externalId": "eng-voa-a_3125855",
+                  "tags": [
+                    "VOA慢速",
+                    "社会万象"
+                  ]
+                },
+                {
+                  "file": "pages/voa/a_2914530.md",
+                  "title": "MH17 Search Finds Possible Pieces of Russian Missile",
+                  "externalId": "eng-voa-a_2914530",
+                  "tags": [
+                    "VOA慢速",
+                    "社会万象"
+                  ]
+                },
+                {
+                  "file": "pages/voa/a_2843945.md",
+                  "title": "Iran Nuclear Talks Deadline Extended",
+                  "externalId": "eng-voa-a_2843945",
+                  "tags": [
+                    "VOA慢速",
+                    "社会万象"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
