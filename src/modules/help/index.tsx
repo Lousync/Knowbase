@@ -49,6 +49,16 @@ export function HelpModule() {
 
   useEffect(() => { loadDocs() }, [loadDocs])
 
+  // 帮助已并入设置列表:已在帮助节时再次深链(如 Toast「查看详情」)直接切换文档
+  useEffect(() => {
+    const onOpen = () => {
+      const target = pendingDocId
+      if (target) { setActiveDoc(target); pendingDocId = null }
+    }
+    window.addEventListener('help:open', onOpen)
+    return () => window.removeEventListener('help:open', onOpen)
+  }, [])
+
   // 插件模块安装/启禁/卸载帮助文档类插件后同步刷新
   useEffect(() => {
     window.addEventListener('plugins-changed', loadDocs)

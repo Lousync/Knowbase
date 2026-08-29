@@ -164,7 +164,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
                   </div>
                 ))}
               </div>
-              <p className="text-[12px] text-[var(--text-muted)]">更多技巧见左下角用户菜单的「帮助」。</p>
+              <p className="text-[12px] text-[var(--text-muted)]">更多技巧见左下角设置菜单的「帮助」。</p>
             </div>
           )}
         </div>

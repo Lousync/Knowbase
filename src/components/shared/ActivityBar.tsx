@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical } from 'lucide-react'
+import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, LifeBuoy } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
@@ -243,6 +243,15 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
               <SettingsIcon size={15} className="text-[var(--text-muted)]" />
               设置
+            </button>
+
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+
+            {/* 帮助 — 独立整页模块(仅文档侧栏,不嵌设置) */}
+            <button onClick={() => { onChange('help'); setMenuOpen(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+              <LifeBuoy size={15} className="text-[var(--text-muted)]" />
+              帮助
             </button>
 
             <div className="border-t border-[var(--border-color)] my-0.5" />

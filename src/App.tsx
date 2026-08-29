@@ -164,7 +164,7 @@ export default function App() {
     return () => window.removeEventListener('knowledge:open', handler)
   }, [])
 
-  // Listen for help:open — navigate to help tab
+  // Listen for help:open — navigate to help tab(入口:设置弹出菜单/Toast 深链)
   useEffect(() => {
     const handler = () => { setActiveTab('help'); setSidebarOpen(true) }
     window.addEventListener('help:open', handler)
