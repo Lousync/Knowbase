@@ -111,6 +111,7 @@ const api = {
   pluginSetEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('plugin:setEnabled', id, enabled),
   pluginUninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
   pluginGetContribution: (id: string, key: string) => ipcRenderer.invoke('plugin:getContribution', id, key),
+  pluginListDeleteFxSkins: () => ipcRenderer.invoke('plugin:listDeleteFxSkins'),
   // AI tools (ToolRegistry)
   aiToolsList: () => ipcRenderer.invoke('aiTools:list'),
   aiToolsInvoke: (name: string, args?: unknown) => ipcRenderer.invoke('aiTools:invoke', name, args),
@@ -287,6 +288,18 @@ const api = {
   createBlogTemplate: (d: unknown) => ipcRenderer.invoke('blogTpl:create', d),
   updateBlogTemplate: (id: string, d: unknown) => ipcRenderer.invoke('blogTpl:update', id, d),
   deleteBlogTemplate: (id: string) => ipcRenderer.invoke('blogTpl:delete', id),
+
+  // quiz records (收藏 + 错题本，全知识包通用)
+  quizRecordGetByPage: (pageId: string) => ipcRenderer.invoke('quizRecord:getByPage', pageId),
+  quizRecordReport: (pageId: string, quizNo: number, correct: boolean, meta: unknown) => ipcRenderer.invoke('quizRecord:report', pageId, quizNo, correct, meta),
+  quizRecordToggleFavorite: (pageId: string, quizNo: number, meta: unknown) => ipcRenderer.invoke('quizRecord:toggleFavorite', pageId, quizNo, meta),
+  quizRecordList: (opts: unknown) => ipcRenderer.invoke('quizRecord:list', opts),
+  quizRecordRemove: (pageId: string, quizNo: number) => ipcRenderer.invoke('quizRecord:remove', pageId, quizNo),
+  quizRecordSetCollections: (recordId: string, collectionIds: string[]) => ipcRenderer.invoke('quizRecord:setCollections', recordId, collectionIds),
+  quizCollectionList: () => ipcRenderer.invoke('quizCollection:list'),
+  quizCollectionCreate: (name: string) => ipcRenderer.invoke('quizCollection:create', name),
+  quizCollectionRename: (id: string, name: string) => ipcRenderer.invoke('quizCollection:rename', id, name),
+  quizCollectionDelete: (id: string) => ipcRenderer.invoke('quizCollection:delete', id),
 
   // fill popup
   isFillPopup,

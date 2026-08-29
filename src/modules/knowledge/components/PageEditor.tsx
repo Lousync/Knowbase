@@ -1,7 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal, ListChecks } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
+import { QuizMode } from '../../../components/shared/QuizMode'
+import { extractQuizzes } from '../../../components/shared/QuizParser'
 import type { KnowledgePage, KnowledgeCategory, KnowledgeTag, KnowledgeBacklinkItem } from '../../../types'
 import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinkContext, getKnowledgeManualLinks, addKnowledgeManualLink, removeKnowledgeManualLink, createKnowledgePage, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
@@ -10,6 +12,7 @@ import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '
 import { FILE_LANG_OPTIONS, getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../../lib/activeTab'
+import { visibleKnowledgeTags } from '../../../lib/knowledgeTags'
 import { ConfirmDialog } from '../../../components/shared'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
@@ -58,12 +61,21 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const annoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  // 沉浸刷题模式（页面含选择题时可用）
+  const [quizMode, setQuizMode] = useState(false)
+  /** 从当前内容解析出的可判题选择题列表 */
+  const quizzes = useMemo(() => {
+    if (fileType !== 'md' && fileType !== 'txt') return []
+    return extractQuizzes(content)
+  }, [content, fileType])
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
   const [unsavedAction, setUnsavedAction] = useState<(() => void) | null>(null)
   // Tags
   const [allTags, setAllTags] = useState<KnowledgeTag[]>([])
   const [entryTags, setEntryTags] = useState<KnowledgeTag[]>([])
+  /** 可见标签（隐藏知识包机器标签 kb-*） */
+  const visibleEntryTags = visibleKnowledgeTags(entryTags)
   const [newTagName, setNewTagName] = useState('')
   const [showTagInput, setShowTagInput] = useState(false)
   // Wiki link disambiguation: when multiple pages share the same title
@@ -643,6 +655,13 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                     <span className="ml-auto text-[10px] text-[var(--text-disabled)]">Ctrl+Shift+R</span>
                   </button>
                 )}
+                {quizzes.length > 0 && (
+                  <button onClick={() => { setQuizMode(true); setShowMoreMenu(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                    <ListChecks size={13} />刷题模式
+                    <span className="ml-auto text-[10px] text-[var(--text-disabled)]">{quizzes.length} 题</span>
+                  </button>
+                )}
                 <div className="my-1 border-t border-[var(--border-color)]" />
                 <button onClick={() => { setShowMoreMenu(false); handleDelete() }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] transition-colors">
@@ -756,6 +775,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>
             <MarkdownPreview
               content={content}
+              pageId={pageId}
+              pageTitle={title}
               knownWikiTitles={knownWikiTitles}
               onWikiLink={title => {
                 resolveInternalLink(title)
@@ -824,9 +845,12 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
         )}
 
-        {/* Tag bar — bottom metadata strip */}
-        <div className="flex items-center gap-1.5 px-4 py-1.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto">
-            {entryTags.map(t => (
+        {/* Tag bar — bottom metadata strip（知识包机器标签 kb-* 自动隐藏） */}
+        <div
+          className="flex items-center gap-1.5 px-4 py-1.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto"
+          title="标签用于搜索与关联：Ctrl+K 快速搜索可按标签筛选页面。知识包自动导入的内部溯源标签已隐藏。"
+        >
+            {visibleKnowledgeTags(entryTags).map(t => (
               <span key={t.id}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] shrink-0"
                 style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
@@ -839,7 +863,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 </button>
               </span>
             ))}
-            {entryTags.length < MAX_TAGS && (
+            {visibleEntryTags.length < MAX_TAGS && (
               showTagInput ? (
                 <input
                   autoFocus
@@ -858,8 +882,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 </button>
               )
             )}
-            {entryTags.length > 0 && (
-              <span className="text-[10px] text-[var(--text-disabled)] ml-1">{entryTags.length}/{MAX_TAGS}</span>
+            {visibleEntryTags.length > 0 && (
+              <span className="text-[10px] text-[var(--text-disabled)] ml-1">{visibleEntryTags.length}/{MAX_TAGS}</span>
             )}
         </div>
       </div>
@@ -1088,6 +1112,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             </div>
           </div>
         </div>
+      )}
+
+      {/* 沉浸刷题模式覆盖层（fixed 全屏，独立于阅读模式） */}
+      {quizMode && quizzes.length > 0 && (
+        <QuizMode quizzes={quizzes} pageTitle={title} pageId={pageId} onClose={() => setQuizMode(false)} />
       )}
     </div>
   )

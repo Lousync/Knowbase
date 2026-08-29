@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText, Folder, ListTree, X } from 'lucide-react'
+import { FileText, Folder, ListTree, X, BookMarked } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { registerAssistantContext } from '../../lib/assistantContext'
@@ -22,6 +22,7 @@ import { SpacePanel } from './components/SpacePanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { QuickSearch } from './components/QuickSearch'
+import { QuizCollection } from './components/QuizCollection'
 import { ConfirmDialog } from '../../components/shared'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { ImportZone } from '../shared/components/ImportZone'
@@ -55,6 +56,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [locatePageId, setLocatePageId] = useState<string | null>(null)
   const [locateCategoryId, setLocateCategoryId] = useState<string | null>(null)
   const [allKnowledgeTags, setAllKnowledgeTags] = useState<KnowledgeTag[]>([])
+  const [showQuizCollection, setShowQuizCollection] = useState(false)
+  /** 删除动画状态：条目删除时先被红色吞噬（animating），动画后消失（done，等待 IPC 完成） */
+  const [deletingMap, setDeletingMap] = useState<Map<string, 'animating' | 'done'>>(new Map())
+  const deletingRef = useRef(deletingMap)
+  deletingRef.current = deletingMap
 
   // ---- 剪贴板 ----
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
@@ -186,11 +192,35 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     })
     refreshAllPages(); refreshChapterPages()
   }
+  /**
+   * 带删除动画的执行器：动画与删除进度同步——
+   * 发起删除 → 条目进入"删除中"（红色吞噬持续推进 + 龙头循环咀嚼，直到删除真正完成）；
+   * 删除完成（IPC resolve）→ 收尾（快速吞完剩余 + 淡出）→ 条目消失并刷新；
+   * 删除失败 → 动画回退（条目恢复显示）。
+   */
+  const deleteWithAnimation = useCallback(async (id: string, fn: () => Promise<void>) => {
+    if (deletingRef.current.has(id)) return
+    setDeletingMap(m => new Map(m).set(id, 'animating'))
+    try {
+      await fn()          // 真实删除（耗时不定：小条目快、大空间慢）
+      // 删除完成 → 收尾：快速吞完 + 淡出（约 400ms，匹配收尾动画时长）
+      setDeletingMap(m => new Map(m).set(id, 'done'))
+      await new Promise<void>(r => setTimeout(r, 420))
+    } catch (e) {
+      console.error('[Knowledge] delete failed:', e)
+      showToast({ type: 'error', message: '删除失败，请重试' })
+    } finally {
+      setDeletingMap(m => { const n = new Map(m); n.delete(id); return n })
+      refreshCategories(); refreshAllPages(); refreshChapterPages(); refreshStarred()
+    }
+  }, [])
+
   const handleDeleteNotebook = async (id: string) => {
-    await deleteKnowledgeCategory(id)
-    if (selectedCategoryId === id) { setSelectedCategoryId(null); setSelectedChapterId(null) }
-    if (selectedSpaceId === id) { setSelectedSpaceId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }
-    refreshCategories(); refreshAllPages()
+    await deleteWithAnimation(id, async () => {
+      await deleteKnowledgeCategory(id)
+      if (selectedCategoryId === id) { setSelectedCategoryId(null); setSelectedChapterId(null) }
+      if (selectedSpaceId === id) { setSelectedSpaceId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }
+    })
   }
 
   // --- chapter CRUD ---
@@ -206,9 +236,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshCategories()
   }
   const handleDeleteChapter = async (id: string) => {
-    await deleteKnowledgeCategory(id)
-    if (selectedChapterId === id) setSelectedChapterId(null)
-    refreshCategories(); refreshChapterPages()
+    await deleteWithAnimation(id, async () => {
+      await deleteKnowledgeCategory(id)
+      if (selectedChapterId === id) setSelectedChapterId(null)
+    })
   }
 
   // --- page CRUD ---
@@ -403,20 +434,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [])
 
   const handlePageDeleted = useCallback(async (id: string) => {
-    await deleteKnowledgePage(id)
-    // 页面已删除，清除脏标记后直接关闭标签页（无需确认未保存）
-    setDirtyPageIds(prev => { const n = new Set(prev); n.delete(id); return n })
-    forceCloseTab(id)
-    await refreshAllPages()
-    await refreshChapterPages()
-    refreshStarred()
-    // After delete, if no page is active but the chapter still has pages, auto-open first one
-    const nextActiveId = activePageIdRef.current
-    const chId = selectedChapterIdRef.current
-    if (!nextActiveId && chId) {
-      const pages = await getKnowledgePages(chId)
-      if (pages.length > 0) handleOpenPage(pages[0].id)
-    }
+    await deleteWithAnimation(id, async () => {
+      await deleteKnowledgePage(id)
+      // 页面已删除，清除脏标记后直接关闭标签页（无需确认未保存）
+      setDirtyPageIds(prev => { const n = new Set(prev); n.delete(id); return n })
+      forceCloseTab(id)
+      // After delete, if no page is active but the chapter still has pages, auto-open first one
+      const nextActiveId = activePageIdRef.current
+      const chId = selectedChapterIdRef.current
+      if (!nextActiveId && chId) {
+        const pages = await getKnowledgePages(chId)
+        if (pages.length > 0) handleOpenPage(pages[0].id)
+      }
+    })
   }, [forceCloseTab])
 
   const handleReorderTabs = useCallback((newOrder: string[]) => { setOpenPageIds(newOrder) }, [])
@@ -974,6 +1004,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                 {readingPage && (
                   <MarkdownPreview
                     content={readingPage.contentMd}
+                    pageId={readingPage.id}
+                    pageTitle={readingPage.title}
                     knownWikiTitles={knownWikiTitles}
                     onWikiLink={t => {
                       const hit = allPages.find(p => p.title === t)
@@ -1053,6 +1085,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onCreateNotebook={handleCreateNotebook}
                       onRenameNotebook={handleRenameNotebook}
                       onDeleteNotebook={handleDeleteNotebook}
+                      deletingMap={deletingMap}
                       onOpenPage={handleOpenPage}
   onCreatePageNamed={handleCreatePageNamed}
                       onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
@@ -1118,6 +1151,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                 )}
               </>
             )}
+            {/* 侧边栏底部：错题本 / 收藏入口 */}
+            <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5">
+              <button
+                onClick={() => setShowQuizCollection(true)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                <BookMarked size={14} />
+                错题本 / 收藏
+              </button>
+            </div>
           </div>
         </ResizablePanel>
 
@@ -1186,6 +1229,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         }}
         onCancel={() => setUnsavedClosePageId(null)}
       />
+
+      {/* 错题本 / 收藏 */}
+      {showQuizCollection && <QuizCollection onClose={() => setShowQuizCollection(false)} />}
     </ImportZone>
   )
 }

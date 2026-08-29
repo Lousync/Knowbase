@@ -46,7 +46,7 @@ const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx']
 /** Skill 变量名规则（提示词 {{var}} 占位符） */
 const SKILL_VAR_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,30}$/
 /** Skill 声明依赖的工具名（命名空间规则与 ToolRegistry 一致，一期仅展示不校验执行权） */
@@ -57,7 +57,7 @@ const LEVEL_RANK: Record<RiskLevel, number> = { S: 0, A: 1, B: 2 }
 // 数据级贡献键(命中即为 A 级)
 const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'knowledgePages']
 // 内容级贡献键(仅含这些为 S 级)
-const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons']
+const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons', 'deleteFx']
 // UI 插件能力白名单(一期发布值;data.* 预留语法本期不放行)
 const KNOWN_CAPABILITIES = ['theme', 'clipboard']
 
@@ -76,6 +76,21 @@ export interface PluginManifest {
   capabilities?: string[]
   activation?: string[]
   contributes?: Record<string, unknown>
+}
+
+/** 删除动画皮肤（插件 contributes.deleteFx，纯数据 S 级） */
+export interface DeleteFxSkin {
+  pluginId?: string
+  id?: string
+  name?: string
+  /** SVG 片段（注入 <svg> 内，禁脚本/事件） */
+  dragonSvg?: string
+  /** 粒子颜色（#RRGGBB 等） */
+  particleColors?: string[]
+  /** 吞噬遮罩颜色 */
+  wipeColor?: string
+  /** 动画时长 ms（300-2000） */
+  durationMs?: number
 }
 
 interface InstalledEntry { id: string; version: string; enabled: boolean; installedAt: string; builtin?: boolean; userRemoved?: boolean; riskLevel?: RiskLevel; grantedCapabilities?: string[]; grantedAt?: string }
@@ -223,6 +238,23 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
             }
           }
         }
+      }
+      if (key === 'deleteFx') {
+        // 删除动画皮肤：纯数据（SVG 龙头 + 颜色 + 时长），S 级内容贡献
+        const fx = (raw.contributes as Record<string, unknown>).deleteFx
+        if (!fx || typeof fx !== 'object' || Array.isArray(fx)) return { error: 'deleteFx 必须是对象' }
+        const f = fx as Record<string, unknown>
+        if (f.name !== undefined && (typeof f.name !== 'string' || !f.name.trim() || f.name.length > 40)) return { error: 'deleteFx.name 缺失或过长' }
+        if (f.dragonSvg !== undefined) {
+          if (typeof f.dragonSvg !== 'string' || f.dragonSvg.length > 16 * 1024) return { error: 'deleteFx.dragonSvg 需为 ≤16KB 的 SVG 片段' }
+          if (/<script|<\/script|on\w+\s*=|javascript:/i.test(f.dragonSvg)) return { error: 'deleteFx.dragonSvg 含危险内容' }
+        }
+        if (f.particleColors !== undefined) {
+          if (!Array.isArray(f.particleColors) || f.particleColors.length === 0 || f.particleColors.length > 12) return { error: 'deleteFx.particleColors 需为 1-12 个颜色' }
+          if (f.particleColors.some((c: unknown) => typeof c !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(c))) return { error: 'deleteFx.particleColors 颜色格式非法' }
+        }
+        if (f.wipeColor !== undefined && (typeof f.wipeColor !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(f.wipeColor))) return { error: 'deleteFx.wipeColor 需为颜色值' }
+        if (f.durationMs !== undefined && (typeof f.durationMs !== 'number' || f.durationMs < 300 || f.durationMs > 2000)) return { error: 'deleteFx.durationMs 需在 300-2000 之间' }
       }
       if (key === 'tools') {
         const tools = (raw.contributes as Record<string, unknown>).tools
@@ -619,6 +651,31 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     } catch (e: any) {
       return { success: false, message: `安装失败: ${e?.message || e}` }
     }
+  })
+
+  ipcMain.handle('plugin:listDeleteFxSkins', (): DeleteFxSkin[] => {
+    // 删除动画皮肤聚合：所有已启用且声明 deleteFx 的插件
+    const idx = readIndex()
+    const out: DeleteFxSkin[] = []
+    for (const [id, entry] of Object.entries(idx)) {
+      if (!entry.enabled) continue
+      const dir = safePathInside(getPluginsRoot(), id)
+      if (!dir || !existsSync(dir)) continue
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) continue
+      const fx = (parsed.manifest.contributes as Record<string, unknown> | undefined)?.deleteFx as Record<string, unknown> | undefined
+      if (!fx || typeof fx !== 'object') continue
+      out.push({
+        pluginId: id,
+        id: typeof fx.id === 'string' && fx.id.trim() ? fx.id : id,
+        name: typeof fx.name === 'string' && fx.name.trim() ? fx.name : parsed.manifest.name,
+        dragonSvg: typeof fx.dragonSvg === 'string' ? fx.dragonSvg : undefined,
+        particleColors: Array.isArray(fx.particleColors) ? fx.particleColors.filter((c: unknown): c is string => typeof c === 'string') : undefined,
+        wipeColor: typeof fx.wipeColor === 'string' ? fx.wipeColor : undefined,
+        durationMs: typeof fx.durationMs === 'number' ? fx.durationMs : undefined,
+      })
+    }
+    return out
   })
 
   ipcMain.handle('plugin:getContribution', (_e, id: string, key: string) => {

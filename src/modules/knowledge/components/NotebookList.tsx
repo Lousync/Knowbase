@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Check, FileText, Folder, FolderOpen, BookOpen, BookPlus, Layers, ChevronRight, ChevronDown, ChevronUp, FolderPlus, FilePlus, Pencil, Trash2, Star, Download, FolderInput, Link2Off, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
+import { DeleteWipe } from '../../../components/shared/DeleteWipe'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -15,6 +16,8 @@ interface Props {
   allPages: KnowledgePage[]
   loosePages: KnowledgePage[]
   starredPages: KnowledgePage[]
+  /** 删除动画状态：'animating' 播放红色吞噬，'done' 不渲染（等待 IPC 完成） */
+  deletingMap?: Map<string, 'animating' | 'done'>
   selectedCategoryId: string | null
   focusChapterId: string | null
   activePageId: string | null
@@ -58,9 +61,12 @@ export function NotebookList({
   onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
   onSortCategory, onSortPage, onCreateChapterUnderNotebook, locatePageId, locateCategoryId,
   onCopy, onCut, onPaste, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds,
+  deletingMap,
   spaceId = null, onSelectSpace,
 }: Props) {
   const isSpaceView = !!spaceId
+  /** 删除动画中（animating 渲染动画 / done 直接隐藏） */
+  const deletingState = (id: string) => deletingMap?.get(id)
 
   // -- sort --
   const sortModes: Array<{ id: string; label: string }> = [
@@ -78,7 +84,7 @@ export function NotebookList({
       return a.sortOrder - b.sortOrder
     })
   }
-  // 空间沉浸视图下 root = 空间内的子项；空间列表视图下 root = 所有空间
+  // 空间沉浸视图下 root = 空间内的子项；空间列表视图下 root = 所有空间（done 的删除条目不渲染）
   const rootCats = sortCats(isSpaceView
     ? categories.filter(c => c.parentId === spaceId)
     : categories.filter(c => !c.parentId))
@@ -449,7 +455,9 @@ export function NotebookList({
             <div
               onClick={handleRowClick}
               className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
-                isSelected ? 'bg-[var(--bg-selected)] text-white'
+                deletingState(cat.id) === 'animating' ? 'kb-deleting'
+                  : deletingState(cat.id) === 'done' ? 'kb-deleting kb-done'
+                : isSelected ? 'bg-[var(--bg-selected)] text-white'
                 : dragOverId === cat.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}
@@ -494,6 +502,7 @@ export function NotebookList({
                 <button onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }} className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="重命名"><Pencil size={13} /></button>
                 <button onClick={e => { e.stopPropagation(); if (skipDeleteConfirm) onDeleteNotebook(cat.id); else setDeleteTarget({ id: cat.id, name: cat.name }) }} className="p-0.5 hover:text-[var(--danger)] text-[var(--text-secondary)]" title="删除"><Trash2 size={13} /></button>
               </div>
+              {deletingState(cat.id) === 'animating' && <DeleteWipe />}
             </div>
           )}
         </div>
@@ -541,7 +550,9 @@ export function NotebookList({
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
-                  activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                  : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
+                  : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
                 style={{
                   paddingLeft: `${(depth + 1) * 16 + 8}px`, paddingRight: '4px',
@@ -566,6 +577,7 @@ export function NotebookList({
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
             ))}
             {/* Sub-categories */}
@@ -736,7 +748,9 @@ export function NotebookList({
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
                   className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
-                    activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                    deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                  : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
+                    : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                   }`}
                   style={{
                     paddingLeft: '5px', paddingRight: '4px',
@@ -760,6 +774,7 @@ export function NotebookList({
                   )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                   {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                  {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
               ))}
               {pageCreateParent?.id === spaceId && renderNewPageInput('空间直属页面', 8)}
@@ -791,7 +806,9 @@ export function NotebookList({
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
                 className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
-                  activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                  : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
+                  : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                 }`}
                 style={{
                   paddingLeft: '5px', paddingRight: '4px',
@@ -815,6 +832,7 @@ export function NotebookList({
                 )}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
             ))}
           </div>
@@ -849,7 +867,11 @@ export function NotebookList({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] border-l-[3px] ${activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'}`}>
+                  className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] border-l-[3px] ${
+                    deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                  : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
+                    : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  }`}>
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
                   {editingPageId === p.id ? (
                     <input
@@ -865,6 +887,7 @@ export function NotebookList({
                     <span className="truncate flex-1">{p.title || '无标题'}</span>
                   )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                  {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
               ))}
             </div>

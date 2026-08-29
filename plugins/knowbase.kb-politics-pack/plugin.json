@@ -1,0 +1,131 @@
+{
+  "id": "knowbase.kb-politics-pack",
+  "name": "考研政治学习空间",
+  "version": "1.0.0",
+  "author": "Knowbase",
+  "description": "考研政治知识包：六大模块知识点（马原/毛中特/新思想/史纲/思修法基/形策当代）+ 时政专题 + 刷题库 + 分析题模板 + 历年真题考点回顾 + 背诵手册。内容依据全国硕士研究生招生考试政治大纲与统编教材整理，仅供个人学习交流。",
+  "type": "declarative",
+  "icon": "icon.svg",
+  "category": "知识包",
+  "riskLevel": "A",
+  "contributes": {
+    "knowledgePages": {
+      "space": "考研政治",
+      "notebooks": [
+        {
+          "name": "马原",
+          "coverColor": "#8e44ad",
+          "chapters": [
+            { "name": "导论", "pages": [ { "file": "pages/mayuan/00-daolun.md", "title": "导论：马克思主义是关于无产阶级和人类解放的科学", "externalId": "pol-my-00", "tags": ["考研政治", "马原", "导论"] } ] },
+            { "name": "世界的物质性及发展规律", "pages": [ { "file": "pages/mayuan/01-weiwulun.md", "title": "唯物论：世界的物质性", "externalId": "pol-my-01", "tags": ["考研政治", "马原", "唯物论"] }, { "file": "pages/mayuan/02-bianzhengfa.md", "title": "唯物辩证法：联系、发展与三大规律", "externalId": "pol-my-02", "tags": ["考研政治", "马原", "辩证法"] } ] },
+            { "name": "实践与认识及其发展规律", "pages": [ { "file": "pages/mayuan/03-renshilun.md", "title": "认识论：实践、认识、真理与价值", "externalId": "pol-my-03", "tags": ["考研政治", "马原", "认识论"] } ] },
+            { "name": "人类社会及其发展规律", "pages": [ { "file": "pages/mayuan/04-weiwushiguan.md", "title": "唯物史观：社会基本矛盾与人民群众", "externalId": "pol-my-04", "tags": ["考研政治", "马原", "唯物史观"] } ] },
+            { "name": "资本主义的本质及规律", "pages": [ { "file": "pages/mayuan/05-zibenlun.md", "title": "资本主义本质：劳动价值论与剩余价值论", "externalId": "pol-my-05", "tags": ["考研政治", "马原", "政治经济学"] } ] },
+            { "name": "资本主义的发展及其趋势", "pages": [ { "file": "pages/mayuan/06-longduan.md", "title": "垄断资本主义、经济全球化与当代变化", "externalId": "pol-my-06", "tags": ["考研政治", "马原", "垄断"] } ] },
+            { "name": "社会主义的发展及其规律", "pages": [ { "file": "pages/mayuan/07-sheke.md", "title": "科学社会主义与社会主义发展规律", "externalId": "pol-my-07", "tags": ["考研政治", "马原", "科学社会主义"] } ] },
+            { "name": "共产主义崇高理想及其最终实现", "pages": [ { "file": "pages/mayuan/08-gongchan.md", "title": "共产主义理想及其最终实现", "externalId": "pol-my-08", "tags": ["考研政治", "马原", "共产主义"] } ] }
+          ]
+        },
+        {
+          "name": "毛中特",
+          "coverColor": "#b03a2e",
+          "chapters": [
+            { "name": "导论与毛泽东思想", "pages": [ { "file": "pages/mzt/01-daolun.md", "title": "马克思主义中国化时代化与毛泽东思想", "externalId": "pol-mzt-01", "tags": ["考研政治", "毛中特", "毛泽东思想"] } ] },
+            { "name": "新民主主义革命理论", "pages": [ { "file": "pages/mzt/02-xinminzhu.md", "title": "新民主主义革命理论", "externalId": "pol-mzt-02", "tags": ["考研政治", "毛中特", "新民主主义"] } ] },
+            { "name": "社会主义改造与初步探索", "pages": [ { "file": "pages/mzt/03-gaizao.md", "title": "社会主义改造理论与社会建设初步探索", "externalId": "pol-mzt-03", "tags": ["考研政治", "毛中特", "社会主义改造"] } ] },
+            { "name": "中国特色社会主义理论体系", "pages": [ { "file": "pages/mzt/04-zhongte.md", "title": "中国特色社会主义理论体系（邓理论/三个代表/科学发展观）", "externalId": "pol-mzt-04", "tags": ["考研政治", "毛中特", "中特理论"] } ] },
+            { "name": "毛中特高频考点", "pages": [ { "file": "pages/mzt/05-gaopin.md", "title": "毛中特高频考点与易混对照", "externalId": "pol-mzt-05", "tags": ["考研政治", "毛中特", "高频考点"] } ] }
+          ]
+        },
+        {
+          "name": "新思想",
+          "coverColor": "#d35400",
+          "chapters": [
+            { "name": "总论与根本主题", "pages": [ { "file": "pages/xsix/01-zonglun.md", "title": "新时代坚持和发展中国特色社会主义", "externalId": "pol-xsx-01", "tags": ["考研政治", "新思想", "总论"] } ] },
+            { "name": "中国式现代化", "pages": [ { "file": "pages/xsix/02-xiandaihua.md", "title": "以中国式现代化全面推进中华民族伟大复兴", "externalId": "pol-xsx-02", "tags": ["考研政治", "新思想", "中国式现代化"] } ] },
+            { "name": "党的全面领导与人民中心", "pages": [ { "file": "pages/xsix/03-lingdao.md", "title": "坚持党的全面领导与以人民为中心", "externalId": "pol-xsx-03", "tags": ["考研政治", "新思想", "党的领导"] } ] },
+            { "name": "经济与改革", "pages": [ { "file": "pages/xsix/04-jingji.md", "title": "高质量发展、新发展格局与全面深化改革", "externalId": "pol-xsx-04", "tags": ["考研政治", "新思想", "高质量发展"] } ] },
+            { "name": "政治与法治", "pages": [ { "file": "pages/xsix/05-zhengzhi.md", "title": "全过程人民民主与全面依法治国", "externalId": "pol-xsx-05", "tags": ["考研政治", "新思想", "民主法治"] } ] },
+            { "name": "文化与社会生态", "pages": [ { "file": "pages/xsix/06-wenhua.md", "title": "文化强国、民生保障与生态文明", "externalId": "pol-xsx-06", "tags": ["考研政治", "新思想", "文化民生生态"] } ] },
+            { "name": "安全与外交", "pages": [ { "file": "pages/xsix/07-anquan.md", "title": "国家安全、一国两制与大国外交", "externalId": "pol-xsx-07", "tags": ["考研政治", "新思想", "安全外交"] } ] },
+            { "name": "党建与高频考点", "pages": [ { "file": "pages/xsix/08-dangjian.md", "title": "全面从严治党与新思想高频考点", "externalId": "pol-xsx-08", "tags": ["考研政治", "新思想", "党建"] } ] }
+          ]
+        },
+        {
+          "name": "史纲",
+          "coverColor": "#1f618d",
+          "chapters": [
+            { "name": "旧民主主义革命时期", "pages": [ { "file": "pages/shigang/01-jiu.md", "title": "旧民主主义革命时期（1840—1919）：历次探索与失败", "externalId": "pol-sg-01", "tags": ["考研政治", "史纲", "旧民主主义革命"] } ] },
+            { "name": "大革命与土地革命", "pages": [ { "file": "pages/shigang/02-dageming.md", "title": "新民主主义革命：大革命与土地革命（1919—1937）", "externalId": "pol-sg-02", "tags": ["考研政治", "史纲", "土地革命"] } ] },
+            { "name": "抗战与解放战争", "pages": [ { "file": "pages/shigang/03-kangzhan.md", "title": "抗日战争与解放战争（1937—1949）", "externalId": "pol-sg-03", "tags": ["考研政治", "史纲", "抗战解放"] } ] },
+            { "name": "社会主义革命与建设", "pages": [ { "file": "pages/shigang/04-shehui.md", "title": "社会主义革命与建设时期（1949—1978）", "externalId": "pol-sg-04", "tags": ["考研政治", "史纲", "社会主义建设"] } ] },
+            { "name": "改革开放与新时代", "pages": [ { "file": "pages/shigang/05-gaige.md", "title": "改革开放与中国特色社会主义新时代（1978—今）", "externalId": "pol-sg-05", "tags": ["考研政治", "史纲", "改革开放"] } ] }
+          ]
+        },
+        {
+          "name": "思修法基",
+          "coverColor": "#27ae60",
+          "chapters": [
+            { "name": "人生观", "pages": [ { "file": "pages/sixiu/01-renshengguan.md", "title": "领悟人生真谛、把握人生方向", "externalId": "pol-sx-01", "tags": ["考研政治", "思修法基", "人生观"] } ] },
+            { "name": "理想信念", "pages": [ { "file": "pages/sixiu/02-lixiang.md", "title": "追求远大理想、坚定崇高信念", "externalId": "pol-sx-02", "tags": ["考研政治", "思修法基", "理想信念"] } ] },
+            { "name": "中国精神", "pages": [ { "file": "pages/sixiu/03-zhongguojingshen.md", "title": "继承优良传统、弘扬中国精神", "externalId": "pol-sx-03", "tags": ["考研政治", "思修法基", "中国精神"] } ] },
+            { "name": "社会主义核心价值观", "pages": [ { "file": "pages/sixiu/04-hexinjiazhi.md", "title": "明确价值要求、践行价值准则", "externalId": "pol-sx-04", "tags": ["考研政治", "思修法基", "核心价值观"] } ] },
+            { "name": "道德", "pages": [ { "file": "pages/sixiu/05-daode.md", "title": "遵守道德规范、锤炼道德品格", "externalId": "pol-sx-05", "tags": ["考研政治", "思修法基", "道德"] } ] },
+            { "name": "法治", "pages": [ { "file": "pages/sixiu/06-fazhi.md", "title": "学习法治思想、提升法治素养", "externalId": "pol-sx-06", "tags": ["考研政治", "思修法基", "法治"] } ] }
+          ]
+        },
+        {
+          "name": "形策与当代",
+          "coverColor": "#2c3e50",
+          "chapters": [
+            { "name": "当代世界经济与政治", "pages": [ { "file": "pages/xingce/01-dangdai.md", "title": "当代世界经济与政治总论", "externalId": "pol-xc-01", "tags": ["考研政治", "形策", "当代"] } ] },
+            { "name": "全球治理与人类命运共同体", "pages": [ { "file": "pages/xingce/02-quanqiu.md", "title": "全球治理与人类命运共同体", "externalId": "pol-xc-02", "tags": ["考研政治", "形策", "全球治理"] } ] },
+            { "name": "2026 时政专题（上）", "pages": [ { "file": "pages/xingce/03-shizheng-a.md", "title": "2026 时政专题（一）：十五五规划与新质生产力", "externalId": "pol-xc-03", "tags": ["考研政治", "形策", "时政2026"] } ] },
+            { "name": "2026 时政专题（下）", "pages": [ { "file": "pages/xingce/04-shizheng-b.md", "title": "2026 时政专题（二）：全球治理与科技外交", "externalId": "pol-xc-04", "tags": ["考研政治", "形策", "时政2026"] } ] }
+          ]
+        },
+        {
+          "name": "刷题库",
+          "coverColor": "#16a085",
+          "chapters": [
+            { "name": "马原选择题", "pages": [ { "file": "pages/quizbank/mayuan.md", "title": "马原选择题精练（12 题）", "externalId": "pol-qz-01", "tags": ["考研政治", "刷题", "马原"] } ] },
+            { "name": "毛中特与新思想选择题", "pages": [ { "file": "pages/quizbank/mzt-xsx.md", "title": "毛中特与新思想选择题精练（12 题）", "externalId": "pol-qz-02", "tags": ["考研政治", "刷题", "毛中特"] } ] },
+            { "name": "史纲选择题", "pages": [ { "file": "pages/quizbank/shigang.md", "title": "史纲选择题精练（10 题）", "externalId": "pol-qz-03", "tags": ["考研政治", "刷题", "史纲"] } ] },
+            { "name": "思修法基选择题", "pages": [ { "file": "pages/quizbank/sixiu.md", "title": "思修法基选择题精练（8 题）", "externalId": "pol-qz-04", "tags": ["考研政治", "刷题", "思修法基"] } ] }
+          ]
+        },
+        {
+          "name": "分析题模板",
+          "coverColor": "#7d3c98",
+          "chapters": [
+            { "name": "通用框架与五科模板", "pages": [ { "file": "pages/template/01-tongyong.md", "title": "分析题通用框架（点-析-结）", "externalId": "pol-tpl-01", "tags": ["考研政治", "模板", "分析题"] }, { "file": "pages/template/02-wuke.md", "title": "五科分析题答题模板速查", "externalId": "pol-tpl-02", "tags": ["考研政治", "模板", "分析题"] } ] }
+          ]
+        },
+        {
+          "name": "历年真题",
+          "coverColor": "#7f8c8d",
+          "chapters": [
+            { "name": "2024—2026 真题考点回顾", "pages": [ { "file": "pages/exams/2024.md", "title": "2024 年真题考点回顾", "externalId": "pol-ex-2024", "tags": ["考研政治", "真题", "2024"] }, { "file": "pages/exams/2025.md", "title": "2025 年真题考点回顾", "externalId": "pol-ex-2025", "tags": ["考研政治", "真题", "2025"] }, { "file": "pages/exams/2026.md", "title": "2026 年真题考点回顾", "externalId": "pol-ex-2026", "tags": ["考研政治", "真题", "2026"] } ] }
+          ]
+        },
+        {
+          "name": "背诵手册",
+          "coverColor": "#c0392b",
+          "chapters": [
+            { "name": "史纲速记", "pages": [ { "file": "pages/recite/timeline.md", "title": "中国近现代史大事记时间轴（1840—今）", "externalId": "pol-recite-timeline", "tags": ["考研政治", "史纲", "时间轴"] }, { "file": "pages/recite/meetings.md", "title": "党史重要会议速查表（一大—二十大）", "externalId": "pol-recite-meetings", "tags": ["考研政治", "史纲", "会议"] } ] },
+            { "name": "土地政策与著作", "pages": [ { "file": "pages/recite/land-policy.md", "title": "土地政策演变表（1928—1950）", "externalId": "pol-recite-land-policy", "tags": ["考研政治", "史纲", "土地政策"] }, { "file": "pages/recite/mao-works.md", "title": "毛泽东重要著作速查表", "externalId": "pol-recite-mao-works", "tags": ["考研政治", "毛中特", "著作"] } ] },
+            { "name": "马原速记", "pages": [ { "file": "pages/recite/phil-basic.md", "title": "哲学基本问题与两大派别", "externalId": "pol-recite-phil-basic", "tags": ["考研政治", "马原", "哲学"] }, { "file": "pages/recite/dialectics.md", "title": "唯物辩证法：三大规律与五对范畴", "externalId": "pol-recite-dialectics", "tags": ["考研政治", "马原", "辩证法"] }, { "file": "pages/recite/epistemology.md", "title": "认识论核心：实践、认识、真理与价值", "externalId": "pol-recite-epistemology", "tags": ["考研政治", "马原", "认识论"] }, { "file": "pages/recite/pol-econ.md", "title": "政治经济学核心：商品、剩余价值与资本", "externalId": "pol-recite-pol-econ", "tags": ["考研政治", "马原", "政治经济学"] } ] },
+            { "name": "高频考点", "pages": [ { "file": "pages/recite/high-freq.md", "title": "高频考点与易混提法对照", "externalId": "pol-recite-high-freq", "tags": ["考研政治", "高频考点"] } ] }
+          ]
+        },
+        {
+          "name": "来源与许可",
+          "coverColor": "#616a6b",
+          "chapters": [
+            { "name": "声明", "pages": [ { "file": "pages/sources/notice.md", "title": "内容来源与版权声明", "externalId": "pol-src-notice", "tags": ["考研政治", "声明"] } ] }
+          ]
+        }
+      ]
+    }
+  }
+}

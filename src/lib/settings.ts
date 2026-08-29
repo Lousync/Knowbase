@@ -70,6 +70,7 @@ export const SETTINGS = {
   // ---- 外观 ----
   theme:             { default: 'dark',       desc: '界面主题' },
   editorFont:        { default: 'system',     desc: '编辑器字体' },
+  deleteFxSkin:      { default: 'builtin',    desc: '删除动画皮肤' },
 
   // ---- 编辑器 ----
   showLineNumbers:   { default: true,         desc: '编辑器显示行号' },

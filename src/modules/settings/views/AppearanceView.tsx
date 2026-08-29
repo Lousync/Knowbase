@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Sun, Moon, Puzzle, CheckCircle2, ChevronRight } from 'lucide-react'
+import { Sun, Moon, Puzzle, CheckCircle2, ChevronRight, Flame } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, IconPreview } from '../../../components/shared/ModuleIcons'
 import { ensurePluginThemeStyles, type PluginThemeWithVars } from '../../../lib/pluginService'
 import { BUILTIN_ICON_PACKS, usePluginIconPacks, type IconModuleId } from '../../../lib/sidebarIcons'
+import { pluginListDeleteFxSkins } from '../../../lib/ipc'
+import type { DeleteFxSkin } from '../../../types'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={24} />,
@@ -23,6 +25,17 @@ export function AppearanceView() {
   // 彩蛋:输入正确口令激活角标;输入其他值确认则还原(隐式开关),界面无任何标注
   const applyEgg = () => { update('badgeEggActivated', eggInput === 'YHAz'); setEggInput('') }
   const pluginIconPacks = usePluginIconPacks()
+
+  const [fxSkins, setFxSkins] = useState<DeleteFxSkin[]>([])
+  useEffect(() => {
+    let alive = true
+    pluginListDeleteFxSkins().then(list => alive && setFxSkins(list)).catch(() => {})
+    return () => { alive = false }
+  }, [])
+  const fxSkinOptions = [
+    { id: 'builtin', name: '内置红色进度条', desc: '纯红色吞噬进度条 · 与删除进度同步' },
+    ...fxSkins.map(s => ({ id: s.id || s.pluginId || '', name: s.name || s.pluginId || '', desc: `来自插件「${s.pluginId}」` })),
+  ]
 
   const iconPacks = [
     ...BUILTIN_ICON_PACKS.map(p => ({ id: p.id, label: p.label, desc: '' })),
@@ -87,6 +100,36 @@ export function AppearanceView() {
           ))}
         </div>
       )}
+      </div>
+
+      {/* 删除动画皮肤(插件可通过 deleteFx 贡献追加自定义龙头/粒子/颜色) */}
+      <div className="mb-8">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">删除动画皮肤</h3>
+        <p className="text-[11px] text-[var(--text-muted)] mb-3">知识库删除条目时的吞噬特效外观;安装带删除动画皮肤的插件后会自动追加到列表。</p>
+        <div className="space-y-1.5 max-w-md">
+          {fxSkinOptions.map(fx => (
+            <button
+              key={fx.id}
+              onClick={() => update('deleteFxSkin', fx.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                s.deleteFxSkin === fx.id
+                  ? 'border-[var(--accent)] bg-[var(--bg-selected)]'
+                  : 'border-[var(--border-color)] hover:bg-[var(--bg-hover)]'
+              }`}
+            >
+              <span className={`shrink-0 ${s.deleteFxSkin === fx.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`}>
+                <Flame size={20} />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className={`block text-[13px] font-medium truncate ${s.deleteFxSkin === fx.id ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+                  {fx.name}
+                </span>
+                <span className="block text-[11px] text-[var(--text-muted)] truncate">{fx.desc}</span>
+              </span>
+              {s.deleteFxSkin === fx.id && <CheckCircle2 size={15} className="text-[var(--accent)] shrink-0" />}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 侧边栏图标风格(插件可通过 sidebarIcons 贡献追加,新包自动出现在列表末尾) */}

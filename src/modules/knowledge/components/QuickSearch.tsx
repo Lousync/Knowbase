@@ -5,6 +5,7 @@ import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../../ty
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { searchKnowledgePages } from '../../../lib/ipc'
+import { isInternalKnowledgeTag } from '../../../lib/knowledgeTags'
 
 interface Props {
   pages: KnowledgePage[]
@@ -174,8 +175,9 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
       }
     }
 
-    // Tags by name — show tag result even if 0 pages use it
+    // Tags by name — show tag result even if 0 pages use it (知识包机器标签 kb-* 隐藏)
     for (const t of tags) {
+      if (isInternalKnowledgeTag(t.name)) continue
       if (fuzzyMatch(query, t.name)) {
         const tagPages = pages.filter(p => (p.tags || []).some(pt => pt.id === t.id))
         res.push({

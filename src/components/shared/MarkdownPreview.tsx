@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -8,6 +8,9 @@ import 'katex/dist/katex.min.css'
 import { Copy } from 'lucide-react'
 import { showToast } from '../../lib/toast'
 import { copyImageUrlToClipboard } from '../../lib/ipc'
+import { preprocessContent, parseQuizFence } from './QuizParser'
+import { QuizCard } from './QuizCard'
+import { normalizeAnswerLayout } from '../../lib/answerLayout'
 
 // Same ID generation as parseHeadings() in OutlinePanel — must match for outline navigation
 function headingId(text: string): string {
@@ -47,12 +50,18 @@ interface Props {
   onLinkClick?: (href: string) => void
   /** 已存在的页面标题集合：不在其中的 wiki 链接渲染为「空链接」虚线样式 */
   knownWikiTitles?: Set<string>
+  /** 来源页面 ID（传入后，页面内选择题启用收藏 + 错题上报） */
+  pageId?: string
+  /** 来源页面标题（用于错题本快照） */
+  pageTitle?: string
 }
 
 /** Unified markdown preview component. Links open via system handler (files → system app, URLs → browser). */
 /** 折叠块(kb-import-408.md 2.2 节):```spoiler-answer 围栏 → 答案/解析默认收起,内部走完整 Markdown 管线 */
 function SpoilerBlock({ content }: { content: string }) {
   const [open, setOpen] = useState(false)
+  // 大题解析排版优化：小问编号（1、/ (1) / 1) 等）自动断行，每个小问单独一行
+  const layoutContent = useMemo(() => normalizeAnswerLayout(content), [content])
   return (
     <div className="my-2.5">
       <button
@@ -67,14 +76,17 @@ function SpoilerBlock({ content }: { content: string }) {
       </button>
       {open && (
         <div className="mt-1.5 px-3 py-2 rounded-md border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-          <MarkdownPreview content={content} />
+          <MarkdownPreview content={layoutContent} />
         </div>
       )}
     </div>
   )
 }
 
-export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles }: Props) {
+export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles, pageId, pageTitle }: Props) {
+  // 旧 408 选择题格式 → ```quiz 围栏（供 pre 组件渲染判题卡片）；非选择题块原样保留
+  const processedContent = useMemo(() => preprocessContent(content), [content])
+
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
     if (onLinkClick) {
@@ -99,11 +111,16 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
         rehypePlugins={[rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]}
         urlTransform={safeUrlTransform}
         components={{
-          // 折叠块/动画 fence 不包 <pre>
+          // 折叠块/动画/选择题围栏不包 <pre>
           pre({ children }) {
             const child = Array.isArray(children) ? children[0] : children
             const cls = (React.isValidElement(child) && ((child.props as { className?: string }).className || '')) || ''
             if (/language-(spoiler|anim)/.test(cls)) return <>{children}</>
+            // ```quiz 围栏（新规范或旧格式预处理产物）→ 判题卡片；解析失败回退普通代码块
+            if (/language-quiz/.test(cls)) {
+              const quiz = parseQuizFence(extractText(children))
+              if (quiz) return <QuizCard quiz={quiz} pageId={pageId} pageTitle={pageTitle} />
+            }
             return <pre>{children}</pre>
           },
           // Override ul/ol to restore list-style killed by Tailwind reset
@@ -207,7 +224,7 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
           },
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   )

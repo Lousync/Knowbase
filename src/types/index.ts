@@ -23,6 +23,39 @@ export interface BlogTemplate {
   id: string; name: string; contentMd: string
   sortOrder: number; createdAt: string; updatedAt: string
 }
+
+// quiz records (收藏 + 错题本，全知识包通用)
+export interface QuizOptionDto { key: string; text: string }
+export interface QuizSnapshotDto {
+  no: number
+  question: string
+  options: QuizOptionDto[]
+  answer: string
+  explanation: string
+}
+export interface QuizRecordDto {
+  id: string
+  pageId: string
+  quizNo: number
+  pageTitle: string
+  isFavorite: boolean
+  wrongCount: number
+  correctCount: number
+  lastResult: number | null
+  snapshot: QuizSnapshotDto | null
+  sourceSpace: string
+  sourceNotebook: string
+  collectionIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+export interface QuizCollectionDto {
+  id: string
+  name: string
+  sortOrder: number
+  createdAt: string
+  count: number
+}
 export interface CreateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string }
 export interface UpdateToolboxScriptDTO { name?: string; description?: string; content?: string; language?: string; sortOrder?: number }
 
@@ -311,6 +344,21 @@ export interface PluginRegistryEntry {
 }
 
 export type PluginRiskLevel = 'S' | 'A' | 'B'
+
+/** 删除动画皮肤（插件 contributes.deleteFx，纯数据） */
+export interface DeleteFxSkin {
+  pluginId?: string
+  id?: string
+  name?: string
+  /** SVG 片段（注入 <svg> 内，禁脚本/事件） */
+  dragonSvg?: string
+  /** 粒子颜色（#RRGGBB 等） */
+  particleColors?: string[]
+  /** 吞噬遮罩颜色 */
+  wipeColor?: string
+  /** 动画时长 ms（300-2000） */
+  durationMs?: number
+}
 
 export interface PluginSummary {
   id: string
@@ -656,6 +704,7 @@ export interface ElectronAPI {
   pluginSetEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; message?: string }>
   pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
   pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
+  pluginListDeleteFxSkins: () => Promise<DeleteFxSkin[]>
   pluginSetGranted: (id: string, caps: string[]) => Promise<{ success: boolean; message?: string }>
   pluginAuditList: (id?: string) => Promise<PluginAuditEntry[]>
   pluginAuditClear: (id?: string) => Promise<{ success: boolean }>
@@ -782,6 +831,17 @@ export interface ElectronAPI {
   createBlogTemplate: (d: { name: string; contentMd?: string }) => Promise<BlogTemplate | null>
   updateBlogTemplate: (id: string, d: { name?: string; contentMd?: string }) => Promise<BlogTemplate | null>
   deleteBlogTemplate: (id: string) => Promise<void>
+  // quiz records (收藏 + 错题本)
+  quizRecordGetByPage: (pageId: string) => Promise<QuizRecordDto[]>
+  quizRecordReport: (pageId: string, quizNo: number, correct: boolean, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }) => Promise<QuizRecordDto>
+  quizRecordToggleFavorite: (pageId: string, quizNo: number, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }) => Promise<QuizRecordDto>
+  quizRecordList: (opts?: { kind?: 'favorite' | 'wrong' | 'all'; sourceSpace?: string; collectionId?: string }) => Promise<QuizRecordDto[]>
+  quizRecordRemove: (pageId: string, quizNo: number) => Promise<void>
+  quizRecordSetCollections: (recordId: string, collectionIds: string[]) => Promise<void>
+  quizCollectionList: () => Promise<QuizCollectionDto[]>
+  quizCollectionCreate: (name: string) => Promise<QuizCollectionDto>
+  quizCollectionRename: (id: string, name: string) => Promise<QuizCollectionDto>
+  quizCollectionDelete: (id: string) => Promise<void>
   // fill popup
   isFillPopup: boolean
   fillPopupTheme: string

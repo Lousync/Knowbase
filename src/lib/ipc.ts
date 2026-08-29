@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -124,6 +124,7 @@ export const pluginListInstalled = () => a().pluginListInstalled()
 export const pluginSetEnabled = (id: string, enabled: boolean) => a().pluginSetEnabled(id, enabled)
 export const pluginUninstall = (id: string) => a().pluginUninstall(id)
 export const pluginGetContribution = (id: string, key: string) => a().pluginGetContribution(id, key)
+export const pluginListDeleteFxSkins = () => a().pluginListDeleteFxSkins()
 export const pluginSetGranted = (id: string, caps: string[]) => a().pluginSetGranted(id, caps)
 export const pluginAuditList = (id?: string) => a().pluginAuditList(id)
 export const pluginAuditClear = (id?: string) => a().pluginAuditClear(id)
@@ -272,6 +273,18 @@ export const listBlogTemplates = () => a().listBlogTemplates()
 export const createBlogTemplate = (d: { name: string; contentMd?: string }) => a().createBlogTemplate(d)
 export const updateBlogTemplate = (id: string, d: { name?: string; contentMd?: string }) => a().updateBlogTemplate(id, d)
 export const deleteBlogTemplate = (id: string) => a().deleteBlogTemplate(id)
+
+// ===== Quiz records (收藏 + 错题本) =====
+export const quizRecordGetByPage = (pageId: string): Promise<QuizRecordDto[]> => a().quizRecordGetByPage(pageId)
+export const quizRecordReport = (pageId: string, quizNo: number, correct: boolean, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }): Promise<QuizRecordDto> => a().quizRecordReport(pageId, quizNo, correct, meta)
+export const quizRecordToggleFavorite = (pageId: string, quizNo: number, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }): Promise<QuizRecordDto> => a().quizRecordToggleFavorite(pageId, quizNo, meta)
+export const quizRecordList = (opts?: { kind?: 'favorite' | 'wrong' | 'all'; sourceSpace?: string; collectionId?: string }): Promise<QuizRecordDto[]> => a().quizRecordList(opts)
+export const quizRecordRemove = (pageId: string, quizNo: number): Promise<void> => a().quizRecordRemove(pageId, quizNo)
+export const quizRecordSetCollections = (recordId: string, collectionIds: string[]): Promise<void> => a().quizRecordSetCollections(recordId, collectionIds)
+export const quizCollectionList = (): Promise<QuizCollectionDto[]> => a().quizCollectionList()
+export const quizCollectionCreate = (name: string): Promise<QuizCollectionDto> => a().quizCollectionCreate(name)
+export const quizCollectionRename = (id: string, name: string): Promise<QuizCollectionDto> => a().quizCollectionRename(id, name)
+export const quizCollectionDelete = (id: string): Promise<void> => a().quizCollectionDelete(id)
 
 // ===== AI Tools (ToolRegistry) =====
 export const aiToolsList = (): Promise<AiToolsListResult> => a().aiToolsList()

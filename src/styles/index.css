@@ -244,3 +244,109 @@ input:focus, textarea:focus, select:focus {
   animation: onboarding-in 180ms ease-out;
 }
 
+/* ===== 删除吞噬动画：与删除进度同步（外观可被插件 deleteFx 皮肤替换） =====
+   两阶段：
+   - 删除中（.kb-deleting）：红色吞噬推进到 ~55% 后停住，龙头循环咀嚼、粒子持续喷（直到删除真正完成）
+   - 收尾（.kb-deleting.kb-done）：删除完成后快速吞完剩余 + 行淡出消失 */
+@keyframes kb-delete-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.kb-deleting {
+  position: relative;
+  pointer-events: none;
+}
+.kb-deleting.kb-done {
+  animation: kb-delete-fade 220ms ease-in 140ms forwards;
+}
+/* 特效层（红色吞噬 + 龙头 + 粒子） */
+.kb-delete-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: visible;
+}
+@keyframes kb-wipe-partial {
+  from { width: 0%; }
+  to { width: 55%; }
+}
+@keyframes kb-wipe-full {
+  from { width: 55%; }
+  to { width: 100%; }
+}
+.kb-wipe-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: auto;
+  width: 0%;
+  background: var(--kb-wipe, var(--danger));
+}
+.kb-deleting .kb-wipe-fill {
+  animation: kb-wipe-partial var(--kb-dur, 1100ms) cubic-bezier(0.55, 0, 0.55, 0.2) forwards;
+}
+.kb-deleting.kb-done .kb-wipe-fill {
+  animation: kb-wipe-full 180ms ease-in forwards;
+}
+/* 龙头：删除中推进到半程后循环张嘴，收尾时掠过整行 */
+@keyframes kb-dragon-run-partial {
+  from { transform: translateX(0); }
+  to { transform: translateX(-60%); }
+}
+@keyframes kb-dragon-run-full {
+  from { transform: translateX(-60%); }
+  to { transform: translateX(-118%); }
+}
+@keyframes kb-jaw {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.22); }
+}
+.kb-dragon {
+  position: absolute;
+  right: -12px;
+  top: -26px;
+  animation: kb-dragon-run-partial var(--kb-dur, 1100ms) cubic-bezier(0.4, 0, 0.6, 1) forwards,
+             kb-jaw 380ms ease-in-out var(--kb-dur, 1100ms) infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  transform-origin: 40% 60%;
+}
+.kb-deleting.kb-done .kb-dragon {
+  animation: kb-dragon-run-full 200ms ease-in forwards;
+}
+.kb-dragon-skin svg {
+  width: 120px;
+  height: auto;
+  display: block;
+}
+/* 粒子：删除中循环喷出，收尾时熄灭 */
+@keyframes kb-particle-fly {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.95; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.25); opacity: 0; }
+}
+.kb-particle {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  right: 8px;
+  background: var(--p, var(--kb-p, #ff7043));
+  animation: kb-particle-fly 520ms ease-out infinite;
+}
+.kb-deleting.kb-done .kb-particle {
+  animation: none;
+  opacity: 0;
+}
+.kb-p1 { --dx: -34px; --dy: -18px; --p: #ffb74d; top: 4px;  animation-delay: 40ms; }
+.kb-p2 { --dx: -26px; --dy: -28px; --p: #ff5252; top: 12px; animation-delay: 90ms; }
+.kb-p3 { --dx: -40px; --dy: -8px;  --p: #ff7043; top: 18px; animation-delay: 20ms; }
+.kb-p4 { --dx: -18px; --dy: -34px; --p: #ff8a65; top: 8px;  animation-delay: 130ms; }
+.kb-p5 { --dx: -46px; --dy: -2px;  --p: #ffd180; top: 14px; animation-delay: 60ms; }
+.kb-p6 { --dx: -30px; --dy: -22px; --p: #ff5252; top: 20px; animation-delay: 110ms; }
+@media (prefers-reduced-motion: reduce) {
+  .kb-deleting { animation: none; }
+  .kb-deleting .kb-wipe-fill { animation: none; width: 100%; }
+  .kb-delete-fx .kb-dragon, .kb-delete-fx .kb-particle { display: none; }
+}
+
