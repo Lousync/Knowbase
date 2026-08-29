@@ -1,7 +1,9 @@
 # 开发者工具演进路线（Dev Bridge Roadmap）
 
-> 状态：**规划稿**。基于已实现的 AI 测试桥（见 `docs/ai-test-bridge.md`）。
-> 六项创意全部生长在既有骨架（动作注册表、环形缓冲、selftest 注册、HTTP 路由）之上，不推翻任何东西，不改动既有业务逻辑。
+> 状态：**已实现并实测通过**（2026-08-29，feature/devbridge-roadmap 分支）。
+> 六项能力全部生长在 AI 测试桥（见 `docs/ai-test-bridge.md`）既有骨架上，
+> 不改动任何既有业务逻辑（唯一例外：`connection.ts` 新增 devbridge 专用的
+> `setDatabaseForTesting`，已加注释声明）。
 
 ## 1. 现状：已建成的两层
 
@@ -177,3 +179,32 @@ registerCheck('flow.habitAutoCheckin', fn, { req: 'habit-linkage' })
 1. 快照存内存还是落盘（`userData/devbridge-snapshots/`）？→ 推荐落盘，避免 devbridge 自己把内存吃爆
 2. 回归录制器的 UI 放哪：devtools 面板（可视化）还是纯 curl（无 UI）？→ 推荐先纯 curl，验证闭环后再补面板
 3. 需求清单的维护方式：手动注册还是从 CHANGELOG 解析？→ 推荐手动注册（解析 CHANGELOG 过度设计）
+
+## 9. 实现记录（2026-08-29）
+
+### 与规划稿的差异
+
+| 规划 | 实际实现 |
+|------|----------|
+| `DELETE /db/snapshot/:id` | `POST /db/snapshot/delete`（body `{ id }`，与 action 风格一致，避免路径参数解析） |
+| `GET /compat/versions` 未定 | 实现为 GET 路由，返回 `{ total, versions }` |
+| 快照存内存或落盘待定 | **内存**，上限 3 份，超出淘汰最旧（几十 MB/份，可接受；`MAX_SNAPSHOTS` 常量可调） |
+| 混沌动作需 confirm | 全部经 `withConfirm` 统一拦截，与 `data.reset` 同款 |
+| 兼容探针需要 db 切换 | `connection.ts` 新增 `setDatabaseForTesting`（约 3 行，注释声明 devbridge 专用） |
+
+### 实测结果（esbuild bundle + electron stub 跑 devbridge 全模块，绕开单实例锁）
+
+- **DB Diff**：A 拍快照 → `blog.create` → B 拍快照 → diff 报 `entries +1`（含新增行主键）；反向 diff 报 `-1`（removed 路径）✓
+- **回归录制器**：start → 两个动作 → stop，轨迹含每步的核心表行数（`tableCounts`），重放按序执行 ✓
+- **Monkey**：40 轮 → 18 成功 / 22 结构化拒绝 / **0 意外异常**，`dbStillOpenable: true` ✓
+- **混沌注入**：`malformedBackupZip` 生成坏 ZIP 与 Zip Slip ZIP；`halfMigratedDb` 生成「表已建、标记丢」的中断库 ✓（恢复验证由 `scripts/chaos-verify.cjs` 承担，需在无单实例锁冲突的环境运行）
+- **兼容探针**：`compat.build until=023` → 16 张表（历史结构）；`compat.restore` → 还原 34 张 ✓
+- **AI 体检报告 / 覆盖率**：`/report` 聚合 selftest 8/8 + 慢 IPC + schema；`/coverage` 展示需求→断言映射（内置 8 项无 req 标签时 features 为空，属预期）✓
+- **tsc**：devbridge 相关零错误（既有的 13 处均位于未改动文件）
+
+### 验证方式说明
+
+本分支实测采用「esbuild bundle + electron stub」绕开项目单实例锁（`requestSingleInstanceLock`，
+与正在运行的 dev 实例互斥）。真实 Electron 集成层（main 启动 / preload / 端口）本次未改动，
+此前已实测通过。混沌的「重启后恢复」验证必须跑 `scripts/chaos-verify.cjs`（会反复杀/启进程），
+建议在无其他 Knowbase 实例运行时执行。

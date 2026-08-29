@@ -25,6 +25,11 @@ export function getDatabase(): SqlJsDatabase {
   return db
 }
 
+/** [devbridge 专用] 兼容探针临时切换数据库实例；业务代码禁止使用（见 docs/devbridge-roadmap.md §4.2） */
+export function setDatabaseForTesting(next: SqlJsDatabase): void {
+  db = next
+}
+
 export async function initDatabase(): Promise<void> {
   SQL = await initSqlJs()
 

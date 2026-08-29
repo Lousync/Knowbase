@@ -5,7 +5,10 @@ import { query, schema, migrations, dbInfo } from './db'
 import { logRing, netRing, ipcRing, aggregateErrors, getUiState } from './capture'
 import { parseListOptions } from './ring'
 import { runAction, listActions } from './actions'
-import { runSelfTest, listChecks } from './selftest'
+import { runSelfTest, listChecks, coverage } from './selftest'
+import { createSnapshot, listSnapshots, deleteSnapshot, diffSnapshots } from './dbdiff'
+import { buildReport } from './report'
+import { listVersions } from './compat'
 
 /**
  * HTTP 调试桥 —— AI 用 curl 即可观测与驱动，无需冷启动应用、无需手写 CDP 协议。
@@ -84,6 +87,12 @@ function indexDoc() {
       { method: 'GET', path: '/ipc', desc: 'IPC 调用，query: since / limit' },
       { method: 'POST', path: '/action', desc: '执行动作，body: { name, params }' },
       { method: 'GET', path: '/selftest', desc: '自检，query: only=<name>' },
+      { method: 'POST', path: '/db/snapshot', desc: '对当前库拍快照（内存上限 3 份）' },
+      { method: 'GET', path: '/db/snapshots', desc: '快照列表' },
+      { method: 'POST', path: '/db/snapshot/delete', desc: '删除快照，body: { id }' },
+      { method: 'GET', path: '/db/diff', desc: '两快照差异，query: from / to' },
+      { method: 'GET', path: '/report', desc: 'AI 体检报告（selftest+errors+慢IPC+schema）' },
+      { method: 'GET', path: '/coverage', desc: '需求↔断言覆盖率地图' },
     ],
     actions: listActions(),
     checks: listChecks(),
@@ -196,6 +205,38 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       const report = await runSelfTest(only)
       // 整体失败时仍返回 200：HTTP 状态码表示「接口可达」，业务成败看 body 的 ok/failed
       send(res, 200, ok(report, startedAt))
+      return
+    }
+    if (path === '/db/snapshot' && method === 'POST') {
+      send(res, 200, ok(createSnapshot(), startedAt))
+      return
+    }
+    if (path === '/db/snapshots' && method === 'GET') {
+      send(res, 200, ok(listSnapshots(), startedAt))
+      return
+    }
+    if (path === '/db/snapshot/delete' && method === 'POST') {
+      const body = parseJson(await readBody(req))
+      send(res, 200, ok({ deleted: deleteSnapshot(String(body.id ?? '')) }, startedAt))
+      return
+    }
+    if (path === '/db/diff' && method === 'GET') {
+      const from = url.searchParams.get('from') ?? ''
+      const to = url.searchParams.get('to') ?? ''
+      if (!from || !to) throwErr('E_BAD_REQUEST', '缺少 from / to 参数')
+      send(res, 200, ok(diffSnapshots(from, to), startedAt))
+      return
+    }
+    if (path === '/report' && method === 'GET') {
+      send(res, 200, ok(await buildReport(), startedAt))
+      return
+    }
+    if (path === '/coverage' && method === 'GET') {
+      send(res, 200, ok(coverage(), startedAt))
+      return
+    }
+    if (path === '/compat/versions' && method === 'GET') {
+      send(res, 200, ok({ total: listVersions().length, versions: listVersions() }, startedAt))
       return
     }
 
