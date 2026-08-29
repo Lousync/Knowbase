@@ -1,5 +1,9 @@
 // ===== 共享类型 =====
 
+import type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult } from '../lib/translateTypes'
+
+export type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult }
+
 export interface Entry {
   id: string; title: string; contentMd: string; contentHtml: string
   date: string; createdAt: string; updatedAt: string
@@ -877,6 +881,10 @@ export interface ElectronAPI {
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
   llmTestModel: (providerId: string, model: string) => Promise<LlmModelTestResultInfo>
   llmGetUsage: () => Promise<LlmUsageInfo>
+  // 划词翻译 / 离线词典
+  dictLookup: (word: string) => Promise<DictLookupResult>
+  dictStatus: () => Promise<DictStatus>
+  translateInvoke: (req: TranslateInvokeRequest) => Promise<TranslateInvokeResult>
   agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>

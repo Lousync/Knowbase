@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check, Square,
-  Pencil, RefreshCw,
+  Pencil, RefreshCw, Languages,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
 import { MarkdownPreview } from '../MarkdownPreview'
+import { TranslateCard } from '../TranslateCard'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentRegenerate, agentEditMessage, agentDeleteMessage,
@@ -79,6 +80,8 @@ export function AssistantPanel() {
   /** 选中文本即问：浮动按钮状态与一次性选中上下文 */
   const [selFloat, setSelFloat] = useState<{ x: number; y: number; text: string } | null>(null)
   const [selCtx, setSelCtx] = useState<AgentContextInfo | null>(null)
+  /** 划词翻译卡片（与「问 AI」浮钮共用选区检测） */
+  const [transFloat, setTransFloat] = useState<{ x: number; y: number; text: string } | null>(null)
   /** 会话抽屉卸载兜底定时器（closeDrawer 240ms 后触发） */
   const drawerTimerRef = useRef<number | null>(null)
   const chatIdRef = useRef<string>('')
@@ -226,7 +229,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
           const rect = sel.getRangeAt(0).getBoundingClientRect()
           if (!rect || (rect.width === 0 && rect.height === 0)) { setSelFloat(null); return }
           setSelFloat({
-            x: Math.min(rect.right + 8, window.innerWidth - 96),
+            x: Math.min(rect.right + 8, window.innerWidth - 170),
             y: Math.min(rect.bottom + 6, window.innerHeight - 44),
             text,
           })
@@ -256,6 +259,13 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     openPanel()
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [openPanel])
+
+  /** 从选中片段发起翻译（浮钮位置直接弹出翻译卡片） */
+  const translateSelection = useCallback((pos: { x: number; y: number }, text: string) => {
+    window.getSelection()?.removeAllRanges()
+    setSelFloat(null)
+    setTransFloat({ x: pos.x, y: pos.y, text })
+  }, [])
 
   const send = useCallback(async () => {
     const text = input.trim()
@@ -362,17 +372,38 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
         </button>
       )}
 
-      {/* 选中文本浮动按钮：主内容区框选任意文字后出现 */}
+      {/* 选中文本浮动按钮：主内容区框选任意文字后出现（问 AI / 翻译） */}
       {selFloat && (
-        <button
+        <div
           data-sel-float
-          onMouseDown={e => e.preventDefault()}
-          onClick={() => askSelection(selFloat.text)}
-          className="fixed z-50 flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--accent)] text-white text-[11px] shadow-lg hover:opacity-90 transition-opacity"
+          className="fixed z-50 flex items-center gap-0.5 rounded-md bg-[var(--accent)] text-white shadow-lg overflow-hidden"
           style={{ left: selFloat.x, top: selFloat.y }}
+          onMouseDown={e => e.preventDefault()}
         >
-          <Sparkles size={11} /> 问 AI
-        </button>
+          <button
+            onClick={() => askSelection(selFloat.text)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] hover:bg-black/10 transition-colors"
+          >
+            <Sparkles size={11} /> 问 AI
+          </button>
+          <span className="w-px self-stretch bg-white/30" />
+          <button
+            onClick={() => translateSelection(selFloat, selFloat.text)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] hover:bg-black/10 transition-colors"
+          >
+            <Languages size={11} /> 翻译
+          </button>
+        </div>
+      )}
+
+      {/* 划词翻译卡片 */}
+      {transFloat && (
+        <TranslateCard
+          x={transFloat.x}
+          y={transFloat.y}
+          text={transFloat.text}
+          onClose={() => setTransFloat(null)}
+        />
       )}
 
       {/* 侧栏面板 */}

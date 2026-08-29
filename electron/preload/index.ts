@@ -140,6 +140,10 @@ const api = {
   llmSetDefaultModel: (value: string) => ipcRenderer.invoke('llm:setDefaultModel', value),
   llmTestModel: (providerId: string, model: string) => ipcRenderer.invoke('llm:testModel', { providerId, model }),
   llmGetUsage: () => ipcRenderer.invoke('llm:getUsage'),
+  // 划词翻译 / 离线词典
+  dictLookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),
+  dictStatus: () => ipcRenderer.invoke('dict:status'),
+  translateInvoke: (req: unknown) => ipcRenderer.invoke('translate:invoke', req),
   agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:chat', req),
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),

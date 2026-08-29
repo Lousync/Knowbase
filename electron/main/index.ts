@@ -34,6 +34,7 @@ import { registerMcpHandlers, restoreMcpConnections } from '../lib/mcpService'
 import { registerSkillHandlers } from '../lib/skillService'
 import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
+import { registerTranslateHandlers } from '../lib/translateService'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -466,6 +467,8 @@ app.whenReady().then(async () => {
     }
     registerLlmHandlers({ getSettingValue, setSettingValue })
     registerAgentHandlers()
+    // 划词翻译:离线词典 + LLM 翻译/AI 精讲
+    registerTranslateHandlers()
   }
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
