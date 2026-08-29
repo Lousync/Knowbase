@@ -13,6 +13,10 @@
     --csv    全量 ecdict.csv 路径（默认用缓存/下载）
     --lemma  lemma.en.txt 路径
     --out    输出路径（默认 resources/dict/ecdict-exam.json）
+词根数据：ECDICT 的 wordroot.txt（JSON 格式，root→释义/词源/例词），
+经倒排后输出两个索引：
+    roots     root → {m:词根含义, c:类别, o:词源, words:词典内例词}
+    wordRoots word → [root,...]（同根词反查）
 """
 
 import argparse
@@ -33,6 +37,14 @@ LEMMA_URLS = [
 ]
 EXAM_TAGS = {"cet4", "cet6", "ky"}
 FREQ_LIMIT = 20000  # 高频词兜底阈值（BNC / 当代语料库词频排名）
+WORDROOT_URLS = [
+    "https://gh-proxy.com/https://raw.githubusercontent.com/skywind3000/ECDICT/master/wordroot.txt",
+    "https://raw.githubusercontent.com/skywind3000/ECDICT/master/wordroot.txt",
+]
+THESAURUS_URLS = [
+    "https://gh-proxy.com/https://raw.githubusercontent.com/zaibacu/thesaurus/master/en_thesaurus.jsonl",
+    "https://raw.githubusercontent.com/zaibacu/thesaurus/master/en_thesaurus.jsonl",
+]
 
 
 def download(urls, dest):
@@ -57,6 +69,81 @@ def fetch(name, urls, explicit):
     if not download(urls, cache):
         sys.exit(f"[dict] 无法获取 {name}，请用 --{name.split('.')[0]} 指定本地文件")
     return cache
+
+
+def build_roots(words, lemma_path_dir):
+    """解析 wordroot.txt（JSON），输出 root 索引与 word→roots 倒排。
+    例词仅保留已入选词典的词；wordroot 可缺失（旧缓存），缺省返回空。"""
+    path = os.path.join(tempfile.gettempdir(), "ecdict", "wordroot.txt")
+    if not os.path.isfile(path) or os.path.getsize(path) < 1024:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not download(WORDROOT_URLS, path):
+            print("[dict] wordroot.txt 获取失败，跳过词根索引")
+            return {}, {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as e:
+        print(f"[dict] wordroot.txt 解析失败，跳过词根索引: {e}")
+        return {}, {}
+
+    roots = {}
+    word_roots = {}
+    for root_id, node in raw.items():
+        if not isinstance(node, dict):
+            continue
+        in_dict = [w for w in node.get("example", []) if isinstance(w, str) and w.strip().lower() in words]
+        if not in_dict:
+            continue
+        root_key = (node.get("root") or root_id).strip().lower()
+        if not root_key or root_key in roots:
+            continue
+        roots[root_key] = {
+            "m": node.get("meaning", "").strip(),
+            "c": node.get("class", "").strip(),
+            "o": node.get("origin", "").strip(),
+            "words": sorted({w.strip().lower() for w in in_dict}),
+        }
+        for w in roots[root_key]["words"]:
+            word_roots.setdefault(w, [])
+            if root_key not in word_roots[w]:
+                word_roots[w].append(root_key)
+    return roots, word_roots
+
+
+def build_synonyms(words):
+    """解析 zaibacu/thesaurus（WordNet 提取的 JSONL），输出 word → 同义词列表。
+    仅保留同义词也入选词典的条目（保证展示质量），每词上限 6 个。可缺失，缺省返回空。"""
+    path = os.path.join(tempfile.gettempdir(), "ecdict", "en_thesaurus.jsonl")
+    if not os.path.isfile(path) or os.path.getsize(path) < 1024:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not download(THESAURUS_URLS, path):
+            print("[dict] en_thesaurus.jsonl 获取失败，跳过同义词索引")
+            return {}
+    synonyms = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    node = json.loads(line)
+                except ValueError:
+                    continue
+                w = str(node.get("word", "")).strip().lower()
+                if w not in words:
+                    continue
+                bucket = synonyms.setdefault(w, [])
+                for s in node.get("synonyms", []):
+                    s = str(s).strip().lower().replace("_", " ")
+                    if s in words and s != w and s not in bucket:
+                        bucket.append(s)
+    except Exception as e:
+        print(f"[dict] 同义词数据解析失败，跳过: {e}")
+        return {}
+    # 至少 2 个同义词才保留（单条没有聚类价值）
+    return {w: s[:6] for w, s in synonyms.items() if len(s) >= 2}
 
 
 def main():
@@ -117,13 +204,17 @@ def main():
                 if form and form.isalpha() and form != base and form not in words:
                     lemma[form] = base
 
+    roots, word_roots = build_roots(words, None)
+    synonyms = build_synonyms(words)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"v": 1, "count": len(words), "words": words, "lemma": lemma},
+        json.dump({"v": 3, "count": len(words), "words": words, "lemma": lemma,
+                   "roots": roots, "wordRoots": word_roots, "synonyms": synonyms},
                   f, ensure_ascii=False, separators=(",", ":"))
 
     size_mb = os.path.getsize(args.out) / 1024 / 1024
-    print(f"[dict] 完成: {len(words)} 词, {len(lemma)} 条词形映射, {size_mb:.1f} MB → {args.out}")
+    print(f"[dict] 完成: {len(words)} 词, {len(lemma)} 条词形映射, {len(roots)} 个词根"
+          f"(覆盖 {len(word_roots)} 词), {len(synonyms)} 词有同义词组, {size_mb:.1f} MB → {args.out}")
 
 
 if __name__ == "__main__":

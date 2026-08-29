@@ -11,13 +11,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   FileText, Calendar, BookOpen, MessageCircle, Wrench, Puzzle,
-  Trash2, LifeBuoy, User, Settings, Upload, GraduationCap,
+  Trash2, LifeBuoy, User, Settings, Upload,
 } from 'lucide-react'
 import { pluginGetContribution, pluginListInstalled } from './ipc'
 
 export type IconModuleId =
   | 'blog' | 'schedule' | 'knowledge' | 'moments' | 'toolbox' | 'plugins'
-  | 'recycle' | 'help' | 'user' | 'settings' | 'export' | 'wordbook'
+  | 'recycle' | 'help' | 'user' | 'settings' | 'export'
 
 export const BUILTIN_ICON_PACKS = [
   { id: 'default', label: '手绘(默认)' },
@@ -29,7 +29,7 @@ export function renderClassicIcon(moduleId: IconModuleId, size: number, classNam
   const map = {
     blog: FileText, schedule: Calendar, knowledge: BookOpen, moments: MessageCircle,
     toolbox: Wrench, plugins: Puzzle, recycle: Trash2, help: LifeBuoy,
-    user: User, settings: Settings, export: Upload, wordbook: GraduationCap,
+    user: User, settings: Settings, export: Upload,
   } as const
   const C = map[moduleId]
   return C ? <C size={size} strokeWidth={1.5} className={className} /> : null

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 
 /** 生词本（迁移 051）：词条 + SRS 状态 + 每日学习量 */
@@ -161,4 +162,55 @@ export function listDailyStats(days: number): { date: string; new_words: number;
   return queryAll<{ date: string; new_words: number; reviewed: number }>(
     'SELECT * FROM wordbook_daily ORDER BY date DESC LIMIT ?', [days]
   )
+}
+
+// ===== 自定义词汇分组（话题归类，迁移 054） =====
+
+export interface WordbookGroupRow {
+  id: string
+  name: string
+  created_at: string
+}
+
+export function listWordbookGroups(): (WordbookGroupRow & { wordCount: number })[] {
+  const groups = queryAll<WordbookGroupRow>('SELECT * FROM wordbook_groups ORDER BY created_at DESC')
+  const counts = queryAll<{ group_id: string; n: number }>(
+    'SELECT group_id, COUNT(*) AS n FROM wordbook_group_words GROUP BY group_id'
+  )
+  const countMap = new Map(counts.map(c => [c.group_id, c.n]))
+  return groups.map(g => ({ ...g, wordCount: countMap.get(g.id) ?? 0 }))
+}
+
+export function createWordbookGroup(name: string): WordbookGroupRow {
+  const id = randomUUID()
+  run('INSERT INTO wordbook_groups (id, name) VALUES (?, ?)', [id, name])
+  return queryAll<WordbookGroupRow>('SELECT * FROM wordbook_groups WHERE id = ?', [id])[0]
+}
+
+export function renameWordbookGroup(id: string, name: string): void {
+  run('UPDATE wordbook_groups SET name = ? WHERE id = ?', [name, id])
+}
+
+export function deleteWordbookGroup(id: string): void {
+  // 显式先删成员：sql.js 运行时外键级联不可靠（与 agentSessionRepo 同口径）
+  run('DELETE FROM wordbook_group_words WHERE group_id = ?', [id])
+  run('DELETE FROM wordbook_groups WHERE id = ?', [id])
+}
+
+export function addWordToGroup(groupId: string, word: string): void {
+  run('INSERT OR IGNORE INTO wordbook_group_words (group_id, word) VALUES (?, ?)', [groupId, word])
+}
+
+export function removeWordFromGroup(groupId: string, word: string): void {
+  run('DELETE FROM wordbook_group_words WHERE group_id = ? AND word = ?', [groupId, word])
+}
+
+export function listGroupWords(groupId: string): string[] {
+  return queryAll<{ word: string }>('SELECT word FROM wordbook_group_words WHERE group_id = ? ORDER BY word', [groupId])
+    .map(r => r.word)
+}
+
+export function getWordbookGroup(id: string): WordbookGroupRow | null {
+  const rows = queryAll<WordbookGroupRow>('SELECT * FROM wordbook_groups WHERE id = ?', [id])
+  return rows.length > 0 ? rows[0] : null
 }

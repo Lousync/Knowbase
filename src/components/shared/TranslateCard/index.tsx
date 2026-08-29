@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages, Star } from 'lucide-react'
+import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages, Star, Volume2 } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
-import { copyText, dictLookup, translateInvoke, wordbookAdd } from '../../../lib/ipc'
+import { speak } from '../../../lib/tts'
+import { copyText, dictLookup, translateInvoke, wordbookAdd, wordbookCheck } from '../../../lib/ipc'
+import { useSettings } from '../../../lib/SettingsContext'
 import type { DictLookupResult, TranslateMode } from '../../../lib/translateTypes'
 import { MarkdownPreview } from '../MarkdownPreview'
 
@@ -35,6 +37,7 @@ function isSingleWord(text: string): boolean {
 
 export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
   const mode: TranslateMode = isSingleWord(text) ? 'word' : 'sentence'
+  const { s } = useSettings()
   const [dict, setDict] = useState<DictLookupResult | null>(null)
   const [aiMd, setAiMd] = useState<string>('')
   const [aiModel, setAiModel] = useState<string>('')
@@ -45,6 +48,14 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
   const [copied, setCopied] = useState(false)
   const [starred, setStarred] = useState(false)
   const reqSeqRef = useRef(0)
+
+  // 单词模式：同步生词本收藏状态
+  useEffect(() => {
+    if (mode !== 'word') return
+    wordbookCheck(text.trim().toLowerCase())
+      .then(r => setStarred(r.inBook))
+      .catch(() => { /* ignore */ })
+  }, [mode, text])
 
   /** 收藏进生词本（仅单词模式） */
   const handleStar = async () => {
@@ -135,6 +146,9 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
   const entry = dict?.found ? dict.entry : undefined
   const examTags = entry?.tags.filter(t => t === 'cet4' || t === 'cet6' || t === 'ky') ?? []
   const otherTags = entry?.tags.filter(t => !(t === 'cet4' || t === 'cet6' || t === 'ky')) ?? []
+  // 该词属于正在学的词书 → 强化归属感提示
+  const activeBook = s.wordbookActiveBook
+  const inActiveBook = !!activeBook && (examTags as string[]).includes(activeBook)
 
   return (
     <div
@@ -178,13 +192,25 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
         {mode === 'word' && (
           <div>
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-[17px] font-semibold text-[var(--text-primary)] break-all">{entry?.word ?? text}</span>
+              <button onClick={() => speak(entry?.word ?? text)} title="点击发音"
+                className="text-[17px] font-semibold text-[var(--text-primary)] break-all hover:text-[var(--accent)] transition-colors">
+                {entry?.word ?? text}
+              </button>
+              <button onClick={() => speak(entry?.word ?? text)} title="发音"
+                className="text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors self-center">
+                <Volume2 size={13} />
+              </button>
               {entry?.phonetic && <span className="text-[12px] text-[var(--text-muted)]">/{entry.phonetic.replace(/^\/|\/$/g, '')}/</span>}
               {entry?.inflectedFrom && (
                 <span className="text-[10px] text-[var(--text-disabled)]">「{entry.inflectedFrom}」的词形还原</span>
               )}
             </div>
 
+            {inActiveBook && (
+              <p className="mt-1 text-[10px] text-[var(--accent)]">
+                这个词在你正在学的{TAG_LABELS[activeBook] ?? activeBook}词书里，收藏后会在每日队列中出现
+              </p>
+            )}
             {entry && (
               <>
                 {/* 考纲与词频徽章 */}

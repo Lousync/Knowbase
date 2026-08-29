@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -281,6 +281,13 @@ export const quizRecordToggleFavorite = (pageId: string, quizNo: number, meta: {
 export const quizRecordList = (opts?: { kind?: 'favorite' | 'wrong' | 'all'; sourceSpace?: string; collectionId?: string }): Promise<QuizRecordDto[]> => a().quizRecordList(opts)
 export const quizRecordRemove = (pageId: string, quizNo: number): Promise<void> => a().quizRecordRemove(pageId, quizNo)
 export const quizRecordSetCollections = (recordId: string, collectionIds: string[]): Promise<void> => a().quizRecordSetCollections(recordId, collectionIds)
+export const quizRecordSetNote = (recordId: string, note: string): Promise<void> => a().quizRecordSetNote(recordId, note)
+export const quizRecordSetTags = (recordId: string, tagIds: string[]): Promise<void> => a().quizRecordSetTags(recordId, tagIds)
+export const quizRecordAddTags = (recordIds: string[], tagIds: string[]): Promise<void> => a().quizRecordAddTags(recordIds, tagIds)
+export const quizRecordStats = (opts?: { sourceSpace?: string }): Promise<QuizStatsDto> => a().quizRecordStats(opts)
+export const quizTagList = (): Promise<QuizTagDto[]> => a().quizTagList()
+export const quizTagCreate = (name: string, kind?: string): Promise<QuizTagDto> => a().quizTagCreate(name, kind)
+export const quizTagDelete = (tagId: string): Promise<void> => a().quizTagDelete(tagId)
 export const quizCollectionList = (): Promise<QuizCollectionDto[]> => a().quizCollectionList()
 export const quizCollectionCreate = (name: string): Promise<QuizCollectionDto> => a().quizCollectionCreate(name)
 export const quizCollectionRename = (id: string, name: string): Promise<QuizCollectionDto> => a().quizCollectionRename(id, name)
@@ -332,6 +339,20 @@ export const wordbookGetToday = (): Promise<WordbookTodayDto> => a().wordbookGet
 export const wordbookAnswer = (word: string, feedback: WordFeedback): Promise<{ ok: boolean; error?: string }> => a().wordbookAnswer(word, feedback)
 export const wordbookSetBook = (book: string): Promise<{ ok: boolean }> => a().wordbookSetBook(book)
 export const wordbookStats = (): Promise<WordbookStatsDto> => a().wordbookStats()
+export const wordbookCheck = (word: string): Promise<{ inBook: boolean; status?: WordbookStatus }> => a().wordbookCheck(word)
+export const wordbookMarkKnown = (word: string): Promise<{ ok: boolean }> => a().wordbookMarkKnown(word)
+export const wordbookBookWords = (book: string, query: string, offset: number, limit: number, orderBy?: string): Promise<BookWordsResultDto> => a().wordbookBookWords(book, query, offset, limit, orderBy)
+export const wordbookRootClusters = (): Promise<RootClusterDto[]> => a().wordbookRootClusters()
+export const wordbookSynonymClusters = (): Promise<SynonymClusterDto[]> => a().wordbookSynonymClusters()
+export const wordbookRelations = (word: string): Promise<{ roots: RootClusterDto[]; synonyms: WordRelationRowDto[] }> => a().wordbookRelations(word)
+export const wordbookGroupsList = (): Promise<WordbookGroupDto[]> => a().wordbookGroupsList()
+export const wordbookGroupsCreate = (name: string): Promise<{ ok: boolean; id?: string; error?: string }> => a().wordbookGroupsCreate(name)
+export const wordbookGroupsRename = (id: string, name: string): Promise<{ ok: boolean; error?: string }> => a().wordbookGroupsRename(id, name)
+export const wordbookGroupsDelete = (id: string): Promise<{ ok: boolean }> => a().wordbookGroupsDelete(id)
+export const wordbookGroupsAddWord = (id: string, word: string): Promise<{ ok: boolean; error?: string }> => a().wordbookGroupsAddWord(id, word)
+export const wordbookGroupsRemoveWord = (id: string, word: string): Promise<{ ok: boolean }> => a().wordbookGroupsRemoveWord(id, word)
+export const wordbookGroupsWords = (id: string): Promise<string[]> => a().wordbookGroupsWords(id)
+export const wordbookCustomQueue = (label: string, words: string[]): Promise<WordbookCustomQueueDto> => a().wordbookCustomQueue(label, words)
 
 export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })

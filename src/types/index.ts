@@ -1,10 +1,10 @@
 // ===== 共享类型 =====
 
 import type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult } from '../lib/translateTypes'
-import type { WordbookBook, WordFeedback, WordbookStatus, WordbookItemDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto } from '../lib/wordbookTypes'
+import type { WordbookBook, WordFeedback, WordbookStatus, QuestionType, WordbookItemDto, WordbookExchangeDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto, BookWordRowDto, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto } from '../lib/wordbookTypes'
 
 export type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult }
-export type { WordbookBook, WordFeedback, WordbookStatus, WordbookItemDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto }
+export type { WordbookBook, WordFeedback, WordbookStatus, QuestionType, WordbookItemDto, WordbookExchangeDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto, BookWordRowDto, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto }
 
 export interface Entry {
   id: string; title: string; contentMd: string; contentHtml: string
@@ -16,7 +16,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'wordbook'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools'
 
 // toolbox
 export interface ToolboxScript {
@@ -48,12 +48,35 @@ export interface QuizRecordDto {
   wrongCount: number
   correctCount: number
   lastResult: number | null
+  /** 连续答对次数：>= 2 视为已掌握（从错题本列表移出） */
+  streakCorrect: number
+  /** 个人备注（卡片展开区可编辑） */
+  note: string
   snapshot: QuizSnapshotDto | null
   sourceSpace: string
   sourceNotebook: string
+  /** 题目所在页面的章节路径（笔记本以下 folder 层级，如"树 › 遍历"） */
+  sourceChapter: string
   collectionIds: string[]
+  tagIds: string[]
   createdAt: string
   updatedAt: string
+}
+/** 题目标签：kind = topic 考点 / type 题型 / difficulty 难度 / custom 关键词 */
+export interface QuizTagDto {
+  id: string
+  name: string
+  kind: string
+  color: string
+  sortOrder: number
+  createdAt: string
+  count: number
+}
+export interface QuizStatsDto {
+  wrong: number
+  mastered: number
+  todayWrong: number
+  correctRate: number
 }
 export interface QuizCollectionDto {
   id: string
@@ -844,6 +867,13 @@ export interface ElectronAPI {
   quizRecordList: (opts?: { kind?: 'favorite' | 'wrong' | 'all'; sourceSpace?: string; collectionId?: string }) => Promise<QuizRecordDto[]>
   quizRecordRemove: (pageId: string, quizNo: number) => Promise<void>
   quizRecordSetCollections: (recordId: string, collectionIds: string[]) => Promise<void>
+  quizRecordSetNote: (recordId: string, note: string) => Promise<void>
+  quizRecordSetTags: (recordId: string, tagIds: string[]) => Promise<void>
+  quizRecordAddTags: (recordIds: string[], tagIds: string[]) => Promise<void>
+  quizRecordStats: (opts?: { sourceSpace?: string }) => Promise<QuizStatsDto>
+  quizTagList: () => Promise<QuizTagDto[]>
+  quizTagCreate: (name: string, kind?: string) => Promise<QuizTagDto>
+  quizTagDelete: (tagId: string) => Promise<void>
   quizCollectionList: () => Promise<QuizCollectionDto[]>
   quizCollectionCreate: (name: string) => Promise<QuizCollectionDto>
   quizCollectionRename: (id: string, name: string) => Promise<QuizCollectionDto>
@@ -896,6 +926,20 @@ export interface ElectronAPI {
   wordbookAnswer: (word: string, feedback: WordFeedback) => Promise<{ ok: boolean; error?: string }>
   wordbookSetBook: (book: string) => Promise<{ ok: boolean }>
   wordbookStats: () => Promise<WordbookStatsDto>
+  wordbookCheck: (word: string) => Promise<{ inBook: boolean; status?: WordbookStatus }>
+  wordbookMarkKnown: (word: string) => Promise<{ ok: boolean }>
+  wordbookBookWords: (book: string, query: string, offset: number, limit: number, orderBy?: string) => Promise<BookWordsResultDto>
+  wordbookRootClusters: () => Promise<RootClusterDto[]>
+  wordbookSynonymClusters: () => Promise<SynonymClusterDto[]>
+  wordbookRelations: (word: string) => Promise<{ roots: RootClusterDto[]; synonyms: WordRelationRowDto[] }>
+  wordbookGroupsList: () => Promise<WordbookGroupDto[]>
+  wordbookGroupsCreate: (name: string) => Promise<{ ok: boolean; id?: string; error?: string }>
+  wordbookGroupsRename: (id: string, name: string) => Promise<{ ok: boolean; error?: string }>
+  wordbookGroupsDelete: (id: string) => Promise<{ ok: boolean }>
+  wordbookGroupsAddWord: (id: string, word: string) => Promise<{ ok: boolean; error?: string }>
+  wordbookGroupsRemoveWord: (id: string, word: string) => Promise<{ ok: boolean }>
+  wordbookGroupsWords: (id: string) => Promise<string[]>
+  wordbookCustomQueue: (label: string, words: string[]) => Promise<WordbookCustomQueueDto>
   agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>

@@ -50,6 +50,9 @@ import { m048HabitLinksMigration } from './048_habit_links'
 import { m049QuizRecordsMigration } from './049_quiz_records'
 import { m050TranslationCacheMigration } from './050_translation_cache'
 import { m051WordbookMigration } from './051_wordbook'
+import { m052QuizMasteryMigration } from './052_quiz_mastery'
+import { m053QuizTagsMigration } from './053_quiz_tags'
+import { m054WordbookGroupsMigration } from './054_wordbook_groups'
 
 /**
  * 迁移执行顺序表 —— 顺序即语义，只允许追加，不允许重排或改名。
@@ -113,4 +116,7 @@ export const MIGRATIONS: Migration[] = [
   m049QuizRecordsMigration,
   m050TranslationCacheMigration,
   m051WordbookMigration,
+  m052QuizMasteryMigration,
+  m053QuizTagsMigration,
+  m054WordbookGroupsMigration,
 ]

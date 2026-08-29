@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive } from 'lucide-react'
+import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
+import { WordbookModule } from './components/wordbook'
 import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
 import { ExportTool } from './components/export/ExportTool'
@@ -65,6 +66,12 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
     icon: <BellRing size={26} strokeWidth={1.5} />,
     available: true,
   },
+  {
+    id: 'wordbook',
+    name: '单词本',
+    icon: <GraduationCap size={26} strokeWidth={1.5} />,
+    available: true,
+  },
 ]
 
 export function ToolboxModule() {
@@ -107,6 +114,8 @@ export function ToolboxModule() {
         return <HabitTracker onBack={() => setActiveTool(null)} />
       case 'remote-supervise':
         return <RemoteSupervise onBack={() => setActiveTool(null)} />
+      case 'wordbook':
+        return <WordbookModule onBack={() => setActiveTool(null)} />
       case 'bookmark-nav':
         return <BookmarkNav onBack={() => setActiveTool(null)} />
       case 'data-export':

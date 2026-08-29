@@ -29,12 +29,30 @@ export interface QuizRecordDto {
   wrongCount: number
   correctCount: number
   lastResult: number | null
+  /** 连续答对次数：>= 2 视为已掌握（从错题本列表移出） */
+  streakCorrect: number
+  /** 个人备注 */
+  note: string
   snapshot: QuizSnapshotDto | null
   sourceSpace: string
   sourceNotebook: string
+  /** 题目所在页面的章节路径（笔记本以下的 folder 层级，如"树 › 遍历"） */
+  sourceChapter: string
   collectionIds: string[]
+  tagIds: string[]
   createdAt: string
   updatedAt: string
+}
+
+export interface QuizTagDto {
+  id: string
+  name: string
+  /** topic 考点 / type 题型 / difficulty 难度 / custom 关键词 */
+  kind: string
+  color: string
+  sortOrder: number
+  createdAt: string
+  count: number
 }
 
 export interface QuizCollectionDto {
@@ -48,6 +66,7 @@ export interface QuizCollectionDto {
 interface RecordRow {
   id: string; page_id: string; quiz_no: number; page_title: string
   is_favorite: number; wrong_count: number; correct_count: number; last_result: number | null
+  streak_correct?: number; note?: string; source_chapter?: string
   snapshot_json: string; source_space: string; source_notebook: string
   created_at: string; updated_at: string
 }
@@ -80,11 +99,17 @@ function parseSnapshot(json: string): QuizSnapshotDto | null {
   }
 }
 
-function resolveSource(pageId: string): { space: string; notebook: string } {
+/**
+ * 解析题目来源：空间 / 笔记本 / 章节路径。
+ * 章节 = 笔记本以下所有 folder 层级（由外到内，如"树 › 遍历"）——
+ * 原题快照只存 space+notebook 导致归档最细只能到笔记本，这里补上章节层级。
+ */
+function resolveSource(pageId: string): { space: string; notebook: string; chapter: string } {
   let space = ''
   let notebook = ''
   const page = queryAll<{ category_id: string }>('SELECT category_id FROM knowledge_pages WHERE id = ?', [pageId])[0]
-  if (!page) return { space, notebook }
+  if (!page) return { space, notebook, chapter: '' }
+  const folders: string[] = []
   let curId: string | null = page.category_id
   let guard = 0
   while (curId && guard++ < 12) {
@@ -92,17 +117,24 @@ function resolveSource(pageId: string): { space: string; notebook: string } {
       'SELECT parent_id, name, category_type FROM knowledge_categories WHERE id = ?', [curId]
     )[0]
     if (!cat) break
-    if (cat.category_type === 'notebook') notebook = cat.name
-    else if (cat.category_type === 'space') space = cat.name
+    if (cat.category_type === 'notebook') { notebook = cat.name; break }
+    if (cat.category_type === 'space') { space = cat.name; break }
+    if (cat.category_type === 'folder' && cat.name) folders.unshift(cat.name)
     curId = cat.parent_id
   }
-  return { space, notebook }
+  return { space, notebook, chapter: folders.join(' › ') }
 }
 
 function collectionIdsOf(recordId: string): string[] {
   return queryAll<{ collection_id: string }>(
     'SELECT collection_id FROM quiz_record_collections WHERE record_id = ?', [recordId]
   ).map(r => r.collection_id)
+}
+
+function tagIdsOf(recordId: string): string[] {
+  return queryAll<{ tag_id: string }>(
+    'SELECT tag_id FROM quiz_record_tags WHERE record_id = ?', [recordId]
+  ).map(r => r.tag_id)
 }
 
 function rowToDto(row: RecordRow): QuizRecordDto {
@@ -115,10 +147,14 @@ function rowToDto(row: RecordRow): QuizRecordDto {
     wrongCount: row.wrong_count ?? 0,
     correctCount: row.correct_count ?? 0,
     lastResult: row.last_result,
+    streakCorrect: row.streak_correct ?? 0,
+    note: row.note ?? '',
     snapshot: parseSnapshot(row.snapshot_json),
     sourceSpace: row.source_space,
     sourceNotebook: row.source_notebook,
+    sourceChapter: row.source_chapter ?? '',
     collectionIds: collectionIdsOf(row.id),
+    tagIds: tagIdsOf(row.id),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -131,12 +167,12 @@ function ensureRecord(pageId: string, quizNo: number, meta: {
 }): RecordRow {
   const existing = queryAll<RecordRow>('SELECT * FROM quiz_records WHERE page_id = ? AND quiz_no = ?', [pageId, quizNo])[0]
   if (existing) return existing
-  const { space, notebook } = resolveSource(pageId)
+  const { space, notebook, chapter } = resolveSource(pageId)
   const id = randomUUID()
   run(
-    `INSERT INTO quiz_records (id, page_id, quiz_no, page_title, is_favorite, wrong_count, correct_count, last_result, snapshot_json, source_space, source_notebook)
-     VALUES (?, ?, ?, ?, 0, 0, 0, NULL, ?, ?, ?)`,
-    [id, pageId, quizNo, meta.pageTitle, meta.snapshot ? JSON.stringify(meta.snapshot) : '', space, notebook]
+    `INSERT INTO quiz_records (id, page_id, quiz_no, page_title, is_favorite, wrong_count, correct_count, last_result, snapshot_json, source_space, source_notebook, source_chapter)
+     VALUES (?, ?, ?, ?, 0, 0, 0, NULL, ?, ?, ?, ?)`,
+    [id, pageId, quizNo, meta.pageTitle, meta.snapshot ? JSON.stringify(meta.snapshot) : '', space, notebook, chapter]
   )
   return queryAll<RecordRow>('SELECT * FROM quiz_records WHERE id = ?', [id])[0]
 }
@@ -161,14 +197,16 @@ export function registerQuizHandlers(): void {
       snapshot: meta?.snapshot ?? null,
     })
     if (correct) {
-      // 答对：correct_count+1，且 wrong_count 归零（重刷全对自动移出错题本）
+      // 答对：correct_count+1、连续答对 streak_correct+1；wrong_count 保留（历史错次供档位分层）。
+      // 连续答对 2 次（streak_correct >= 2）视为已掌握，从错题本列表移出。
       run(
-        "UPDATE quiz_records SET correct_count = correct_count + 1, wrong_count = 0, last_result = 1, updated_at = datetime('now', 'localtime') WHERE id = ?",
+        "UPDATE quiz_records SET correct_count = correct_count + 1, streak_correct = streak_correct + 1, last_result = 1, updated_at = datetime('now', 'localtime') WHERE id = ?",
         [row.id]
       )
     } else {
+      // 答错：wrong_count+1、连续答对清零（回流错题本）
       run(
-        "UPDATE quiz_records SET wrong_count = wrong_count + 1, last_result = 0, updated_at = datetime('now', 'localtime') WHERE id = ?",
+        "UPDATE quiz_records SET wrong_count = wrong_count + 1, streak_correct = 0, last_result = 0, updated_at = datetime('now', 'localtime') WHERE id = ?",
         [row.id]
       )
     }
@@ -195,17 +233,24 @@ export function registerQuizHandlers(): void {
     kind?: 'favorite' | 'wrong' | 'all'
     sourceSpace?: string
     collectionId?: string
+    tagIds?: string[]
   }) => {
     const kind = opts?.kind ?? 'all'
     const conds: string[] = []
     const params: unknown[] = []
     if (kind === 'favorite') conds.push('r.is_favorite = 1')
-    else if (kind === 'wrong') conds.push('r.wrong_count > 0')
-    else conds.push('(r.is_favorite = 1 OR r.wrong_count > 0)')
+    else if (kind === 'wrong') conds.push('r.wrong_count > 0 AND r.streak_correct < 2')
+    else conds.push('(r.is_favorite = 1 OR (r.wrong_count > 0 AND r.streak_correct < 2))')
     if (opts?.sourceSpace) { conds.push('r.source_space = ?'); params.push(opts.sourceSpace) }
     if (opts?.collectionId) {
       conds.push('EXISTS (SELECT 1 FROM quiz_record_collections c WHERE c.record_id = r.id AND c.collection_id = ?)')
       params.push(opts.collectionId)
+    }
+    // 标签筛选：命中任一选中标签即算匹配
+    const tagIds = Array.isArray(opts?.tagIds) ? opts!.tagIds!.filter(t => typeof t === 'string' && t) : []
+    if (tagIds.length > 0) {
+      conds.push(`EXISTS (SELECT 1 FROM quiz_record_tags t WHERE t.record_id = r.id AND t.tag_id IN (${tagIds.map(() => '?').join(',')}))`)
+      params.push(...tagIds)
     }
     const rows = queryAll<RecordRow>(
       `SELECT r.* FROM quiz_records r WHERE ${conds.join(' AND ')} ORDER BY r.updated_at DESC, r.page_id ASC, r.quiz_no ASC`,
@@ -227,6 +272,105 @@ export function registerQuizHandlers(): void {
     for (const cid of Array.isArray(collectionIds) ? collectionIds : []) {
       if (typeof cid !== 'string' || !cid) continue
       run('INSERT OR IGNORE INTO quiz_record_collections (record_id, collection_id) VALUES (?, ?)', [recordId, cid])
+    }
+  })
+
+  /** 同步 QuizTagDto 的 kind 取值：考点 / 题型 / 难度 / 关键词 */
+  const TAG_KINDS = ['topic', 'type', 'difficulty', 'custom']
+  function validKind(k: unknown): string {
+    return typeof k === 'string' && TAG_KINDS.includes(k) ? k : 'custom'
+  }
+
+  const TAG_COLORS: Record<string, string> = {
+    topic: '#7f77dd', type: '#378add', difficulty: '#ba7517', custom: '#1d9e75',
+  }
+
+  ipcMain.handle('quizTag:list', () => {
+    const rows = queryAll<{ id: string; name: string; kind: string; color: string; sort_order: number; created_at: string }>(
+      'SELECT * FROM quiz_tags ORDER BY sort_order ASC, created_at ASC'
+    )
+    return rows.map(t => ({
+      id: t.id,
+      name: t.name,
+      kind: t.kind,
+      color: t.color || TAG_COLORS[t.kind] || '#888780',
+      sortOrder: t.sort_order,
+      createdAt: t.created_at,
+      count: queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM quiz_record_tags WHERE tag_id = ?', [t.id])[0]?.n ?? 0,
+    })) as QuizTagDto[]
+  })
+
+  ipcMain.handle('quizTag:create', (_e, name: string, kind?: string) => {
+    const nm = typeof name === 'string' ? name.trim().slice(0, 24) : ''
+    if (!nm) throw new Error('标签名缺失')
+    const k = validKind(kind)
+    const exist = queryAll<{ id: string }>('SELECT id FROM quiz_tags WHERE name = ? AND kind = ?', [nm, k])[0]
+    if (exist) {
+      return queryAll<{ id: string; name: string; kind: string; color: string; sort_order: number; created_at: string }>(
+        'SELECT * FROM quiz_tags WHERE id = ?', [exist.id]
+      ).map(t => ({ id: t.id, name: t.name, kind: t.kind, color: t.color, sortOrder: t.sort_order, createdAt: t.created_at, count: 0 }))[0] as QuizTagDto
+    }
+    const id = randomUUID()
+    const maxOrder = queryAll<{ m: number }>('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM quiz_tags')[0]?.m ?? 0
+    run('INSERT INTO quiz_tags (id, name, kind, color, sort_order) VALUES (?, ?, ?, ?, ?)', [id, nm, k, TAG_COLORS[k] ?? '', maxOrder])
+    return { id, name: nm, kind: k, color: TAG_COLORS[k] ?? '', sortOrder: maxOrder, createdAt: '', count: 0 } as QuizTagDto
+  })
+
+  ipcMain.handle('quizTag:delete', (_e, tagId: string) => {
+    if (typeof tagId !== 'string' || !tagId) return
+    run('DELETE FROM quiz_record_tags WHERE tag_id = ?', [tagId])
+    run('DELETE FROM quiz_tags WHERE id = ?', [tagId])
+  })
+
+  /** 单题设置标签（整体覆盖） */
+  ipcMain.handle('quizRecord:setTags', (_e, recordId: string, tagIds: string[]) => {
+    if (typeof recordId !== 'string' || !recordId) throw new Error('recordId 缺失')
+    run('DELETE FROM quiz_record_tags WHERE record_id = ?', [recordId])
+    for (const tid of Array.isArray(tagIds) ? tagIds : []) {
+      if (typeof tid !== 'string' || !tid) continue
+      run('INSERT OR IGNORE INTO quiz_record_tags (record_id, tag_id) VALUES (?, ?)', [recordId, tid])
+    }
+  })
+
+  /** 批量打标：给多条记录追加标签（去重） */
+  ipcMain.handle('quizRecord:addTags', (_e, recordIds: string[], tagIds: string[]) => {
+    const rids = Array.isArray(recordIds) ? recordIds.filter(x => typeof x === 'string' && x) : []
+    const tids = Array.isArray(tagIds) ? tagIds.filter(x => typeof x === 'string' && x) : []
+    if (rids.length === 0 || tids.length === 0) return
+    for (const rid of rids) {
+      for (const tid of tids) {
+        run('INSERT OR IGNORE INTO quiz_record_tags (record_id, tag_id) VALUES (?, ?)', [rid, tid])
+      }
+    }
+  })
+
+  ipcMain.handle('quizRecord:setNote', (_e, recordId: string, note: string) => {
+    if (typeof recordId !== 'string' || !recordId) throw new Error('recordId 缺失')
+    const text = typeof note === 'string' ? note.slice(0, 500) : ''
+    run("UPDATE quiz_records SET note = ? WHERE id = ?", [text, recordId])
+  })
+
+  ipcMain.handle('quizRecord:stats', (_e, opts?: { sourceSpace?: string }) => {
+    const conds: string[] = []
+    const params: unknown[] = []
+    if (opts?.sourceSpace) { conds.push('r.source_space = ?'); params.push(opts.sourceSpace) }
+    const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : ''
+    const agg = queryAll<{ wrong: number; mastered: number; today_wrong: number; sum_correct: number; sum_wrong: number }>(
+      `SELECT
+        SUM(CASE WHEN r.wrong_count > 0 AND r.streak_correct < 2 THEN 1 ELSE 0 END) AS wrong,
+        SUM(CASE WHEN r.wrong_count > 0 AND r.streak_correct >= 2 THEN 1 ELSE 0 END) AS mastered,
+        SUM(CASE WHEN r.last_result = 0 AND date(r.updated_at) = date('now', 'localtime') THEN 1 ELSE 0 END) AS today_wrong,
+        SUM(r.correct_count) AS sum_correct,
+        SUM(r.wrong_count) AS sum_wrong
+       FROM quiz_records r ${where}`,
+      params
+    )[0] ?? { wrong: 0, mastered: 0, today_wrong: 0, sum_correct: 0, sum_wrong: 0 }
+    const total = (agg.sum_correct ?? 0) + (agg.sum_wrong ?? 0)
+    return {
+      wrong: agg.wrong ?? 0,
+      mastered: agg.mastered ?? 0,
+      todayWrong: agg.today_wrong ?? 0,
+      correctRate: total > 0 ? Math.round(((agg.sum_correct ?? 0) / total) * 100) : 0,
     }
   })
 
