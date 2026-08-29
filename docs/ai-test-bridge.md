@@ -240,6 +240,7 @@ env -u KNOWBASE_DEV_BRIDGE npm run build && ls out/main/   # 不应有 chunks/
 
 ## 8. 后续方向
 
+- **演进路线**：见 `docs/devbridge-roadmap.md` —— 数据库 Diff、回归录制器、混沌注入、兼容探针、Monkey 测试、需求追溯、AI 体检报告，全部生长在本文档的骨架之上
 - 在 `src/modules/devtools/` 的 `TOOLS` 中追加可视化面板（日志流、自检结果、动作触发）
 - 将高频能力包装为 MCP Server tools，让支持 MCP 的 AI 客户端直接调用（项目已有完整 MCP client 实现）
 - 补 `schedule` / `knowledge` 侧的更多动作，覆盖双链解析与知识包导入
