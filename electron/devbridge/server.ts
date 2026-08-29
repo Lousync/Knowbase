@@ -275,7 +275,8 @@ export function startServer(preferredPort = DEFAULT_PORT): Promise<StartedServer
 
     const tryListen = (port: number) => {
       server.once('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE' && attempt < 10) {
+        // EACCES 同样顺延:Windows 上端口落在系统保留段(Hyper-V/WSL 排除范围)时抛 EACCES 而非 EADDRINUSE
+        if ((err.code === 'EADDRINUSE' || err.code === 'EACCES') && attempt < 10) {
           attempt++
           tryListen(port + 1)
           return
