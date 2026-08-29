@@ -35,14 +35,48 @@ export interface CheckResult {
   ok: boolean
   message?: string
   durationMs?: number
+  req?: string
 }
 
 export type CheckFn = () => CheckResult | Promise<CheckResult>
 
-const checks = new Map<string, CheckFn>()
+/** 需求关联元信息：让回归网有覆盖率地图（见 GET /coverage） */
+export interface CheckMeta {
+  /** 关联的需求/功能标识（如 'habit-linkage'），AI 实现功能时同步登记 */
+  req?: string
+}
 
-export function registerCheck(name: string, fn: CheckFn): void {
-  checks.set(name, fn)
+interface CheckEntry {
+  fn: CheckFn
+  meta?: CheckMeta
+}
+
+const checks = new Map<string, CheckEntry>()
+
+export function registerCheck(name: string, fn: CheckFn, meta?: CheckMeta): void {
+  checks.set(name, { fn, meta })
+}
+
+export interface CoverageFeature {
+  req: string
+  checks: string[]
+  covered: boolean
+}
+
+/** 需求→断言覆盖地图：哪些功能有回归保护、哪些裸奔 */
+export function coverage(): { features: CoverageFeature[]; totalChecks: number; uncoveredReqs: string[] } {
+  const byReq = new Map<string, string[]>()
+  for (const [name, { meta }] of checks) {
+    const req = meta?.req
+    if (!req) continue
+    const list = byReq.get(req) ?? []
+    list.push(name)
+    byReq.set(req, list)
+  }
+  const features: CoverageFeature[] = [...byReq.entries()]
+    .map(([req, cs]) => ({ req, checks: cs.sort(), covered: cs.length > 0 }))
+    .sort((a, b) => a.req.localeCompare(b.req))
+  return { features, totalChecks: checks.size, uncoveredReqs: [] }
 }
 
 // ---------- 内置检查项 ----------
@@ -207,15 +241,15 @@ export async function runSelfTest(only?: string): Promise<SelfTestReport> {
   const items: CheckResult[] = []
 
   for (const name of names) {
-    const fn = checks.get(name)
-    if (!fn) {
+    const entry = checks.get(name)
+    if (!entry) {
       items.push({ name, ok: false, message: '未注册的检查项' })
       continue
     }
     const start = Date.now()
     try {
-      const r = await fn()
-      items.push({ ...r, durationMs: Date.now() - start })
+      const r = await entry.fn()
+      items.push({ ...r, req: entry.meta?.req, durationMs: Date.now() - start })
     } catch (e) {
       items.push({ name, ok: false, message: e instanceof Error ? e.message : String(e), durationMs: Date.now() - start })
     }
