@@ -85,6 +85,33 @@ int WPL(BiTree root, int depth) {
 6. 不需要在解析里再写 `1、` `2、` `3、` 编号（已用加粗小标题表达层级）
 7. 解析末尾如有"调用示例"/"时间复杂度"等收尾说明，作为**最后一个**小问的内容延伸（不加新小标题）
 
+### 代码块在 spoiler 内的写法（重要）
+
+**spoiler-answer 是围栏代码块，内部不能嵌套另一个围栏代码块**（```c 会提前终止 spoiler，导致答案折叠被截断——这是 v1.1.0 真题排版错乱的根因）。
+
+正确做法：**代码内容用"缩进代码块"**（行首 4 个空格，前后空行）：
+
+```markdown
+```spoiler-answer
+**解析**：
+
+**(1) 给出算法的基本设计思想。**
+
+……
+
+**(2) 使用 C 或 C++ 语言，给出二叉树结点的数据类型定义。**
+
+    typedef struct BiTNode {
+        int weight;
+        struct BiTNode *lchild, *rchild;
+    } BiTNode, *BiTree;
+```
+```
+
+- 缩进代码块在围栏内是安全文本，remark 渲染为代码块（无语法高亮，可接受）
+- **禁止**在 spoiler-answer 内使用 ```language 围栏代码块
+- 修复工具 `scripts/fix-408-pack.py` 会自动把已存在的嵌套围栏转换为缩进写法
+
 ### 反例（禁止）
 
 ```markdown
@@ -158,7 +185,7 @@ typedef struct ...  // 代码块与小问混在一起，归属不明
 | **知识包源修复 + 打包** | `scripts/fix-408-pack.py` | 修复插件源目录 `pages/exams/*.md` 大题解析（小问加粗标题 + 独立成段 + 代码块归属）→ 升版本 → 重新打包 zip。用法：`python scripts/fix-408-pack.py --src <插件目录> --out <输出目录> --version X.Y.Z` |
 | **数据库直接修复** | `scripts/fix-quiz-answer-layout.py` | 直接修 `knowledge_pages.content_md`（`--write` 实写 / 默认 dry-run / `--db` 指定库），用于已导入页面的立即可见修复 |
 | **渲染层兜底** | `src/lib/answerLayout.ts` → `normalizeAnswerLayout()` | 句末标点后小问编号自动断行（已接入 MarkdownPreview 的 SpoilerBlock），防规范遗漏 |
-| **远程市场上传** | 流程见下"发布到远程市场" | 上传新 zip + 更新 registry.json + CHANGELOG.md |
+| **远程市场上传** | `scripts/publish-knowledge-pack.py` | 一站式发布：质量门（zip/src 一致性 + quiz JSON 合法性 + manifest 合规复刻 + icon 安全）→ 生成新 registry.json（v+1）/ CHANGELOG.md 条目 → git data API 链一次原子提交（zip/icon/registry/CHANGELOG）→ 下载回验 sha256 与完整性；内置防重复发布保护。用法：`python scripts/publish-knowledge-pack.py --pack-dir <插件目录> --zip <zip路径> --version X.Y.Z --name "市场显示名" --desc "市场描述" --icon-name kb-xxx-icon.svg --changelog "CHANGELOG 条目（含版本与 registry vN）"` |
 
 ### 典型工作流（AI 执行顺序）
 

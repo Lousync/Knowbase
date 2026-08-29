@@ -9,6 +9,7 @@ import { isEditingInput } from '../../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { CategoryMovePicker } from './CategoryMovePicker'
 import { useContextMenuPosition } from '../../../lib/useContextMenuPosition'
+import { DeleteWipe } from '../../../components/shared/DeleteWipe'
 
 interface Props {
   notebookName: string
@@ -46,6 +47,8 @@ interface Props {
   onRenamePage?: (pageId: string, name: string) => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
+  /** 删除动画状态：'animating' 播放红色吞噬，'done' 收尾淡出（与 NotebookList 共用同一 deletingMap） */
+  deletingMap?: Map<string, 'animating' | 'done'>
 }
 
 export function ChapterPanel({
@@ -55,8 +58,10 @@ export function ChapterPanel({
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
   onLocateInExplorer, onMoveCategory,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
-  onCopy, onCut, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds,
+  onCopy, onCut, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds, deletingMap,
 }: Props) {
+  /** 删除动画状态（与 NotebookList 同一 deletingMap：animating 渲染吞噬 / done 收尾淡出） */
+  const deletingState = (id: string) => deletingMap?.get(id)
   const [showNewChapter, setShowNewChapter] = useState(false)
   const [newName, setNewName] = useState('')
   // 新建页面：先命名再创建
@@ -256,7 +261,7 @@ export function ChapterPanel({
           <div key={ch.id} data-chapter-id={ch.id}>
             {editingId === ch.id ? (
               <input
-                className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[13px] outline-none text-[var(--text-primary)]"
+                className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py-lg)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
                 onBlur={() => handleRename(ch.id)}
@@ -267,8 +272,10 @@ export function ChapterPanel({
               <div
                 data-chapter-id={ch.id}
                 onClick={() => onSelectChapter(ch.id)}
-                className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded transition-colors text-[13px] ${
-                  selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
+                className={`flex items-center gap-1.5 px-1 py-[var(--kb-row-py-lg)] cursor-pointer group rounded transition-colors text-[var(--kb-row-fs)] ${
+                  deletingState(ch.id) === 'animating' ? 'kb-deleting'
+                  : deletingState(ch.id) === 'done' ? 'kb-deleting kb-done'
+                  : selectedChapterId === ch.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]'
                   : dragOverChId === ch.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                   : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
@@ -293,6 +300,7 @@ export function ChapterPanel({
                     <Trash2 size={13} />
                   </button>
                 </div>
+                {deletingState(ch.id) === 'animating' && <DeleteWipe />}
               </div>
             )}
           </div>
@@ -443,8 +451,10 @@ export function ChapterPanel({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ pageId: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`flex items-center gap-1.5 px-1 py-1 cursor-pointer group rounded text-[13px] transition-colors border-l-[3px] ${
-                    activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  className={`flex items-center gap-1.5 px-1 py-[var(--kb-row-py-lg)] cursor-pointer group rounded text-[var(--kb-row-fs)] transition-colors border-l-[3px] ${
+                    deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                    : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
+                    : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                   } ${
                     dragOverPageId === p.id
                       ? dragOverPageSide === 'left'
@@ -459,7 +469,7 @@ export function ChapterPanel({
                   <FileIcon ext={p.fileType || ''} size={15} />
                   {editingPageId === p.id ? (
                     <input
-                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py-lg)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                       value={editPageName}
                       onChange={e => setEditPageName(e.target.value)}
                       onBlur={() => handleRenamePage(p.id)}
@@ -485,6 +495,7 @@ export function ChapterPanel({
                     className="shrink-0 p-0.5 opacity-0 group-hover:opacity-100">
                     <Star size={13} className={p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
                   </button>
+                  {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
             )
           ))}

@@ -1,6 +1,6 @@
 {
   "name": "knowbase",
-  "version": "2.12.0",
+  "version": "2.12.1",
   "description": "Knowbase Programmer Edition — 本地 Windows 桌面知识管理工具",
   "main": "./out/main/index.js",
   "scripts": {

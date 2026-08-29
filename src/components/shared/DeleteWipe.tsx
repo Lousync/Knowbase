@@ -22,7 +22,9 @@ export function DeleteWipe() {
 
   const wipeColor = skin?.wipeColor
   const durationMs = skin?.durationMs ?? 1100
-  const particles = skin?.particleColors
+  // 粒子：皮肤提供了 particleColors 则用皮肤配色，否则用内置默认（像素火花配色）
+  const DEFAULT_PARTICLE_COLORS = ['#ffb74d', '#ff5252', '#ff7043', '#ff8a65', '#ffd180', '#ff5252']
+  const particles = skin?.particleColors && skin.particleColors.length > 0 ? skin.particleColors : DEFAULT_PARTICLE_COLORS
 
   return (
     <div
@@ -33,14 +35,14 @@ export function DeleteWipe() {
         ['--kb-dur' as string]: `${durationMs}ms`,
       }}
     >
-      {/* 红色吞噬进度条（始终渲染，删除中推进到半程、完成时吞满） */}
+      {/* 红色吞噬进度条（始终渲染，删除中推进到 90%、完成时吞满；带像素纹理与锯齿前缘） */}
       <div className="kb-wipe-fill" />
       {/* 可选：插件装饰（龙头等 SVG，完整 <svg> 注入，已安全校验） */}
       {skin?.dragonSvg && (
         <div className="kb-dragon kb-dragon-skin" dangerouslySetInnerHTML={{ __html: skin.dragonSvg }} />
       )}
-      {/* 可选：插件粒子（未提供则不渲染） */}
-      {particles && particles.length > 0 && [1, 2, 3, 4, 5, 6].map(i => {
+      {/* 粒子：内置默认方形像素火花；插件皮肤提供 particleColors 则换色 */}
+      {particles.length > 0 && [1, 2, 3, 4, 5, 6].map(i => {
         const color = particles[(i - 1) % particles.length]
         return <span key={i} className={`kb-particle kb-p${i}`} style={{ ['--p' as string]: color }} />
       })}

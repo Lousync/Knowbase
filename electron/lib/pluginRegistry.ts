@@ -15,7 +15,7 @@ import { getPackState, importPack } from './knowledgePackImporter'
  */
 
 /** 插件下载/registry 镜像默认值 — 与 src/lib/settings.ts updateMirror 及 updateService 保持一致 */
-const DEFAULT_PLUGIN_MIRROR = 'https://gh.dpik.top'
+const DEFAULT_PLUGIN_MIRROR = 'https://gh-proxy.com'
 let pluginSettingReader: (key: string) => unknown = () => undefined
 
 /** 用户配置的 ghproxy 前缀镜像(gh.dpik.top 等);未配置过用默认,显式空串=不用 */

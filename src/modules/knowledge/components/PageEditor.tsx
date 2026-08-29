@@ -1114,7 +1114,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         </div>
       )}
 
-      {/* 沉浸刷题模式覆盖层（fixed 全屏，独立于阅读模式） */}
+      {/* 沉浸刷题模式覆盖层（模块内全屏，独立于阅读模式；不遮挡窗口标题栏） */}
       {quizMode && quizzes.length > 0 && (
         <QuizMode quizzes={quizzes} pageTitle={title} pageId={pageId} onClose={() => setQuizMode(false)} />
       )}

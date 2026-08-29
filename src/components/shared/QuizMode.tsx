@@ -118,7 +118,7 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId }: Props) {
   const rightList = useMemo(() => records.filter(r => r.correct), [records])
 
   return (
-    <div className="fixed inset-0 z-[70] bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="刷题模式">
+    <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="刷题模式">
       {/* 顶栏 */}
       <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <button

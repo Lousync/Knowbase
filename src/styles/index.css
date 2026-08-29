@@ -246,8 +246,9 @@ input:focus, textarea:focus, select:focus {
 
 /* ===== 删除吞噬动画：与删除进度同步（外观可被插件 deleteFx 皮肤替换） =====
    两阶段：
-   - 删除中（.kb-deleting）：红色吞噬推进到 ~55% 后停住，龙头循环咀嚼、粒子持续喷（直到删除真正完成）
-   - 收尾（.kb-deleting.kb-done）：删除完成后快速吞完剩余 + 行淡出消失 */
+   - 删除中（.kb-deleting）：红色吞噬推进到 ~90% 后停住（前缘像素台阶循环闪烁、粒子持续喷，直到删除真正完成）
+   - 收尾（.kb-deleting.kb-done）：删除完成后快速吞完剩余 + 行淡出消失
+   像素感：吞噬条带棋盘格纹理 + 右缘锯齿台阶（::after），粒子为方形像素火花（默认即有，插件可换色） */
 @keyframes kb-delete-fade {
   from { opacity: 1; }
   to { opacity: 0; }
@@ -269,12 +270,13 @@ input:focus, textarea:focus, select:focus {
 }
 @keyframes kb-wipe-partial {
   from { width: 0%; }
-  to { width: 55%; }
+  to { width: 90%; }
 }
 @keyframes kb-wipe-full {
-  from { width: 55%; }
+  from { width: 90%; }
   to { width: 100%; }
 }
+/* 吞噬条：纯色 + 像素棋盘格纹理（两向 repeating-linear-gradient 形成格子） */
 .kb-wipe-fill {
   position: absolute;
   top: 0;
@@ -283,20 +285,48 @@ input:focus, textarea:focus, select:focus {
   left: auto;
   width: 0%;
   background: var(--kb-wipe, var(--danger));
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 6px, rgba(0, 0, 0, 0.16) 6px 12px),
+    repeating-linear-gradient(0deg, transparent 0 6px, rgba(0, 0, 0, 0.12) 6px 12px);
+}
+/* 前缘像素台阶（右缘锯齿，宽度 12px 的阶梯剪裁，删除中循环闪烁模拟"咀嚼"） */
+.kb-wipe-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  background: var(--kb-wipe, var(--danger));
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 6px, rgba(0, 0, 0, 0.16) 6px 12px),
+    repeating-linear-gradient(0deg, transparent 0 6px, rgba(0, 0, 0, 0.12) 6px 12px);
+  clip-path: polygon(0 0, 100% 0, 100% 25%, 50% 25%, 50% 50%, 100% 50%, 100% 75%, 50% 75%, 50% 100%, 0 100%);
+}
+@keyframes kb-edge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 .kb-deleting .kb-wipe-fill {
   animation: kb-wipe-partial var(--kb-dur, 1100ms) cubic-bezier(0.55, 0, 0.55, 0.2) forwards;
 }
+.kb-deleting .kb-wipe-fill::after {
+  animation: kb-edge-pulse 460ms ease-in-out var(--kb-dur, 1100ms) infinite;
+}
 .kb-deleting.kb-done .kb-wipe-fill {
   animation: kb-wipe-full 180ms ease-in forwards;
 }
-/* 龙头：删除中推进到半程后循环张嘴，收尾时掠过整行 */
+.kb-deleting.kb-done .kb-wipe-fill::after {
+  animation: none;
+  opacity: 1;
+}
+/* 龙头：删除中推进到 90% 附近后循环张嘴，收尾时掠过整行 */
 @keyframes kb-dragon-run-partial {
   from { transform: translateX(0); }
-  to { transform: translateX(-60%); }
+  to { transform: translateX(-92%); }
 }
 @keyframes kb-dragon-run-full {
-  from { transform: translateX(-60%); }
+  from { transform: translateX(-92%); }
   to { transform: translateX(-118%); }
 }
 @keyframes kb-jaw {
@@ -320,17 +350,17 @@ input:focus, textarea:focus, select:focus {
   height: auto;
   display: block;
 }
-/* 粒子：删除中循环喷出，收尾时熄灭 */
+/* 粒子：方形像素火花，删除中循环喷出，收尾时熄灭（内置默认配色，插件皮肤可换） */
 @keyframes kb-particle-fly {
   0% { transform: translate(0, 0) scale(1); opacity: 0.95; }
   100% { transform: translate(var(--dx), var(--dy)) scale(0.25); opacity: 0; }
 }
 .kb-particle {
   position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  right: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 0;
+  right: 6px;
   background: var(--p, var(--kb-p, #ff7043));
   animation: kb-particle-fly 520ms ease-out infinite;
 }
@@ -347,6 +377,7 @@ input:focus, textarea:focus, select:focus {
 @media (prefers-reduced-motion: reduce) {
   .kb-deleting { animation: none; }
   .kb-deleting .kb-wipe-fill { animation: none; width: 100%; }
+  .kb-deleting .kb-wipe-fill::after { animation: none; opacity: 1; }
   .kb-delete-fx .kb-dragon, .kb-delete-fx .kb-particle { display: none; }
 }
 

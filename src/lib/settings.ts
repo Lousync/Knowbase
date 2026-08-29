@@ -54,6 +54,21 @@ export const BLOG_SIZE_OPTIONS = [
   { id: 'l', label: '宽松' },
 ] as const
 
+/** 知识库侧边栏条目大小（树行密度：行高 + 字号） */
+export const KNOWLEDGE_SIDEBAR_SIZE_OPTIONS = [
+  { id: 's', label: '紧凑' },
+  { id: 'm', label: '标准' },
+  { id: 'l', label: '宽松' },
+] as const
+
+/** 知识库侧边栏条目大小 → CSS 变量（--kb-row-py 树行内边距 / --kb-row-py-lg 章节行内边距 / --kb-row-fs 行字号）。
+ *  m 档与原实现像素完全一致（2px / 4px / 13px），切换 s/l 只改变密度不改变布局。 */
+export const KNOWLEDGE_SIDEBAR_ITEM_VARS: Record<string, Record<string, string>> = {
+  s: { '--kb-row-py': '0px', '--kb-row-py-lg': '2px', '--kb-row-fs': '12px' },
+  m: { '--kb-row-py': '2px', '--kb-row-py-lg': '4px', '--kb-row-fs': '13px' },
+  l: { '--kb-row-py': '7px', '--kb-row-py-lg': '9px', '--kb-row-fs': '14px' },
+}
+
 export const FONT_SIZE_OPTIONS = [
   { id: 12, label: '12px' },
   { id: 13, label: '13px' },
@@ -98,6 +113,9 @@ export const SETTINGS = {
 
   // ---- 博客 ----
   blogCardSize:       { default: 'm',         desc: '博客卡片大小' },
+
+  // ---- 知识库 ----
+  knowledgeSidebarItemSize: { default: 'm',  desc: '知识库侧边栏条目大小（s=紧凑 / m=标准 / l=宽松）' },
 
   // ---- 边栏宽度 ----
   sidebarWidth_blog:             { default: 240, desc: '博客边栏宽度' },
@@ -166,7 +184,7 @@ export const SETTINGS = {
   pluginAllowedLevels: { default: 'S,A,B', desc: '允许安装/启用的插件安全等级(S/A/B 逗号分隔)' },
 
   // ---- 更新下载 ----
-  updateMirror: { default: 'https://gh.dpik.top', desc: '更新下载镜像(GitHub 加速代理前缀,留空直连 GitHub;失效可随时替换)' },
+  updateMirror: { default: 'https://gh-proxy.com', desc: '更新下载镜像(GitHub 加速代理前缀,留空直连 GitHub;失效可随时替换)' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

@@ -25,7 +25,7 @@ let getSettingValue: (key: string) => unknown = () => undefined
  * 主进程读的是原始 settings.json 缓存,未写过该 key 时拿不到渲染层注册表的默认值,
  * 故此处兜底;用户显式置空字符串 = 强制直连。
  */
-const DEFAULT_UPDATE_MIRROR = 'https://gh.dpik.top'
+const DEFAULT_UPDATE_MIRROR = 'https://gh-proxy.com'
 
 /** 规范化用户配置的镜像前缀:非法返回 null(空串视为直连) */
 function resolveMirror(): string | null {
@@ -38,7 +38,7 @@ function resolveMirror(): string | null {
 }
 
 /** 已知可用的 ghproxy 节点(下载速度与缓存健康度不定,作为用户镜像之后的兜底候选) */
-const FALLBACK_MIRRORS = ['https://gh.dpik.top', 'https://gh-proxy.com', 'https://cdn.gh-proxy.com']
+const FALLBACK_MIRRORS = ['https://gh-proxy.com', 'https://gh.dpik.top', 'https://cdn.gh-proxy.com']
 
 /**
  * 由已通过白名单校验的 GitHub URL 构造下载候选列表:

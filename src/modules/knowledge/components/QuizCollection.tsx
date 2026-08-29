@@ -110,7 +110,7 @@ export function QuizCollection({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="错题本与收藏">
+    <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="错题本与收藏">
       {/* 顶栏 */}
       <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <span className="text-[13px] font-medium text-[var(--text-primary)]">错题本 / 收藏</span>

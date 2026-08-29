@@ -29,6 +29,8 @@ import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
+import { useSettings } from '../../lib/SettingsContext'
+import { KNOWLEDGE_SIDEBAR_ITEM_VARS } from '../../lib/settings'
 
 // ---- 剪贴板类型 ----
 interface ClipItem { type: 'category' | 'page'; id: string }
@@ -57,6 +59,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [locateCategoryId, setLocateCategoryId] = useState<string | null>(null)
   const [allKnowledgeTags, setAllKnowledgeTags] = useState<KnowledgeTag[]>([])
   const [showQuizCollection, setShowQuizCollection] = useState(false)
+  // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
+  const { s: settings } = useSettings()
+  const sidebarItemVars = KNOWLEDGE_SIDEBAR_ITEM_VARS[settings.knowledgeSidebarItemSize] ?? KNOWLEDGE_SIDEBAR_ITEM_VARS.m
   /** 删除动画状态：条目删除时先被红色吞噬（animating），动画后消失（done，等待 IPC 完成） */
   const [deletingMap, setDeletingMap] = useState<Map<string, 'animating' | 'done'>>(new Map())
   const deletingRef = useRef(deletingMap)
@@ -1024,7 +1029,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         <>
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
             {/* 空间沉浸视图顶部：返回栏（仅空间内显示） */}
             {selectedSpaceId && selectedSpace && (
               <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={handleRenameNotebook} />
@@ -1146,21 +1151,24 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onRenamePage={handleRenamePage}
                       clipboard={clipboard}
                       cutItemIds={cutItemIds}
+                      deletingMap={deletingMap}
                     />
                   </div>
                 )}
               </>
             )}
-            {/* 侧边栏底部：错题本 / 收藏入口 */}
-            <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5">
-              <button
-                onClick={() => setShowQuizCollection(true)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-              >
-                <BookMarked size={14} />
-                错题本 / 收藏
-              </button>
-            </div>
+            {/* 侧边栏底部：错题本 / 收藏入口（仅空间内显示，顶层工作区列表不显示） */}
+            {selectedSpaceId && selectedSpace && (
+              <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5">
+                <button
+                  onClick={() => setShowQuizCollection(true)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <BookMarked size={14} />
+                  错题本 / 收藏
+                </button>
+              </div>
+            )}
           </div>
         </ResizablePanel>
 

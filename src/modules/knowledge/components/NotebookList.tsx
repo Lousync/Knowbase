@@ -444,7 +444,7 @@ export function NotebookList({
         >
           {editingId === cat.id ? (
             <input
-              className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[13px] outline-none text-[var(--text-primary)]"
+              className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py-lg)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
               value={editName}
               onChange={e => setEditName(e.target.value)}
               onBlur={() => handleRename(cat.id)}
@@ -454,7 +454,7 @@ export function NotebookList({
           ) : (
             <div
               onClick={handleRowClick}
-              className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors ${
+              className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors ${
                 deletingState(cat.id) === 'animating' ? 'kb-deleting'
                   : deletingState(cat.id) === 'done' ? 'kb-deleting kb-done'
                 : isSelected ? 'bg-[var(--bg-selected)] text-white'
@@ -485,7 +485,7 @@ export function NotebookList({
               ) : (
                 <Folder size={15} className="shrink-0 text-[var(--text-muted)]" />
               )}
-              <span className="flex-1 truncate text-[13px]">{cat.name}</span>
+              <span className="flex-1 truncate text-[var(--kb-row-fs)]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
                 {onSortCategory && (<><button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={13} /></button><button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={13} /></button></>)}
                 {isNotebook ? (
@@ -549,7 +549,7 @@ export function NotebookList({
                   e.preventDefault(); e.stopPropagation()
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
-                className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
+                className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors border-l-[3px] ${
                   deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
                   : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -563,7 +563,7 @@ export function NotebookList({
                 <FileIcon ext={p.fileType || ''} size={14} />
                 {editingPageId === p.id ? (
                   <input
-                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                     value={editPageName}
                     onChange={e => setEditPageName(e.target.value)}
                     onBlur={() => handleRenamePage(p.id)}
@@ -572,7 +572,7 @@ export function NotebookList({
                     autoFocus
                   />
                 ) : (
-                  <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                  <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                 )}
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
@@ -747,7 +747,7 @@ export function NotebookList({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
+                  className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors border-l-[3px] ${
                     deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
                     : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -761,7 +761,7 @@ export function NotebookList({
                   <FileIcon ext={p.fileType || ''} size={14} />
                   {editingPageId === p.id ? (
                     <input
-                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                       value={editPageName}
                       onChange={e => setEditPageName(e.target.value)}
                       onBlur={() => handleRenamePage(p.id)}
@@ -770,7 +770,7 @@ export function NotebookList({
                       autoFocus
                     />
                   ) : (
-                    <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                    <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                   )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                   {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
@@ -805,7 +805,7 @@ export function NotebookList({
                   e.preventDefault(); e.stopPropagation()
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
-                className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded transition-colors border-l-[3px] ${
+                className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors border-l-[3px] ${
                   deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
                   : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -819,7 +819,7 @@ export function NotebookList({
                 <FileIcon ext={p.fileType || ''} size={14} />
                 {editingPageId === p.id ? (
                   <input
-                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-0.5 text-[13px] outline-none text-[var(--text-primary)]"
+                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                     value={editPageName}
                     onChange={e => setEditPageName(e.target.value)}
                     onBlur={() => handleRenamePage(p.id)}
@@ -828,7 +828,7 @@ export function NotebookList({
                     autoFocus
                   />
                 ) : (
-                  <span className="flex-1 truncate text-[13px]">{p.title || '无标题'}</span>
+                  <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                 )}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
@@ -867,7 +867,7 @@ export function NotebookList({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`flex items-center gap-1.5 px-1 ml-2 py-0.5 cursor-pointer rounded text-[12px] border-l-[3px] ${
+                  className={`flex items-center gap-1.5 px-1 ml-2 py-[var(--kb-row-py)] cursor-pointer rounded text-[var(--kb-row-fs)] border-l-[3px] ${
                     deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
                     : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -875,7 +875,7 @@ export function NotebookList({
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
                   {editingPageId === p.id ? (
                     <input
-                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1 py-0.5 text-[12px] outline-none text-[var(--text-primary)]"
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                       value={editPageName}
                       onChange={e => setEditPageName(e.target.value)}
                       onBlur={() => handleRenamePage(p.id)}
