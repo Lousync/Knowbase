@@ -13,9 +13,9 @@ import { notifyCheckin } from './pushService'
  * - 幂等：UNIQUE(habit_id, date) + getRowsModified() 保证只在新打卡时推送
  */
 
-export type LinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge'
+export type LinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge' | 'wordbook'
 
-const SOURCE_WHITELIST: LinkSource[] = ['blog', 'pomodoro', 'schedule', 'knowledge']
+const SOURCE_WHITELIST: LinkSource[] = ['blog', 'pomodoro', 'schedule', 'knowledge', 'wordbook']
 
 /** 业务模块保存行为后上报；date 为行为发生的业务日期（本地 YYYY-MM-DD），非系统当天 */
 export interface Activity {
@@ -79,6 +79,11 @@ function computeMetric(a: Activity): number | null {
     case 'knowledge': {
       const row = queryOne<{ n: number }>("SELECT COUNT(*) AS n FROM knowledge_pages WHERE date(created_at, 'localtime') = ?", [a.date])
       return row?.n ?? 0
+    }
+    // 单词本：当天完成学习的词数（新学+复习）
+    case 'wordbook': {
+      const row = queryOne<{ new_words: number; reviewed: number }>('SELECT new_words, reviewed FROM wordbook_daily WHERE date = ?', [a.date])
+      return (row?.new_words ?? 0) + (row?.reviewed ?? 0)
     }
     default:
       return null

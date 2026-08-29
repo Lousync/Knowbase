@@ -27,7 +27,7 @@ function dictPath(): string {
   return join(base, 'resources', 'dict', 'ecdict-exam.json')
 }
 
-function ensureLoaded(): DictData | null {
+function ensureLoaded(): DictData {
   if (data) return data
   try {
     data = JSON.parse(readFileSync(dictPath(), 'utf-8')) as DictData
@@ -138,7 +138,62 @@ export function lookupWord(rawWord: string): DictLookupResult {
 }
 
 export function getDictionaryStatus(): DictStatus {
-  const d = ensureLoaded()
-  const count = d ? Object.keys(d.words).length : 0
+  const count = Object.keys(ensureLoaded().words).length
   return { available: count > 0, wordCount: count }
+}
+
+// ===== 词书词表（按 ECDICT 考纲标签派生，供单词本模块使用） =====
+
+export type BookId = 'cet4' | 'cet6' | 'ky'
+
+const BOOK_IDS: BookId[] = ['cet4', 'cet6', 'ky']
+
+export function isBookId(v: string): v is BookId {
+  return (BOOK_IDS as string[]).includes(v)
+}
+
+interface BookWord { word: string; frq: number }
+
+const bookCache = new Map<BookId, BookWord[]>()
+
+/** 词书词表：按使用词频升序（高频在前），惰性构建并缓存 */
+export function getBookWords(book: BookId): BookWord[] {
+  const cached = bookCache.get(book)
+  if (cached) return cached
+  const d = ensureLoaded()
+  const list: BookWord[] = []
+  for (const [word, raw] of Object.entries(d.words)) {
+    if ((raw[3] || '').split(/\s+/).includes(book)) {
+      list.push({ word, frq: Number(raw[7]) || 999999 })
+    }
+  }
+  list.sort((a, b) => a.frq - b.frq)
+  bookCache.set(book, list)
+  return list
+}
+
+/** 取翻译首行（选项展示用）；未收录返回空串 */
+export function getPrimaryTranslation(word: string): string {
+  const raw = ensureLoaded().words[word.toLowerCase()]
+  if (!raw) return ''
+  return (raw[1] || '').split('\n')[0].trim()
+}
+
+/** 为答案词挑 n 个干扰项释义（同词书优先，翻译首行互不相同） */
+export function pickDistractors(answer: string, book: BookId | null, n: number): string[] {
+  const d = ensureLoaded()
+  const answerLine = getPrimaryTranslation(answer)
+  const pool: string[] = book ? getBookWords(book).map(w => w.word) : Object.keys(d.words)
+  const out: string[] = []
+  const seen = new Set([answerLine])
+  const start = Math.floor(Math.random() * pool.length)
+  for (let i = 0; i < pool.length && out.length < n; i++) {
+    const w = pool[(start + i) % pool.length]
+    if (w === answer.toLowerCase()) continue
+    const line = getPrimaryTranslation(w)
+    if (!line || seen.has(line)) continue
+    seen.add(line)
+    out.push(line)
+  }
+  return out
 }

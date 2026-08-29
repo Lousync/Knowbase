@@ -34,6 +34,7 @@ const LINK_SOURCES: { id: HabitLinkSource; label: string; unit: string; hint: st
   { id: 'pomodoro', label: '完成番茄专注', unit: '次', hint: '当天完成的专注场次达到阈值' },
   { id: 'schedule', label: '完成日程任务', unit: '个', hint: '当天完成的任务数达到阈值' },
   { id: 'knowledge', label: '新建知识页面', unit: '个', hint: '当天新建的页面数达到阈值' },
+  { id: 'wordbook', label: '背单词', unit: '词', hint: '当天完成学习的词数（新学+复习）达到阈值' },
 ]
 
 export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {

@@ -1,8 +1,10 @@
 // ===== 共享类型 =====
 
 import type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult } from '../lib/translateTypes'
+import type { WordbookBook, WordFeedback, WordbookStatus, WordbookItemDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto } from '../lib/wordbookTypes'
 
 export type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult }
+export type { WordbookBook, WordFeedback, WordbookStatus, WordbookItemDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto }
 
 export interface Entry {
   id: string; title: string; contentMd: string; contentHtml: string
@@ -14,7 +16,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'wordbook'
 
 // toolbox
 export interface ToolboxScript {
@@ -117,7 +119,7 @@ export interface UpdateWeightDTO { weight?: number; date?: string; series?: stri
 // ---- 打卡模块 ----
 export type HabitRuleType = 'daily' | 'weekdays' | 'flexible'
 /** 自动打卡来源（跨模块联动），指标现值由主进程从各源表按业务日期反查 */
-export type HabitLinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge'
+export type HabitLinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge' | 'wordbook'
 export interface HabitLink {
   source: HabitLinkSource
   /** 达标阈值：博客=字数，其余=当天累计次数 */
@@ -885,6 +887,15 @@ export interface ElectronAPI {
   dictLookup: (word: string) => Promise<DictLookupResult>
   dictStatus: () => Promise<DictStatus>
   translateInvoke: (req: TranslateInvokeRequest) => Promise<TranslateInvokeResult>
+  // 单词本
+  wordbookAdd: (word: string) => Promise<{ ok: boolean; already?: boolean; error?: string }>
+  wordbookRemove: (word: string) => Promise<{ ok: boolean }>
+  wordbookSetMastered: (word: string, mastered: boolean) => Promise<{ ok: boolean }>
+  wordbookList: (status?: string) => Promise<WordbookEntryDto[]>
+  wordbookGetToday: () => Promise<WordbookTodayDto>
+  wordbookAnswer: (word: string, feedback: WordFeedback) => Promise<{ ok: boolean; error?: string }>
+  wordbookSetBook: (book: string) => Promise<{ ok: boolean }>
+  wordbookStats: () => Promise<WordbookStatsDto>
   agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>

@@ -1238,8 +1238,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         onCancel={() => setUnsavedClosePageId(null)}
       />
 
-      {/* 错题本 / 收藏 */}
-      {showQuizCollection && <QuizCollection onClose={() => setShowQuizCollection(false)} />}
+      {/* 错题本 / 收藏（按当前学习空间分区：只显示该空间的内容） */}
+      {showQuizCollection && <QuizCollection onClose={() => setShowQuizCollection(false)} spaceName={selectedSpace?.name ?? undefined} />}
     </ImportZone>
   )
 }

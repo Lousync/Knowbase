@@ -35,6 +35,7 @@ import { registerSkillHandlers } from '../lib/skillService'
 import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
 import { registerTranslateHandlers } from '../lib/translateService'
+import { registerWordbookHandlers } from '../lib/wordbookService'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -469,6 +470,8 @@ app.whenReady().then(async () => {
     registerAgentHandlers()
     // 划词翻译:离线词典 + LLM 翻译/AI 精讲
     registerTranslateHandlers()
+    // 单词本:生词本 + 每日队列 SRS + 词书
+    registerWordbookHandlers({ getSettingValue: (key) => settingsCache[key], setSettingValue })
   }
 
   ipcMain.handle('app:getVersion', () => app.getVersion())

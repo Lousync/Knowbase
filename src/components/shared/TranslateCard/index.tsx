@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages } from 'lucide-react'
+import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages, Star } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
-import { copyText, dictLookup, translateInvoke } from '../../../lib/ipc'
+import { copyText, dictLookup, translateInvoke, wordbookAdd } from '../../../lib/ipc'
 import type { DictLookupResult, TranslateMode } from '../../../lib/translateTypes'
 import { MarkdownPreview } from '../MarkdownPreview'
 
@@ -43,7 +43,20 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
   const [aiStarted, setAiStarted] = useState(mode === 'sentence') // 句子模式挂载即翻译
   const [cached, setCached] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [starred, setStarred] = useState(false)
   const reqSeqRef = useRef(0)
+
+  /** 收藏进生词本（仅单词模式） */
+  const handleStar = async () => {
+    const w = (dict?.found ? dict.entry!.word : text).trim().toLowerCase()
+    try {
+      const r = await wordbookAdd(w)
+      if (r.ok) {
+        setStarred(true)
+        showToast({ type: 'info', message: r.already ? `「${w}」已在生词本` : `已加入生词本：${w}` })
+      } else showToast({ type: 'error', message: r.error ?? '收藏失败' })
+    } catch { showToast({ type: 'error', message: '收藏失败' }) }
+  }
 
   // 单词模式：立即查离线词典
   useEffect(() => {
@@ -134,6 +147,14 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
         {mode === 'word' ? <BookOpen size={12} className="text-[var(--accent)]" /> : <Languages size={12} className="text-[var(--accent)]" />}
         <span className="text-[11px] font-medium text-[var(--text-secondary)]">{mode === 'word' ? '词典' : '翻译'}</span>
         {cached && <span className="text-[10px] text-[var(--text-disabled)]">已缓存</span>}
+        {mode === 'word' && (
+          <button onClick={() => void handleStar()} title={starred ? '已加入生词本' : '加入生词本'}
+            className={`p-1 rounded transition-colors ${starred
+              ? 'text-amber-400'
+              : 'text-[var(--text-muted)] hover:text-amber-400 hover:bg-[var(--bg-hover)]'}`}>
+            <Star size={11} className={starred ? 'fill-current' : ''} />
+          </button>
+        )}
         <button onClick={handleCopy} title="复制结果"
           className="ml-auto p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
           {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}

@@ -11,5 +11,5 @@
     "outDir": "./out",
     "types": ["electron-vite/node"]
   },
-  "include": ["electron/**/*", "electron.vite.config.ts", "src/lib/settings.ts", "src/lib/translateTypes.ts"]
+  "include": ["electron/**/*", "electron.vite.config.ts", "src/lib/settings.ts", "src/lib/translateTypes.ts", "src/lib/wordbookTypes.ts"]
 }

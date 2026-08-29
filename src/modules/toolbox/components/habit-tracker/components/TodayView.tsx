@@ -14,7 +14,7 @@ interface Props {
 const WEEK_FULL = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const LINK_LABELS: Record<HabitLinkSource, string> = {
-  blog: '写日志', pomodoro: '番茄专注', schedule: '日程任务', knowledge: '知识页面',
+  blog: '写日志', pomodoro: '番茄专注', schedule: '日程任务', knowledge: '知识页面', wordbook: '背单词',
 }
 
 export function TodayView({ habits, records, onToggle, onNew }: Props) {

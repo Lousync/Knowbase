@@ -49,6 +49,7 @@ import { m047KnowledgePackImportsMigration } from './047_knowledge_pack_imports'
 import { m048HabitLinksMigration } from './048_habit_links'
 import { m049QuizRecordsMigration } from './049_quiz_records'
 import { m050TranslationCacheMigration } from './050_translation_cache'
+import { m051WordbookMigration } from './051_wordbook'
 
 /**
  * 迁移执行顺序表 —— 顺序即语义，只允许追加，不允许重排或改名。
@@ -111,4 +112,5 @@ export const MIGRATIONS: Migration[] = [
   m048HabitLinksMigration,
   m049QuizRecordsMigration,
   m050TranslationCacheMigration,
+  m051WordbookMigration,
 ]

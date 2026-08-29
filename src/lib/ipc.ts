@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -322,6 +322,16 @@ export const llmGetUsage = (): Promise<LlmUsageInfo> => a().llmGetUsage()
 export const dictLookup = (word: string): Promise<DictLookupResult> => a().dictLookup(word)
 export const dictStatus = (): Promise<DictStatus> => a().dictStatus()
 export const translateInvoke = (req: TranslateInvokeRequest): Promise<TranslateInvokeResult> => a().translateInvoke(req)
+
+// ===== 单词本 =====
+export const wordbookAdd = (word: string): Promise<{ ok: boolean; already?: boolean; error?: string }> => a().wordbookAdd(word)
+export const wordbookRemove = (word: string): Promise<{ ok: boolean }> => a().wordbookRemove(word)
+export const wordbookSetMastered = (word: string, mastered: boolean): Promise<{ ok: boolean }> => a().wordbookSetMastered(word, mastered)
+export const wordbookList = (status?: string): Promise<WordbookEntryDto[]> => a().wordbookList(status)
+export const wordbookGetToday = (): Promise<WordbookTodayDto> => a().wordbookGetToday()
+export const wordbookAnswer = (word: string, feedback: WordFeedback): Promise<{ ok: boolean; error?: string }> => a().wordbookAnswer(word, feedback)
+export const wordbookSetBook = (book: string): Promise<{ ok: boolean }> => a().wordbookSetBook(book)
+export const wordbookStats = (): Promise<WordbookStatsDto> => a().wordbookStats()
 
 export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })
