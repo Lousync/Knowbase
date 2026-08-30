@@ -1,6 +1,6 @@
 {
   "name": "knowbase",
-  "version": "2.12.1",
+  "version": "2.13.0",
   "description": "Knowbase Programmer Edition — 本地 Windows 桌面知识管理工具",
   "main": "./out/main/index.js",
   "scripts": {
@@ -19,6 +19,7 @@
     "katex": "^0.18.4",
     "lucide-react": "^1.0.0",
     "monaco-editor": "^0.55.1",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

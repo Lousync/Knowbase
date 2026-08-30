@@ -21,6 +21,9 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContext
  * 拖拽左缘调宽；拖到 320px 以下松手 = 整体关闭（snap），不会误触下层模块侧栏。
  */
 
+/** 选区矩形（viewport 坐标），供翻译卡片智能定位 */
+interface SelRect { left: number; top: number; right: number; bottom: number }
+
 interface UiMessage {
   id?: string
   role: 'user' | 'assistant'
@@ -78,10 +81,10 @@ export function AssistantPanel() {
   /** 行内编辑用户消息：目标消息 id + 草稿 */
   const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null)
   /** 选中文本即问：浮动按钮状态与一次性选中上下文 */
-  const [selFloat, setSelFloat] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [selFloat, setSelFloat] = useState<{ x: number; y: number; rect: SelRect; text: string } | null>(null)
   const [selCtx, setSelCtx] = useState<AgentContextInfo | null>(null)
   /** 划词翻译卡片（与「问 AI」浮钮共用选区检测） */
-  const [transFloat, setTransFloat] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [transFloat, setTransFloat] = useState<{ rect: SelRect; text: string } | null>(null)
   /** 会话抽屉卸载兜底定时器（closeDrawer 240ms 后触发） */
   const drawerTimerRef = useRef<number | null>(null)
   const chatIdRef = useRef<string>('')
@@ -231,6 +234,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
           setSelFloat({
             x: Math.min(rect.right + 8, window.innerWidth - 170),
             y: Math.min(rect.bottom + 6, window.innerHeight - 44),
+            rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
             text,
           })
         } catch { setSelFloat(null) }
@@ -260,11 +264,11 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [openPanel])
 
-  /** 从选中片段发起翻译（浮钮位置直接弹出翻译卡片） */
-  const translateSelection = useCallback((pos: { x: number; y: number }, text: string) => {
+  /** 从选中片段发起翻译（携带选区矩形，卡片据此智能定位） */
+  const translateSelection = useCallback((pos: { rect: SelRect }, text: string) => {
     window.getSelection()?.removeAllRanges()
     setSelFloat(null)
-    setTransFloat({ x: pos.x, y: pos.y, text })
+    setTransFloat({ rect: pos.rect, text })
   }, [])
 
   const send = useCallback(async () => {
@@ -399,8 +403,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       {/* 划词翻译卡片 */}
       {transFloat && (
         <TranslateCard
-          x={transFloat.x}
-          y={transFloat.y}
+          rect={transFloat.rect}
           text={transFloat.text}
           onClose={() => setTransFloat(null)}
         />

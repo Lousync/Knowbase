@@ -388,6 +388,31 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     }
   }, [])
 
+  // ===== 脚注：选中词语包裹为 `word^[标注]`，阅读/预览态点击展开 =====
+  const insertFootnote = useCallback(() => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    const sel = editor?.getSelection()
+    if (!editor || !model || !sel) return
+    const selected = model.getValueInRange(sel)
+    if (!selected.trim() || selected.includes('\n')) {
+      showToast({ type: 'info', message: '请先在编辑器中选中要标注的单词或短语（单行）' })
+      return
+    }
+    const base = selected.trim().replace(/\^\[[^\]]*\]$/, '')
+    const text = `${base}^[注释]`
+    editor.executeEdits('footnote', [{ range: sel, text }])
+    // 选中占位文字「注释」，直接输入即替换
+    const end = editor.getSelection()
+    if (end) {
+      editor.setSelection({
+        startLineNumber: end.endLineNumber, startColumn: end.endColumn - 3,
+        endLineNumber: end.endLineNumber, endColumn: end.endColumn - 1,
+      })
+    }
+    editor.focus()
+  }, [])
+
   // Monaco mount handler — register wiki-link completion provider
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
@@ -619,6 +644,11 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             className={`w-2.5 h-2.5 rounded-full shrink-0 ${saving ? 'bg-[var(--warning)] animate-pulse' : 'bg-green-500'}`}
             title={saving ? '保存中…' : '已保存'}
           />
+          {!isCodeFile && !isPdfFile && !preview && (
+            <button onClick={insertFootnote} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="脚注：选中词语后点击，加自己的标注（阅读时点击展开）">
+              <StickyNote size={15} />
+            </button>
+          )}
           {!isCodeFile && !isPdfFile && !preview && (
             <button onClick={() => imageInputRef.current?.click()} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="插入图片">
               <ImagePlus size={15} />

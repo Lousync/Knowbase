@@ -22,18 +22,34 @@ export function applyThemeClass(themeId: string): void {
 }
 
 export const FONT_OPTIONS = [
-  { id: 'system', label: '系统默认', sample: 'System UI' },
-  { id: 'yahei',  label: '微软雅黑', sample: 'Microsoft YaHei' },
-  { id: 'noto',   label: '思源黑体', sample: 'Noto Sans SC' },
-  { id: 'mono',   label: '等宽字体', sample: 'Cascadia Code' },
+  { id: 'system',    label: '系统默认',   sample: 'System UI' },
+  { id: 'yahei',     label: '微软雅黑',   sample: 'Microsoft YaHei' },
+  { id: 'dengxian',  label: '等线',       sample: 'DengXian' },
+  { id: 'heiti',     label: '黑体',       sample: 'SimHei' },
+  { id: 'noto',      label: '思源黑体',   sample: 'Noto Sans SC' },
+  { id: 'notoserif', label: '思源宋体',   sample: 'Noto Serif SC' },
+  { id: 'songti',    label: '宋体',       sample: 'SimSun' },
+  { id: 'fangsong',  label: '仿宋',       sample: 'FangSong' },
+  { id: 'kaiti',     label: '楷体',       sample: 'KaiTi' },
+  { id: 'lxgw',      label: '霞鹜文楷',   sample: 'LXGW WenKai' },
+  { id: 'times',     label: '西文衬线',   sample: 'Times New Roman' },
+  { id: 'mono',      label: '等宽字体',   sample: 'Cascadia Code' },
 ] as const
 
-/** 字体 ID → CSS font-family */
+/** 字体 ID → CSS font-family（链条末端的兜底保证任何机器都可用） */
 export const FONT_CSS_MAP: Record<string, string> = {
-  system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
-  yahei:  "'Microsoft YaHei', '微软雅黑', sans-serif",
-  noto:   "'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
-  mono:   "'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace",
+  system:    "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
+  yahei:     "'Microsoft YaHei', '微软雅黑', sans-serif",
+  dengxian:  "'DengXian', '等线', 'Microsoft YaHei', sans-serif",
+  heiti:     "'SimHei', '黑体', 'Microsoft YaHei', sans-serif",
+  noto:      "'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
+  notoserif: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif",
+  songti:    "'SimSun', '宋体', 'Noto Serif SC', serif",
+  fangsong:  "'FangSong', '仿宋', 'SimSun', serif",
+  kaiti:     "'KaiTi', '楷体', 'SimSun', serif",
+  lxgw:      "'LXGW WenKai', '霞鹜文楷', 'KaiTi', '楷体', serif",
+  times:     "'Times New Roman', Georgia, 'SimSun', serif",
+  mono:      "'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace",
 }
 
 export const ENCODING_OPTIONS = [
@@ -181,6 +197,9 @@ export const SETTINGS = {
   // ---- 单词本 ----
   wordbookActiveBook: { default: '',  desc: '当前学习的词书(\'\'=未选 cet4|cet6|ky)' },
   wordbookNewPerDay:  { default: 10,  desc: '每日建议新学词数' },
+
+  // ---- 错题本形态 ----
+  quizbookMode: { default: 'plugin', desc: '错题本形态:plugin 插件版(默认,C 级模块插件) / builtin 内置版(回退)' },
 
   // ---- 模型标记 ----
   aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },

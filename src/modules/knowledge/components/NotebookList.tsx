@@ -575,7 +575,7 @@ export function NotebookList({
                   <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                 )}
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
-                {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
                 {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
@@ -772,7 +772,7 @@ export function NotebookList({
                   ) : (
                     <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                   )}
-                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                   {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
@@ -830,7 +830,7 @@ export function NotebookList({
                 ) : (
                   <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                 )}
-                {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
                 {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
@@ -867,7 +867,7 @@ export function NotebookList({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`flex items-center gap-1.5 px-1 ml-2 py-[var(--kb-row-py)] cursor-pointer rounded text-[var(--kb-row-fs)] border-l-[3px] ${
+                  className={`group flex items-center gap-1.5 px-1 ml-2 py-[var(--kb-row-py)] cursor-pointer rounded text-[var(--kb-row-fs)] border-l-[3px] ${
                     deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
                     : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
@@ -886,7 +886,7 @@ export function NotebookList({
                   ) : (
                     <span className="truncate flex-1">{p.title || '无标题'}</span>
                   )}
-                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
+                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
               ))}

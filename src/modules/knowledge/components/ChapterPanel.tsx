@@ -480,8 +480,8 @@ export function ChapterPanel({
                   ) : (
                     <span className="flex-1 truncate">{p.title || '无标题'}</span>
                   )}
-                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return fi.badge ? <span className="shrink-0 text-[8px] px-1 rounded font-medium ml-0.5" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> : null })()}
-                  <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {(() => { const fi = getFileTypeInfo(p.fileType || ''); return fi.badge ? <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-0.5" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> : null })()}
+                  <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
                     <button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }}
                       className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移">
                       <ChevronUp size={11} />
@@ -492,7 +492,7 @@ export function ChapterPanel({
                     </button>
                   </div>
                   <button onClick={e => { e.stopPropagation(); onToggleStar(p.id) }}
-                    className="shrink-0 p-0.5 opacity-0 group-hover:opacity-100">
+                    className="shrink-0 p-0.5 hidden group-hover:block">
                     <Star size={13} className={p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
                   </button>
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}

@@ -107,11 +107,18 @@ const api = {
     return () => { ipcRenderer.removeListener('plugin:download-progress', handler) }
   },
   pluginInstallFromFile: (grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installFromFile', grantedCapabilities),
+  pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installBundledSample', filename, grantedCapabilities),
   pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),
   pluginSetEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('plugin:setEnabled', id, enabled),
   pluginUninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
   pluginGetContribution: (id: string, key: string) => ipcRenderer.invoke('plugin:getContribution', id, key),
+  pluginListViews: (slot: unknown) => ipcRenderer.invoke('plugin:listViews', slot),
   pluginListDeleteFxSkins: () => ipcRenderer.invoke('plugin:listDeleteFxSkins'),
+  // C 级模块插件:自有数据表读写(结构化 CRUD,主进程校验 data 能力)
+  pluginDataQuery: (pluginId: string, table: string, opts: unknown) => ipcRenderer.invoke('pluginData:query', pluginId, table, opts),
+  pluginDataInsert: (pluginId: string, table: string, row: unknown) => ipcRenderer.invoke('pluginData:insert', pluginId, table, row),
+  pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: unknown) => ipcRenderer.invoke('pluginData:update', pluginId, table, rowId, patch),
+  pluginDataDelete: (pluginId: string, table: string, rowId: string | number) => ipcRenderer.invoke('pluginData:delete', pluginId, table, rowId),
   // AI tools (ToolRegistry)
   aiToolsList: () => ipcRenderer.invoke('aiTools:list'),
   aiToolsInvoke: (name: string, args?: unknown) => ipcRenderer.invoke('aiTools:invoke', name, args),
@@ -167,6 +174,10 @@ const api = {
   wordbookGroupsRemoveWord: (id: string, word: string) => ipcRenderer.invoke('wordbook:groups:removeWord', id, word),
   wordbookGroupsWords: (id: string) => ipcRenderer.invoke('wordbook:groups:words', id),
   wordbookCustomQueue: (label: string, words: string[]) => ipcRenderer.invoke('wordbook:customQueue', label, words),
+  // PDF 工具箱
+  pdfMerge: (files: Array<{ name: string; data: Uint8Array }>) => ipcRenderer.invoke('pdf:merge', files),
+  pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => ipcRenderer.invoke('pdf:organize', payload),
+  pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => ipcRenderer.invoke('pdf:export', payload),
   agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:chat', req),
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),
@@ -184,6 +195,8 @@ const api = {
   pluginAuditList: (id?: string) => ipcRenderer.invoke('plugin:auditList', id),
   pluginAuditClear: (id?: string) => ipcRenderer.invoke('plugin:auditClear', id),
   pluginAuditWrite: (id: string, action: string, detail?: unknown) => ipcRenderer.invoke('plugin:auditWrite', id, action, detail),
+  pluginGetAllowedLevels: () => ipcRenderer.invoke('plugin:getAllowedLevels'),
+  pluginSetAllowedLevels: (levels: unknown) => ipcRenderer.invoke('plugin:setAllowedLevels', levels),
   knowledgePackGetState: (pluginId: string) => ipcRenderer.invoke('knowledgePack:getImportState', pluginId),
   knowledgePackImport: (pluginId: string, overwriteModified: boolean, forceExternalIds?: string[]) => ipcRenderer.invoke('knowledgePack:importPack', pluginId, overwriteModified, forceExternalIds ?? []),
   onKnowledgePackProgress: (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => {
@@ -334,6 +347,15 @@ const api = {
   quizCollectionCreate: (name: string) => ipcRenderer.invoke('quizCollection:create', name),
   quizCollectionRename: (id: string, name: string) => ipcRenderer.invoke('quizCollection:rename', id, name),
   quizCollectionDelete: (id: string) => ipcRenderer.invoke('quizCollection:delete', id),
+  // quiz data migration (P2: main tables ⇄ plugin namespace tables)
+  quizMigrateStatus: () => ipcRenderer.invoke('quizMigrate:status'),
+  quizMigrateExport: () => ipcRenderer.invoke('quizMigrate:export'),
+  quizMigrateToPlugin: (opts: unknown) => ipcRenderer.invoke('quizMigrate:toPlugin', opts),
+  quizMigrateFromPlugin: () => ipcRenderer.invoke('quizMigrate:fromPlugin'),
+  quizMigrateDropPluginData: () => ipcRenderer.invoke('quizMigrate:dropPluginData'),
+  // plugin-mode quiz report (write to plugin namespace tables)
+  quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta: unknown) => ipcRenderer.invoke('quiz:pluginReport', pluginId, pageId, quizNo, correct, meta),
+  quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => ipcRenderer.invoke('quiz:pluginToggleFavorite', pluginId, pageId, quizNo),
 
   // fill popup
   isFillPopup,

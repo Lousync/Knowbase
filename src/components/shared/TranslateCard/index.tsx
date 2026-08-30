@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages, Star, Volume2 } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
 import { speak } from '../../../lib/tts'
@@ -15,8 +15,8 @@ import { MarkdownPreview } from '../MarkdownPreview'
  */
 
 interface TranslateCardProps {
-  x: number
-  y: number
+  /** 选区矩形（viewport 坐标），卡片据此定位：优先放选区下方，放不下放上方，且不遮住选中的原文 */
+  rect: { left: number; top: number; right: number; bottom: number }
   text: string
   onClose: () => void
 }
@@ -35,7 +35,7 @@ function isSingleWord(text: string): boolean {
   return /^[A-Za-z][A-Za-z''-]*$/.test(text.trim())
 }
 
-export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
+export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
   const mode: TranslateMode = isSingleWord(text) ? 'word' : 'sentence'
   const { s } = useSettings()
   const [dict, setDict] = useState<DictLookupResult | null>(null)
@@ -139,9 +139,31 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
     } else showToast({ type: 'error', message: '复制失败' })
   }
 
+  // ===== 智能定位：先渲染量高，再"先量后摆"，避免溢出屏幕或盖住选中的原文 =====
   const CARD_W = 400
-  const left = Math.max(8, Math.min(x, window.innerWidth - CARD_W - 12))
-  const top = Math.max(8, Math.min(y, window.innerHeight - 80))
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const h = cardRef.current?.offsetHeight ?? 320
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const M = 8 // 视口边距
+    // 垂直：优先选区下方，放不下放上方，都放不下则取最大可视高度
+    let top: number
+    if (rect.bottom + M + h <= vh - M) top = rect.bottom + M
+    else if (rect.top - M - h >= M) top = rect.top - M - h
+    else top = Math.max(M, Math.min(vh - M - h, rect.bottom + M))
+    // 水平：与选区左缘对齐并夹进视口
+    let left = Math.max(M, Math.min(rect.left, vw - CARD_W - M))
+    // 若仍与选区纵向重叠（上下都放不下的兜底），横移到选区侧旁避免盖住原文
+    const vOverlap = top < rect.bottom && top + h > rect.top
+    if (vOverlap && left < rect.right && left + CARD_W > rect.left) {
+      if (rect.right + M + CARD_W <= vw - M) left = rect.right + M
+      else if (rect.left - M - CARD_W >= M) left = rect.left - M - CARD_W
+    }
+    setPlace({ left, top })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const entry = dict?.found ? dict.entry : undefined
   const examTags = entry?.tags.filter(t => t === 'cet4' || t === 'cet6' || t === 'ky') ?? []
@@ -152,9 +174,10 @@ export function TranslateCard({ x, y, text, onClose }: TranslateCardProps) {
 
   return (
     <div
+      ref={cardRef}
       data-translate-card
-      className="fixed z-50 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl flex flex-col overflow-hidden"
-      style={{ left, top, width: CARD_W, maxHeight: 'min(70vh, 560px)' }}
+      className="fixed z-50 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl flex flex-col overflow-hidden transition-opacity"
+      style={{ left: place?.left ?? -9999, top: place?.top ?? -9999, width: CARD_W, maxHeight: 'min(70vh, 560px)', opacity: place ? 1 : 0 }}
     >
       {/* 头部 */}
       <div className="shrink-0 h-8 px-2.5 flex items-center gap-1.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">

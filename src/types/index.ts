@@ -78,6 +78,19 @@ export interface QuizStatsDto {
   todayWrong: number
   correctRate: number
 }
+/** 错题本数据迁移（主表 ⇄ 插件命名空间表）状态与结果 */
+export interface QuizMigrateStatus {
+  main: Record<string, number>
+  plugin: Record<string, number>
+  pluginTablesExist: boolean
+}
+export interface QuizMigrateResult {
+  ok: boolean
+  dryRun?: boolean
+  moved?: Record<string, number>
+  backupPath?: string
+  error?: string
+}
 export interface QuizCollectionDto {
   id: string
   name: string
@@ -372,7 +385,7 @@ export interface PluginRegistryEntry {
   updatedAt?: string
 }
 
-export type PluginRiskLevel = 'S' | 'A' | 'B'
+export type PluginRiskLevel = 'S' | 'A' | 'B' | 'C'
 
 /** 删除动画皮肤（插件 contributes.deleteFx，纯数据） */
 export interface DeleteFxSkin {
@@ -387,6 +400,20 @@ export interface DeleteFxSkin {
   wipeColor?: string
   /** 动画时长 ms（300-2000） */
   durationMs?: number
+}
+
+/** 插件视图挂载点贡献（C 级模块插件 contributes.views） */
+export interface PluginViewContribution {
+  pluginId: string
+  name: string
+  entry: string
+  /** 挂载槽位，如 knowledge.sidebar */
+  slot: string
+  title: string
+  /** fullscreen 覆盖层 / panel 面板 */
+  mode: string
+  icon?: string
+  granted: string[]
 }
 
 export interface PluginSummary {
@@ -647,6 +674,10 @@ export interface AgentChatResult {
   trace: AgentTraceStep[]
 }
 
+// ===== PDF 工具箱 =====
+export type PdfOpResult = { ok: true; data: Uint8Array } | { ok: false; error: string; cancelled?: boolean }
+export type PdfExportResult = { ok: true; path: string } | { ok: false; error?: string; cancelled?: boolean }
+
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
   copyImage: (src: { path?: string; dataUrl?: string }) => Promise<boolean>
@@ -729,15 +760,23 @@ export interface ElectronAPI {
   pluginInstall: (url: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => () => void
   pluginInstallFromFile: (grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
+  pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   pluginListInstalled: () => Promise<PluginSummary[]>
   pluginSetEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; message?: string }>
   pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
   pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
+  pluginListViews: (slot?: string) => Promise<PluginViewContribution[]>
+  pluginDataQuery: (pluginId: string, table: string, opts?: { where?: Array<{ column: string; op?: string; value: unknown }>; orderBy?: string; desc?: boolean; limit?: number }) => Promise<Record<string, unknown>[]>
+  pluginDataInsert: (pluginId: string, table: string, row: Record<string, unknown>) => Promise<{ ok: boolean; id?: string; error?: string }>
+  pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>
+  pluginDataDelete: (pluginId: string, table: string, rowId: string | number) => Promise<{ ok: boolean; error?: string }>
   pluginListDeleteFxSkins: () => Promise<DeleteFxSkin[]>
   pluginSetGranted: (id: string, caps: string[]) => Promise<{ success: boolean; message?: string }>
   pluginAuditList: (id?: string) => Promise<PluginAuditEntry[]>
   pluginAuditClear: (id?: string) => Promise<{ success: boolean }>
   pluginAuditWrite: (id: string, action: string, detail?: unknown) => Promise<{ success: boolean }>
+  pluginGetAllowedLevels: () => Promise<string[]>
+  pluginSetAllowedLevels: (levels: string[]) => Promise<{ success: boolean; message?: string }>
   knowledgePackGetState: (pluginId: string) => Promise<{ ok: boolean; state?: 'not-imported' | 'imported' | 'update-available' | 'disabled'; version?: string; chapters?: number; totalPages?: number; newPages?: number; changedPages?: number; lastImportedAt?: string; spaceId?: string | null; notebookCount?: number; spaceName?: string; message?: string }>
   knowledgePackImport: (pluginId: string, overwriteModified: boolean, forceExternalIds?: string[]) => Promise<{ ok: boolean; created?: number; updated?: number; skipped?: number; conflicts?: { title: string; reason: string; externalId: string }[]; spaceId?: string | null; message?: string }>
   onKnowledgePackProgress: (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => () => void
@@ -862,7 +901,7 @@ export interface ElectronAPI {
   deleteBlogTemplate: (id: string) => Promise<void>
   // quiz records (收藏 + 错题本)
   quizRecordGetByPage: (pageId: string) => Promise<QuizRecordDto[]>
-  quizRecordReport: (pageId: string, quizNo: number, correct: boolean, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }) => Promise<QuizRecordDto>
+  quizRecordReport: (pageId: string, quizNo: number, correct: boolean, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }) => Promise<QuizRecordDto | null>
   quizRecordToggleFavorite: (pageId: string, quizNo: number, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }) => Promise<QuizRecordDto>
   quizRecordList: (opts?: { kind?: 'favorite' | 'wrong' | 'all'; sourceSpace?: string; collectionId?: string }) => Promise<QuizRecordDto[]>
   quizRecordRemove: (pageId: string, quizNo: number) => Promise<void>
@@ -878,6 +917,14 @@ export interface ElectronAPI {
   quizCollectionCreate: (name: string) => Promise<QuizCollectionDto>
   quizCollectionRename: (id: string, name: string) => Promise<QuizCollectionDto>
   quizCollectionDelete: (id: string) => Promise<void>
+  // quiz data migration (P2)
+  quizMigrateStatus: () => Promise<QuizMigrateStatus>
+  quizMigrateExport: () => Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }>
+  quizMigrateToPlugin: (opts?: { dryRun?: boolean; backup?: boolean }) => Promise<QuizMigrateResult>
+  quizMigrateFromPlugin: () => Promise<QuizMigrateResult>
+  quizMigrateDropPluginData: () => Promise<{ ok: boolean; error?: string }>
+  quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }) => Promise<{ ok: boolean; error?: string }>
+  quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => Promise<{ ok: boolean; favorite: boolean }>
   // fill popup
   isFillPopup: boolean
   fillPopupTheme: string
@@ -940,6 +987,10 @@ export interface ElectronAPI {
   wordbookGroupsRemoveWord: (id: string, word: string) => Promise<{ ok: boolean }>
   wordbookGroupsWords: (id: string) => Promise<string[]>
   wordbookCustomQueue: (label: string, words: string[]) => Promise<WordbookCustomQueueDto>
+  // PDF 工具箱
+  pdfMerge: (files: Array<{ name: string; data: Uint8Array }>) => Promise<PdfOpResult>
+  pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => Promise<PdfOpResult>
+  pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => Promise<PdfExportResult>
   agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>

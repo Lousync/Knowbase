@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, QuizMigrateResult, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -118,17 +118,28 @@ export const updatePauseDownload = () => a().updatePauseDownload()
 export const updateCancelDownload = () => a().updateCancelDownload()
 export const onUpdateDownloadProgress = (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => a().onUpdateDownloadProgress(cb)
 export const pluginFetchRegistry = () => a().pluginFetchRegistry()
-export const pluginInstall = (url: string) => a().pluginInstall(url)
-export const pluginInstallFromFile = () => a().pluginInstallFromFile()
+export const pluginInstall = (url: string, grantedCapabilities?: string[]) => a().pluginInstall(url, grantedCapabilities)
+export const pluginInstallFromFile = (grantedCapabilities?: string[]) => a().pluginInstallFromFile(grantedCapabilities)
+/** 一键安装内置示例插件（开发期从工作区 samples/ 读，prod 后续用 extraResources 预置） */
+export const pluginInstallBundledSample = (filename: string, grantedCapabilities?: string[]) => a().pluginInstallBundledSample(filename, grantedCapabilities)
 export const pluginListInstalled = () => a().pluginListInstalled()
 export const pluginSetEnabled = (id: string, enabled: boolean) => a().pluginSetEnabled(id, enabled)
 export const pluginUninstall = (id: string) => a().pluginUninstall(id)
 export const pluginGetContribution = (id: string, key: string) => a().pluginGetContribution(id, key)
+/** 列出已启用插件声明的视图挂载点（可按 slot 过滤） */
+export const pluginListViews = (slot?: string): Promise<PluginViewContribution[]> => a().pluginListViews(slot)
+/** C 级模块插件：自有数据表读写（主进程校验 data 能力后执行，禁止任意 SQL） */
+export const pluginDataQuery = (pluginId: string, table: string, opts?: { where?: Array<{ column: string; op?: string; value: unknown }>; orderBy?: string; desc?: boolean; limit?: number }): Promise<Record<string, unknown>[]> => a().pluginDataQuery(pluginId, table, opts)
+export const pluginDataInsert = (pluginId: string, table: string, row: Record<string, unknown>): Promise<{ ok: boolean; id?: string; error?: string }> => a().pluginDataInsert(pluginId, table, row)
+export const pluginDataUpdate = (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> => a().pluginDataUpdate(pluginId, table, rowId, patch)
+export const pluginDataDelete = (pluginId: string, table: string, rowId: string | number): Promise<{ ok: boolean; error?: string }> => a().pluginDataDelete(pluginId, table, rowId)
 export const pluginListDeleteFxSkins = () => a().pluginListDeleteFxSkins()
 export const pluginSetGranted = (id: string, caps: string[]) => a().pluginSetGranted(id, caps)
 export const pluginAuditList = (id?: string) => a().pluginAuditList(id)
 export const pluginAuditClear = (id?: string) => a().pluginAuditClear(id)
 export const pluginAuditWrite = (id: string, action: string, detail?: unknown) => a().pluginAuditWrite(id, action, detail)
+export const pluginGetAllowedLevels = (): Promise<string[]> => a().pluginGetAllowedLevels()
+export const pluginSetAllowedLevels = (levels: string[]): Promise<{ success: boolean; message?: string }> => a().pluginSetAllowedLevels(levels)
 export const knowledgePackGetState = (pluginId: string) => a().knowledgePackGetState(pluginId)
 export const knowledgePackImport = (pluginId: string, overwriteModified: boolean, forceExternalIds?: string[]) => a().knowledgePackImport(pluginId, overwriteModified, forceExternalIds)
 export const onKnowledgePackProgress = (cb: (p: { pluginId: string; current: number; total: number; title: string }) => void) => a().onKnowledgePackProgress(cb)
@@ -276,7 +287,7 @@ export const deleteBlogTemplate = (id: string) => a().deleteBlogTemplate(id)
 
 // ===== Quiz records (收藏 + 错题本) =====
 export const quizRecordGetByPage = (pageId: string): Promise<QuizRecordDto[]> => a().quizRecordGetByPage(pageId)
-export const quizRecordReport = (pageId: string, quizNo: number, correct: boolean, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }): Promise<QuizRecordDto> => a().quizRecordReport(pageId, quizNo, correct, meta)
+export const quizRecordReport = (pageId: string, quizNo: number, correct: boolean, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }): Promise<QuizRecordDto | null> => a().quizRecordReport(pageId, quizNo, correct, meta)
 export const quizRecordToggleFavorite = (pageId: string, quizNo: number, meta: { pageTitle?: string; snapshot?: QuizSnapshotDto }): Promise<QuizRecordDto> => a().quizRecordToggleFavorite(pageId, quizNo, meta)
 export const quizRecordList = (opts?: { kind?: 'favorite' | 'wrong' | 'all'; sourceSpace?: string; collectionId?: string }): Promise<QuizRecordDto[]> => a().quizRecordList(opts)
 export const quizRecordRemove = (pageId: string, quizNo: number): Promise<void> => a().quizRecordRemove(pageId, quizNo)
@@ -292,6 +303,15 @@ export const quizCollectionList = (): Promise<QuizCollectionDto[]> => a().quizCo
 export const quizCollectionCreate = (name: string): Promise<QuizCollectionDto> => a().quizCollectionCreate(name)
 export const quizCollectionRename = (id: string, name: string): Promise<QuizCollectionDto> => a().quizCollectionRename(id, name)
 export const quizCollectionDelete = (id: string): Promise<void> => a().quizCollectionDelete(id)
+// ===== 错题本数据迁移（P2） =====
+export const quizMigrateStatus = (): Promise<QuizMigrateStatus> => a().quizMigrateStatus()
+export const quizMigrateExport = (): Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }> => a().quizMigrateExport()
+export const quizMigrateToPlugin = (opts?: { dryRun?: boolean; backup?: boolean }): Promise<QuizMigrateResult> => a().quizMigrateToPlugin(opts)
+export const quizMigrateFromPlugin = (): Promise<QuizMigrateResult> => a().quizMigrateFromPlugin()
+export const quizMigrateDropPluginData = (): Promise<{ ok: boolean; error?: string }> => a().quizMigrateDropPluginData()
+/** 插件模式判题上报 / 收藏切换（写插件命名空间表，不碰主表） */
+export const quizPluginReport = (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }): Promise<{ ok: boolean; error?: string }> => a().quizPluginReport(pluginId, pageId, quizNo, correct, meta)
+export const quizPluginToggleFavorite = (pluginId: string, pageId: string, quizNo: number): Promise<{ ok: boolean; favorite: boolean }> => a().quizPluginToggleFavorite(pluginId, pageId, quizNo)
 
 // ===== AI Tools (ToolRegistry) =====
 export const aiToolsList = (): Promise<AiToolsListResult> => a().aiToolsList()
@@ -353,6 +373,11 @@ export const wordbookGroupsAddWord = (id: string, word: string): Promise<{ ok: b
 export const wordbookGroupsRemoveWord = (id: string, word: string): Promise<{ ok: boolean }> => a().wordbookGroupsRemoveWord(id, word)
 export const wordbookGroupsWords = (id: string): Promise<string[]> => a().wordbookGroupsWords(id)
 export const wordbookCustomQueue = (label: string, words: string[]): Promise<WordbookCustomQueueDto> => a().wordbookCustomQueue(label, words)
+
+// ===== PDF 工具箱 =====
+export const pdfMerge = (files: Array<{ name: string; data: Uint8Array }>): Promise<PdfOpResult> => a().pdfMerge(files)
+export const pdfOrganize = (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }): Promise<PdfOpResult> => a().pdfOrganize(payload)
+export const pdfExport = (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }): Promise<PdfExportResult> => a().pdfExport(payload)
 
 export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })

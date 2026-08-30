@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -190,37 +190,37 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
               </div>
             )
           },
-          // Convert [[wiki links]] in paragraph text to clickable spans
+          // Convert [[wiki links]] + 脚注（word^[标注]） in paragraph text to interactive spans
           p({ children }) {
-            return <p>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</p>
+            return <p>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</p>
           },
           // Also handle wiki links in list items, headings, etc.
           li({ children }) {
-            return <li>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</li>
+            return <li>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</li>
           },
           h1({ children }) {
             const text = extractText(children)
-            return <h1 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h1>
+            return <h1 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h1>
           },
           h2({ children }) {
             const text = extractText(children)
-            return <h2 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h2>
+            return <h2 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h2>
           },
           h3({ children }) {
             const text = extractText(children)
-            return <h3 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h3>
+            return <h3 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h3>
           },
           h4({ children }) {
             const text = extractText(children)
-            return <h4 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h4>
+            return <h4 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h4>
           },
           h5({ children }) {
             const text = extractText(children)
-            return <h5 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h5>
+            return <h5 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h5>
           },
           h6({ children }) {
             const text = extractText(children)
-            return <h6 id={headingId(text)}>{renderWikiLinks(children, onWikiLink, knownWikiTitles)}</h6>
+            return <h6 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h6>
           },
         }}
       >
@@ -243,6 +243,78 @@ function extractText(children: React.ReactNode): string {
 }
 
 /** Recursively scan React children for `[[wiki links]]` in text nodes and replace them with clickable spans. */
+// ===== 脚注：`word^[标注]`（Pandoc 风格行内脚注）=====
+// 阅读时点击带虚线下划线的词展开自己的标注；语法在编辑器用「脚注」按钮或手写生成
+
+const FOOTNOTE_RE = /([\w一-鿿''-]+)\^\[([^\]]+)\]/
+
+/** 单个脚注词：虚线下划线 + 上标「注」，点击弹出标注气泡 */
+function FootnoteWord({ word, note }: { word: string; note: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+  return (
+    <span ref={ref} className="relative inline-block">
+      <span
+        className="border-b border-dashed border-[var(--accent)] cursor-help hover:bg-[var(--accent)]/10 transition-colors"
+        title="点击查看脚注"
+        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+      >
+        {word}
+        <sup className="ml-0.5 text-[9px] text-[var(--accent)]">注</sup>
+      </span>
+      {open && (
+        <span
+          className="absolute left-0 top-full z-40 mt-1.5 w-72 max-w-[80vw] block px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl text-[12px] leading-relaxed text-[var(--text-primary)] whitespace-normal text-left"
+          onClick={e => e.stopPropagation()}
+        >
+          <span className="block text-[10px] text-[var(--text-disabled)] mb-0.5">脚注 · {word}</span>
+          {note}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** 在文本节点中扫描 `word^[标注]` 并替换为脚注组件 */
+function renderFootnotes(children: React.ReactNode): React.ReactNode {
+  return React.Children.map(children, child => {
+    if (typeof child === 'string') {
+      if (!child.includes('^[')) return child
+      const parts: React.ReactNode[] = []
+      let remaining = child
+      let key = 0
+      while (remaining.length > 0) {
+        const m = FOOTNOTE_RE.exec(remaining)
+        if (!m) { parts.push(remaining); break }
+        if (m.index > 0) parts.push(remaining.slice(0, m.index))
+        parts.push(<FootnoteWord key={key++} word={m[1]} note={m[2]} />)
+        remaining = remaining.slice(m.index + m[0].length)
+      }
+      return <>{parts}</>
+    }
+    if (React.isValidElement(child) && (child.props as any)?.children) {
+      return React.cloneElement(child, {
+        ...(child.props as any),
+        children: renderFootnotes((child.props as any).children),
+      } as any)
+    }
+    return child
+  })
+}
+
+/** 行内扩展统一入口：先脚注，后双链（脚注词不被双链二次处理） */
+function renderInlineExtras(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>): React.ReactNode {
+  return renderWikiLinks(renderFootnotes(children), onWikiLink, knownWikiTitles)
+}
+
 function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>): React.ReactNode {
   if (!onWikiLink) return children
   return React.Children.map(children, child => {

@@ -36,6 +36,7 @@ import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
 import { registerTranslateHandlers } from '../lib/translateService'
 import { registerWordbookHandlers } from '../lib/wordbookService'
+import { registerPdfHandlers } from '../lib/pdfService'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -443,7 +444,7 @@ app.whenReady().then(async () => {
   registerSuperviseHandlers()
   registerSummaryHandlers()
   registerBlogTemplateHandlers()
-  registerQuizHandlers()
+  registerQuizHandlers({ getSettingValue: (key) => settingsCache[key] })
   // 开发者工具(内部对 app.isPackaged 自行守卫,打包版不注册任何 handler)
   registerDevtoolsHandlers()
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
@@ -472,6 +473,8 @@ app.whenReady().then(async () => {
     registerTranslateHandlers()
     // 单词本:生词本 + 每日队列 SRS + 词书
     registerWordbookHandlers({ getSettingValue: (key) => settingsCache[key], setSettingValue })
+    // PDF 工具箱:合并/页面重组/导出
+    registerPdfHandlers()
   }
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
