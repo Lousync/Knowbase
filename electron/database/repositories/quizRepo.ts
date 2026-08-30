@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { migrationStatus, exportQuizData, migrateToPlugin, migrateFromPlugin, dropPluginData, pluginReportRecord, pluginToggleFavoriteRecord, QUIZBOOK_PLUGIN_ID } from '../../lib/quizMigration'
 
 /**
  * 刷题记录（收藏 + 错题）数据层。
@@ -177,7 +178,18 @@ function ensureRecord(pageId: string, quizNo: number, meta: {
   return queryAll<RecordRow>('SELECT * FROM quiz_records WHERE id = ?', [id])[0]
 }
 
-export function registerQuizHandlers(): void {
+/**
+ * 判题/收藏上报的存储目标：
+ * - quizbookMode=plugin 且插件表存在 → 写插件命名空间表（错题本彻底插件化）
+ * - 否则 → 主表（回退/内置模式）
+ */
+function pluginModeEnabled(getSettingValue?: (key: string) => unknown): boolean {
+  try {
+    return getSettingValue?.('quizbookMode') === 'plugin'
+  } catch { return false }
+}
+
+export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) => unknown }): void {
   // ===== 记录 =====
 
   ipcMain.handle('quizRecord:getByPage', (_e, pageId: string) => {
@@ -192,6 +204,14 @@ export function registerQuizHandlers(): void {
     if (typeof pageId !== 'string' || !pageId) throw new Error('pageId 缺失')
     const no = Number(quizNo)
     if (!Number.isInteger(no)) throw new Error('quizNo 非法')
+    // 彻底插件化：quizbookMode=plugin 时判题直接写插件命名空间表
+    if (pluginModeEnabled(deps?.getSettingValue)) {
+      pluginReportRecord(QUIZBOOK_PLUGIN_ID, pageId, no, Boolean(correct), {
+        pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
+        snapshot: meta?.snapshot ?? null,
+      })
+      return null
+    }
     const row = ensureRecord(pageId, no, {
       pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
       snapshot: meta?.snapshot ?? null,
@@ -220,6 +240,11 @@ export function registerQuizHandlers(): void {
     if (typeof pageId !== 'string' || !pageId) throw new Error('pageId 缺失')
     const no = Number(quizNo)
     if (!Number.isInteger(no)) throw new Error('quizNo 非法')
+    // 彻底插件化：收藏同样写插件表
+    if (pluginModeEnabled(deps?.getSettingValue)) {
+      const r = pluginToggleFavoriteRecord(QUIZBOOK_PLUGIN_ID, pageId, no)
+      return { id: `${pageId}:${no}`, pageId, quizNo: no, pageTitle: '', isFavorite: r.favorite, wrongCount: 0, correctCount: 0, lastResult: null, streakCorrect: 0, note: '', snapshot: null, sourceSpace: '', sourceNotebook: '', sourceChapter: '', collectionIds: [], tagIds: [], createdAt: '', updatedAt: '' } as QuizRecordDto
+    }
     const row = ensureRecord(pageId, no, {
       pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
       snapshot: meta?.snapshot ?? null,
@@ -411,5 +436,21 @@ export function registerQuizHandlers(): void {
   ipcMain.handle('quizCollection:delete', (_e, id: string) => {
     run('DELETE FROM quiz_record_collections WHERE collection_id = ?', [id])
     run('DELETE FROM quiz_collections WHERE id = ?', [id])
+  })
+
+  // ===== 数据迁移（P2：主表 ⇄ 插件命名空间表） =====
+
+  ipcMain.handle('quizMigrate:status', () => migrationStatus())
+  ipcMain.handle('quizMigrate:export', () => exportQuizData())
+  ipcMain.handle('quizMigrate:toPlugin', (_e, opts?: { dryRun?: boolean; backup?: boolean }) => migrateToPlugin(opts))
+  ipcMain.handle('quizMigrate:fromPlugin', () => migrateFromPlugin())
+  ipcMain.handle('quizMigrate:dropPluginData', () => dropPluginData())
+
+  // 插件模式判题上报 / 收藏切换（写入插件命名空间表）
+  ipcMain.handle('quiz:pluginReport', (_e, pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }) => {
+    return pluginReportRecord(pluginId, pageId, Number(quizNo), Boolean(correct), meta)
+  })
+  ipcMain.handle('quiz:pluginToggleFavorite', (_e, pluginId: string, pageId: string, quizNo: number) => {
+    return pluginToggleFavoriteRecord(pluginId, pageId, Number(quizNo))
   })
 }

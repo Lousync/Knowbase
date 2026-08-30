@@ -7,6 +7,11 @@ import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { getPackState, importPack } from './knowledgePackImporter'
+import {
+  validateTableDef, ensurePluginTables, dropPluginTables,
+  pluginQuery, pluginInsert, pluginUpdate, pluginDelete, pluginDumpTable,
+} from './pluginDataStore'
+import type { PluginTableDef, WhereCond } from './pluginDataStore'
 
 /**
  * 插件注册表与安装管理。
@@ -46,20 +51,20 @@ const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx', 'tables', 'views']
 /** Skill 变量名规则（提示词 {{var}} 占位符） */
 const SKILL_VAR_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,30}$/
 /** Skill 声明依赖的工具名（命名空间规则与 ToolRegistry 一致，一期仅展示不校验执行权） */
 const SKILL_TOOL_REF_RE = /^[a-z][a-z0-9]*(\.[a-z0-9][a-z0-9._-]*)*$/
-// 安全分级:S=内容级(纯静态) / A=数据级(写库) / B=能力级(UI 沙箱+桥)
-export type RiskLevel = 'S' | 'A' | 'B'
-const LEVEL_RANK: Record<RiskLevel, number> = { S: 0, A: 1, B: 2 }
+// 安全分级:S=内容级(纯静态) / A=数据级(写库) / B=能力级(UI 沙箱+桥) / C=模块级(插件自有表+宿主 API+视图挂载)
+export type RiskLevel = 'S' | 'A' | 'B' | 'C'
+const LEVEL_RANK: Record<RiskLevel, number> = { S: 0, A: 1, B: 2, C: 3 }
 // 数据级贡献键(命中即为 A 级)
 const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'knowledgePages']
 // 内容级贡献键(仅含这些为 S 级)
 const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons', 'deleteFx']
-// UI 插件能力白名单(一期发布值;data.* 预留语法本期不放行)
-const KNOWN_CAPABILITIES = ['theme', 'clipboard']
+// UI 插件能力白名单:theme/clipboard 为一期放行;data/knowledge/navigation 为 C 级模块插件(需显式授权)
+const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation']
 
 export interface PluginManifest {
   id: string
@@ -177,7 +182,7 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
     if (typeof raw.category !== 'string' || !raw.category.trim() || raw.category.length > 20) return { error: 'category 需为 1-20 字符的分类名' }
   }
   if (raw.riskLevel !== undefined) {
-    if (typeof raw.riskLevel !== 'string' || !['S', 'A', 'B'].includes(raw.riskLevel)) return { error: 'riskLevel 仅允许 S / A / B' }
+    if (typeof raw.riskLevel !== 'string' || !['S', 'A', 'B', 'C'].includes(raw.riskLevel)) return { error: 'riskLevel 仅允许 S / A / B / C' }
   }
   if (raw.capabilities !== undefined) {
     if (raw.type !== 'ui') return { error: 'capabilities 仅 UI 插件(type: ui)可声明' }
@@ -198,6 +203,32 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
     if (typeof raw.contributes !== 'object' || raw.contributes === null || Array.isArray(raw.contributes)) return { error: 'contributes 必须是对象' }
     for (const key of Object.keys(raw.contributes)) {
       if (!KNOWN_CONTRIBUTIONS.includes(key)) return { error: `不支持的贡献类型: ${key}` }
+      if (key === 'tables') {
+        if (raw.type !== 'ui') return { error: 'tables 贡献仅 UI 插件(type: ui)可声明' }
+        const arr = (raw.contributes as Record<string, unknown>).tables
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 20) return { error: 'tables 需为 1-20 张表的数组' }
+        const names = new Set<string>()
+        for (const t of arr) {
+          const v = validateTableDef(t)
+          if (!v.ok) return { error: `tables: ${v.error}` }
+          if (names.has(v.table.name)) return { error: `tables: 重复的表名 ${v.table.name}` }
+          names.add(v.table.name)
+        }
+        if (!(Array.isArray(raw.capabilities) && raw.capabilities.includes('data'))) {
+          return { error: '声明 tables 必须同时申请 data 能力' }
+        }
+      }
+      if (key === 'views') {
+        if (raw.type !== 'ui') return { error: 'views 贡献仅 UI 插件(type: ui)可声明' }
+        const arr = (raw.contributes as Record<string, unknown>).views
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 10) return { error: 'views 需为 1-10 个视图的数组' }
+        for (const v of arr as Record<string, unknown>[]) {
+          if (!v || typeof v !== 'object') return { error: 'views: 视图条目非法' }
+          if (typeof v.slot !== 'string' || !/^[a-z][a-z0-9.]{0,40}$/.test(v.slot)) return { error: 'views: slot 非法(如 knowledge.sidebar)' }
+          if (typeof v.title !== 'string' || !v.title.trim() || v.title.length > 20) return { error: 'views: title 缺失或过长(≤20)' }
+          if (v.mode !== undefined && !['fullscreen', 'panel'].includes(v.mode as string)) return { error: 'views: mode 仅支持 fullscreen / panel' }
+        }
+      }
       if (key === 'tools' && raw.type !== 'ui') return { error: 'tools 贡献仅 UI 插件(type: ui)可声明' }
       if (key === 'knowledgePages') {
         const kp = (raw.contributes as Record<string, unknown>).knowledgePages
@@ -309,9 +340,15 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
 
 // ---------- 安全分级 ----------
 
-/** 主进程强算等级(防骗标):ui→B;含数据级贡献→A;仅内容级贡献→S */
+/** 主进程强算等级(防骗标):ui+数据表/宿主API 能力→C;ui→B;含数据级贡献→A;仅内容级贡献→S */
 function computeRiskLevel(m: PluginManifest): RiskLevel {
-  if (m.type === 'ui') return 'B'
+  if (m.type === 'ui') {
+    const caps = Array.isArray(m.capabilities) ? m.capabilities : []
+    const keys = Object.keys(m.contributes || {})
+    // 声明自有数据表并申请 data / knowledge / navigation 能力 = 模块级插件
+    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation')) return 'C'
+    return 'B'
+  }
   const keys = Object.keys(m.contributes || {})
   if (keys.some(k => DATA_LEVEL_KEYS.includes(k))) return 'A'
   return 'S'
@@ -326,18 +363,21 @@ export function effectiveRiskLevel(m: PluginManifest): RiskLevel {
   return computed
 }
 
-/** 策略开关:允许安装/启用的等级集合(settings.json → pluginAllowedLevels) */
+/** 策略开关:允许安装/启用的等级集合(settings.json → pluginAllowedLevels)
+ *  C 级(模块插件:自有数据表 + 宿主 API + 视图挂载)默认不开放,需用户显式加入白名单 */
 function getAllowedLevels(): Set<string> {
   try {
     const sp = join(app.getPath('userData'), 'settings.json')
     if (existsSync(sp)) {
       const s = JSON.parse(readFileSync(sp, 'utf-8'))
-      const raw = typeof s.pluginAllowedLevels === 'string' ? s.pluginAllowedLevels : 'S,A,B'
-      const set = new Set(raw.split(',').map(x => x.trim().toUpperCase()).filter(x => ['S', 'A', 'B'].includes(x)))
+      const raw: string = typeof s.pluginAllowedLevels === 'string' ? s.pluginAllowedLevels : 'S,A,B,C'
+      const allowed: string[] = ['S', 'A', 'B', 'C']
+      const set = new Set(raw.split(',').map((x: string) => x.trim().toUpperCase()).filter((x: string) => allowed.includes(x)))
       if (set.size > 0) return set
     }
   } catch { /* ignore */ }
-  return new Set(['S', 'A', 'B'])
+  // 默认白名单含 C：错题本彻底插件化（默认 plugin 模式）需要 C 级模块插件
+  return new Set(['S', 'A', 'B', 'C'])
 }
 
 /** 行为审计 */
@@ -460,7 +500,7 @@ async function fetchRegistryRaw(): Promise<any> {
 
 // ---------- 安装 ----------
 
-function installFromBuffer(buf: Buffer, grantedCapabilities?: string[]): { success: true; manifest: PluginManifest; riskLevel: RiskLevel; isUpdate: boolean } | { success: false; message: string } {
+function installFromBuffer(buf: Buffer, grantedCapabilities?: string[], opts?: { bypassLevelCheck?: boolean }): { success: true; manifest: PluginManifest; riskLevel: RiskLevel; isUpdate: boolean } | { success: false; message: string } {
   // 绝对上限(内容型插件放宽到 60MB,精确限额在 manifest 解析后判定)
   if (buf.length === 0 || buf.length > 60 * 1024 * 1024) {
     return { success: false, message: '插件包为空或超出 60MB 上限' }
@@ -493,9 +533,9 @@ function installFromBuffer(buf: Buffer, grantedCapabilities?: string[]): { succe
   // 安全分级:主进程强算 + 自报取高(防骗标)
   const riskLevel = effectiveRiskLevel(manifest)
 
-  // 策略开关:不允许的等级直接拦截
+  // 策略开关:不允许的等级直接拦截（内置官方示例(installBundledSample)可绕过——源可信）
   const allowed = getAllowedLevels()
-  if (!allowed.has(riskLevel)) {
+  if (!opts?.bypassLevelCheck && !allowed.has(riskLevel)) {
     return { success: false, message: `策略限制:当前仅允许安装 ${[...allowed].sort().join(' / ')} 级插件,该插件为 ${riskLevel} 级` }
   }
 
@@ -546,6 +586,11 @@ function installFromBuffer(buf: Buffer, grantedCapabilities?: string[]): { succe
     ...(manifest.type === 'ui' ? { grantedCapabilities: granted, grantedAt: new Date().toISOString() } : {}),
   }
   writeIndex(idx)
+  // C 级模块插件:建插件自有数据表(幂等,失败不阻断安装)
+  const declaredTables = (manifest.contributes?.tables ?? []) as PluginTableDef[]
+  if (declaredTables.length > 0) {
+    try { ensurePluginTables(manifest.id, declaredTables) } catch { /* ignore */ }
+  }
   auditWrite(manifest.id, isUpdate ? 'update' : 'install', { version: manifest.version, riskLevel, granted: granted ?? null })
   console.log(`[Plugins] 已安装插件 ${manifest.id}@${manifest.version} (${riskLevel} 级)`)
   notifyPluginsChanged()
@@ -653,6 +698,25 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     }
   })
 
+  /**
+   * 一键安装内置示例插件（开发期从工作区 samples/ 读，prod 后续用 extraResources 预置）。
+   * 引导卡直接调它——避免用户去磁盘找 zip。
+   * 安全：filename 严格校验（只允许 [a-z0-9._-] + .zip），限定在 samples 目录内。
+   */
+  ipcMain.handle('plugin:installBundledSample', (_e, filename: string, grantedCapabilities?: unknown) => {
+    try {
+      if (typeof filename !== 'string' || !/^[\w][\w.-]{0,80}\.zip$/i.test(filename) || filename.includes('..')) {
+        return { success: false, message: '文件名非法' }
+      }
+      const samplePath = join(app.getAppPath(), 'samples', filename)
+      if (!existsSync(samplePath)) return { success: false, message: `内置示例不存在: ${filename}(开发版从工作区 samples 读取)` }
+      const grants = Array.isArray(grantedCapabilities) ? grantedCapabilities.filter((c): c is string => typeof c === 'string') : undefined
+      return installFromBuffer(readFileSync(samplePath), grants, { bypassLevelCheck: true })
+    } catch (e: any) {
+      return { success: false, message: `安装失败: ${e?.message || e}` }
+    }
+  })
+
   ipcMain.handle('plugin:listDeleteFxSkins', (): DeleteFxSkin[] => {
     // 删除动画皮肤聚合：所有已启用且声明 deleteFx 的插件
     const idx = readIndex()
@@ -691,6 +755,39 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     if (data === undefined) return { ok: false, message: '该插件未包含此内容' }
     if (JSON.stringify(data).length > 1024 * 1024) return { ok: false, message: '贡献内容过大' }
     return { ok: true, data }
+  })
+
+  /** 列出所有已启用插件声明的视图挂载点(可按 slot 过滤,如 knowledge.sidebar) */
+  ipcMain.handle('plugin:listViews', (_e, slot?: string) => {
+    const idx = readIndex()
+    const views: Array<{ pluginId: string; name: string; entry: string; slot: string; title: string; mode: string; icon?: string; granted: string[] }> = []
+    for (const [id, entry] of Object.entries(idx)) {
+      if (!entry.enabled) continue
+      const dir = safePathInside(getPluginsRoot(), id)
+      if (!dir || !existsSync(dir)) continue
+      try {
+        const parsed = readManifestAt(dir)
+        if ('error' in parsed) continue
+        const m = parsed.manifest
+        if (m.type !== 'ui' || !m.entry) continue
+        const vs = (m.contributes?.views ?? []) as Array<Record<string, unknown>>
+        for (const v of vs) {
+          if (typeof v?.slot !== 'string') continue
+          if (slot && v.slot !== slot) continue
+          views.push({
+            pluginId: id,
+            name: m.name,
+            entry: m.entry,
+            slot: String(v.slot),
+            title: String(v.title || m.name),
+            mode: (v.mode as string) || 'fullscreen',
+            ...(m.icon ? { icon: `plugin://${id}/${m.icon}` } : {}),
+            granted: entry.grantedCapabilities || [],
+          })
+        }
+      } catch { /* 单个插件读取失败不影响其他插件 */ }
+    }
+    return views
   })
 
   ipcMain.handle('plugin:listInstalled', (): PluginSummary[] => {
@@ -762,6 +859,23 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     return { success: true }
   })
 
+  /** C 级白名单：读取/写入 pluginAllowedLevels（settings.json），UI 里可勾选 C 级 */
+  ipcMain.handle('plugin:getAllowedLevels', () => Array.from(getAllowedLevels()).sort())
+  ipcMain.handle('plugin:setAllowedLevels', (_e, levels: unknown) => {
+    const arr = Array.isArray(levels)
+      ? levels.map(x => String(x).trim().toUpperCase()).filter((x): x is string => ['S', 'A', 'B', 'C'].includes(x))
+      : []
+    const sp = join(app.getPath('userData'), 'settings.json')
+    try {
+      const cur = existsSync(sp) ? JSON.parse(readFileSync(sp, 'utf-8')) : {}
+      cur.pluginAllowedLevels = arr.join(',')
+      writeFileSync(sp, JSON.stringify(cur, null, 2), 'utf-8')
+      return { success: true }
+    } catch (e: unknown) {
+      return { success: false, message: String((e as Error)?.message || e) }
+    }
+  })
+
   ipcMain.handle('plugin:auditWrite', (_e, id: string, action: string, detail: unknown) => {
     if (typeof id !== 'string' || !ID_RE.test(id)) return { success: false }
     if (typeof action !== 'string' || !['import', 'deny', 'run', 'grant'].includes(action)) return { success: false }
@@ -775,25 +889,95 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     if (!idx[id]) return { success: false, message: '插件未安装' }
     idx[id].enabled = Boolean(enabled)
     writeIndex(idx)
+    // 启用时补齐插件自有数据表(C 级 data 能力),避免禁用期表被清后无法恢复
+    if (enabled) {
+      try {
+        const dir = safePathInside(getPluginsRoot(), id)
+        if (dir) {
+          const m = readManifestAt(dir)
+          if (m && 'manifest' in m) {
+            const tables = (m.manifest.contributes?.tables ?? []) as PluginTableDef[]
+            if (tables.length > 0) ensurePluginTables(id, tables)
+          }
+        }
+      } catch { /* ignore */ }
+    }
     notifyPluginsChanged()
     return { success: true }
   })
 
-  ipcMain.handle('plugin:uninstall', (_e, id: string) => {
+  ipcMain.handle('plugin:uninstall', (_e, id: string, dropData?: boolean) => {
     if (typeof id !== 'string' || !ID_RE.test(id)) return { success: false, message: '插件 id 非法' }
     const idx = readIndex()
     if (!idx[id]) return { success: false, message: '插件未安装' }
     if (idx[id].builtin) return { success: false, message: '内置插件不可卸载,可改为禁用' }
     const dir = safePathInside(getPluginsRoot(), id)
     if (!dir) return { success: false, message: '插件 id 非法' }
+    // C 级插件:卸载前导出自有表数据(供渲染层提示用户保存),再按需删表
+    let dump: Array<{ table: string; rows: unknown[] }> | undefined
+    try {
+      const m = readManifestAt(dir)
+      if (m && 'manifest' in m) {
+        const tables = (m.manifest.contributes?.tables ?? []) as PluginTableDef[]
+        if (tables.length > 0) {
+          dump = tables.map(t => ({ table: t.name, rows: pluginDumpTable(id, tables, t.name) }))
+          if (dropData !== false) dropPluginTables(id, tables)
+        }
+      }
+    } catch { /* ignore */ }
     try { if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) } catch (e: any) {
       return { success: false, message: `删除插件目录失败: ${e?.message || e}` }
     }
-    auditWrite(id, 'uninstall', { version: idx[id].version })
+    auditWrite(id, 'uninstall', { version: idx[id].version, droppedTables: dropData !== false })
     delete idx[id]
     writeIndex(idx)
     notifyPluginsChanged()
-    return { success: true }
+    return { success: true, dump }
+  })
+
+  // ---------- C 级模块插件:自有数据表读写(结构化 CRUD,禁止任意 SQL) ----------
+
+  /** 校验插件已安装启用且已授权 data 能力,返回其声明的表定义 */
+  function assertDataAccess(pluginId: string): { ok: true; tables: PluginTableDef[] } | { ok: false; error: string } {
+    if (typeof pluginId !== 'string' || !ID_RE.test(pluginId)) return { ok: false, error: '插件 id 非法' }
+    const idx = readIndex()
+    const entry = idx[pluginId]
+    if (!entry) return { ok: false, error: '插件未安装' }
+    if (!entry.enabled) return { ok: false, error: '插件已禁用' }
+    const dir = safePathInside(getPluginsRoot(), pluginId)
+    if (!dir) return { ok: false, error: '插件 id 非法' }
+    let m: { manifest: PluginManifest } | { error: string }
+    try { m = readManifestAt(dir) } catch { return { ok: false, error: '读取插件清单失败' } }
+    if (!m || 'error' in m) return { ok: false, error: '读取插件清单失败' }
+    if (!(m.manifest.capabilities || []).includes('data')) return { ok: false, error: '插件未声明 data 能力' }
+    if (!(entry.grantedCapabilities || []).includes('data')) return { ok: false, error: 'data 能力未授权' }
+    const tables = (m.manifest.contributes?.tables ?? []) as PluginTableDef[]
+    if (tables.length === 0) return { ok: false, error: '插件未声明数据表' }
+    return { ok: true, tables }
+  }
+
+  ipcMain.handle('pluginData:query', (_e, pluginId: string, table: string, opts?: { where?: WhereCond[]; orderBy?: string; desc?: boolean; limit?: number }) => {
+    const acc = assertDataAccess(pluginId)
+    if (!acc.ok) return []
+    return pluginQuery(pluginId, acc.tables, table, opts)
+  })
+
+  ipcMain.handle('pluginData:insert', (_e, pluginId: string, table: string, row: Record<string, unknown>) => {
+    const acc = assertDataAccess(pluginId)
+    if (!acc.ok) return { ok: false, error: acc.error }
+    return pluginInsert(pluginId, acc.tables, table, row)
+  })
+
+  ipcMain.handle('pluginData:update', (_e, pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>) => {
+    const acc = assertDataAccess(pluginId)
+    if (!acc.ok) return { ok: false, error: acc.error }
+    return pluginUpdate(pluginId, acc.tables, table, rowId, patch)
+  })
+
+  ipcMain.handle('pluginData:delete', (_e, pluginId: string, table: string, rowId: string | number) => {
+    const acc = assertDataAccess(pluginId)
+    if (!acc.ok) return { ok: false, error: acc.error }
+    return pluginDelete(pluginId, acc.tables, table, rowId)
   })
 
   // 内容型插件(knowledgePages):导入状态与执行

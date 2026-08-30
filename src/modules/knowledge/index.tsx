@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText, Folder, ListTree, X, BookMarked } from 'lucide-react'
-import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../types'
+import { FileText, Folder, ListTree, X, BookMarked, Puzzle } from 'lucide-react'
+import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import {
@@ -13,7 +13,7 @@ import {
   showFolderDialog, importFolder,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
-  getKnowledgeTags
+  getKnowledgeTags, pluginListViews
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { NotebookList } from './components/NotebookList'
@@ -23,8 +23,11 @@ import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { QuickSearch } from './components/QuickSearch'
 import { QuizCollection } from './components/QuizCollection'
+import { QuizMode } from '../../components/shared/QuizMode'
+import type { QuizItem } from '../../components/shared/QuizParser'
 import { ConfirmDialog } from '../../components/shared'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
+import { PluginFrame } from '../../components/shared/PluginFrame'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { isEditingInput } from '../../lib/shortcuts'
@@ -59,6 +62,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [locateCategoryId, setLocateCategoryId] = useState<string | null>(null)
   const [allKnowledgeTags, setAllKnowledgeTags] = useState<KnowledgeTag[]>([])
   const [showQuizCollection, setShowQuizCollection] = useState(false)
+  /** C 级模块插件声明的视图（slot=knowledge.sidebar）+ 当前打开的插件视图 */
+  const [pluginViews, setPluginViews] = useState<PluginViewContribution[]>([])
+  const [activePluginView, setActivePluginView] = useState<PluginViewContribution | null>(null)
+  /** 插件通过 host.review 请求的重刷会话（宿主开 QuizMode，判题写插件表） */
+  const [pluginReview, setPluginReview] = useState<{ title: string; pageId?: string; items: QuizItem[] } | null>(null)
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
   const { s: settings } = useSettings()
   const sidebarItemVars = KNOWLEDGE_SIDEBAR_ITEM_VARS[settings.knowledgeSidebarItemSize] ?? KNOWLEDGE_SIDEBAR_ITEM_VARS.m
@@ -93,6 +101,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [activePageId])
   useEffect(() => { selectedCategoryIdRef.current = selectedCategoryId }, [selectedCategoryId])
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
+
+  // 插件视图挂载点：加载声明了 knowledge.sidebar 的 C 级模块插件
+  const loadPluginViews = useCallback(async () => {
+    try { setPluginViews(await pluginListViews('knowledge.sidebar')) } catch { /* ignore */ }
+  }, [])
+  useEffect(() => { void loadPluginViews() }, [loadPluginViews])
 
   // AI 助手上下文：当前打开的页面（供全局侧栏"边看边问"）
   useEffect(() => {
@@ -1157,16 +1171,44 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                 )}
               </>
             )}
-            {/* 侧边栏底部：错题本 / 收藏入口（仅空间内显示，顶层工作区列表不显示） */}
+            {/* 侧边栏底部：错题本 / 收藏 + 插件视图入口（仅空间内显示，顶层工作区列表不显示） */}
             {selectedSpaceId && selectedSpace && (
-              <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5">
-                <button
-                  onClick={() => setShowQuizCollection(true)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <BookMarked size={14} />
-                  错题本 / 收藏
-                </button>
+              <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5 space-y-0.5">
+                {/* 内置错题本：设置切到 plugin 模式后让位给插件版（不删除代码，可随时切回） */}
+                {settings.quizbookMode !== 'plugin' && (
+                  <button
+                    onClick={() => setShowQuizCollection(true)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <BookMarked size={14} />
+                    错题本 / 收藏
+                  </button>
+                )}
+                {/* C 级模块插件声明的视图挂载点（slot=knowledge.sidebar） */}
+                {pluginViews.map(v => (
+                  <button
+                    key={`${v.pluginId}:${v.slot}`}
+                    onClick={() => setActivePluginView(v)}
+                    title={`${v.name}（插件）`}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <Puzzle size={14} />
+                    <span className="truncate">{v.title}</span>
+                    <span className="ml-auto text-[10px] text-[var(--text-disabled)] shrink-0">插件</span>
+                  </button>
+                ))}
+                {/* 插件版未安装时的占位入口（跳插件模块安装） */}
+                {settings.quizbookMode === 'plugin' && !pluginViews.some(v => v.pluginId === 'knowbase.quizbook') && (
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('plugins:open'))}
+                    title="错题本已切换为插件版，但 knowbase.quizbook 插件未安装/未启用"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <Puzzle size={14} />
+                    <span className="truncate">错题本(需装插件)</span>
+                    <span className="ml-auto text-[10px] text-[var(--accent)] shrink-0">去安装</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1240,6 +1282,53 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
       {/* 错题本 / 收藏（按当前学习空间分区：只显示该空间的内容；源链接可跳回原页面） */}
       {showQuizCollection && <QuizCollection onClose={() => setShowQuizCollection(false)} spaceName={selectedSpace?.name ?? undefined} onOpenPage={handleOpenPage} />}
+
+      {/* C 级模块插件视图：全屏覆盖层（沙箱 iframe + 数据桥） */}
+      {activePluginView && (
+        <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label={`${activePluginView.title}（插件）`}>
+          <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+            <Puzzle size={14} className="text-[var(--accent)]" />
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">{activePluginView.title}</span>
+            <span className="text-[10px] text-[var(--text-disabled)]">{activePluginView.name} · 插件</span>
+            <div className="flex-1" />
+            <button
+              onClick={() => setActivePluginView(null)}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <X size={14} />
+              关闭
+            </button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <PluginFrame
+              pluginId={activePluginView.pluginId}
+              entry={activePluginView.entry}
+              grantedCapabilities={activePluginView.granted}
+              onHostAction={(action, payload) => {
+                if (action === 'host.review') {
+                  const p = (payload ?? {}) as { title?: string; pageId?: string; items?: QuizItem[] }
+                  if (Array.isArray(p.items) && p.items.length > 0) {
+                    setPluginReview({ title: p.title || activePluginView.title, pageId: p.pageId, items: p.items })
+                    return true
+                  }
+                }
+                return false
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 插件模式重刷：宿主刷题器，判题/收藏写入插件命名空间表 */}
+      {pluginReview && activePluginView && (
+        <QuizMode
+          quizzes={pluginReview.items}
+          pageTitle={pluginReview.title}
+          pageId={pluginReview.pageId}
+          pluginReport={{ pluginId: activePluginView.pluginId }}
+          onClose={() => setPluginReview(null)}
+        />
+      )}
     </ImportZone>
   )
 }

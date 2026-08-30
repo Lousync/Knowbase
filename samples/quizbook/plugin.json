@@ -1,0 +1,215 @@
+{
+  "id": "knowbase.quizbook",
+  "name": "错题本（插件版）",
+  "version": "0.2.1",
+  "type": "ui",
+  "entry": "index.html",
+  "author": "Knowbase",
+  "description": "错题本插件版：数据存插件自有表（plugin_knowbase_quizbook_*），书架按科目分、书内按章节归档，重刷复用宿主刷题器（判题写插件表）",
+  "category": "学习",
+  "riskLevel": "C",
+  "capabilities": [
+    "data",
+    "knowledge"
+  ],
+  "contributes": {
+    "tables": [
+      {
+        "name": "records",
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "page_id",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "quiz_no",
+            "type": "INTEGER",
+            "notNull": true
+          },
+          {
+            "name": "page_title",
+            "type": "TEXT"
+          },
+          {
+            "name": "is_favorite",
+            "type": "INTEGER",
+            "default": "0"
+          },
+          {
+            "name": "wrong_count",
+            "type": "INTEGER",
+            "default": "0"
+          },
+          {
+            "name": "correct_count",
+            "type": "INTEGER",
+            "default": "0"
+          },
+          {
+            "name": "last_result",
+            "type": "INTEGER"
+          },
+          {
+            "name": "streak_correct",
+            "type": "INTEGER",
+            "default": "0"
+          },
+          {
+            "name": "note",
+            "type": "TEXT",
+            "default": "''"
+          },
+          {
+            "name": "snapshot_json",
+            "type": "TEXT",
+            "default": "''"
+          },
+          {
+            "name": "source_space",
+            "type": "TEXT",
+            "default": "''"
+          },
+          {
+            "name": "source_notebook",
+            "type": "TEXT",
+            "default": "''"
+          },
+          {
+            "name": "source_chapter",
+            "type": "TEXT",
+            "default": "''"
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT"
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT"
+          }
+        ],
+        "indexes": [
+          {
+            "columns": [
+              "page_id"
+            ]
+          },
+          {
+            "columns": [
+              "page_id",
+              "quiz_no"
+            ],
+            "unique": true
+          },
+          {
+            "columns": [
+              "wrong_count"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "collections",
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "sort_order",
+            "type": "INTEGER",
+            "default": "0"
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT"
+          }
+        ]
+      },
+      {
+        "name": "record_collections",
+        "columns": [
+          {
+            "name": "record_id",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "collection_id",
+            "type": "TEXT",
+            "notNull": true
+          }
+        ]
+      },
+      {
+        "name": "tags",
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "kind",
+            "type": "TEXT",
+            "default": "'custom'"
+          },
+          {
+            "name": "color",
+            "type": "TEXT",
+            "default": "''"
+          },
+          {
+            "name": "sort_order",
+            "type": "INTEGER",
+            "default": "0"
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT"
+          }
+        ]
+      },
+      {
+        "name": "record_tags",
+        "columns": [
+          {
+            "name": "record_id",
+            "type": "TEXT",
+            "notNull": true
+          },
+          {
+            "name": "tag_id",
+            "type": "TEXT",
+            "notNull": true
+          }
+        ]
+      }
+    ],
+    "views": [
+      {
+        "slot": "knowledge.sidebar",
+        "title": "错题本(插件版)",
+        "mode": "fullscreen"
+      }
+    ]
+  },
+  "icon": "icon.svg"
+}

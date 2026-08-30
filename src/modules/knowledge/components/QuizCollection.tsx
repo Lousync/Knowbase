@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Star, Trash2, FolderPlus, RotateCcw, ChevronDown, ChevronRight, ChevronLeft, Check, CheckSquare, Folder, Inbox, ExternalLink, StickyNote, Tag, Plus } from 'lucide-react'
+import { X, Star, Trash2, FolderPlus, RotateCcw, ChevronDown, ChevronRight, ChevronLeft, Check, CheckSquare, Folder, Inbox, ExternalLink, StickyNote, Tag, Plus, Database } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { QuizMode } from '../../../components/shared/QuizMode'
+import { QuizMigratePanel } from './QuizMigratePanel'
 import type { QuizItem } from '../../../components/shared/QuizParser'
 import type { QuizRecordDto, QuizCollectionDto, QuizTagDto } from '../../../types'
 import {
@@ -90,6 +91,8 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
   const [newTagDraft, setTagDraft] = useState('')
   const [newTagKind, setNewTagKind] = useState<string>('topic')
   const [showBulkTag, setShowBulkTag] = useState(false)
+  /** 数据迁移面板（P2：主表 ⇄ 插件命名空间表） */
+  const [showMigrate, setShowMigrate] = useState(false)
 
   /** 保存备注（本地立即更新 + 落库） */
   const saveNote = async (r: QuizRecordDto) => {
@@ -578,6 +581,14 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
           </>
         )}
         <button
+          onClick={() => setShowMigrate(true)}
+          title="错题本数据迁移（P2：主表 ⇄ 插件表）"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+        >
+          <Database size={13} />
+          迁移
+        </button>
+        <button
           onClick={onClose}
           className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
         >
@@ -893,6 +904,9 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
           )}
         </div>
       </div>
+
+      {/* 数据迁移面板（P2） */}
+      {showMigrate && <QuizMigratePanel onClose={() => setShowMigrate(false)} />}
     </div>
   )
 }

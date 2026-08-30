@@ -1,0 +1,33 @@
+{
+  "id": "quizbook.demo",
+  "name": "错题本（插件版 Demo）",
+  "version": "0.1.0",
+  "type": "ui",
+  "entry": "index.html",
+  "author": "Knowbase",
+  "description": "P1 验证插件：声明自有数据表 + 侧边栏视图挂载点，验证 C 级模块插件链路（建表→读写→渲染）",
+  "category": "学习",
+  "riskLevel": "C",
+  "capabilities": ["data"],
+  "contributes": {
+    "tables": [
+      {
+        "name": "records",
+        "columns": [
+          { "name": "page_id", "type": "TEXT" },
+          { "name": "quiz_no", "type": "INTEGER" },
+          { "name": "question", "type": "TEXT" },
+          { "name": "wrong_count", "type": "INTEGER", "notNull": true, "default": "0" },
+          { "name": "updated_at", "type": "TEXT" }
+        ],
+        "indexes": [
+          { "columns": ["page_id"] },
+          { "columns": ["page_id", "quiz_no"], "unique": true }
+        ]
+      }
+    ],
+    "views": [
+      { "slot": "knowledge.sidebar", "title": "错题本(插件)", "mode": "fullscreen" }
+    ]
+  }
+}

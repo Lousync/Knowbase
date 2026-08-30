@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>错题本（插件版）</title>
+<style>
+  :root { --bg-primary:#fff; --bg-secondary:#f7f7f5; --bg-hover:#f1f1ee; --text-primary:#1c1c1a; --text-secondary:#5f5e5a; --text-muted:#888780; --accent:#378add; --border-color:#e4e2d9; --danger:#a32d2d; --success:#3b6d11; --warning:#854f0b; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; font-size: 13px; line-height: 1.6; background: var(--bg-primary); color: var(--text-primary); }
+  .top { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); position: sticky; top: 0; z-index: 5; }
+  .top .back { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 6px; }
+  .top .back:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .top .title { font-size: 14px; font-weight: 500; }
+  .top .count { font-size: 11px; color: var(--text-muted); }
+  .top .sp { flex: 1; }
+  .wrap { padding: 14px; }
+  .shelf { display: flex; flex-wrap: wrap; gap: 12px; }
+  .book { width: 148px; height: 100px; border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--bg-secondary); transition: border-color .15s; }
+  .book:hover { border-color: var(--text-muted); }
+  .book .spine { width: 9px; float: left; height: 100%; }
+  .book .face { padding: 10px 8px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+  .book .name { font-size: 13px; font-weight: 500; line-height: 1.3; word-break: break-all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .book .meta { font-size: 11px; color: var(--text-muted); }
+  .empty { text-align: center; color: var(--text-muted); padding: 48px 0; }
+  .ch-group { margin-bottom: 18px; }
+  .ch-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ch-head .name { font-size: 12px; font-weight: 500; }
+  .ch-head .cnt { font-size: 11px; color: var(--text-muted); }
+  .ch-head .sp { flex: 1; }
+  .ch-head button { font-size: 11px; color: var(--text-secondary); background: none; border: none; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .ch-head button:hover { color: var(--accent); background: var(--bg-hover); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .card { border: 1px solid var(--border-color); border-radius: 10px; padding: 10px; background: var(--bg-secondary); display: flex; flex-direction: column; gap: 8px; }
+  .card .q { font-size: 13px; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .card .badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+  .badge.wrong { background: #fcebeb; color: var(--danger); }
+  .badge.reviewing { background: #eaf3de; color: var(--success); }
+  .badge.tag { background: var(--bg-hover); color: var(--text-secondary); }
+  .card .ops { display: flex; justify-content: flex-end; gap: 6px; border-top: 1px solid var(--border-color); padding-top: 8px; }
+  .card .ops button { font-size: 11px; color: var(--text-secondary); background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+  .card .ops button:hover { color: var(--accent); border-color: var(--accent); }
+  .stat { display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); }
+  .stat b { font-size: 15px; color: var(--text-primary); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="top">
+  <button class="back" id="btn-back" style="display:none">← 返回</button>
+  <span class="title" id="title">错题本</span>
+  <span class="count" id="count"></span>
+  <span class="sp"></span>
+</div>
+<div class="wrap" id="view"><div class="empty">加载中…</div></div>
+
+<script>
+/* ===== 宿主桥（kb-plugin 协议，串行队列） ===== */
+var CHANNEL = 'kb-plugin'
+var pending = null
+function call(action, payload) {
+  return new Promise(function (resolve, reject) {
+    pending = { action: action, resolve: resolve, reject: reject }
+    parent.postMessage({ channel: CHANNEL, action: action, payload: payload }, '*')
+    setTimeout(function () {
+      if (pending && pending.action === action) { pending = null; reject(new Error('宿主无响应')) }
+    }, 10000)
+  })
+}
+window.addEventListener('message', function (e) {
+  var d = e.data
+  if (!d || d.channel !== CHANNEL) return
+  if (d.action === 'init') {
+    var vars = (d.payload && d.payload.vars) || {}
+    for (var k in vars) if (vars[k]) document.documentElement.style.setProperty(k, vars[k])
+    return
+  }
+  if (!pending || pending.action !== d.action) return
+  var w = pending; pending = null
+  var p = d.payload || {}
+  if (p.denied) w.reject(new Error(p.reason || '宿主拒绝'))
+  else w.resolve(p)
+})
+
+/* ===== 状态与数据 ===== */
+var RECORDS = []   // records 表行（含 rowid）
+var TAGS = []      // tags 表行
+var R_TAGS = []    // record_tags 表行
+var view = { kind: 'shelf', notebook: null, chapter: null }   // shelf | book
+var $ = function (id) { return document.getElementById(id) }
+
+function loadAll() {
+  return Promise.all([
+    call('data.query', { table: 'records', orderBy: 'updated_at', desc: true, limit: 1000 }),
+    call('data.query', { table: 'tags', limit: 200 }),
+    call('data.query', { table: 'record_tags', limit: 2000 }),
+  ]).then(function (rs) {
+    RECORDS = rs[0].rows || []
+    TAGS = rs[1].rows || []
+    R_TAGS = rs[2].rows || []
+    render()
+  }).catch(function (e) {
+    $('view').innerHTML = '<div class="empty">数据加载失败：' + e.message + '</div>'
+  })
+}
+
+function tagNames(recordId) {
+  return R_TAGS.filter(function (rt) { return rt.record_id === recordId })
+    .map(function (rt) { var t = TAGS.find(function (x) { return x.id === rt.tag_id }); return t ? t : null })
+    .filter(Boolean)
+}
+
+function snapshotOf(row) {
+  try { return JSON.parse(row.snapshot_json || 'null') } catch { return null }
+}
+
+/* ===== 渲染 ===== */
+function render() {
+  if (view.kind === 'shelf') renderShelf()
+  else renderBook()
+}
+
+function renderShelf() {
+  $('btn-back').style.display = 'none'
+  $('title').textContent = '错题本'
+  $('count').textContent = RECORDS.length + ' 题'
+  // 按来源笔记本分书
+  var groups = {}
+  RECORDS.forEach(function (r) { var k = r.source_notebook || '未分类'; (groups[k] = groups[k] || []).push(r) })
+  var names = Object.keys(groups).sort(function (a, b) { return groups[b].length - groups[a].length })
+  if (names.length === 0) { $('view').innerHTML = '<div class="empty">暂无错题，去知识包刷题吧</div>'; return }
+  var html = '<div class="shelf">'
+  var palette = ['#185fa5', '#0f6e56', '#993c1d', '#854f0b', '#534ab7', '#993556', '#3b6d11', '#5f5e5a']
+  names.forEach(function (n, i) {
+    var list = groups[n]
+    var wrong = list.filter(function (r) { return r.wrong_count > 0 && r.streak_correct < 2 }).length
+    var fav = list.filter(function (r) { return r.is_favorite }).length
+    var c = palette[i % palette.length]
+    html += '<div class="book" data-notebook="' + esc(n) + '" onclick="openBook(\'' + escAttr(n) + '\')">' +
+      '<div class="spine" style="background:' + c + '"></div>' +
+      '<div class="face"><span class="name">' + esc(n) + '</span>' +
+      '<span class="meta">错 ' + wrong + ' · 藏 ' + fav + '</span></div></div>'
+  })
+  html += '</div>'
+  $('view').innerHTML = html
+}
+
+function renderBook() {
+  $('btn-back').style.display = ''
+  $('title').textContent = view.notebook
+  var list = RECORDS.filter(function (r) { return (r.source_notebook || '未分类') === view.notebook })
+  $('count').textContent = list.length + ' 题'
+  if (list.length === 0) { $('view').innerHTML = '<div class="empty">本书暂无错题</div>'; return }
+  var wrong = list.filter(function (r) { return r.wrong_count > 0 && r.streak_correct < 2 }).length
+  var mastered = list.filter(function (r) { return r.streak_correct >= 2 }).length
+  var html = '<div class="stat"><span>待复习 <b>' + wrong + '</b></span><span>已掌握 <b>' + mastered + '</b></span><span>共 <b>' + list.length + '</b></span></div>'
+  // 按章节分组
+  var groups = {}
+  list.forEach(function (r) { var k = r.source_chapter || '未分章节'; (groups[k] = groups[k] || []).push(r) })
+  Object.keys(groups).forEach(function (ch) {
+    var rows = groups[ch]
+    html += '<div class="ch-group"><div class="ch-head"><span class="name">' + esc(ch) + '</span><span class="cnt">' + rows.length + ' 题</span>' +
+      '<span class="sp"></span><button onclick="reviewAll(\'' + escAttr(view.notebook) + '\',\'' + escAttr(ch) + '\')">重刷本章</button></div>'
+    html += '<div class="cards">'
+    rows.forEach(function (r) {
+      var snap = snapshotOf(r)
+      var q = snap && snap.question ? stripMd(snap.question) : (r.page_title || '（无题干）')
+      var badges = ''
+      if (r.wrong_count > 0) badges += '<span class="badge wrong">错 ' + r.wrong_count + '</span>'
+      if (r.streak_correct === 1) badges += '<span class="badge reviewing">复习中</span>'
+      tagNames(r.id).forEach(function (t) { badges += '<span class="badge tag" style="color:' + escAttr(t.color) + '">' + esc(t.name) + '</span>' })
+      var item = JSON.stringify({ no: r.quiz_no, question: snap ? snap.question : '', options: snap ? snap.options : [], answer: snap ? snap.answer : '', explanation: snap ? snap.explanation : '' })
+      html += '<div class="card"><div class="q">' + esc(q) + '</div>' +
+        '<div class="badges">' + badges + '</div>' +
+        '<div class="ops"><button onclick="reviewCard(' + escAttr(JSON.stringify({ row: r, snap: snap })) + ')">重刷本题</button></div></div>'
+    })
+    html += '</div></div>'
+  })
+  $('view').innerHTML = html
+}
+
+/* ===== 动作 ===== */
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m] }) }
+function escAttr(s) { return esc(String(s)).replace(/\\/g, '&#92;') }
+function stripMd(s) { return String(s).replace(/[#*_`>~|\[\]()!-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) }
+
+function openBook(nb) { view = { kind: 'book', notebook: nb, chapter: null }; render() }
+$('btn-back').onclick = function () { view = { kind: 'shelf', notebook: null, chapter: null }; render() }
+
+function pickRows(rows) {
+  var items = [], pageId = null
+  rows.forEach(function (r) {
+    var snap = snapshotOf(r)
+    if (!snap) return
+    if (!pageId) pageId = r.page_id
+    items.push({ no: r.quiz_no, question: snap.question, options: snap.options, answer: snap.answer, explanation: snap.explanation })
+  })
+  return { items: items, pageId: pageId }
+}
+
+function reviewAll(nb, ch) {
+  var rows = RECORDS.filter(function (r) { return (r.source_notebook || '未分类') === nb && (r.source_chapter || '未分章节') === ch })
+  var p = pickRows(rows)
+  if (!p.items.length) { parent.postMessage({ channel: CHANNEL, action: 'toast', payload: '本章无可重刷内容' }, '*'); return }
+  parent.postMessage({ channel: CHANNEL, action: 'host.review', payload: { title: nb + ' › ' + ch, pageId: p.pageId, items: p.items } }, '*')
+}
+
+function reviewCard(json) {
+  var data = JSON.parse(json)
+  var p = pickRows([data.row])
+  if (!p.items.length) return
+  parent.postMessage({ channel: CHANNEL, action: 'host.review', payload: { title: '重刷本题', pageId: p.pageId, items: p.items } }, '*')
+}
+
+loadAll().catch(function (e) { $('view').innerHTML = '<div class="empty">初始化失败：' + e.message + '</div>' })
+</script>
+</body>
+</html>

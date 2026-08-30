@@ -1,13 +1,14 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
 import {
   Puzzle, RefreshCw, Search, FolderOpen, Download, Loader2,
-  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield,
+  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield, Boxes, BookMarked,
   History, Trash2, ScrollText,
 } from 'lucide-react'
 import {
-  pluginFetchRegistry, pluginInstall, pluginInstallFromFile,
+  pluginFetchRegistry, pluginInstall, pluginInstallFromFile, pluginInstallBundledSample,
   pluginListInstalled, pluginSetEnabled, pluginUninstall, pluginGetContribution,
   pluginSetGranted, pluginAuditList, pluginAuditClear, pluginAuditWrite,
+  pluginGetAllowedLevels, pluginSetAllowedLevels,
   createHabit, createBookmarkCategory, createBookmarkItem, bookmarkGetAll,
   knowledgePackGetState, knowledgePackImport, onKnowledgePackProgress,
 } from '../../lib/ipc'
@@ -49,11 +50,17 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
 const CAPABILITY_LABELS: Record<string, string> = {
   clipboard: '剪贴板写入',
   theme: '主题变量注入',
+  data: '自有数据表读写',
+  knowledge: '知识库访问与重刷',
+  navigation: '导航跳转',
 }
 
 const CAPABILITY_DESCS: Record<string, string> = {
   clipboard: '允许插件将内容(如生成的密码)复制到系统剪贴板',
   theme: '允许插件临时调整应用配色变量(关闭即恢复)',
+  data: '允许插件读写它自己的数据表(plugin_<id>_*，无法访问其他插件或宿主库表)',
+  knowledge: '允许插件打开宿主刷题器等知识功能(判题写入插件自己的数据表)',
+  navigation: '允许插件请求跳转到指定页面',
 }
 
 const DATA_TARGETS: Record<string, string> = {
@@ -67,6 +74,7 @@ const LEVEL_META: Record<PluginRiskLevel, { label: string; color: string; bg: st
   S: { label: '内容', color: 'var(--success)', bg: 'var(--success)', icon: <ShieldCheck size={11} /> },
   A: { label: '数据写入', color: 'var(--warning)', bg: 'var(--warning)', icon: <ShieldAlert size={11} /> },
   B: { label: '增强能力', color: 'var(--danger)', bg: 'var(--danger)', icon: <Shield size={11} /> },
+  C: { label: '模块', color: '#7f77dd', bg: '#7f77dd', icon: <Boxes size={11} /> },
 }
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -140,6 +148,24 @@ export function PluginsModule() {
 
   useEffect(() => { refreshInstalled() }, [refreshInstalled])
 
+  /** C 级模块插件白名单（pluginAllowedLevels） */
+  const [allowedLevels, setAllowedLevels] = useState<string[]>(['S', 'A', 'B'])
+  useEffect(() => {
+    pluginGetAllowedLevels().then(setAllowedLevels).catch(() => { /* ignore */ })
+  }, [])
+  const toggleLevelC = async (on: boolean) => {
+    const next = on
+      ? Array.from(new Set([...allowedLevels, 'C']))
+      : allowedLevels.filter(x => x !== 'C')
+    const r = await pluginSetAllowedLevels(next)
+    if (r.success) {
+      setAllowedLevels(next)
+      showToast({ type: 'info', message: on ? '已允许 C 级模块插件（可读写自有数据表）' : '已关闭 C 级模块插件许可' })
+    } else {
+      showToast({ type: 'error', message: r.message || '设置失败' })
+    }
+  }
+
   const loadMarket = useCallback(async (force = false) => {
     setMarketLoading(true); setMarketError('')
     const r = await pluginFetchRegistry()
@@ -181,8 +207,8 @@ export function PluginsModule() {
     const existing = installed.find(x => x.id === p.id)
     const isUpdate = Boolean(existing)
 
-    if (level === 'B') {
-      // B 级:逐能力勾选(更新时默认勾选既有授权,新增能力需手动勾)
+    if (level === 'B' || level === 'C') {
+      // B/C 级:逐能力勾选(更新时默认勾选既有授权,新增能力需手动勾)
       const prev = existing?.grantedCapabilities || []
       const declared = p.capabilities || []
       const initial = isUpdate ? declared.filter(c => prev.includes(c)) : declared
@@ -235,6 +261,32 @@ export function PluginsModule() {
       setTab('installed')
     } else if (r.message && r.message !== '已取消') {
       showToast({ type: 'error', message: r.message })
+    }
+  }
+
+  /** 一键安装内置错题本插件（开发期从工作区 samples/quizbook-0.2.0.zip 直接装，prod 后续用 extraResources 预置） */
+  const handleInstallBundledQuizbook = async () => {
+    setBusy(true)
+    // 双保险：确保白名单含 C（内置示例安装本身已绕过等级检查，但授权状态需一致）
+    if (!allowedLevels.includes('C')) {
+      const r = await pluginSetAllowedLevels(Array.from(new Set([...allowedLevels, 'C'])))
+      if (r.success) setAllowedLevels(prev => Array.from(new Set([...prev, 'C'])))
+    }
+    const r = await pluginInstallBundledSample('quizbook-0.2.1.zip')
+    setBusy(false)
+    if (r.success) {
+      showToast({ type: 'info', message: '错题本插件已安装，请在详情页授权 data/knowledge 能力' })
+      window.dispatchEvent(new CustomEvent('plugins-changed'))
+      await refreshInstalled()
+      setTab('installed')
+      // 自动选中刚装的插件进详情页授权
+      const list = await pluginListInstalled()
+      const just = list.find(p => p.id === 'knowbase.quizbook')
+      if (just) setSelected({ kind: 'installed', plugin: just })
+    } else {
+      // 兜底：内置示例缺失（打包版或路径错）→ 走文件选择
+      showToast({ type: 'warning', message: r.message || '内置示例不可用，改用文件选择' })
+      await handleInstallFromFile()
     }
   }
 
@@ -523,8 +575,8 @@ export function PluginsModule() {
               取消
             </button>
             <button
-              onClick={() => doInstall(entry, level === 'B' ? granted : undefined)}
-              disabled={busy || (level === 'B' && false)}
+              onClick={() => doInstall(entry, (level === 'B' || level === 'C') ? granted : undefined)}
+              disabled={busy}
               className="px-4 py-2 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
             >
               {busy ? <Loader2 size={12} className="animate-spin" /> : isUpdate ? '确认更新' : '确认安装'}
@@ -861,6 +913,33 @@ export function PluginsModule() {
           )}
         </div>
 
+        {/* 错题本模式切换 + C 级白名单（两行紧凑，不与列表同流避免突兀） */}
+        {tab === 'installed' && (
+          <div className="px-3 py-1.5 flex flex-col gap-1 text-[10px] text-[var(--text-muted)] border-b border-[var(--border-color)]/60">
+            <select
+              value={s.quizbookMode}
+              onChange={e => {
+                const next = e.target.value
+                update('quizbookMode', next as 'builtin' | 'plugin')
+                showToast({ type: 'info', message: next === 'plugin' ? '已切换为插件版（知识空间侧边栏查看）' : '已切换回内置版' })
+              }}
+              className="px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[var(--text-primary)] text-[10px] outline-none w-fit"
+            >
+              <option value="plugin">错题本 · 插件版（默认）</option>
+              <option value="builtin">错题本 · 内置版（回退）</option>
+            </select>
+            <label className="flex items-center gap-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allowedLevels.includes('C')}
+                onChange={e => void toggleLevelC(e.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+              允许 C 级模块插件
+            </label>
+          </div>
+        )}
+
         {/* 分类筛选(市场):外观 / 工具 / 知识包 */}
         {tab === 'market' && (
           <div className="px-2 pb-2 flex flex-wrap gap-1 shrink-0">
@@ -872,7 +951,7 @@ export function PluginsModule() {
             >
               全部分类
             </button>
-            {(['外观', '工具', '知识包'] as const).map(c => (
+            {(['外观', '工具', '知识包', '学习'] as const).map(c => (
               <button
                 key={c}
                 onClick={() => setCategoryFilter(categoryFilter === c ? '' : c)}
@@ -889,15 +968,40 @@ export function PluginsModule() {
         {/* 列表 */}
         <div className="flex-1 overflow-y-auto">
           {tab === 'installed' ? (
-            filteredInstalled.length === 0 ? (
-              <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
-                {q ? '没有匹配的插件' : (
-                  <>还没有安装插件<br />
-                    <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-1">去市场逛逛 →</button>
-                  </>
-                )}
-              </div>
-            ) : filteredInstalled.map(installedItem)
+            <div>
+              {/* 错题本官方推荐行式条目（未安装时显示，与其他已安装插件同款样式 + 右侧一键安装按钮） */}
+              {!installed.some(x => x.id === 'knowbase.quizbook') && (
+                <button
+                  onClick={() => void handleInstallBundledQuizbook()}
+                  className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left border-l-2 border-l-transparent hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <BookMarked size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] font-medium truncate text-[var(--text-primary)]">错题本（插件版）</span>
+                      <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v0.2.1</span>
+                      <span className="text-[9px] px-1 py-px rounded bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">官方</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)] truncate">C 级模块插件 · 错题本彻底插件版（随程序分发）</div>
+                  </div>
+                  <span
+                    onClick={e => { e.stopPropagation(); void handleInstallBundledQuizbook() }}
+                    className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
+                  >
+                    一键安装
+                  </span>
+                </button>
+              )}
+              {filteredInstalled.length === 0 ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
+                  {q ? '没有匹配的插件' : (
+                    <>还没有安装插件<br />
+                      <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-1">去市场逛逛 →</button>
+                    </>
+                  )}
+                </div>
+              ) : filteredInstalled.map(installedItem)}
+            </div>
           ) : marketLoading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-[var(--text-muted)]">
               <Loader2 size={14} className="animate-spin" />正在获取…

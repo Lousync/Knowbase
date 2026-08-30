@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>错题本（插件版 Demo）</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; padding: 16px; margin: 0; font-size: 13px; line-height: 1.6;
+         background: var(--bg-primary, transparent); color: var(--text-primary, inherit); }
+  h2 { font-size: 15px; font-weight: 500; margin: 0 0 4px; }
+  .hint { color: var(--text-muted, #888); font-size: 12px; margin-bottom: 12px; }
+  button { font: inherit; padding: 4px 10px; margin-right: 6px; border: 1px solid var(--border-color, #ccc);
+           border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+  button:hover { background: var(--bg-hover, rgba(128,128,128,.12)); }
+  pre { background: var(--bg-secondary, rgba(128,128,128,.1)); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; font-size: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+</style>
+</head>
+<body>
+<h2>错题本（插件版 Demo）</h2>
+<div class="hint">P1 验证：插件自有数据表 <code>records</code> 的建表 / 插入 / 查询链路（经 kb-plugin 桥）</div>
+
+<div class="row">
+  <button id="btn-insert">插入一条测试记录</button>
+  <button id="btn-query">查询全部记录</button>
+  <button id="btn-clear">清空输出</button>
+</div>
+<pre id="out">等待操作…</pre>
+
+<script>
+/**
+ * 宿主桥协议（与 toolbox UI 插件宿主一致）：
+ *   插件 → 宿主 { channel:'kb-plugin', action:'data.query', payload:{ table, where?, orderBy?, desc?, limit? } }
+ *   宿主 → 插件 { channel:'kb-plugin', action: 同名, payload:{ rows } / { ok, id } / { denied, reason } }
+ *   宿主 → 插件 { channel:'kb-plugin', action:'init', payload:{ vars } }  // 加载完成后下发主题变量
+ * 注意：data.* 的插件 ID 由宿主注入，插件无法访问其他插件或宿主的库表。
+ */
+var CHANNEL = 'kb-plugin'
+var PLUGIN_ID = 'quizbook.demo'
+var TABLE = 'records'
+var out = document.getElementById('out')
+var waiting = null
+
+function show(obj) { out.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }
+
+function call(action, payload) {
+  return new Promise(function (resolve, reject) {
+    waiting = { action: action, resolve: resolve, reject: reject }
+    parent.postMessage({ channel: CHANNEL, action: action, payload: payload }, '*')
+    setTimeout(function () {
+      if (waiting && waiting.action === action) { waiting = null; reject(new Error('宿主无响应（桥未接入或超时）')) }
+    }, 8000)
+  })
+}
+
+window.addEventListener('message', function (e) {
+  var d = e.data
+  if (!d || d.channel !== CHANNEL) return
+  if (d.action === 'init') {
+    // 套用宿主主题变量，自动适配深浅色
+    var vars = (d.payload && d.payload.vars) || {}
+    for (var k in vars) if (vars[k]) document.documentElement.style.setProperty(k, vars[k])
+    return
+  }
+  if (!waiting || waiting.action !== d.action) return
+  var p = d.payload || {}
+  var w = waiting
+  waiting = null
+  if (p.denied) w.reject(new Error(p.reason || '宿主拒绝'))
+  else w.resolve(p)
+})
+
+document.getElementById('btn-insert').onclick = function () {
+  show('插入中…')
+  call('data.insert', {
+    table: TABLE,
+    row: {
+      page_id: 'demo-page-' + Date.now(),
+      quiz_no: Math.floor(Math.random() * 100),
+      question: '这是一条来自插件沙箱的测试错题',
+      wrong_count: 1,
+      updated_at: new Date().toISOString()
+    }
+  }).then(show).catch(function (e) { show('失败: ' + e.message) })
+}
+
+document.getElementById('btn-query').onclick = function () {
+  show('查询中…')
+  call('data.query', { table: TABLE, orderBy: 'rowid', desc: true, limit: 50 })
+    .then(show).catch(function (e) { show('失败: ' + e.message) })
+}
+
+document.getElementById('btn-clear').onclick = function () { out.textContent = '已清空' }
+</script>
+</body>
+</html>
