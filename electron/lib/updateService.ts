@@ -1,5 +1,5 @@
 import { app, ipcMain, shell, BrowserWindow, net } from 'electron'
-import { createWriteStream, existsSync, mkdirSync, statSync, unlinkSync } from 'fs'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { createHash } from 'crypto'
 import { Readable } from 'stream'
@@ -57,6 +57,22 @@ function downloadCandidates(url: string): string[] {
 }
 
 export interface UpdateAsset { name: string; url: string; size: number }
+
+/**
+ * 结构化失败原因 — UI 据此渲染差异化操作(重试/换镜像/稍后再试):
+ * size-mismatch/sha512-mismatch → 服务器文件或镜像坏字节;network/channel-all-failed → 网络类;
+ * cancelled/paused → 主动中止,不算错误。
+ */
+export type UpdateFailReason =
+  | 'size-mismatch' | 'sha512-mismatch' | 'network' | 'channel-all-failed' | 'cancelled' | 'unknown'
+
+/** 失败发生环节(download → verify → sha512),供 UI 文案精准定位 */
+export type UpdateFailStep = 'download' | 'verify' | 'sha512'
+
+/** 带结构化原因的错误,downloadOne/verify 链路统一抛出 */
+class UpdateError extends Error {
+  constructor(message: string, public reason: UpdateFailReason) { super(message) }
+}
 
 export interface UpdateCheckResult {
   ok: boolean
@@ -133,10 +149,12 @@ async function downloadOne(
 ): Promise<void> {
   const headers: Record<string, string> = { 'User-Agent': 'Knowbase-App' }
   if (startOffset > 0) headers['Range'] = `bytes=${startOffset}-`
-  const r = await net.fetch(candidate, { headers, redirect: 'follow', signal })
+  const r = await net.fetch(candidate, { headers, redirect: 'follow', signal }).catch((e: any) => {
+    throw new UpdateError(`${new URL(candidate).hostname} ${e?.message || '网络请求失败'}`, 'network')
+  })
   const ctype = String(r.headers.get('content-type') || '')
-  if (!r.ok || !r.body) throw new Error(`${new URL(candidate).hostname} HTTP ${r.status}`)
-  if (/text\/html/i.test(ctype)) throw new Error(`${new URL(candidate).hostname} 返回的是网页而非文件`)
+  if (!r.ok || !r.body) throw new UpdateError(`${new URL(candidate).hostname} HTTP ${r.status}`, 'network')
+  if (/text\/html/i.test(ctype)) throw new UpdateError(`${new URL(candidate).hostname} 返回的是网页而非文件`, 'network')
 
   // 服务器不支持 Range(应答 200 而非 206)→ 只能从头重下
   let offset = startOffset
@@ -145,7 +163,7 @@ async function downloadOne(
   const totalFull = r.status === 206 ? offset + segTotal : segTotal
   // 大小前置校验:content-length 与期望不符 → 直接判坏字节,避免白下载整包
   if (expectedSize && totalFull > 0 && totalFull !== expectedSize) {
-    throw new Error(`文件大小不符(期望 ${expectedSize},实际 ${totalFull}),疑似坏字节`)
+    throw new UpdateError(`文件大小不符(期望 ${expectedSize},实际 ${totalFull}),服务器文件可能未传完整`, 'size-mismatch')
   }
   const out = createWriteStream(dest, { flags: offset > 0 ? 'a' : 'w' })
   let received = 0
@@ -176,7 +194,7 @@ async function downloadOne(
         slowTimer = setTimeout(() => {
           if (received < SLOW_MIN_BYTES) {
             reader.destroy()
-            rej(new Error(`${host} 下载过慢(15s 内不足 2MB),已切换通道`))
+            rej(new UpdateError(`${host} 下载过慢(15s 内不足 2MB),已切换通道`, 'network'))
           } else {
             scheduleSlowCheck()
           }
@@ -192,15 +210,17 @@ async function downloadOne(
   }
   // 流结束后的兜底校验:chunked/无 content-length 时服务器提前断流也会被截获
   if (expectedSize && statSync(dest).size !== expectedSize) {
-    throw new Error(`文件大小不符(期望 ${expectedSize},实际 ${statSync(dest).size}),疑似坏字节`)
+    throw new UpdateError(`文件大小不符(期望 ${expectedSize},实际 ${statSync(dest).size}),服务器文件可能未传完整`, 'size-mismatch')
   }
 }
 
-/** 下载文件完整性校验:size(若有) + latest.yml 的 sha512(若可取);任一不符即视为坏字节 */
-async function verifyInstaller(dest: string, expectedSize: number | undefined, assetUrl: string): Promise<{ ok: boolean; message?: string }> {
+/** 下载文件完整性校验:size(若有) + latest.yml 的 sha512(若可取);任一不符即视为坏字节。
+ *  metaFound=false 表示三件套中的 latest.yml 缺失(发布侧事故信号),仅剩 size 校验兜底。 */
+async function verifyInstaller(dest: string, expectedSize: number | undefined, assetUrl: string): Promise<{ ok: boolean; message?: string; reason?: UpdateFailReason; step?: UpdateFailStep; metaFound: boolean }> {
+  let metaFound = false
   try {
     if (expectedSize && statSync(dest).size !== expectedSize) {
-      return { ok: false, message: '文件大小不符,疑似坏字节' }
+      return { ok: false, message: '文件大小不符,疑似坏字节', reason: 'size-mismatch', step: 'verify', metaFound }
     }
     let sha512 = ''
     try {
@@ -212,7 +232,7 @@ async function verifyInstaller(dest: string, expectedSize: number | undefined, a
           if (!r.ok || !r.body || /text\/html/i.test(String(r.headers.get('content-type') || ''))) continue
           const txt = await r.text()
           const m = /sha512:\s*([A-Za-z0-9+/=]+)/.exec(txt)
-          if (m) { sha512 = m[1]; break }
+          if (m) { sha512 = m[1]; metaFound = true; break }
         } catch { /* 换下一候选 */ }
       }
     } catch { /* 取不到 latest.yml → 退回仅 size 校验 */ }
@@ -225,16 +245,42 @@ async function verifyInstaller(dest: string, expectedSize: number | undefined, a
         s.on('end', () => res(hash.digest()))
         s.on('error', rej)
       })
-      if (!buf.equals(expected)) return { ok: false, message: '文件校验和(SHA512)不符,镜像可能返回了坏字节' }
+      if (!buf.equals(expected)) {
+        return { ok: false, message: '文件校验和(SHA512)不符,镜像可能返回了坏字节', reason: 'sha512-mismatch', step: 'sha512', metaFound }
+      }
     }
-    return { ok: true }
+    return { ok: true, metaFound }
   } catch (e: any) {
-    return { ok: false, message: e?.message || String(e) }
+    return { ok: false, message: e?.message || String(e), reason: 'unknown', step: 'verify', metaFound }
   }
+}
+
+/**
+ * 安装包清理:install 触发时在 userData 记录 {安装包路径, 触发时版本}。
+ * 下次启动若版本已变化(= 安装完成)则删除安装包;版本未变(安装被取消/失败)则保留供重试。
+ */
+function installerCleanupMarkerPath(): string {
+  return join(app.getPath('userData'), 'pending-installer-cleanup.json')
+}
+
+function markInstallerForCleanup(filePath: string): void {
+  try {
+    writeFileSync(installerCleanupMarkerPath(), JSON.stringify({ filePath, fromVersion: app.getVersion() }), 'utf-8')
+  } catch { /* 清理是尽力而为 */ }
+}
+
+function runInstallerStartupCleanup(): void {
+  try {
+    const p = installerCleanupMarkerPath()
+    const { filePath, fromVersion } = JSON.parse(readFileSync(p, 'utf-8'))
+    if (fromVersion !== app.getVersion() && existsSync(filePath)) unlinkSync(filePath)
+    unlinkSync(p)
+  } catch { /* 无标记或已清理 */ }
 }
 
 export function registerUpdateHandlers(deps?: { getSettingValue?: (key: string) => unknown }): void {
   if (deps?.getSettingValue) getSettingValue = deps.getSettingValue
+  runInstallerStartupCleanup()
   ipcMain.handle('update:check', async (): Promise<UpdateCheckResult> => {
     const currentVersion = app.getVersion()
     try {
@@ -286,6 +332,9 @@ ipcMain.handle('update:download', async (_e, url: string, name: string, expected
     const dest = join(dir, safeName)
     lastDownloadDest = dest
     let lastErr = ''
+    let lastReason: UpdateFailReason = 'channel-all-failed'
+    let lastStep: UpdateFailStep = 'download'
+    let metaMissing = false
     try {
       // 逐个候选通道:下载 → 完整性校验 → 通过才返回;坏字节自动换下一通道。
       // 暂停=中止但保留断点(下次 download 从断点 Range 续传);取消=中止并清除断点;
@@ -301,9 +350,12 @@ ipcMain.handle('update:download', async (_e, url: string, name: string, expected
             const check = await verifyInstaller(dest, expectedSize, url)
             if (check.ok) {
               pushProgress(100, statSync(dest).size, expectedSize || statSync(dest).size)
-              return { success: true, filePath: dest }
+              // latest.yml 缺失 → 仅剩 size 校验兜底,提示发布侧三件套不全(安装时 NSIS 可能报 integrity check failed)
+              return { success: true, filePath: dest, metaMissing: !check.metaFound }
             }
-            lastErr = check.message
+            lastErr = check.message || lastErr
+            lastReason = check.reason || 'unknown'
+            lastStep = check.step || 'verify'
             try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
           } catch (e: any) {
             if (e?.name === 'AbortError' || pauseRequested || cancelRequested) {
@@ -317,6 +369,8 @@ ipcMain.handle('update:download', async (_e, url: string, name: string, expected
               break
             }
             lastErr = e?.message || String(e)
+            lastReason = e instanceof UpdateError ? e.reason : 'network'
+            lastStep = 'download'
             try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
           }
         }
@@ -326,9 +380,9 @@ ipcMain.handle('update:download', async (_e, url: string, name: string, expected
       }
       if (cancelRequested) {
         try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
-        return { success: false, cancelled: true, message: '下载已取消' }
+        return { success: false, cancelled: true, reason: 'cancelled', message: '下载已取消' }
       }
-      return { success: false, message: lastErr || '所有下载通道均失败' }
+      return { success: false, reason: lastReason, step: lastStep, message: lastErr || '所有下载通道均失败' }
     } finally {
       downloading = false
       activeDownloadAbort = null
@@ -356,7 +410,7 @@ ipcMain.handle('update:download', async (_e, url: string, name: string, expected
     return { ok: false, message: '没有进行中的下载' }
   })
 
-  ipcMain.handle('update:install', (_e, filePath: string) => {
+  ipcMain.handle('update:install', async (_e, filePath: string) => {
     // 仅允许运行系统"下载"目录内的安装包
     try {
       const downloads = resolve(app.getPath('downloads'))
@@ -365,7 +419,9 @@ ipcMain.handle('update:download', async (_e, url: string, name: string, expected
         return { success: false, message: '路径不受信任' }
       }
       if (!existsSync(resolved)) return { success: false, message: '安装包不存在' }
-      shell.openPath(resolved)
+      const err = await shell.openPath(resolved)
+      if (err) return { success: false, message: err }
+      markInstallerForCleanup(resolved)
       return { success: true }
     } catch (e: any) {
       return { success: false, message: e?.message || String(e) }

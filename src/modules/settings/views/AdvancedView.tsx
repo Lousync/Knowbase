@@ -1,77 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   RotateCcw, Sparkles, RefreshCw, Download, ExternalLink, Play,
-  CheckCircle2, AlertTriangle, Loader2, Pause, X,
+  CheckCircle2, AlertTriangle, Loader2, Pause, X, MonitorUp,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
+import { getAppVersion, openExternal } from '../../../lib/ipc'
 import {
-  getAppVersion, checkForUpdate, downloadUpdate, installUpdate,
-  onUpdateDownloadProgress, openExternal, updatePauseDownload, updateCancelDownload,
-} from '../../../lib/ipc'
+  useUpdateStore, updateCheck, updateDownload, updatePause, updateCancel, updateInstall,
+  updateFailKind, updateFailMessage,
+} from '../../../lib/updateStore'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
-
-type UpdateState = 'idle' | 'checking' | 'uptodate' | 'available' | 'downloading' | 'paused' | 'downloaded' | 'error'
-
-interface UpdateResult {
-  ok: boolean
-  hasUpdate: boolean
-  currentVersion: string
-  latestVersion: string
-  releaseUrl: string
-  notes: string
-  asset: { name: string; url: string; size: number } | null
-  message?: string
-}
 
 export function AdvancedView() {
   const { s, update } = useSettings()
-
-  // ---- 检查更新 ----
+  const upd = useUpdateStore()
+  const mirrorInputRef = useRef<HTMLInputElement | null>(null)
   const [appVersion, setAppVersion] = useState('')
-  const [updState, setUpdState] = useState<UpdateState>('idle')
-  const [updResult, setUpdResult] = useState<UpdateResult | null>(null)
-  const [updError, setUpdError] = useState('')
-  const [progress, setProgress] = useState({ percent: 0, receivedBytes: 0, totalBytes: 0 })
-  const [downloadedPath, setDownloadedPath] = useState('')
 
-  useEffect(() => { getAppVersion().then(setAppVersion) }, [])
-  useEffect(() => onUpdateDownloadProgress(p => setProgress(p)), [])
+  useEffect(() => { getAppVersion().then(setAppVersion).catch(() => {}) }, [])
 
-  const handleCheckUpdate = async () => {
-    setUpdState('checking'); setUpdError('')
-    try {
-      const r = await checkForUpdate()
-      setUpdResult(r)
-      if (!r.ok) { setUpdError(r.message || '检查失败,请检查网络'); setUpdState('error') }
-      else setUpdState(r.hasUpdate ? 'available' : 'uptodate')
-    } catch (e: any) {
-      setUpdError(e?.message || '检查失败,请检查网络'); setUpdState('error')
-    }
-  }
-
-  const handleDownload = async () => {
-    if (!updResult?.asset) return
-    setUpdState('downloading')
-    setProgress({ percent: 0, receivedBytes: 0, totalBytes: updResult.asset.size })
-    const r = await downloadUpdate(updResult.asset.url, updResult.asset.name, updResult.asset.size)
-    if (r.success && r.filePath) { setDownloadedPath(r.filePath); setUpdState('downloaded') }
-    else if (r.paused) setUpdState('paused') // 进度条保留在暂停时的值,继续下载会断点续传
-    else if (r.cancelled) { setUpdState('available'); setProgress({ percent: 0, receivedBytes: 0, totalBytes: 0 }) }
-    else { setUpdError(r.message || '下载失败'); setUpdState('error') }
-  }
-
-  const handlePause = async () => { await updatePauseDownload() }
-
-  const handleCancel = async () => {
-    await updateCancelDownload()
-    setUpdState('available')
-    setProgress({ percent: 0, receivedBytes: 0, totalBytes: 0 })
-  }
-
-  const handleInstall = async () => {
-    const r = await installUpdate(downloadedPath)
-    if (!r.success) { setUpdError(r.message || '启动安装程序失败'); setUpdState('error') }
-  }
+  /** 检查失败(无 check 信息)展示原始 message;下载失败按 reason 结构化 */
+  const failText = upd.check ? updateFailMessage(upd) : (upd.error || '检查失败,请检查网络')
+  const failKind = upd.check ? updateFailKind(upd.reason) : 'network'
 
   return (
     <div>
@@ -84,12 +34,12 @@ export function AdvancedView() {
         <div className="flex items-center gap-3 mb-3">
           <span className="text-[13px] text-[var(--text-primary)]">当前版本 v{appVersion || '…'}</span>
           <button
-            onClick={handleCheckUpdate}
-            disabled={updState === 'checking' || updState === 'downloading'}
+            onClick={() => void updateCheck()}
+            disabled={upd.phase === 'checking' || upd.phase === 'downloading'}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {updState === 'checking' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            {updState === 'checking' ? '检查中…' : '检查更新'}
+            {upd.phase === 'checking' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            {upd.phase === 'checking' ? '检查中…' : '检查更新'}
           </button>
         </div>
 
@@ -97,6 +47,7 @@ export function AdvancedView() {
         <div className="mb-4 max-w-md">
           <label className="block text-[12px] text-[var(--text-secondary)] mb-1">下载镜像(GitHub 加速代理)</label>
           <input
+            ref={mirrorInputRef}
             value={String(s.updateMirror ?? '')}
             onChange={e => update('updateMirror', e.target.value.trim())}
             placeholder="留空 = 直连 GitHub,例:https://gh.dpik.top"
@@ -113,76 +64,102 @@ export function AdvancedView() {
           </p>
         </div>
 
-        {updState === 'uptodate' && (
+        {upd.phase === 'uptodate' && (
           <div className="flex items-center gap-1.5 text-[12px] text-[var(--success)]">
             <CheckCircle2 size={13} />已是最新版本
           </div>
         )}
-        {updState === 'error' && (
-          <div className="flex items-center gap-1.5 text-[12px] text-[var(--danger)]">
-            <AlertTriangle size={13} />{updError}
+
+        {upd.phase === 'error' && (
+          <div className="border border-[var(--danger)]/40 rounded-lg p-3 max-w-md bg-[var(--bg-secondary)]">
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle size={13} className="text-[var(--danger)] mt-0.5 shrink-0" />
+              <span className="text-[12px] text-[var(--danger)] leading-relaxed">{failText}</span>
+            </div>
+            {upd.check && (
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <button onClick={() => void updateDownload()}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-white bg-[var(--accent)] rounded hover:bg-[var(--accent-hover)] transition-colors">
+                  <RefreshCw size={11} />{failKind === 'integrity' ? '重新下载' : '重试'}
+                </button>
+                <button onClick={() => {
+                  mirrorInputRef.current?.focus()
+                  mirrorInputRef.current?.select()
+                }}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                  <MonitorUp size={11} />更换镜像重试
+                </button>
+                <span className="text-[11px] text-[var(--text-muted)]">换镜像后点「重新下载」即可断点续传</span>
+              </div>
+            )}
           </div>
         )}
 
-        {(updState === 'available' || updState === 'downloading' || updState === 'paused' || updState === 'downloaded') && updResult && (
+        {(upd.phase === 'available' || upd.phase === 'downloading' || upd.phase === 'paused' || upd.phase === 'downloaded') && upd.check && (
           <div className="border border-[var(--border-color)] rounded-lg p-3 max-w-md bg-[var(--bg-secondary)]">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles size={13} className="text-[var(--accent)]" />
-              <span className="text-[13px] font-medium text-[var(--text-primary)]">发现新版本 v{updResult.latestVersion}</span>
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">发现新版本 v{upd.check.latestVersion}</span>
               <button
-                onClick={() => openExternal(updResult.releaseUrl).catch(() => {})}
+                onClick={() => openExternal(upd.check!.releaseUrl).catch(() => {})}
                 className="ml-auto flex items-center gap-1 text-[11px] text-[var(--accent)] hover:underline"
               >
                 <ExternalLink size={11} />发布页
               </button>
             </div>
 
-            {(updState === 'downloading' || updState === 'paused') ? (
+            {(upd.phase === 'downloading' || upd.phase === 'paused') ? (
               <div>
                 <div className="h-1.5 bg-[var(--bg-tertiary)] rounded overflow-hidden mb-1.5">
-                  <div className={`h-full transition-all ${updState === 'paused' ? 'bg-[var(--warning)]' : 'bg-[var(--accent)]'}`} style={{ width: `${progress.percent}%` }} />
+                  <div className={`h-full transition-all ${upd.phase === 'paused' ? 'bg-[var(--warning)]' : 'bg-[var(--accent)]'}`} style={{ width: `${upd.progress.percent}%` }} />
                 </div>
                 <div className="text-[11px] text-[var(--text-muted)]">
-                  {updState === 'paused' ? '已暂停 ' : '正在下载 '}{updResult.asset?.name} — {progress.percent}%
-                  {progress.totalBytes > 0 && `（${(progress.receivedBytes / 1048576).toFixed(1)} / ${(progress.totalBytes / 1048576).toFixed(1)} MB）`}
-                  {updState === 'paused' && ',继续下载将从断点续传'}
+                  {upd.phase === 'paused' ? '已暂停 ' : '正在下载 '}{upd.check.asset?.name} — {upd.progress.percent}%
+                  {upd.progress.totalBytes > 0 && `（${(upd.progress.receivedBytes / 1048576).toFixed(1)} / ${(upd.progress.totalBytes / 1048576).toFixed(1)} MB）`}
+                  {upd.phase === 'paused' && ',继续下载将从断点续传'}
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  {updState === 'downloading' ? (
-                    <button onClick={() => void handlePause()}
+                  {upd.phase === 'downloading' ? (
+                    <button onClick={() => void updatePause()}
                       className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
                       <Pause size={11} />暂停
                     </button>
                   ) : (
-                    <button onClick={() => void handleDownload()}
+                    <button onClick={() => void updateDownload()}
                       className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-white bg-[var(--accent)] rounded hover:bg-[var(--accent-hover)] transition-colors">
                       <Download size={11} />继续下载
                     </button>
                   )}
-                  <button onClick={() => void handleCancel()}
+                  <button onClick={() => void updateCancel()}
                     className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-red-400 hover:bg-[var(--bg-hover)] transition-colors">
                     <X size={11} />取消下载
                   </button>
                 </div>
               </div>
-            ) : updState === 'downloaded' ? (
+            ) : upd.phase === 'downloaded' ? (
               <div>
                 <div className="flex items-center gap-1.5 text-[12px] text-[var(--success)] mb-2">
                   <CheckCircle2 size={13} />安装包已下载到系统「下载」目录
                 </div>
+                {upd.metaMissing && (
+                  <div className="flex items-start gap-1.5 text-[11px] text-[var(--warning)] mb-2 leading-relaxed">
+                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                    更新源文件不完整:latest.yml 缺失,已按文件大小完成校验;若安装时提示 integrity check failed,请到发布页手动下载
+                  </div>
+                )}
                 <button
-                  onClick={handleInstall}
+                  onClick={() => void updateInstall()}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors"
                 >
                   <Play size={12} />运行安装程序
                 </button>
-                <p className="text-[11px] text-[var(--text-muted)] mt-2">安装完成后重新打开应用即完成更新</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-2">安装完成后重新打开应用即完成更新;旧安装包将在更新成功后自动清理</p>
               </div>
             ) : (
               <div>
-                {updResult.asset ? (
+                {upd.check.asset ? (
                   <button
-                    onClick={handleDownload}
+                    onClick={() => void updateDownload()}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors mb-2"
                   >
                     <Download size={12} />下载更新
@@ -190,11 +167,11 @@ export function AdvancedView() {
                 ) : (
                   <p className="text-[11px] text-[var(--text-muted)] mb-2">该版本未附带安装包，请前往发布页手动下载</p>
                 )}
-                {updResult.notes && (
+                {upd.check.notes && (
                   <details className="text-[12px]">
                     <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-secondary)]">查看更新内容</summary>
                     <div className="mt-2 max-h-48 overflow-y-auto border border-[var(--border-color)] rounded p-2 bg-[var(--bg-primary)]">
-                      <MarkdownPreview content={updResult.notes} />
+                      <MarkdownPreview content={upd.check.notes} />
                     </div>
                   </details>
                 )}
