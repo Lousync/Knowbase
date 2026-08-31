@@ -163,6 +163,13 @@ export function AssistantPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, openPanel, closePanel])
 
+  // 主体卡片内 AI 按钮 → ai-assistant:toggle 事件（与 Ctrl+J 同一套开关逻辑）
+  useEffect(() => {
+    const onToggle = () => { if (open) closePanel(); else openPanel() }
+    window.addEventListener('ai-assistant:toggle', onToggle)
+    return () => window.removeEventListener('ai-assistant:toggle', onToggle)
+  }, [open, openPanel, closePanel])
+
   // 检查是否有可用模型供应商（决定引导态）——每次打开面板时重新检查，
   // 避免用户先开面板、后去设置配好模型回来仍显示「未配置」的过期状态
   useEffect(() => {
@@ -365,16 +372,8 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
 
   return (
     <>
-      {/* 悬浮入口 */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          title="AI 助手 (Ctrl+J)"
-          className="fixed z-40 bottom-16 right-5 w-11 h-11 rounded-full bg-[var(--accent)] text-white shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
-        >
-          <Sparkles size={19} />
-        </button>
-      )}
+      {/* 悬浮入口已移至主体卡片内（App.tsx 渲染，相对主体定位，任务栏展开不遮挡）。
+          主体按钮点击时派发 ai-assistant:toggle，由下方 useEffect 统一处理 */}
 
       {/* 选中文本浮动按钮：主内容区框选任意文字后出现（问 AI / 翻译） */}
       {selFloat && (

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Sparkles } from 'lucide-react'
 import type { TabName } from './types'
 import { TitleBar, ActivityBar, StatusBar } from './components/shared'
 import { Toast } from './components/shared/Toast'
@@ -50,6 +51,14 @@ export default function App() {
   // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
   const [dayPanelVisible, setDayPanelVisible] = useState(false)
   const [dayPanelDetached, setDayPanelDetached] = useState(false)
+  // 窗口宽度：任务栏最大宽度与窗口联动（窄窗口自动收窄，主体不被压扁）
+  const [winWidth, setWinWidth] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const onResize = () => setWinWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const dayPanelMaxWidth = Math.max(300, Math.min(500, Math.floor(winWidth * 0.4)))
   const { s, update, ready: settingsReady } = useSettings()
   useCheckinReminder()
   useHabitAutoCheckinToast()
@@ -342,7 +351,7 @@ export default function App() {
 <main className="flex-1 flex overflow-hidden bg-[var(--bg-primary)] relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称 */}
             <div className="m-1.5 flex min-w-0 flex-1">
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
               {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
               {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
               {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
@@ -354,6 +363,14 @@ export default function App() {
               {renderTab('help', <HelpModule />)}
               {DevToolsModuleDynamic && renderTab('devtools', <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
               {renderTab('user', <UserModule />)}
+              {/* AI 助手入口：归属主体卡片，任务栏展开/收起不影响其相对位置 */}
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
+                title="AI 助手 (Ctrl+J)"
+                className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
+              >
+                <Sparkles size={19} />
+              </button>
               </div>
             </div>
             {dayPanelVisible && !dayPanelDetached && (
@@ -361,7 +378,7 @@ export default function App() {
                 storageKey="dayPanelEmbedded"
                 defaultWidth={300}
                 minWidth={240}
-                maxWidth={500}
+                maxWidth={dayPanelMaxWidth}
                 side="right"
                 visible
                 showHandle

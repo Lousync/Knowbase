@@ -44,6 +44,15 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
     })
   }, [storageKey, minWidth, maxWidth])
 
+  // 约束变化联动（如主窗口缩放导致 maxWidth 变小）→ 当前宽度超限时自动收窄
+  useEffect(() => {
+    const next = Math.max(minWidth, Math.min(maxWidth, widthRef.current))
+    if (next !== widthRef.current) {
+      widthRef.current = next
+      setWidth(next)
+    }
+  }, [minWidth, maxWidth])
+
   // mousedown on handle
   const onHandleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
