@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu, net } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu, net, Tray } from 'electron'
 import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
@@ -25,7 +25,7 @@ import { registerBlogTemplateHandlers } from '../database/repositories/blogTempl
 import { registerQuizHandlers } from '../database/repositories/quizRepo'
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
-import { initDayPanel, disposeDayPanel } from './dayPanelWindow'
+import { initDayPanel, disposeDayPanel, getPanelMode, setPanelMode, onPanelModeChanged, isPopoutOpen } from './dayPanelWindow'
 import { registerWindowBus } from './windowBus'
 import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
@@ -135,6 +135,57 @@ if (!gotLock) {
 
 let mainWindow: BrowserWindow | null = null
 
+// ===== 托盘常驻：主窗口 X = 隐藏，任务栏独立存活（用户决策 2026-08-31）=====
+let isQuitting = false
+let tray: Tray | null = null
+
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function createTray(): void {
+  try {
+    const candidates = [
+      join(app.getAppPath(), 'build', 'icon.png'),
+      join(process.resourcesPath ?? '', 'build', 'icon.png'),
+    ]
+    let img = nativeImage.createEmpty()
+    for (const p of candidates) {
+      const cand = nativeImage.createFromPath(p)
+      if (!cand.isEmpty()) { img = cand; break }
+    }
+    if (process.platform === 'win32') img = img.resize({ width: 16, height: 16 })
+    tray = new Tray(img)
+    tray.setToolTip('Knowbase · 日程打卡')
+    const rebuildMenu = () => {
+      tray?.setContextMenu(Menu.buildFromTemplate([
+        { label: '显示主窗口', click: showMainWindow },
+        { type: 'separator' },
+        { label: '任务栏模式', submenu: [
+          { label: '自由漂浮', type: 'radio', checked: getPanelMode() === 'floating', click: () => setPanelMode('floating') },
+          { label: '顶部停靠', type: 'radio', checked: getPanelMode() === 'top-dock', click: () => setPanelMode('top-dock') },
+          { label: '桌面小组件', type: 'radio', checked: getPanelMode() === 'desktop-widget', click: () => setPanelMode('desktop-widget') },
+        ]},
+        { type: 'separator' },
+        { label: '退出 Knowbase', click: () => { isQuitting = true; app.quit() } },
+      ]))
+    }
+    rebuildMenu()
+    // 模式变化时刷新托盘单选状态
+    onPanelModeChanged(rebuildMenu)
+    tray.on('click', showMainWindow)
+    console.log('[Tray] 托盘已创建')
+  } catch (e) {
+    console.warn('[Tray] 创建失败（不影响使用）:', e)
+  }
+}
+
 function createWindow(): void {
   console.log('[Window] ELECTRON_RENDERER_URL =', process.env.ELECTRON_RENDERER_URL || '(empty)')
   // 半透明亚克力：窗口背景材质跟随系统（Windows 11 22H2+），渲染层把根容器/标题栏/卡片衔接处
@@ -202,8 +253,16 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null
-    // 生命周期随主窗口：主窗口关闭 → 销毁小窗，让 window-all-closed 正常触发退出
+    // 主窗口真正关闭（托盘「退出」路径）→ 销毁任务栏窗口，让退出流程收尾
     disposeDayPanel()
+  })
+
+  // 托盘常驻：点 X = 隐藏到托盘（任务栏独立存活），不退出应用；真正退出走托盘菜单
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault()
+      mainWindow?.hide()
+    }
   })
 }
 
@@ -538,11 +597,19 @@ app.whenReady().then(async () => {
   // 跨窗口数据变更总线（data:notify → kb:data-changed），先于任何窗口能力注册
   registerWindowBus()
 
-  // 日程与打卡侧边栏（WeChat 模式：内嵌 + 可脱离）
+  // 日程与打卡侧边栏（WeChat 模式：内嵌 + 可脱离；桌面互动模式见 dayPanelWindow.ts）
   initDayPanel({
     getMainWindow: () => mainWindow,
     rendererUrl: () => process.env.ELECTRON_RENDERER_URL ?? null,
+    getSetting: (key) => settingsCache[key],
+    setSetting: (key, value) => {
+      settingsCache[key] = value
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(flushSettingsToDisk, 500)
+    },
   })
+
+  createTray()
 
   app.on('activate', () => {
     // macOS: 点击 dock 图标时重建窗口
@@ -559,10 +626,19 @@ app.on('second-instance', () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  // 托盘常驻：主窗口隐藏（未销毁）时不会走到这里；真到全窗口关闭时，
+  // 若还在托盘常驻期（未触发退出）则保持后台（任务栏 popout 可能存活），否则退出
+  if (isQuitting) {
+    if (process.platform !== 'darwin') app.quit()
+  } else if (!tray && !isPopoutOpen()) {
+    app.quit()
+  }
 })
 
 app.on('before-quit', () => {
+  isQuitting = true
+  tray?.destroy()
+  tray = null
   destroyPasswordFiller()
   stopSuperviseScheduler()
   disposeDayPanel()

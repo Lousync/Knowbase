@@ -28,9 +28,17 @@ function msUntilTomorrow(): number {
 const dragRegion = { WebkitAppRegion: 'drag' } as React.CSSProperties
 const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 
+export type PanelMode = 'floating' | 'top-dock' | 'desktop-widget'
+
 export interface DayPanelProps {
   /** embedded：主窗口内嵌面板（高度由父容器决定，h-full）；popout：独立 BrowserWindow（h-screen） */
   mode: 'embedded' | 'popout'
+  /** popout 专属：桌面互动模式（floating 自由漂浮 / top-dock 顶部停靠 / desktop-widget 桌面小组件） */
+  panelMode?: PanelMode
+  /** popout + top-dock 专属：收缩为触碰条 */
+  collapsed?: boolean
+  /** popout + desktop-widget 专属：鼠标穿透 ⇄ 可交互 */
+  widgetInteractive?: boolean
   /** 嵌入→脱离（内嵌模式顶部按钮触发）；主进程负责创建独立窗口 */
   onPopout?: () => void
   /** 脱离→嵌入（独立窗口顶部按钮触发 / Esc）；主进程负责销毁独立窗口 */
@@ -42,8 +50,9 @@ export interface DayPanelProps {
 /**
  * 日程与打卡侧边栏组件（WeChat 模式：同一组件既渲染主窗口内嵌面板，也渲染独立脱离窗口）
  * 逾期置顶红分组 → 今日任务（子任务展开一级）→ 快速添加（轻量时间解析）→ 今日打卡
+ * popout 态支持三种桌面互动模式（panelMode），交互协议见 dayPanelWindow.ts
  */
-export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps) {
+export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widgetInteractive = false, onPopout, onDockBack, onClose }: DayPanelProps) {
   const [todayStr, setTodayStr] = useState(() => localToday())
   const todayDate = useMemo(() => {
     const [y, m, d] = todayStr.split('-').map(Number)
@@ -315,16 +324,105 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
     ? 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
     : 'relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
 
+  // ---- 桌面互动模式判定 ----
+  const isTopDock = mode === 'popout' && panelMode === 'top-dock'
+  const isWidget = mode === 'popout' && panelMode === 'desktop-widget'
+  const showTouchStrip = isTopDock && collapsed
+  const showFullPanel = !isWidget && !showTouchStrip
+
+  // top-dock：移入展开 / 移出 500ms 收回（主进程 grace）；小组件：划过激活可交互 / 移出恢复穿透
+  const onRootMouseEnter = useCallback(() => {
+    if (isTopDock) void window.api?.dayPanelTopdockExpand?.()
+  }, [isTopDock])
+  const onRootMouseLeave = useCallback(() => {
+    if (isTopDock && !collapsed) void window.api?.dayPanelTopdockCollapseIntent?.()
+    if (isWidget && widgetInteractive) void window.api?.dayPanelWidgetInteractive?.(false)
+  }, [isTopDock, isWidget, collapsed, widgetInteractive])
+  const onRootMouseMove = useCallback(() => {
+    if (isWidget && !widgetInteractive) void window.api?.dayPanelWidgetInteractive?.(true)
+  }, [isWidget, widgetInteractive])
+
+  // 触碰条：收缩态占满 10px 窗口，待办角标 + 高亮指示
+  if (showTouchStrip) {
+    return (
+      <div
+        className="relative h-full w-full cursor-pointer overflow-hidden"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--bg-primary) 82%, transparent)' }}
+        onMouseEnter={onRootMouseEnter}
+        title="日程与打卡 · 悬停展开"
+      >
+        <div className="absolute inset-x-4 top-0 h-[3px] rounded-b bg-[var(--accent)]/70" />
+        {pendingCount > 0 && (
+          <div
+            className="absolute right-2 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
+            style={{ backgroundColor: 'var(--danger)' }}
+            title={`${pendingCount} 个待办`}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // 桌面小组件：只读展示，鼠标划过激活为可交互
+  if (isWidget) {
+    return (
+      <div
+        className="flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-xl border border-[var(--border-color)] p-2.5 text-[var(--text-primary)]"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 20px rgb(0 0 0 / 0.25)',
+        }}
+        onMouseMove={onRootMouseMove}
+        onMouseLeave={onRootMouseLeave}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium">
+            {todayDate.getMonth() + 1}月{todayDate.getDate()}日 {WEEKDAY_LABELS[todayDate.getDay()]}
+          </span>
+          <span className="text-[10px] text-[var(--text-muted)]">{widgetInteractive ? '可操作' : '划过激活'}</span>
+        </div>
+        <div className="flex items-baseline gap-1 text-[11px]">
+          <span className="text-[var(--text-muted)]">今日待办</span>
+          <span className="text-[13px] font-medium text-[var(--accent)]">{pendingCount}</span>
+          <span className="text-[10px] text-[var(--text-muted)]">/ 完成 {doneCount}</span>
+        </div>
+        <div className="flex items-center gap-1 text-[11px]">
+          <span className="text-[var(--text-muted)]">今日打卡</span>
+          <span className="font-medium">{checkedToday}/{plannedHabits.length}</span>
+        </div>
+        <div className="mt-auto flex flex-col gap-1">
+          <button
+            onClick={() => { window.api?.dayPanelOpenInMain?.('schedule') }}
+            className="rounded-md border border-[var(--border-color)] py-1 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+            title="在主窗口任务模块中管理"
+          >
+            打开任务模块
+          </button>
+          <button
+            onClick={() => { window.api?.dayPanelSetMode?.('floating'); window.api?.dayPanelPopout?.() }}
+            className="rounded-md py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)]"
+            title="切换为自由漂浮模式"
+          >
+            切换自由漂浮
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className={containerCls}>
-      {/* 表头：嵌入式下用 WebkitAppRegion: drag 让用户能拖出脱离，独立窗口由 BrowserWindow 自身拖动 */}
+    <div className={containerCls} onMouseEnter={onRootMouseEnter} onMouseLeave={onRootMouseLeave}>
+      {/* 表头：嵌入式下用 WebkitAppRegion: drag 让用户能拖出脱离，独立窗口由 BrowserWindow 自身拖动；
+          top-dock 展开态固定贴顶，禁拖（避免用户拖走破坏停靠位置） */}
       <div
         className="flex h-10 shrink-0 select-none items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-tertiary)] px-3"
-        style={mode === 'popout' ? dragRegion : undefined}
+        style={mode === 'popout' && !isTopDock ? dragRegion : undefined}
       >
         <div className="flex items-center gap-1.5 text-[12px]">
-          {mode === 'popout' && <GripHorizontal size={13} className="text-[var(--text-muted)]" />}
+          {mode === 'popout' && !isTopDock && <GripHorizontal size={13} className="text-[var(--text-muted)]" />}
           日程与打卡
+          {isTopDock && <span className="text-[10px] font-normal text-[var(--text-muted)]">顶部停靠 · 移出自动收回</span>}
         </div>
         <div className="flex items-center gap-0.5" style={mode === 'popout' ? noDrag : undefined}>
           {mode === 'embedded' && (

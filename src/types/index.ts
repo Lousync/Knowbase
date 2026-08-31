@@ -929,12 +929,20 @@ export interface ElectronAPI {
   // fill popup
   isFillPopup: boolean
   isDayPanel: boolean
-  // 日程与打卡侧边栏（WeChat 模式：内嵌 + 可脱离）
-  dayPanelGetState: () => Promise<{ detached: boolean }>
+  // 日程与打卡侧边栏（内嵌 + 可脱离；独立态支持三种桌面互动模式）
+  dayPanelGetState: () => Promise<{ detached: boolean; mode: string; collapsed: boolean; widgetInteractive: boolean }>
   dayPanelPopout: () => Promise<boolean>
   dayPanelDockBack: () => Promise<boolean>
   dayPanelToggle: () => Promise<boolean>
-  onDayPanelStateChanged: (cb: (s: { detached: boolean }) => void) => () => void
+  dayPanelSetMode: (m: string) => Promise<string>
+  dayPanelTopdockExpand: () => Promise<void>
+  dayPanelTopdockCollapseIntent: () => Promise<void>
+  dayPanelTopdockCancelCollapse: () => Promise<void>
+  dayPanelWidgetInteractive: (active: boolean) => Promise<boolean>
+  onDayPanelStateChanged: (cb: (s: { detached: boolean; mode: string; collapsed: boolean; widgetInteractive: boolean }) => void) => () => void
+  onDayPanelModeChanged: (cb: (s: { mode: string }) => void) => () => void
+  onDayPanelCollapsedChanged: (cb: (s: { collapsed: boolean }) => void) => () => void
+  onDayPanelWidgetInteractiveChanged: (cb: (s: { interactive: boolean }) => void) => () => void
   onDayPanelToggleVisibility: (cb: () => void) => () => void
   dayPanelOpenInMain: (tab: string) => void
   onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => () => void
