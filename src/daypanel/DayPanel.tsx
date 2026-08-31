@@ -3,6 +3,7 @@ import {
   GripHorizontal, X, Check, Pencil, Trash2, CalendarClock,
   Plus, ChevronRight, ChevronDown, ExternalLink,
   PanelRightClose, PanelRightOpen,
+  FileText, BookOpen, MessageCircle, Wrench, Settings,
 } from 'lucide-react'
 import type { ScheduleTodo, Habit, HabitRecord } from '../types'
 import { localToday } from '../lib/date'
@@ -17,6 +18,16 @@ import { parseQuickDate } from './parseQuickDate'
 import { isPlannedOn, currentStreak, buildRecordIndex } from '../modules/toolbox/components/habit-tracker/dateUtils'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/** 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块 */
+const MODULE_LINKS: { tab: string; icon: typeof FileText; label: string }[] = [
+  { tab: 'blog', icon: FileText, label: '博客' },
+  { tab: 'schedule', icon: CalendarClock, label: '日程' },
+  { tab: 'knowledge', icon: BookOpen, label: '知识库' },
+  { tab: 'moments', icon: MessageCircle, label: '说说' },
+  { tab: 'toolbox', icon: Wrench, label: '工具箱' },
+  { tab: 'settings', icon: Settings, label: '设置' },
+]
 
 /** 距次日 00:00:05 的毫秒数（用于跨零点刷新定时器） */
 function msUntilTomorrow(): number {
@@ -319,16 +330,23 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
     )
   }
 
-  // 容器高度：嵌入式由外层卡片壳 flex 提供（flex-1）；独立窗口自己 h-screen
-  const containerCls = mode === 'embedded'
-    ? 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
-    : 'relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
-
   // ---- 桌面互动模式判定 ----
   const isTopDock = mode === 'popout' && panelMode === 'top-dock'
   const isWidget = mode === 'popout' && panelMode === 'desktop-widget'
   const showTouchStrip = isTopDock && collapsed
-  const showFullPanel = !isWidget && !showTouchStrip
+
+  // 容器高度：嵌入式由外层卡片壳 flex 提供（flex-1）；独立窗口自己 h-screen。
+  // top-dock 走透明窗口（无底色，圆角毛玻璃由 containerStyle 提供）；floating 保持不透明实体窗
+  const containerCls = mode === 'embedded'
+    ? 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
+    : `relative flex h-screen flex-col overflow-hidden text-[var(--text-primary)] select-none${isTopDock ? '' : ' bg-[var(--bg-primary)]'}`
+  // top-dock 展开态：透明窗口 + 底部圆角 + 毛玻璃（圆润悬浮感，顶部贴屏无圆角）
+  const containerStyle = isTopDock ? {
+    backgroundColor: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
+    backdropFilter: 'blur(14px)',
+    boxShadow: '0 10px 36px rgb(0 0 0 / 0.28)',
+    borderRadius: '0 0 20px 20px',
+  } : undefined
 
   // top-dock：移入展开 / 移出 500ms 收回（主进程 grace）；小组件：划过激活可交互 / 移出恢复穿透
   const onRootMouseEnter = useCallback(() => {
@@ -342,19 +360,25 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
     if (isWidget && !widgetInteractive) void window.api?.dayPanelWidgetInteractive?.(true)
   }, [isWidget, widgetInteractive])
 
-  // 触碰条：收缩态占满 10px 窗口，待办角标 + 高亮指示
+  // 触碰条：收缩态占满 10px 透明窗口，半透明圆角条 + 待办红点 + 顶部高亮
   if (showTouchStrip) {
     return (
       <div
-        className="relative h-full w-full cursor-pointer overflow-hidden"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--bg-primary) 82%, transparent)' }}
+        className="relative h-full w-full cursor-pointer overflow-visible px-2"
         onMouseEnter={onRootMouseEnter}
         title="日程与打卡 · 悬停展开"
       >
-        <div className="absolute inset-x-4 top-0 h-[3px] rounded-b bg-[var(--accent)]/70" />
+        <div
+          className="absolute inset-0 top-0 rounded-b-xl border-x border-b border-[var(--border-color)]"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--bg-primary) 78%, transparent)',
+            boxShadow: '0 3px 12px rgb(0 0 0 / 0.18)',
+          }}
+        />
+        <div className="absolute inset-x-5 top-0 h-[3px] rounded-b bg-[var(--accent)]/70" />
         {pendingCount > 0 && (
           <div
-            className="absolute right-2 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
+            className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
             style={{ backgroundColor: 'var(--danger)' }}
             title={`${pendingCount} 个待办`}
           />
@@ -367,11 +391,11 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   if (isWidget) {
     return (
       <div
-        className="flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-xl border border-[var(--border-color)] p-2.5 text-[var(--text-primary)]"
+        className="flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-2xl border border-[var(--border-color)] p-3 text-[var(--text-primary)]"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
-          backdropFilter: 'blur(10px)',
-          boxShadow: '0 4px 20px rgb(0 0 0 / 0.25)',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 6px 28px rgb(0 0 0 / 0.28)',
         }}
         onMouseMove={onRootMouseMove}
         onMouseLeave={onRootMouseLeave}
@@ -412,12 +436,12 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   }
 
   return (
-    <div className={containerCls} onMouseEnter={onRootMouseEnter} onMouseLeave={onRootMouseLeave}>
+    <div className={containerCls} style={containerStyle} onMouseEnter={onRootMouseEnter} onMouseLeave={onRootMouseLeave}>
       {/* 表头：嵌入式下用 WebkitAppRegion: drag 让用户能拖出脱离，独立窗口由 BrowserWindow 自身拖动；
           top-dock 展开态固定贴顶，禁拖（避免用户拖走破坏停靠位置） */}
       <div
-        className="flex h-10 shrink-0 select-none items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-tertiary)] px-3"
-        style={mode === 'popout' && !isTopDock ? dragRegion : undefined}
+        className="flex h-10 shrink-0 select-none items-center justify-between border-b border-[var(--border-color)] px-3"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 78%, transparent)', ...(mode === 'popout' && !isTopDock ? dragRegion : undefined) }}
       >
         <div className="flex items-center gap-1.5 text-[12px]">
           {mode === 'popout' && !isTopDock && <GripHorizontal size={13} className="text-[var(--text-muted)]" />}
@@ -434,7 +458,7 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
               <PanelRightClose size={14} strokeWidth={1.5} />
             </button>
           )}
-          {mode === 'popout' && (
+          {mode === 'popout' && !isTopDock && (
             <button
               onClick={onDockBack}
               className="rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
@@ -566,6 +590,25 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
           </div>
         </section>
       </div>
+
+      {/* 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块 */}
+      {isTopDock && (
+        <div className="shrink-0 border-t border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-tertiary)_55%,transparent)] px-1 py-1.5">
+          <div className="flex items-center justify-around">
+            {MODULE_LINKS.map(({ tab, icon: Icon, label }) => (
+              <button
+                key={tab}
+                onClick={() => { window.api?.dayPanelOpenInMain?.(tab) }}
+                title={`打开 ${label}`}
+                className="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]"
+              >
+                <Icon size={15} strokeWidth={1.5} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

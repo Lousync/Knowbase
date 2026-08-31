@@ -32,6 +32,7 @@ const COLLAPSE_DELAY_MS = 500     // 鼠标移出后收回的 grace 窗口
 const DEFAULT_W = 300
 const DEFAULT_H = 520
 const BOUNDS_SAVE_MS = 400        // 位置/尺寸落盘防抖
+const DOCK_DRAG_THRESHOLD = 20    // 自由漂浮拖拽松手时：窗口顶部距工作区顶缘 ≤ 该值 → 自动停靠
 
 let popout: BrowserWindow | null = null
 let getMainWindow: () => BrowserWindow | null = () => null
@@ -134,6 +135,8 @@ function createPopout(): void {
   }
 
   const isWidget = mode === 'desktop-widget'
+  // 顶部停靠与桌面小组件都走透明圆角窗口（圆润感）；自由漂浮保持不透明实体窗口
+  const isGlass = mode === 'top-dock' || isWidget
   windowMode = mode
 
   popout = new BrowserWindow({
@@ -152,8 +155,8 @@ function createPopout(): void {
     resizable: !isWidget && mode !== 'top-dock',
     show: false,
     title: '日程与打卡',
-    transparent: isWidget,
-    backgroundColor: isWidget ? '#00000000' : '#1e1e1e',
+    transparent: isGlass,
+    backgroundColor: isGlass ? '#00000000' : '#1e1e1e',
     alwaysOnTop: mode === 'top-dock' || isWidget,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -188,7 +191,7 @@ function createPopout(): void {
   })
 
   // 位置/尺寸持久化（top-dock 收缩态、动画期间跳过，避免覆盖展开高度）
-  popout.on('moved', scheduleSaveBounds)
+  popout.on('moved', onPopoutMoved)
   popout.on('resized', scheduleSaveBounds)
 
   // X 关闭 = 自动回内嵌
@@ -222,6 +225,17 @@ function scheduleSaveBounds(): void {
     if (b.width < 40 || b.height < 20) return
     setSetting('dayPanelPopoutBounds', { x: b.x, y: b.y, width: b.width, height: b.height })
   }, BOUNDS_SAVE_MS)
+}
+
+/** 自由漂浮拖拽松手（moved）：窗口顶部贴近工作区顶缘 → 自动切换顶部停靠（无需快捷键） */
+function onPopoutMoved(): void {
+  scheduleSaveBounds()
+  if (mode !== 'floating' || !popout || popout.isDestroyed()) return
+  const b = popout.getBounds()
+  const wa = screen.getPrimaryDisplay().workArea
+  if (b.y - wa.y <= DOCK_DRAG_THRESHOLD) {
+    setPanelMode('top-dock')
+  }
 }
 
 function destroyPopout(): void {
