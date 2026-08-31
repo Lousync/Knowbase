@@ -1,0 +1,412 @@
+<mxfile host="WorkBuddy" modified="2026-08-31T00:00:00.000Z" agent="WorkBuddy" version="21.0.0">
+  <diagram id="layout-page" name="1-双窗口布局">
+    <mxGraphModel dx="1400" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="880" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="mainWin" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafbfc;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="880" height="760" as="geometry" />
+        </mxCell>
+        <mxCell id="mTitle" value="主窗口（现有布局 · 仅 TitleBar 增加一枚小窗开关按钮）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;align=left;spacingLeft=12;fontSize=11;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="880" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="tbDay" value="⧉" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=13;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="656" y="60" width="44" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="tbDayHint" value="← 新增开关按钮（小窗开启时高亮）" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="480" y="94" width="220" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="mStatus" value="StatusBar" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;align=left;spacingLeft=12;fontSize=10;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="40" y="796" width="880" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="mAct" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eceef2;strokeColor=#dfe2e8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="92" width="48" height="704" as="geometry" />
+        </mxCell>
+        <mxCell id="mActLabel" value="ActivityBar" style="text;html=1;horizontal=0;align=center;verticalAlign=middle;fontSize=10;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="40" y="420" width="48" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ai1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9bec8;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="56" y="120" width="16" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="ai2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9bec8;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="56" y="160" width="16" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="ai3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9bec8;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="56" y="200" width="16" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="ai4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3b82f6;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="56" y="240" width="16" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="mMain" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;" vertex="1" parent="1">
+          <mxGeometry x="88" y="92" width="832" height="704" as="geometry" />
+        </mxCell>
+        <mxCell id="mMainPh" value="当前模块内容&#10;主内容区完全不变——小窗在主窗口之外" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;dashed=1;fontSize=11;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="160" y="180" width="680" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="dockGap" value="贴边吸附&#10;主窗口 move / resize → 小窗实时跟随" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontColor=#854F0B;" vertex="1" parent="1">
+          <mxGeometry x="850" y="380" width="180" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="panel" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f8fa;strokeColor=#c9cdd4;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="936" y="60" width="300" height="760" as="geometry" />
+        </mxCell>
+        <mxCell id="pHead" value="⠿ 日程与打卡" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef1f5;strokeColor=#dfe3e9;align=left;spacingLeft=12;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="936" y="60" width="300" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pDockBtn" value="⛶" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="1176" y="68" width="26" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="pCloseBtn" value="✕" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="1204" y="68" width="26" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="pSecOver" value="⏰ 逾期（1）" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#A32D2D;" vertex="1" parent="1">
+          <mxGeometry x="948" y="108" width="276" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowO1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCEBEB;strokeColor=#F7C1C1;" vertex="1" parent="1">
+          <mxGeometry x="944" y="130" width="284" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pCbO1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#F09595;" vertex="1" parent="1">
+          <mxGeometry x="952" y="139" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="pTtO1" value="整理错题本 · 计网第3章" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;fontColor=#791F1F;" vertex="1" parent="1">
+          <mxGeometry x="974" y="130" width="180" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pTmO1" value="8月30日" style="text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#A32D2D;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="130" width="70" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pSecT" value="今天 · 8月31日 周一（2 待办 / 1 完成）" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="948" y="172" width="276" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowT1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="944" y="194" width="284" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pCb1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;" vertex="1" parent="1">
+          <mxGeometry x="952" y="203" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="pTt1" value="晨会准备" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="974" y="194" width="160" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pTm1" value="09:30" style="text;html=1;align=right;verticalAlign=middle;fontSize=10;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="1136" y="194" width="60" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pDot1" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f59e0b;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1208" y="206" width="8" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowT2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="944" y="230" width="284" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pCh2" value="▾" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="948" y="230" width="14" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pCb2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;" vertex="1" parent="1">
+          <mxGeometry x="964" y="239" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="pTt2" value="复习操作系统 · 进程调度" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="986" y="230" width="150" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pTm2" value="14:00" style="text;html=1;align=right;verticalAlign=middle;fontSize=10;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="1136" y="230" width="60" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pDot2" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#3b82f6;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1208" y="242" width="8" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="pSub2" value="└ 看完 3.4 节 + 课后练习（子任务 · 点击展开一级）" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="972" y="262" width="256" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowT3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="944" y="292" width="284" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pCb3" value="✓" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#22c55e;strokeColor=#22c55e;fontColor=#ffffff;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="952" y="301" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="pTt3" value="提交周报" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#b0b7c0;" vertex="1" parent="1">
+          <mxGeometry x="974" y="292" width="160" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pTm3" value="已完成" style="text;html=1;align=right;verticalAlign=middle;fontSize=10;fontColor=#b0b7c0;" vertex="1" parent="1">
+          <mxGeometry x="1136" y="292" width="60" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pQadd" value="+ 快速添加：『周五 14:00 复习计网』自动解析时间" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;dashed=1;align=left;spacingLeft=10;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="944" y="332" width="284" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="pDiv1" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=#dfe3e9;" vertex="1" parent="1">
+          <mxGeometry x="944" y="376" width="284" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pSecH" value="今日打卡（1/3）" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="948" y="384" width="276" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowH1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="944" y="406" width="284" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHdot1" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#22c55e;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="952" y="418" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="pHn1" value="早起 07:00" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="970" y="406" width="120" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHs1" value="连续 12 天" style="text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="1076" y="406" width="110" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHb1" value="✓" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#22c55e;strokeColor=#22c55e;fontColor=#ffffff;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1198" y="413" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowH2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="944" y="444" width="284" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHdot2" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#8b5cf6;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="952" y="456" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="pHn2" value="每日阅读 30min" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="970" y="444" width="120" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHs2" value="连续 5 天" style="text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="1076" y="444" width="110" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHb2" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;" vertex="1" parent="1">
+          <mxGeometry x="1198" y="451" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pRowH3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="944" y="482" width="284" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHdot3" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f59e0b;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="952" y="494" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="pHn3" value="运动 20min" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="970" y="482" width="120" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHs3" value="连续 3 天" style="text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="1076" y="482" width="110" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="pHb3" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;" vertex="1" parent="1">
+          <mxGeometry x="1198" y="489" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pHadd" value="+ 新增习惯（名称 + 颜色，规则默认每日）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;dashed=1;align=left;spacingLeft=10;fontSize=10;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="944" y="524" width="284" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pHnote" value="完整规则 / 统计 → 点击跳转主窗口 · 工具箱" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="948" y="560" width="276" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="pKbd" value="Ctrl + Alt + S 开关小窗 · 启动不自动打开" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#b0b7c0;" vertex="1" parent="1">
+          <mxGeometry x="948" y="730" width="276" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="note1" value="① 独立无边框 BrowserWindow：无标题栏、不进任务栏，仅表头可拖动；视觉与主窗口一致（同 CSS 变量主题）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="60" width="330" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" value="② 默认贴边吸附：主窗口移动/缩放实时跟随；拖离自动解除吸附，双击表头回吸附" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="124" width="330" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="note3" value="③ 位置/大小/吸附/显示状态持久化 settings.json；越界自动 clamp 回工作区（多显示器安全）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="188" width="330" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="note4" value="④ 生命周期随主窗口；启动不自动打开，手动唤起（TitleBar 按钮 / Ctrl+Alt+S）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="252" width="330" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="note5" value="⑤ 复用渲染 bundle（#/day-panel 路由）+ 现有 schedule/habit IPC；跨窗口同步走 data:notify 主进程广播" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="316" width="330" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="note6" value="⑥ 入口按钮：TitleBar 右侧（锁屏/置顶左侧），复用 WinBtn 风格、激活高亮、tooltip 提示快捷键——按钮位置与小窗弹出方向（右侧）心智一致，不加悬浮球" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="380" width="330" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="note7" value="⑦ 内容增强：逾期任务置顶红分组、子任务点击展开一级、快速添加轻量时间解析（解析失败降级=今天）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;align=left;spacingLeft=8;fontSize=10;fontColor=#6b5a2e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="458" width="330" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="miniT" value="拖离态示意：" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="560" width="100" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="miniMain" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef2;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="590" width="150" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="miniGap" value="自由间距" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="1436" y="660" width="70" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="miniPanel" value="小窗&#10;自由摆放" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f8fa;strokeColor=#c9cdd4;fontSize=10;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="1512" y="620" width="110" height="170" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="interaction-page" name="2-窗口行为与数据流">
+    <mxGraphModel dx="1400" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="880" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="secA" value="A · 窗口行为（吸附 ↔ 拖离）" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="320" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="st1m" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef2;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="110" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="st1p" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f8fa;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="150" y="60" width="60" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="st1l" value="吸附中：紧贴右缘，&#10;随主窗口移动/缩放实时跟随" style="text;html=1;align=center;verticalAlign=top;fontSize=9;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="40" y="182" width="170" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="st2m" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef2;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="280" y="60" width="110" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="st2p" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f8fa;strokeColor=#c9cdd4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="76" width="60" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="st2l" value="用户拖动表头 → 自动解除吸附&#10;（程序化 setBounds 与用户 move 事件比对判定）" style="text;html=1;align=center;verticalAlign=top;fontSize=9;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="270" y="182" width="240" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="st3p" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f8fa;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="560" y="60" width="60" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="st3l" value="自由摆放：位置持久化，&#10;双击表头 → 重新吸附回主窗口右缘" style="text;html=1;align=center;verticalAlign=top;fontSize=9;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="530" y="182" width="240" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="secB" value="B · 快速添加（含轻量时间解析）" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="240" width="320" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="addBox" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="268" width="340" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="addInput" value="周五 14:00 复习计网" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#dfe2e8;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="52" y="280" width="256" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="addDate" value="周五 ▾" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#a9c7f5;fontSize=10;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="316" y="280" width="52" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="addTime" value="14:00" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#a9c7f5;fontSize=10;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="316" y="312" width="52" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="addParse" value="解析结果回填日期/时间选择器（蓝色），可手动改" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="52" y="314" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="addBtn" value="添加" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3b82f6;strokeColor=none;fontColor=#ffffff;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="52" y="336" width="52" height="0" as="geometry" />
+        </mxCell>
+        <mxCell id="hintB" value="解析规则：今天/明天/后天/周X/X号/HH:mm/H点；命中→回填选择器；未命中→默认今天。规则集中一个纯函数模块，便于单测" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="40" y="358" width="460" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="secC" value="C · 任务行悬停菜单" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="440" y="240" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="taskRow" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="440" y="268" width="280" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="cbC" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;" vertex="1" parent="1">
+          <mxGeometry x="448" y="277" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="ttC" value="晨会准备" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="470" y="268" width="160" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="moreC" value="⋯" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="688" y="274" width="24" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="menuC" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="640" y="310" width="160" height="116" as="geometry" />
+        </mxCell>
+        <mxCell id="m1" value="✎ 编辑" style="text;html=1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="640" y="310" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" value="🗑 删除" style="text;html=1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="640" y="338" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="m4" value="⏱ 改到今天" style="text;html=1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="640" y="366" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="m3" value="↗ 打开任务模块（唤起主窗口）" style="text;html=1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=9;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="640" y="394" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="secD" value="D · 打卡勾选" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="860" y="240" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="hA" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="860" y="268" width="200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="hdA" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#22c55e;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="868" y="280" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="hnA" value="早起 07:00" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="886" y="268" width="100" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="hbA" value="✓" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#22c55e;strokeColor=#22c55e;fontColor=#ffffff;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1028" y="275" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="hB" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#eef0f4;" vertex="1" parent="1">
+          <mxGeometry x="860" y="310" width="200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="hdB" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#8b5cf6;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="868" y="322" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="hnB" value="每日阅读 30min" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="886" y="310" width="100" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="hbB" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9bec8;" vertex="1" parent="1">
+          <mxGeometry x="1028" y="317" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="hintD" value="toggleHabitCheck(habitId, 今天)；再点取消" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#98a1ad;" vertex="1" parent="1">
+          <mxGeometry x="860" y="348" width="240" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="secE" value="E · 跨窗口数据流（无新增表，复用现有 IPC + 主进程广播）" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="410" width="480" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" value="主窗口渲染层&#10;schedule / toolbox 模块视图" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#a9c7f5;fontSize=10;fontColor=#2b4c7e;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="190" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="b1b" value="小窗渲染层 DayPanel&#10;（#/day-panel 路由）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#a9c7f5;fontSize=10;fontColor=#2b4c7e;" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="190" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" value="src/lib/ipc.ts&#10;同一套封装：getScheduleTodos / updateScheduleTodo / habitGetAll / toggleHabitCheck …" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#a9c7f5;fontSize=9;fontColor=#2b4c7e;" vertex="1" parent="1">
+          <mxGeometry x="300" y="480" width="210" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" value="主进程 Repositories&#10;SQLite (sql.js) schedule / habit 表" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#a9c7f5;fontSize=10;fontColor=#2b4c7e;" vertex="1" parent="1">
+          <mxGeometry x="580" y="480" width="190" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="新增：data:notify → 主进程&#10;广播 on:dataChanged 给所有窗口&#10;{ scope: &#39;schedule&#39; | &#39;habit&#39; }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f0d9a8;fontSize=9;fontColor=#6b5a2e;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="840" y="480" width="210" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="edge1" value="读写" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=9;fontColor=#7a828e;exitX=1;exitY=0.5;entryX=0;entryY=0.35;" edge="1" parent="1" source="b1" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge1b" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.65;" edge="1" parent="1" source="b1b" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge2" value="IPC" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=9;fontColor=#7a828e;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b2" target="b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge3" value="写入成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=9;fontColor=#7a828e;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b3" target="e1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge4" value="广播 → 双方监听刷新" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=9;fontColor=#7a828e;dashed=1;exitX=0;exitY=0.5;entryX=1;entryY=0.2;" edge="1" parent="1" source="e1" target="b1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="491" />
+              <mxPoint x="260" y="451" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;exitX=0;exitY=0.5;entryX=1;entryY=0.8;" edge="1" parent="1" source="e1" target="b1b">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="523" />
+              <mxPoint x="260" y="563" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="secF" value="F · 实现要点清单" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" value="1. electron/main/dayPanelWindow.ts：frameless + skipTaskbar + resizable，min 240px / 默认 300px；吸附时高度 = 主窗口高度" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="648" width="520" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="2. 复用渲染 bundle：index.html#/day-panel，App.tsx 按 hash 分流渲染 DayPanelWindowApp（共享主题 CSS 变量）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="690" width="520" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="3. 吸附跟随：主窗口 move/resize → 重算小窗 bounds；用户拖动 → 解除吸附；双击表头 → 回吸附；全部持久化" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="732" width="520" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="4. 快捷键：globalShortcut 注册 Ctrl+Alt+S；启动不自动打开；关闭 = hide 保活；主窗口关闭时 destroy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="774" width="520" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="5. 入口：TitleBar 右侧 WinBtn 图标按钮（激活高亮 + tooltip），点击 toggle 小窗；小窗「打开任务模块」→ 唤起主窗口 + 切 Tab" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="816" width="520" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" value="6. 内容增强：逾期置顶红分组（→ 改到今天入口）；子任务点击展开一级；快速添加解析 = 独立纯函数模块（可单测）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f7;strokeColor=#e2e5eb;align=left;spacingLeft=8;fontSize=10;fontColor=#3a414b;" vertex="1" parent="1">
+          <mxGeometry x="620" y="648" width="520" height="34" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

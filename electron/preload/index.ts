@@ -44,6 +44,7 @@ const api = {
   getScheduleTodos: (date: string) => ipcRenderer.invoke('schedule:getTodos', date),
   getScheduleDates: (yearMonth: string) => ipcRenderer.invoke('schedule:getDatesWithTodos', yearMonth),
   getScheduleMonthTodos: (yearMonth: string) => ipcRenderer.invoke('schedule:getMonthTodos', yearMonth),
+  getScheduleOverdue: (today: string) => ipcRenderer.invoke('schedule:getOverdue', today),
   getScheduleDeadlineCounts: (yearMonth: string) => ipcRenderer.invoke('schedule:getDeadlineCounts', yearMonth),
   getScheduleSubtasks: (parentId: string) => ipcRenderer.invoke('schedule:getSubtasks', parentId),
   createScheduleTodo: (data: unknown) => ipcRenderer.invoke('schedule:createTodo', data),

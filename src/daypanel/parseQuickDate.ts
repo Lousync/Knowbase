@@ -86,16 +86,26 @@ export function parseQuickDate(raw: string, now: Date = new Date()): ParsedQuick
     }
   }
 
-  // ---- 日期：周X（下周X / 下下周X → 严格未来的下一个该星期几，再 +7/+14） ----
+  // ---- 日期：周X ----
+  // 无前缀：「严格未来的下一次」该星期几（今天就说今天时按下一次理解，即 +7）
+  // 下X / 下下X：以周一为周起点定位到「下一周 / 下下周」的该星期几。
+  // 注意不能写成「无前缀结果再 +7/+14」——今天是该星期几时会整体多跳一周
+  //（今天周一说「下周一」会被算成 14 天后，正确是 7 天后）。
   if (!date) {
     m = /(下下|下)?(周|礼拜|星期)([日天一二三四五六])(?![日天一二三四五六])/.exec(text)
     if (m) {
       const target = WEEKDAY_TOKENS[m[3]]
-      let delta = (target - now.getDay() + 7) % 7
-      if (delta === 0) delta = 7
-      if (m[1] === '下') delta += 7
-      if (m[1] === '下下') delta += 14
-      date = toDateStr(addDays(now, delta))
+      let d: Date
+      if (m[1] === '下' || m[1] === '下下') {
+        const mondayOffset = (now.getDay() + 6) % 7     // 今天距本周周一的天数（周一=0）
+        const weekShift = m[1] === '下下' ? 14 : 7
+        d = addDays(now, -mondayOffset + weekShift + ((target + 6) % 7))
+      } else {
+        let delta = (target - now.getDay() + 7) % 7
+        if (delta === 0) delta = 7
+        d = addDays(now, delta)
+      }
+      date = toDateStr(d)
       text = cut(text, m)
     }
   }
@@ -130,8 +140,9 @@ export function parseQuickDate(raw: string, now: Date = new Date()): ParsedQuick
   }
 
   // ---- 日期：MM-DD / MM/DD（排除 3-4节/页 之类正文数字） ----
+  // 排除项的负向预查要带「可选空白」，否则「3-4 节」这种数字与量词间有空格的写法会漏网被当成 3 月 4 日
   if (!date) {
-    m = /(?<![\d/-])(\d{1,2})[-/](\d{1,2})(?![\d/-章节页条款个题道])/.exec(text)
+    m = /(?<![\d/-])(\d{1,2})[-/](\d{1,2})(?![\d/-]|\s*[章节页条款个题道])/.exec(text)
     if (m) {
       const mo = +m[1]
       const day = +m[2]

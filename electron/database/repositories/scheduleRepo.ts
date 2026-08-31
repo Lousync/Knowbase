@@ -54,6 +54,16 @@ export function registerScheduleHandlers(): void {
     return rows.map(rowToTodo)
   })
 
+  // 获取全部逾期未完成的顶层任务（日期早于 today，不限月份；按日期升序）
+  ipcMain.handle('schedule:getOverdue', (_e, today: string) => {
+    if (typeof today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return []
+    const rows = queryAll<TodoRow>(
+      "SELECT * FROM schedule_todos WHERE date < ? AND status = 'pending' AND parent_id IS NULL ORDER BY date, sort_order, created_at",
+      [today]
+    )
+    return rows.map(rowToTodo)
+  })
+
   // 获取某月有数据的日期列表（日历打点用）— 排除子任务
   ipcMain.handle('schedule:getDatesWithTodos', (_e, yearMonth: string) => {
     const rows = queryAll<{ date: string }>(

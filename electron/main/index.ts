@@ -25,7 +25,8 @@ import { registerBlogTemplateHandlers } from '../database/repositories/blogTempl
 import { registerQuizHandlers } from '../database/repositories/quizRepo'
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
-import { initDayPanel, disposeDayPanel } from './dayPanelWindow'
+import { initDayPanel, disposeDayPanel, dayPanelOnMainMinimized } from './dayPanelWindow'
+import { registerWindowBus } from './windowBus'
 import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
@@ -204,7 +205,11 @@ function createWindow(): void {
 
 // ===== 窗口控制 + 缩放 + 设置 IPC =====
 function registerWindowHandlers(): void {
-  ipcMain.handle('window:minimize', () => mainWindow?.minimize())
+  ipcMain.handle('window:minimize', () => {
+    mainWindow?.minimize()
+    // 伴随最小化路径②：标题栏最小化按钮 → 小窗同步隐藏（平台事件与轮询之外的即时通路）
+    dayPanelOnMainMinimized()
+  })
   ipcMain.handle('window:maximize', () => {
     if (mainWindow?.isMaximized()) mainWindow.unmaximize()
     else mainWindow?.maximize()
@@ -524,6 +529,9 @@ app.whenReady().then(async () => {
 
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()
+
+  // 跨窗口数据变更总线（data:notify → kb:data-changed），先于任何窗口能力注册
+  registerWindowBus()
 
   // 日程与打卡小窗：IPC + 全局快捷键 Ctrl+Alt+S；启动不自动打开，状态持久化走 settings 缓存
   initDayPanel({

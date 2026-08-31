@@ -710,6 +710,7 @@ export interface ElectronAPI {
   getScheduleTodos: (date: string) => Promise<ScheduleTodo[]>
   getScheduleDates: (yearMonth: string) => Promise<string[]>
   getScheduleMonthTodos: (yearMonth: string) => Promise<ScheduleTodo[]>
+  getScheduleOverdue: (today: string) => Promise<ScheduleTodo[]>
   getScheduleDeadlineCounts: (yearMonth: string) => Promise<Record<string, number>>
   getScheduleSubtasks: (parentId: string) => Promise<ScheduleTodo[]>
   createScheduleTodo: (d: CreateScheduleTodoDTO) => Promise<ScheduleTodo>

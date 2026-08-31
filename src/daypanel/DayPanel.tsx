@@ -1,26 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   GripHorizontal, X, Pin, PinOff, Check, Pencil, Trash2, CalendarClock,
-  Plus, ChevronRight, ChevronDown, ExternalLink, CalendarDays, Clock, Magnet,
+  Plus, ChevronRight, ChevronDown, ExternalLink, Magnet,
 } from 'lucide-react'
 import type { ScheduleTodo, Habit, HabitRecord } from '../types'
 import { localToday, formatEntryDate } from '../lib/date'
 import {
-  getScheduleTodos, getScheduleMonthTodos, getScheduleSubtasks,
+  getScheduleTodos, getScheduleOverdue, getScheduleSubtasks,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo,
   habitGetAll, createHabit, toggleHabitCheck,
 } from '../lib/ipc'
 import { notifyDataChanged, useDataChanged } from '../lib/dataChanged'
+import { showToast } from '../lib/toast'
 import { parseQuickDate } from './parseQuickDate'
-import { isPlannedOn, currentStreak, buildRecordIndex, formatLocalDate } from '../modules/toolbox/components/habit-tracker/dateUtils'
-
-function prevMonth(ym: string): string {
-  const [y, m] = ym.split('-').map(Number)
-  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
-}
+import { isPlannedOn, currentStreak, buildRecordIndex } from '../modules/toolbox/components/habit-tracker/dateUtils'
 
 /** 磁吸气泡范围（px），需与 electron/main/dayPanelWindow.ts 的 MAGNET_RANGE 保持一致 */
 const SNAP_MAGNET_RANGE = 160
+
+/** 距次日 00:00:05 的毫秒数（用于跨零点刷新定时器） */
+function msUntilTomorrow(): number {
+  const now = new Date()
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5)
+  return Math.max(1000, next.getTime() - now.getTime())
+}
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
@@ -33,7 +36,8 @@ const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
  * 逾期置顶红分组 → 今日任务（子任务展开一级）→ 快速添加（轻量时间解析）→ 今日打卡
  */
 export function DayPanel() {
-  const todayStr = localToday()
+  // today 是 state 而非常量：小窗 hide 保活不销毁，挂在后台过夜必须自己翻页
+  const [todayStr, setTodayStr] = useState(() => localToday())
   const todayDate = useMemo(() => {
     const [y, m, d] = todayStr.split('-').map(Number)
     return new Date(y, m - 1, d)
@@ -48,8 +52,20 @@ export function DayPanel() {
   const [subtasks, setSubtasks] = useState<Record<string, ScheduleTodo[]>>({})
   const [editing, setEditing] = useState<{ id: string; title: string; date: string; time: string } | null>(null)
   const [quick, setQuick] = useState('')
+  const [manualDate, setManualDate] = useState<string | null>(null)  // 手动覆盖解析出的日期
+  const [manualTime, setManualTime] = useState<string | null>(null)  // 手动覆盖/补填时间
   const [newHabit, setNewHabit] = useState('')
   const [docked, setDocked] = useState(true)
+
+  // ---- 跨零点自动翻页：对齐到次日 00:00:05，并挂 focus 兜底（休眠唤醒等场景） ----
+  useEffect(() => {
+    let timer: number | undefined
+    const tick = () => {
+      timer = window.setTimeout(() => { setTodayStr(localToday()); tick() }, msUntilTomorrow())
+    }
+    tick()
+    return () => { if (timer) window.clearTimeout(timer) }
+  }, [])
 
   // ---- 磁吸气泡：自由摆放拖近主窗口 → 气泡随距离渐进出现；吸附完成 → 弹跳「已吸附」 ----
   const [snapNear, setSnapNear] = useState(false)
@@ -60,29 +76,30 @@ export function DayPanel() {
       setSnapNear(near)
       if (typeof dist === 'number') setSnapDist(dist)
     })
+    let popTimer: number | undefined
     const offSnap = window.api?.onDayPanelSnapChanged?.(({ docked: d }) => {
       setDocked(d)
       setSnapNear(false)
       setSnapDone(true)
-      setTimeout(() => setSnapDone(false), 1400)
+      if (popTimer) window.clearTimeout(popTimer)
+      popTimer = window.setTimeout(() => setSnapDone(false), 1400)
     })
-    return () => { offHint?.(); offSnap?.() }
+    return () => {
+      offHint?.()
+      offSnap?.()
+      if (popTimer) window.clearTimeout(popTimer)
+    }
   }, [])
 
   const load = useCallback(async () => {
-    const today = localToday()
-    const ym = today.slice(0, 7)
     try {
-      const [todayList, cur, prev, habitData] = await Promise.all([
-        getScheduleTodos(today),
-        getScheduleMonthTodos(ym),
-        getScheduleMonthTodos(prevMonth(ym)),
+      // 逾期走专用查询：date < today 全量直查（此前只取当月+上月，逾期三个月以上直接消失）
+      const [todayList, od, habitData] = await Promise.all([
+        getScheduleTodos(todayStr),
+        getScheduleOverdue(todayStr),
         habitGetAll(),
       ])
       setTodos(todayList)
-      const od = [...prev, ...cur]
-        .filter(t => t.date < today && t.status === 'pending' && !t.parentId)
-        .sort((a, b) => a.date.localeCompare(b.date))
       setOverdue(od)
       setHabits(habitData.habits ?? [])
       setRecords(habitData.records ?? [])
@@ -95,8 +112,9 @@ export function DayPanel() {
     } catch (e) {
       console.error('[DayPanel] 加载失败', e)
     }
-  }, [])
+  }, [todayStr])
 
+  // todayStr 变化（跨零点翻页）时 load 重新生成，自动重拉数据
   useEffect(() => { void load() }, [load])
   useDataChanged('schedule', load)
   useDataChanged('habit', load)
@@ -106,9 +124,10 @@ export function DayPanel() {
     window.api?.onHabitAutoChecked?.(() => { void load() })
   }, [load])
 
-  // 小窗获得焦点时刷新吸附状态（用户拖离后自动解除，按钮图标需同步）
+  // 获得焦点时：刷新吸附状态（拖离后按钮图标需同步）+ 兜底校正日期（休眠唤醒/系统时间变更）
   useEffect(() => {
     const onFocus = () => {
+      setTodayStr(prev => (prev === localToday() ? prev : localToday()))
       window.api?.dayPanelGetState?.().then(st => setDocked(!!st?.docked)).catch(() => {})
     }
     void onFocus()
@@ -116,11 +135,26 @@ export function DayPanel() {
     return () => window.removeEventListener('focus', onFocus)
   }, [])
 
+  // Esc 关闭小窗（输入框聚焦时先失焦，避免误关）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const el = document.activeElement
+      if (el instanceof HTMLInputElement) { el.blur(); return }
+      void window.api?.dayPanelClose?.()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const topTodos = useMemo(() => todos.filter(t => !t.parentId), [todos])
   const pendingCount = topTodos.filter(t => t.status === 'pending').length
   const doneCount = topTodos.filter(t => t.status === 'done').length
 
   const parsed = useMemo(() => parseQuickDate(quick, todayDate), [quick, todayDate])
+  // 手动覆盖优先：解析错了可以在预览行直接改，不用整句重打
+  const finalDate = manualDate ?? parsed.date
+  const finalTime = manualTime !== null ? manualTime : parsed.time
 
   // ---- 打卡派生数据 ----
   const habitIndex = useMemo(() => buildRecordIndex(records), [records])
@@ -134,6 +168,8 @@ export function DayPanel() {
   )
 
   // ---- 操作 ----
+  // 统一约定：notifyDataChanged 会驱动本窗口 + 跨窗口各刷一次（useDataChanged），
+  // 成功路径不再手写 load()，避免一次操作触发两轮全量重拉；仅失败时 load() 回滚乐观更新。
   const toggleStatus = useCallback(async (t: ScheduleTodo) => {
     const next = t.status === 'done' ? 'pending' : 'done'
     setTodos(cur => cur.map(x => (x.id === t.id ? { ...x, status: next } : x)))
@@ -141,32 +177,46 @@ export function DayPanel() {
     try {
       await updateScheduleTodo(t.id, { status: next })
       notifyDataChanged('schedule')
-    } finally {
+    } catch (e) {
+      console.error('[DayPanel] 更新状态失败', e)
       void load()
     }
   }, [load])
 
   const moveToToday = useCallback(async (id: string) => {
-    await updateScheduleTodo(id, { date: localToday() })
-    notifyDataChanged('schedule')
-    void load()
-  }, [load])
+    try {
+      await updateScheduleTodo(id, { date: todayStr })
+      notifyDataChanged('schedule')
+      showToast({ type: 'info', message: '已改到今天' })
+    } catch (e) {
+      console.error('[DayPanel] 迁移失败', e)
+      void load()
+    }
+  }, [todayStr, load])
 
   const removeTodo = useCallback(async (t: ScheduleTodo) => {
     if (!window.confirm(`删除任务「${t.title}」？`)) return
-    await deleteScheduleTodo(t.id)
-    notifyDataChanged('schedule')
-    void load()
+    try {
+      await deleteScheduleTodo(t.id)
+      notifyDataChanged('schedule')
+    } catch (e) {
+      console.error('[DayPanel] 删除失败', e)
+      void load()
+    }
   }, [load])
 
   const saveEdit = useCallback(async () => {
     if (!editing) return
     const title = editing.title.trim()
     if (!title) { setEditing(null); return }
-    await updateScheduleTodo(editing.id, { title, date: editing.date, time: editing.time || null })
-    setEditing(null)
-    notifyDataChanged('schedule')
-    void load()
+    try {
+      await updateScheduleTodo(editing.id, { title, date: editing.date, time: editing.time || null })
+      setEditing(null)
+      notifyDataChanged('schedule')
+    } catch (e) {
+      console.error('[DayPanel] 保存失败', e)
+      void load()
+    }
   }, [editing, load])
 
   const toggleExpand = useCallback(async (pid: string) => {
@@ -185,14 +235,21 @@ export function DayPanel() {
     const title = parsed.title.trim()
     if (!title) return
     try {
-      await createScheduleTodo({ title, date: parsed.date, time: parsed.time ?? undefined, taskType: 'plan' })
+      await createScheduleTodo({ title, date: finalDate, time: finalTime || undefined, taskType: 'plan' })
       setQuick('')
+      setManualDate(null)
+      setManualTime(null)
       notifyDataChanged('schedule')
-      void load()
+      // 落到今天之外的任务在列表里看不到，必须给反馈
+      showToast({
+        type: 'info',
+        message: finalDate === todayStr ? `已添加到今天：${title}` : `已添加到 ${formatEntryDate(finalDate)}：${title}`,
+      })
     } catch (e) {
       console.error('[DayPanel] 快速添加失败', e)
+      showToast({ type: 'error', message: '添加失败，请重试' })
     }
-  }, [parsed, load])
+  }, [parsed, finalDate, finalTime, todayStr])
 
   const addHabit = useCallback(async () => {
     const name = newHabit.trim()
@@ -201,21 +258,27 @@ export function DayPanel() {
       await createHabit({ name })
       setNewHabit('')
       notifyDataChanged('habit')
-      void load()
+      showToast({ type: 'info', message: `已新增习惯：${name}（规则默认每日，可在工具箱调整）` })
     } catch (e) {
       console.error('[DayPanel] 新增习惯失败', e)
+      showToast({ type: 'error', message: '新增习惯失败，请重试' })
     }
-  }, [newHabit, load])
+  }, [newHabit])
 
+  // 与任务勾选保持一致：先本地翻转再落库，打卡不再有可感迟滞
   const checkHabit = useCallback(async (h: Habit) => {
+    const willCheck = !(habitIndex.get(h.id)?.has(todayStr) ?? false)
+    setRecords(cur => willCheck
+      ? [...cur, { id: `${h.id}:${todayStr}`, habitId: h.id, date: todayStr } as HabitRecord]
+      : cur.filter(r => !(r.habitId === h.id && r.date === todayStr)))
     try {
       await toggleHabitCheck(h.id, todayStr)
       notifyDataChanged('habit')
-      void load()
     } catch (e) {
       console.error('[DayPanel] 打卡失败', e)
+      void load()
     }
-  }, [todayStr, load])
+  }, [todayStr, habitIndex, load])
 
   const openInMain = useCallback((tab: string) => {
     window.api?.dayPanelOpenInMain?.(tab)
@@ -341,7 +404,7 @@ export function DayPanel() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {/* 磁吸气泡（贴左缘中间，半透明毛玻璃）：拖近时随距离渐进出现 + 呼吸动画；吸附完成弹跳提示 */}
       <style>{`@keyframes kbSnapPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}@keyframes kbSnapPop{0%{transform:scale(.6);opacity:.4}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}`}</style>
       <div
@@ -368,7 +431,7 @@ export function DayPanel() {
       </div>
       {/* 表头：拖拽区（按住移动窗口） */}
       <div
-        className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-tertiary)] px-3"
+        className="flex h-10 shrink-0 select-none items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-tertiary)] px-3"
         style={dragRegion}
       >
         <div className="flex items-center gap-1.5 text-[13px] font-medium">
@@ -404,10 +467,19 @@ export function DayPanel() {
 
         {/* 今日任务 */}
         <section>
-          <p className="mb-1 px-1 text-xs font-medium text-[var(--text-primary)]">
-            今天 · {todayDate.getMonth() + 1}月{todayDate.getDate()}日 {WEEKDAY_LABELS[todayDate.getDay()]}
-            <span className="ml-1 font-normal text-[var(--text-muted)]">（{pendingCount} 待办 / {doneCount} 完成）</span>
-          </p>
+          <div className="mb-1 flex items-center justify-between gap-2 px-1">
+            <p className="min-w-0 truncate text-xs font-medium text-[var(--text-primary)]">
+              今天 · {todayDate.getMonth() + 1}月{todayDate.getDate()}日 {WEEKDAY_LABELS[todayDate.getDay()]}
+              <span className="ml-1 font-normal text-[var(--text-muted)]">（{pendingCount} 待办 / {doneCount} 完成）</span>
+            </p>
+            <button
+              onClick={() => openInMain('schedule')}
+              className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)]"
+              title="在主窗口任务模块中管理（日历 / 四象限 / 子任务）"
+            >
+              任务模块<ExternalLink size={10} />
+            </button>
+          </div>
           <div className="space-y-0.5">{topTodos.map(t => taskRow(t, false))}</div>
           {topTodos.length === 0 && (
             <p className="px-1 py-2 text-xs text-[var(--text-muted)]">今天暂无任务，下方快速添加一条吧</p>
@@ -417,7 +489,11 @@ export function DayPanel() {
             <div className="flex items-center gap-1.5">
               <input
                 value={quick}
-                onChange={e => setQuick(e.target.value)}
+                onChange={e => {
+                  setQuick(e.target.value)
+                  setManualDate(null)
+                  setManualTime(null)
+                }}
                 onKeyDown={e => { if (e.key === 'Enter') void addQuick() }}
                 placeholder="快速添加：周五 14:00 复习计网"
                 className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
@@ -431,16 +507,32 @@ export function DayPanel() {
               </button>
             </div>
             {quick.trim() && (
-              <div className="mt-1 flex items-center gap-1.5 px-1 text-[11px] text-[var(--text-muted)]">
-                <span className="inline-flex items-center gap-0.5 rounded bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[var(--accent)]">
-                  <CalendarDays size={10} />{formatEntryDate(parsed.date)}
-                </span>
-                {parsed.time && (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[var(--accent)]">
-                    <Clock size={10} />{parsed.time}
-                  </span>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-[var(--text-muted)]">
+                {/* 解析结果可直接改：解析错了不用整句重打 */}
+                <input
+                  type="date"
+                  value={finalDate}
+                  onChange={e => setManualDate(e.target.value || null)}
+                  title="日期（可修改）"
+                  className="rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1 py-0.5 text-[11px] text-[var(--accent)] outline-none focus:border-[var(--accent)]"
+                />
+                <input
+                  type="time"
+                  value={finalTime ?? ''}
+                  onChange={e => setManualTime(e.target.value || null)}
+                  title="时间（可填写 / 修改）"
+                  className="w-[74px] rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1 py-0.5 text-[11px] text-[var(--accent)] outline-none focus:border-[var(--accent)]"
+                />
+                {(manualDate || manualTime !== null) && (
+                  <button
+                    onClick={() => { setManualDate(null); setManualTime(null) }}
+                    className="rounded px-1 py-0.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]"
+                    title="恢复自动解析结果"
+                  >
+                    重解析
+                  </button>
                 )}
-                <span>标题：{parsed.title || '（空）'}</span>
+                <span className="min-w-0 flex-1 truncate" title={parsed.title}>标题：{parsed.title || '（空）'}</span>
               </div>
             )}
           </div>
@@ -507,8 +599,9 @@ export function DayPanel() {
         </section>
       </div>
 
-      <div className="shrink-0 border-t border-[var(--border-color)] px-3 py-1.5 text-[10px] text-[var(--text-muted)]">
-        Ctrl+Alt+S 开关 · 拖动表头移动窗口 · 「完整配置」跳转主窗口工具箱
+      <div className="shrink-0 select-none border-t border-[var(--border-color)] px-3 py-1.5 text-[10px] leading-relaxed text-[var(--text-muted)]">
+        Ctrl+Alt+S 开关 · Esc 关闭 · 拖动表头移动窗口<br />
+        拖近主窗口右缘自动吸附，拖离即解除
       </div>
     </div>
   )
