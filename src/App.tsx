@@ -326,7 +326,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_58%,transparent)] overflow-hidden">
+    <div className="flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_76%,transparent)] overflow-hidden">
       <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} />
       <PomodoroProvider>
         <div className="flex flex-1 overflow-hidden">
