@@ -391,7 +391,7 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
                 onChange={e => { setQuick(e.target.value); setManualTime(null) }}
                 onKeyDown={e => { if (e.key === 'Enter') void addQuick() }}
                 placeholder="添加任务"
-                className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
+                className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 text-[11px] outline-none focus:border-[var(--accent)]"
               />
               <button
                 onClick={() => void addQuick()}
