@@ -51,8 +51,6 @@ let quitting = false
 let attachedMain: BrowserWindow | null = null
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let lastHintAt = 0
-/** 主窗口最小化前小窗是否可见：还原时按此恢复（伴随最小化） */
-let followMinimize = false
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
 
@@ -120,17 +118,7 @@ function attachMainListeners(): void {
   main.on('resize', follow)
   main.on('maximize', follow)
   main.on('unmaximize', follow)
-  // 伴随最小化：主窗口最小化 → 小窗隐藏；还原 → 按原可见状态恢复
-  main.on('minimize', () => {
-    if (!panel || panel.isDestroyed() || !panel.isVisible() || quitting) return
-    followMinimize = true
-    hidePanel()
-  })
-  main.on('restore', () => {
-    if (!followMinimize) return
-    followMinimize = false
-    showPanel()
-  })
+  // 注：伴随最小化由「子窗口」系统行为保证（createPanel 设置 parent），无需手动监听
 }
 
 /** 向所有窗口广播（小窗为接收方：吸附气泡 / 吸附完成提示） */
@@ -209,6 +197,9 @@ function createPanel(): void {
     ...bounds,
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
+    // 子窗口：系统级保证「伴随最小化」——主窗口最小化/还原时小窗自动跟随（Windows 原生行为），
+    // 不依赖 minimize/restore 事件（frameless 窗口事件触发不可靠）；主窗口关闭时小窗自动关闭
+    parent: deps?.getMainWindow() ?? undefined,
     frame: false,
     skipTaskbar: true,
     maximizable: false,
