@@ -17,19 +17,18 @@ function showToastSafe(message: string): void {
   showToast({ type: 'info', message })
 }
 
-export function TitleBar() {
+interface TitleBarProps {
+  /** 日程打卡侧边栏当前是否激活（内嵌显示中或独立窗口打开中）。用于按钮高亮 */
+  dayPanelActive?: boolean
+  /** 点击日程打卡侧边栏开关按钮：App 统一处理「脱离态→吸附 / 内嵌态→显示」逻辑 */
+  onToggleDayPanel?: () => void
+}
+
+export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarProps = {}) {
   const { s: settings } = useSettings()
   const badgeEgg = settings.badgeEggActivated
   const [isMaximized, setIsMaximized] = useState(false)
   const [isPinned, setIsPinned] = useState(false)
-
-  // ---- 日程打卡小窗开关：状态由主进程推送（toggle 的发起方可能是小窗自身/快捷键） ----
-  const [dayPanelVisible, setDayPanelVisible] = useState(false)
-  useEffect(() => {
-    window.api?.dayPanelGetState?.().then(st => setDayPanelVisible(!!st?.visible)).catch(() => {})
-    const off = window.api?.onDayPanelVisibleChange?.((v: boolean) => setDayPanelVisible(v))
-    return () => { off?.() }
-  }, [])
 
   // ---- 更新入口:全部状态来自全局 updateStore,与设置页(高级)完全同步 ----
   const upd = useUpdateStore()
@@ -239,15 +238,15 @@ export function TitleBar() {
             </div>
           )}
           <WinBtn
-            onClick={() => { void window.api?.dayPanelToggle?.() }}
-            title="日程与打卡小窗 (Ctrl+Alt+S)"
+            onClick={onToggleDayPanel ?? (() => {})}
+            title="日程与打卡侧边栏 (Ctrl+Alt+S)"
           >
             <CalendarCheck2
               size={14}
               strokeWidth={1.5}
-              className={dayPanelVisible ? 'text-[var(--accent)]' : ''}
-              fill={dayPanelVisible ? 'var(--accent)' : 'transparent'}
-              fillOpacity={dayPanelVisible ? 0.25 : 0}
+              className={dayPanelActive ? 'text-[var(--accent)]' : ''}
+              fill={dayPanelActive ? 'var(--accent)' : 'transparent'}
+              fillOpacity={dayPanelActive ? 0.25 : 0}
             />
           </WinBtn>
           <WinBtn onClick={() => window.dispatchEvent(new CustomEvent('lockscreen:toggle'))} title="锁屏">

@@ -6,9 +6,9 @@ import { Toast } from '../components/shared/Toast'
 import { DayPanel } from './DayPanel'
 
 /**
- * 小窗根组件：独立 BrowserWindow 加载 index.html#/day-panel 时渲染（App.tsx 按 argv 分流）。
- * 与主窗口共享渲染 bundle 与 CSS 变量主题；主窗口设置变更（theme/zoom/字体）经
- * data:notify 广播 scope='settings'，此处重新应用。
+ * 独立脱离窗口根应用：与主窗口共用 #/day-panel 路由，仅在 detached=true 时由主进程创建
+ * 独立的 BrowserWindow 加载并渲染本应用。主窗口内嵌态下不进入此分支（App.tsx 直接渲染
+ * <DayPanel mode="embedded" />）。
  */
 export function DayPanelWindowApp() {
   const applyAppearance = useCallback(async () => {
@@ -40,7 +40,10 @@ export function DayPanelWindowApp() {
 
   return (
     <>
-      <DayPanel />
+      <DayPanel
+        mode="popout"
+        onDockBack={() => { void window.api?.dayPanelDockBack?.() }}
+      />
       <Toast />
     </>
   )

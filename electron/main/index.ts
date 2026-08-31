@@ -25,7 +25,7 @@ import { registerBlogTemplateHandlers } from '../database/repositories/blogTempl
 import { registerQuizHandlers } from '../database/repositories/quizRepo'
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
-import { initDayPanel, disposeDayPanel, dayPanelOnMainMinimized } from './dayPanelWindow'
+import { initDayPanel, disposeDayPanel } from './dayPanelWindow'
 import { registerWindowBus } from './windowBus'
 import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
@@ -207,8 +207,9 @@ function createWindow(): void {
 function registerWindowHandlers(): void {
   ipcMain.handle('window:minimize', () => {
     mainWindow?.minimize()
-    // 伴随最小化路径②：标题栏最小化按钮 → 小窗同步隐藏（平台事件与轮询之外的即时通路）
-    dayPanelOnMainMinimized()
+    // WeChat 模式下小窗要么内嵌在主窗口、要么是独立顶层窗口；最小化主窗口时：
+    //   - 内嵌态：随主窗口最小化（同一 BrowserWindow）
+    //   - 独立态：保持可见（用户可能想让小窗单独常驻），不联动
   })
   ipcMain.handle('window:maximize', () => {
     if (mainWindow?.isMaximized()) mainWindow.unmaximize()
@@ -533,20 +534,10 @@ app.whenReady().then(async () => {
   // 跨窗口数据变更总线（data:notify → kb:data-changed），先于任何窗口能力注册
   registerWindowBus()
 
-  // 日程与打卡小窗：IPC + 全局快捷键 Ctrl+Alt+S；启动不自动打开，状态持久化走 settings 缓存
+  // 日程与打卡侧边栏（WeChat 模式：内嵌 + 可脱离）
   initDayPanel({
     getMainWindow: () => mainWindow,
-    loadState: () => {
-      try {
-        const raw = settingsCache['dayPanelState']
-        return raw ? JSON.parse(String(raw)) : undefined
-      } catch { return undefined }
-    },
-    saveState: (st) => {
-      settingsCache['dayPanelState'] = JSON.stringify(st)
-      if (saveTimer) clearTimeout(saveTimer)
-      saveTimer = setTimeout(flushSettingsToDisk, 500)
-    },
+    rendererUrl: () => process.env.ELECTRON_RENDERER_URL ?? null,
   })
 
   app.on('activate', () => {

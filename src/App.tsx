@@ -26,6 +26,8 @@ import { useCheckinReminder } from './lib/useCheckinReminder'
 import { useHabitAutoCheckinToast } from './lib/useHabitAutoCheckin'
 import { AssistantPanel } from './components/shared/AssistantPanel'
 import { DayPanelWindowApp } from './daypanel/DayPanelWindowApp'
+import { DayPanel } from './daypanel/DayPanel'
+import { ResizablePanel } from './components/shared/ResizablePanel'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
 export default function App() {
@@ -45,6 +47,9 @@ export default function App() {
   const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [locked, setLocked] = useState(false)
+  // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
+  const [dayPanelVisible, setDayPanelVisible] = useState(false)
+  const [dayPanelDetached, setDayPanelDetached] = useState(false)
   const { s, update, ready: settingsReady } = useSettings()
   useCheckinReminder()
   useHabitAutoCheckinToast()
@@ -194,6 +199,21 @@ export default function App() {
     return () => { off?.() }
   }, [])
 
+  // 日程打卡侧边栏：脱离态变化推送（独立窗口打开/销毁）
+  useEffect(() => {
+    const off = window.api?.onDayPanelStateChanged?.(({ detached }) => {
+      setDayPanelDetached(detached)
+      // 脱离→内嵌（独立窗口被关）：自动恢复内嵌显示，避免用户看到一个"消失的面板"
+      if (!detached) setDayPanelVisible(true)
+    })
+    return () => { off?.() }
+  }, [])
+  // 全局快捷键 Ctrl+Alt+S toggle：脱离态→吸附 + 显示内嵌；否则切内嵌可见性
+  useEffect(() => {
+    const off = window.api?.onDayPanelToggleVisibility?.(() => { setDayPanelVisible(v => !v) })
+    return () => { off?.() }
+  }, [])
+
   // 开发者工具 — 仅 DEV 动态加载:打包构建时 import.meta.env.DEV 被静态替换为 false,
   // 动态 import 随之被 tree-shaking 移除,devtools 模块代码不进入产物
   const [DevToolsModuleDynamic, setDevtoolsNode] = useState<React.ComponentType<DevToolsModuleProps> | null>(null)
@@ -256,6 +276,18 @@ export default function App() {
     else { setActiveTab(tab); setSidebarOpen(true); window.dispatchEvent(new CustomEvent('tab-switched')) }
   }
 
+  // 日程打卡侧边栏：标题栏按钮 + Ctrl+Alt+S 统一入口
+  // - 脱离态 → 吸附回来（关独立窗口 + 显示内嵌）
+  // - 内嵌态 → 切可见性
+  const toggleDayPanel = useCallback(() => {
+    if (dayPanelDetached) {
+      void window.api?.dayPanelDockBack?.()
+      setDayPanelVisible(true)
+    } else {
+      setDayPanelVisible(v => !v)
+    }
+  }, [dayPanelDetached])
+
   // Ctrl+= / Ctrl+- zoom — synced with settings
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -303,22 +335,41 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden">
-      <TitleBar />
+      <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} />
       <PomodoroProvider>
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
-          <main className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-primary)] relative">
-            {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-            {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-            {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
+<main className="flex-1 flex overflow-hidden bg-[var(--bg-primary)] relative">
+            <div className="flex-1 flex flex-col min-w-0">
+              {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
+              {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
+              {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
 {renderTab('moments', <MomentsModule />)}
 {renderTab('recycle', <RecycleBinModule isActive={activeTab === 'recycle'} />)}
-            {renderTab('settings', <SettingsModule />)}
-            {renderTab('toolbox', <ToolboxModule />)}
-            {renderTab('plugins', <PluginsModule />)}
-            {renderTab('help', <HelpModule />)}
-            {DevToolsModuleDynamic && renderTab('devtools', <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-            {renderTab('user', <UserModule />)}
+              {renderTab('settings', <SettingsModule />)}
+              {renderTab('toolbox', <ToolboxModule />)}
+              {renderTab('plugins', <PluginsModule />)}
+              {renderTab('help', <HelpModule />)}
+              {DevToolsModuleDynamic && renderTab('devtools', <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
+              {renderTab('user', <UserModule />)}
+            </div>
+            {dayPanelVisible && !dayPanelDetached && (
+              <ResizablePanel
+                storageKey="dayPanelEmbedded"
+                defaultWidth={300}
+                minWidth={240}
+                maxWidth={500}
+                side="right"
+                visible
+                showHandle
+              >
+                <DayPanel
+                  mode="embedded"
+                  onPopout={() => { void window.api?.dayPanelPopout?.() }}
+                  onClose={() => setDayPanelVisible(false)}
+                />
+              </ResizablePanel>
+            )}
             <PomodoroPanel />
           </main>
       {/* 全局 AI 助手侧栏 */}

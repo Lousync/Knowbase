@@ -929,15 +929,14 @@ export interface ElectronAPI {
   // fill popup
   isFillPopup: boolean
   isDayPanel: boolean
-  // 日程与打卡小窗（独立伴随窗口）
+  // 日程与打卡侧边栏（WeChat 模式：内嵌 + 可脱离）
+  dayPanelGetState: () => Promise<{ detached: boolean }>
+  dayPanelPopout: () => Promise<boolean>
+  dayPanelDockBack: () => Promise<boolean>
   dayPanelToggle: () => Promise<boolean>
-  dayPanelClose: () => Promise<boolean>
-  dayPanelDock: () => Promise<boolean>
-  dayPanelGetState: () => Promise<{ visible: boolean; docked: boolean }>
+  onDayPanelStateChanged: (cb: (s: { detached: boolean }) => void) => () => void
+  onDayPanelToggleVisibility: (cb: () => void) => () => void
   dayPanelOpenInMain: (tab: string) => void
-  onDayPanelVisibleChange: (cb: (visible: boolean) => void) => () => void
-  onDayPanelSnapHint: (cb: (h: { near: boolean; dist?: number }) => void) => () => void
-  onDayPanelSnapChanged: (cb: (h: { docked: boolean }) => void) => () => void
   onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => () => void
   dataNotify: (payload: { scope: string }) => void
   onDataChanged: (cb: (payload: { scope: string }) => void) => () => void

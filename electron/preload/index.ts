@@ -364,29 +364,29 @@ const api = {
   // fill popup
   isFillPopup,
   isDayPanel,
-  // 日程与打卡小窗（独立伴随窗口，主窗口 TitleBar 按钮 / Ctrl+Alt+S 开关）
-  dayPanelToggle: () => ipcRenderer.invoke('daypanel:toggle'),
-  dayPanelClose: () => ipcRenderer.invoke('daypanel:close'),
-  dayPanelDock: () => ipcRenderer.invoke('daypanel:dock'),
-  dayPanelGetState: () => ipcRenderer.invoke('daypanel:get-state') as Promise<{ visible: boolean; docked: boolean }>,
+  // 日程与打卡侧边栏（WeChat 模式：内嵌面板 + 可脱离独立窗口）
+  // - 当前是否处于脱离态（独立窗口打开中）
+  dayPanelGetState: () => ipcRenderer.invoke('daypanel:get-state') as Promise<{ detached: boolean }>,
+  // - 内嵌→脱离：创建独立窗口（与主窗口共用 #/day-panel 路由）
+  dayPanelPopout: () => ipcRenderer.invoke('daypanel:popout') as Promise<boolean>,
+  // - 脱离→内嵌：销毁独立窗口
+  dayPanelDockBack: () => ipcRenderer.invoke('daypanel:dock-back') as Promise<boolean>,
+  // - 切换（内嵌则隐藏；脱离则吸附回来）
+  dayPanelToggle: () => ipcRenderer.invoke('daypanel:toggle') as Promise<boolean>,
+  // - 跨窗口 detached 状态推送（主窗口 / 独立窗口同步）
+  onDayPanelStateChanged: (cb: (s: { detached: boolean }) => void) => {
+    const handler = (_e: unknown, s: { detached: boolean }) => cb(s)
+    ipcRenderer.on('daypanel:state-changed', handler)
+    return () => { ipcRenderer.removeListener('daypanel:state-changed', handler) }
+  },
+  // - 快捷键 toggle 通知（让主窗口切内嵌可见性）
+  onDayPanelToggleVisibility: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('daypanel:toggle-visibility', handler)
+    return () => { ipcRenderer.removeListener('daypanel:toggle-visibility', handler) }
+  },
+  // - 小窗内唤起主窗口并切 Tab
   dayPanelOpenInMain: (tab: string) => ipcRenderer.send('daypanel:open-in-main', tab),
-  onDayPanelVisibleChange: (cb: (visible: boolean) => void) => {
-    const handler = (_e: unknown, v: boolean) => cb(v)
-    ipcRenderer.on('daypanel:visible-changed', handler)
-    return () => { ipcRenderer.removeListener('daypanel:visible-changed', handler) }
-  },
-  // 磁吸气泡提示：自由摆放状态下拖近主窗口 → 主进程推送 near=true/false（附距离供渐进反馈）
-  onDayPanelSnapHint: (cb: (h: { near: boolean; dist?: number }) => void) => {
-    const handler = (_e: unknown, h: { near: boolean; dist?: number }) => cb(h)
-    ipcRenderer.on('daypanel:snap-hint', handler)
-    return () => { ipcRenderer.removeListener('daypanel:snap-hint', handler) }
-  },
-  // 磁吸完成提示：自动吸附/按钮回吸附后推送
-  onDayPanelSnapChanged: (cb: (h: { docked: boolean }) => void) => {
-    const handler = (_e: unknown, h: { docked: boolean }) => cb(h)
-    ipcRenderer.on('daypanel:snap-changed', handler)
-    return () => { ipcRenderer.removeListener('daypanel:snap-changed', handler) }
-  },
   // 主窗口接收小窗指令（如切换模块 Tab）
   onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => {
     const handler = (_e: unknown, p: { type: string; tab?: string }) => cb(p)
