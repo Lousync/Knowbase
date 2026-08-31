@@ -141,16 +141,17 @@ def main():
             cmd += ['--prerelease']
         run(cmd)
 
-    # ---- 回读验证远端资产齐全 ----
+    # ---- 回读验证远端资产齐全(GitHub 会把资产名空格替换为点号,归一化后比对) ----
     print('== 远端验证 ==')
     info = json.loads(run(['gh', 'release', 'view', tag, '--json', 'assets,isDraft', '--repo', REPO]))
-    remote = {a['name']: a['size'] for a in info.get('assets', [])}
+    remote = {a['name'].replace(' ', '.'): a['size'] for a in info.get('assets', [])}
     ok = True
     for n, p in ((exe_name, exe_p), (blockmap_name, blockmap_p), (yml_name, yml_p)):
-        have = n in remote
-        size_ok = have and remote[n] == os.path.getsize(p)
+        rn = n.replace(' ', '.')
+        have = rn in remote
+        size_ok = have and remote[rn] == os.path.getsize(p)
         ok = ok and have and size_ok
-        print('  %-50s %s' % (n, 'OK' if (have and size_ok) else ('缺失!' if not have else '大小不符! (%s != %s)' % (remote.get(n), os.path.getsize(p)))))
+        print('  %-50s %s' % (rn, 'OK' if (have and size_ok) else ('缺失!' if not have else '大小不符! (%s != %s)' % (remote.get(rn), os.path.getsize(p)))))
     if info.get('isDraft'):
         print('  ! 这是 draft Release,记得发布正式版后客户端才能收到更新')
     if not ok:
