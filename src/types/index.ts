@@ -935,7 +935,7 @@ export interface ElectronAPI {
   dayPanelGetState: () => Promise<{ visible: boolean; docked: boolean }>
   dayPanelOpenInMain: (tab: string) => void
   onDayPanelVisibleChange: (cb: (visible: boolean) => void) => () => void
-  onDayPanelSnapHint: (cb: (h: { near: boolean }) => void) => () => void
+  onDayPanelSnapHint: (cb: (h: { near: boolean; dist?: number }) => void) => () => void
   onDayPanelSnapChanged: (cb: (h: { docked: boolean }) => void) => () => void
   onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => () => void
   dataNotify: (payload: { scope: string }) => void

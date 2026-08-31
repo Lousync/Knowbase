@@ -19,6 +19,9 @@ function prevMonth(ym: string): string {
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
 }
 
+/** 磁吸气泡范围（px），需与 electron/main/dayPanelWindow.ts 的 MAGNET_RANGE 保持一致 */
+const SNAP_MAGNET_RANGE = 160
+
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 /** 拖拽区域 inline style（Tailwind 无此工具类） */
@@ -48,16 +51,20 @@ export function DayPanel() {
   const [newHabit, setNewHabit] = useState('')
   const [docked, setDocked] = useState(true)
 
-  // ---- 磁吸气泡：自由摆放拖近主窗口 → 透明气泡提示；吸附完成 → 短暂「已吸附」反馈 ----
+  // ---- 磁吸气泡：自由摆放拖近主窗口 → 气泡随距离渐进出现；吸附完成 → 弹跳「已吸附」 ----
   const [snapNear, setSnapNear] = useState(false)
+  const [snapDist, setSnapDist] = useState(SNAP_MAGNET_RANGE)
   const [snapDone, setSnapDone] = useState(false)
   useEffect(() => {
-    const offHint = window.api?.onDayPanelSnapHint?.(({ near }) => setSnapNear(near))
+    const offHint = window.api?.onDayPanelSnapHint?.(({ near, dist }) => {
+      setSnapNear(near)
+      if (typeof dist === 'number') setSnapDist(dist)
+    })
     const offSnap = window.api?.onDayPanelSnapChanged?.(({ docked: d }) => {
       setDocked(d)
       setSnapNear(false)
       setSnapDone(true)
-      setTimeout(() => setSnapDone(false), 900)
+      setTimeout(() => setSnapDone(false), 1400)
     })
     return () => { offHint?.(); offSnap?.() }
   }, [])
@@ -335,20 +342,29 @@ export function DayPanel() {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none">
-      {/* 磁吸气泡（贴左缘中间，半透明 + 毛玻璃；拖近主窗口时出现，吸附完成短暂展示） */}
+      {/* 磁吸气泡（贴左缘中间，半透明毛玻璃）：拖近时随距离渐进出现 + 呼吸动画；吸附完成弹跳提示 */}
+      <style>{`@keyframes kbSnapPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}@keyframes kbSnapPop{0%{transform:scale(.6);opacity:.4}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}`}</style>
       <div
-        className="pointer-events-none absolute left-1 top-1/2 z-50 flex items-center gap-1.5 rounded-xl border border-[var(--accent)]/40 px-2.5 py-1.5 text-xs"
+        className="pointer-events-none absolute left-1 top-1/2 z-50"
         style={{
-          backgroundColor: 'color-mix(in srgb, var(--bg-primary) 74%, transparent)',
-          backdropFilter: 'blur(6px)',
-          color: snapNear ? 'var(--accent)' : 'var(--text-primary)',
           opacity: snapNear || snapDone ? 1 : 0,
-          transform: `translateY(-50%) translateX(${snapNear || snapDone ? 6 : 0}px) scale(${snapNear || snapDone ? 1 : 0.9})`,
-          transition: 'opacity 0.18s ease, transform 0.18s ease',
+          transform: `translateY(-50%) translateX(${snapNear || snapDone ? 8 : -4}px) scale(${0.85 + 0.15 * (1 - Math.min(snapDist, SNAP_MAGNET_RANGE) / SNAP_MAGNET_RANGE)})`,
+          transition: snapNear ? 'transform 0.08s linear, opacity 0.15s ease' : 'opacity 0.2s ease, transform 0.2s ease',
         }}
       >
-        {snapNear ? <Magnet size={13} /> : <Check size={13} className="text-[var(--success)]" />}
-        {snapNear ? '松手吸附到主窗口' : '已吸附'}
+        <div
+          className="flex items-center gap-1.5 rounded-xl border border-[var(--accent)] px-2.5 py-1.5 text-xs font-medium"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--bg-primary) 78%, transparent)',
+            backdropFilter: 'blur(8px)',
+            color: snapNear ? 'var(--accent)' : 'var(--text-primary)',
+            boxShadow: '0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent), 0 4px 14px rgb(0 0 0 / 0.18)',
+            animation: snapDone ? 'kbSnapPop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1)' : snapNear ? 'kbSnapPulse 1.1s ease-in-out infinite' : undefined,
+          }}
+        >
+          {snapNear ? <Magnet size={14} className="shrink-0" /> : <Check size={14} className="shrink-0 text-[var(--success)]" />}
+          {snapNear ? '松手吸附到主窗口' : '已吸附到主窗口'}
+        </div>
       </div>
       {/* 表头：拖拽区（按住移动窗口） */}
       <div

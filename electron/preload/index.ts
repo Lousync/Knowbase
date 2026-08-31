@@ -374,9 +374,9 @@ const api = {
     ipcRenderer.on('daypanel:visible-changed', handler)
     return () => { ipcRenderer.removeListener('daypanel:visible-changed', handler) }
   },
-  // 磁吸气泡提示：自由摆放状态下拖近主窗口 → 主进程推送 near=true/false
-  onDayPanelSnapHint: (cb: (h: { near: boolean }) => void) => {
-    const handler = (_e: unknown, h: { near: boolean }) => cb(h)
+  // 磁吸气泡提示：自由摆放状态下拖近主窗口 → 主进程推送 near=true/false（附距离供渐进反馈）
+  onDayPanelSnapHint: (cb: (h: { near: boolean; dist?: number }) => void) => {
+    const handler = (_e: unknown, h: { near: boolean; dist?: number }) => cb(h)
     ipcRenderer.on('daypanel:snap-hint', handler)
     return () => { ipcRenderer.removeListener('daypanel:snap-hint', handler) }
   },

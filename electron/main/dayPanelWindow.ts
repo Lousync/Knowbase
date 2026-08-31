@@ -29,11 +29,11 @@ const DOCK_GAP = 0
 /** 用户拖离判定阈值：实际位置与吸附期望位置偏差超过该值 → 解除吸附 */
 const DOCK_SLIP_THRESHOLD = 16
 /** 磁吸范围：自由摆放状态下，左缘距主窗口右缘小于该值 → 出现吸附气泡提示 */
-const MAGNET_RANGE = 80
+const MAGNET_RANGE = 160
 /** 磁吸触发距离：小于该值 → 自动吸附（磁铁效果） */
-const SNAP_DIST = 14
+const SNAP_DIST = 24
 /** 磁吸所需的最小垂直重叠量（px），避免错位窗口被误吸 */
-const MIN_OVERLAP = 60
+const MIN_OVERLAP = 40
 /** snap-hint 广播节流（ms），move 事件高频触发，避免刷 IPC */
 const HINT_THROTTLE_MS = 60
 
@@ -51,6 +51,8 @@ let quitting = false
 let attachedMain: BrowserWindow | null = null
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let lastHintAt = 0
+/** 主窗口最小化前小窗是否可见：还原时按此恢复（伴随最小化） */
+let followMinimize = false
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
 
@@ -118,6 +120,17 @@ function attachMainListeners(): void {
   main.on('resize', follow)
   main.on('maximize', follow)
   main.on('unmaximize', follow)
+  // 伴随最小化：主窗口最小化 → 小窗隐藏；还原 → 按原可见状态恢复
+  main.on('minimize', () => {
+    if (!panel || panel.isDestroyed() || !panel.isVisible() || quitting) return
+    followMinimize = true
+    hidePanel()
+  })
+  main.on('restore', () => {
+    if (!followMinimize) return
+    followMinimize = false
+    showPanel()
+  })
 }
 
 /** 向所有窗口广播（小窗为接收方：吸附气泡 / 吸附完成提示） */
@@ -170,10 +183,10 @@ function onPanelMove(): void {
       broadcast('daypanel:snap-changed', { docked: true })
       return
     }
-    // 接近但未触发 → 气泡提示
+    // 接近但未触发 → 气泡提示（带距离，供小窗做渐进反馈）
     if (now - lastHintAt >= HINT_THROTTLE_MS) {
       lastHintAt = now
-      broadcast('daypanel:snap-hint', { near: true })
+      broadcast('daypanel:snap-hint', { near: true, dist: Math.max(0, dist) })
     }
   } else if (now - lastHintAt >= HINT_THROTTLE_MS) {
     lastHintAt = now
