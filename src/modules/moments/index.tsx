@@ -1209,7 +1209,9 @@ export function MomentsModule() {
       {viewMode === 'timeline' && (
         <button
           onClick={openCreate}
-          className="fixed right-6 bottom-6 z-40 w-16 h-16 rounded-full bg-[var(--accent)] text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] hover:bg-[var(--accent-hover)] transition-all flex items-center justify-center"
+          // absolute 相对模块根（= 主体卡片内）：任务栏展开/收起不影响相对位置；
+          // bottom-24 避开右下角 AI 助手按钮
+          className="absolute right-6 bottom-24 z-40 w-16 h-16 rounded-full bg-[var(--accent)] text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] hover:bg-[var(--accent-hover)] transition-all flex items-center justify-center"
           title="新建说说"
         >
           <Plus size={28} strokeWidth={2.2} />
