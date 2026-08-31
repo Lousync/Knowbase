@@ -333,7 +333,7 @@ export default function App() {
           <ActivityBar active={activeTab} onChange={handleTabChange} />
 <main className="flex-1 flex overflow-hidden relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称 */}
-            <div className="mr-1.5 my-1.5 flex min-w-0 flex-1">
+            <div className="my-1.5 flex min-w-0 flex-1">
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
               {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
               {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
@@ -367,7 +367,7 @@ export default function App() {
                 showHandle
               >
                 {/* 内嵌面板的"子窗口"外壳：留白 + 圆角 + 阴影，让它在主窗口内像独立浮窗（微信会议窗同款） */}
-                <div className="m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
+                <div className="my-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
                   <DayPanel
                     mode="embedded"
                     onPopout={() => { void window.api?.dayPanelPopout?.() }}
