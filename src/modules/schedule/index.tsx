@@ -15,7 +15,7 @@ import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
-import { useDataChanged } from '../../lib/dataChanged'
+import { useDataChanged, notifyDataChanged } from '../../lib/dataChanged'
 
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]' }
@@ -188,23 +188,27 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
           endCriteria: form.taskType === 'plan' ? form.endCriteria : ''
         })
       } else { await createScheduleTodo(dto) }
-      setModalOpen(false); setEditTarget(null); await refreshAll()
+      setModalOpen(false); setEditTarget(null)
+      notifyDataChanged('schedule')
+      await refreshAll()
     } catch (e) { console.error(e) }
   }
 
   async function handleToggleDone(todo: ScheduleTodo) {
     await updateScheduleTodo(todo.id, { status: todo.status === 'done' ? 'pending' : 'done' })
+    notifyDataChanged('schedule')
     await refreshAll()
   }
 
   async function handleRestoreDone(id: string) {
     await updateScheduleTodo(id, { status: 'pending' })
+    notifyDataChanged('schedule')
     await refreshAll()
   }
 
   const [showDone, setShowDone] = useState(false)
 
-  async function handleDelete(id: string) { await deleteScheduleTodo(id); await refreshAll() }
+  async function handleDelete(id: string) { await deleteScheduleTodo(id); notifyDataChanged('schedule'); await refreshAll() }
 
   async function handleClearDone() {
     if (doneTodos.length === 0) return
@@ -230,6 +234,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
       const st = subs.find(s => s.id === id)
       if (st) {
         await updateScheduleTodo(id, { status: st.status === 'done' ? 'pending' : 'done' })
+        notifyDataChanged('schedule')
         await refreshAll()
         return
       }
@@ -238,10 +243,11 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
   async function handleDeleteSubtaskAny(id: string) {
     await deleteScheduleTodo(id)
+    notifyDataChanged('schedule')
     await refreshAll()
   }
 
-  async function handleMigrateDaily(id: string) { await updateScheduleTodo(id, { date: today }); await refreshAll() }
+  async function handleMigrateDaily(id: string) { await updateScheduleTodo(id, { date: today }); notifyDataChanged('schedule'); await refreshAll() }
 
   // ---- derived data (ALL tasks, including done) ----
   const allWithTags = useMemo(() =>
@@ -342,11 +348,13 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     const st = editSubtasks.find(s => s.id === id)
     if (!st) return
     await updateScheduleTodo(id, { status: st.status === 'done' ? 'pending' : 'done' })
+    notifyDataChanged('schedule')
     await refreshAll()
   }
 
   async function handleDeleteSubtask(id: string) {
     await deleteScheduleTodo(id)
+    notifyDataChanged('schedule')
     await refreshAll()
   }
 
@@ -357,6 +365,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
       parentId: editTarget.id,
     }
     await createScheduleTodo(dto)
+    notifyDataChanged('schedule')
     await refreshAll()
   }
 

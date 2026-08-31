@@ -28,6 +28,14 @@ const MIN_HEIGHT = 420
 const DOCK_GAP = 0
 /** 用户拖离判定阈值：实际位置与吸附期望位置偏差超过该值 → 解除吸附 */
 const DOCK_SLIP_THRESHOLD = 16
+/** 磁吸范围：自由摆放状态下，左缘距主窗口右缘小于该值 → 出现吸附气泡提示 */
+const MAGNET_RANGE = 80
+/** 磁吸触发距离：小于该值 → 自动吸附（磁铁效果） */
+const SNAP_DIST = 14
+/** 磁吸所需的最小垂直重叠量（px），避免错位窗口被误吸 */
+const MIN_OVERLAP = 60
+/** snap-hint 广播节流（ms），move 事件高频触发，避免刷 IPC */
+const HINT_THROTTLE_MS = 60
 
 interface DayPanelDeps {
   getMainWindow: () => BrowserWindow | null
@@ -42,6 +50,7 @@ let state: DayPanelState = { x: null, y: null, width: DEFAULT_WIDTH, height: DEF
 let quitting = false
 let attachedMain: BrowserWindow | null = null
 let persistTimer: ReturnType<typeof setTimeout> | null = null
+let lastHintAt = 0
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
 
@@ -111,7 +120,14 @@ function attachMainListeners(): void {
   main.on('unmaximize', follow)
 }
 
-/** 小窗 move → 吸附态下检测用户拖离；自由态下持久化位置 */
+/** 向所有窗口广播（小窗为接收方：吸附气泡 / 吸附完成提示） */
+function broadcast(channel: string, payload: unknown): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(channel, payload)
+  }
+}
+
+/** 小窗 move → 吸附态下检测用户拖离；自由态下检测磁吸接近并持久化位置 */
 function onPanelMove(): void {
   if (!panel || panel.isDestroyed() || quitting) return
   if (state.docked) {
@@ -124,12 +140,44 @@ function onPanelMove(): void {
       state.x = b.x
       state.y = b.y
       persist()
+      broadcast('daypanel:snap-changed', { docked: false })
     }
-  } else {
-    const b = panel.getBounds()
-    state.x = b.x
-    state.y = b.y
-    schedulePersist()
+    return
+  }
+
+  // ---- 自由摆放态：磁吸检测（拖近主窗口右缘 → 气泡提示 → 自动吸附） ----
+  const b = panel.getBounds()
+  state.x = b.x
+  state.y = b.y
+  schedulePersist()
+
+  const main = deps?.getMainWindow() ?? null
+  if (!main || main.isDestroyed()) return
+  const mb = main.getBounds()
+  const dist = b.x - (mb.x + mb.width)          // 小窗左缘到主窗口右缘的水平距离
+  const overlap = Math.min(b.y + b.height, mb.y + mb.height) - Math.max(b.y, mb.y)
+  const now = Date.now()
+
+  if (dist >= -SNAP_DIST && dist <= MAGNET_RANGE && overlap >= MIN_OVERLAP) {
+    if (dist <= SNAP_DIST) {
+      // 磁铁吸附：吸附到主窗口右缘
+      state.docked = true
+      state.x = null
+      state.y = null
+      const expect = dockedBounds(state.width)
+      if (expect) panel.setBounds(expect)
+      persist()
+      broadcast('daypanel:snap-changed', { docked: true })
+      return
+    }
+    // 接近但未触发 → 气泡提示
+    if (now - lastHintAt >= HINT_THROTTLE_MS) {
+      lastHintAt = now
+      broadcast('daypanel:snap-hint', { near: true })
+    }
+  } else if (now - lastHintAt >= HINT_THROTTLE_MS) {
+    lastHintAt = now
+    broadcast('daypanel:snap-hint', { near: false })
   }
 }
 

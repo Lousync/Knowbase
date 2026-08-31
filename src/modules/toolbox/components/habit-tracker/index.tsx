@@ -4,7 +4,7 @@ import type { Habit, HabitRecord } from '../../../../types'
 import { deleteHabit, updateHabit, toggleHabitCheck } from '../../../../lib/ipc'
 import { showToast } from '../../../../lib/toast'
 import { buildRecordIndex, currentStreak } from './dateUtils'
-import { useDataChanged } from '../../../../lib/dataChanged'
+import { useDataChanged, notifyDataChanged } from '../../../../lib/dataChanged'
 import { HabitSidebar } from './components/HabitSidebar'
 import { TodayView } from './components/TodayView'
 import { CalendarView } from './components/CalendarView'
@@ -52,6 +52,7 @@ export function HabitTracker({ onBack }: Props) {
         ? [...records, { id: `${habitId}:${date}`, habitId, date }]
         : records.filter(r => !(r.habitId === habitId && r.date === date))
       setRecords(next)
+      notifyDataChanged('habit')
       // 正向反馈：里程碑连续天数
       if (res.checked) {
         const habit = habits.find(h => h.id === habitId)
@@ -72,6 +73,7 @@ export function HabitTracker({ onBack }: Props) {
     try {
       const updated = await updateHabit(h.id, { archived: h.archived })
       setHabits(cur => cur.map(x => (x.id === updated.id ? updated : x)))
+      notifyDataChanged('habit')
     } catch (e) {
       console.error('归档失败', e)
     }
@@ -150,7 +152,7 @@ export function HabitTracker({ onBack }: Props) {
           mode={editor.mode}
           habit={editor.mode === 'edit' ? editor.habit : undefined}
           onClose={() => setEditor(null)}
-          onSaved={() => { setEditor(null); void refresh() }}
+          onSaved={() => { setEditor(null); notifyDataChanged('habit'); void refresh() }}
         />
       )}
     </div>

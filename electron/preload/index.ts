@@ -374,6 +374,18 @@ const api = {
     ipcRenderer.on('daypanel:visible-changed', handler)
     return () => { ipcRenderer.removeListener('daypanel:visible-changed', handler) }
   },
+  // 磁吸气泡提示：自由摆放状态下拖近主窗口 → 主进程推送 near=true/false
+  onDayPanelSnapHint: (cb: (h: { near: boolean }) => void) => {
+    const handler = (_e: unknown, h: { near: boolean }) => cb(h)
+    ipcRenderer.on('daypanel:snap-hint', handler)
+    return () => { ipcRenderer.removeListener('daypanel:snap-hint', handler) }
+  },
+  // 磁吸完成提示：自动吸附/按钮回吸附后推送
+  onDayPanelSnapChanged: (cb: (h: { docked: boolean }) => void) => {
+    const handler = (_e: unknown, h: { docked: boolean }) => cb(h)
+    ipcRenderer.on('daypanel:snap-changed', handler)
+    return () => { ipcRenderer.removeListener('daypanel:snap-changed', handler) }
+  },
   // 主窗口接收小窗指令（如切换模块 Tab）
   onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => {
     const handler = (_e: unknown, p: { type: string; tab?: string }) => cb(p)

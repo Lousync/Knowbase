@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   GripHorizontal, X, Pin, PinOff, Check, Pencil, Trash2, CalendarClock,
-  Plus, ChevronRight, ChevronDown, ExternalLink, CalendarDays, Clock,
+  Plus, ChevronRight, ChevronDown, ExternalLink, CalendarDays, Clock, Magnet,
 } from 'lucide-react'
 import type { ScheduleTodo, Habit, HabitRecord } from '../types'
 import { localToday, formatEntryDate } from '../lib/date'
@@ -47,6 +47,20 @@ export function DayPanel() {
   const [quick, setQuick] = useState('')
   const [newHabit, setNewHabit] = useState('')
   const [docked, setDocked] = useState(true)
+
+  // ---- 磁吸气泡：自由摆放拖近主窗口 → 透明气泡提示；吸附完成 → 短暂「已吸附」反馈 ----
+  const [snapNear, setSnapNear] = useState(false)
+  const [snapDone, setSnapDone] = useState(false)
+  useEffect(() => {
+    const offHint = window.api?.onDayPanelSnapHint?.(({ near }) => setSnapNear(near))
+    const offSnap = window.api?.onDayPanelSnapChanged?.(({ docked: d }) => {
+      setDocked(d)
+      setSnapNear(false)
+      setSnapDone(true)
+      setTimeout(() => setSnapDone(false), 900)
+    })
+    return () => { offHint?.(); offSnap?.() }
+  }, [])
 
   const load = useCallback(async () => {
     const today = localToday()
@@ -320,7 +334,22 @@ export function DayPanel() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none">
+      {/* 磁吸气泡（贴左缘中间，半透明 + 毛玻璃；拖近主窗口时出现，吸附完成短暂展示） */}
+      <div
+        className="pointer-events-none absolute left-1 top-1/2 z-50 flex items-center gap-1.5 rounded-xl border border-[var(--accent)]/40 px-2.5 py-1.5 text-xs"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--bg-primary) 74%, transparent)',
+          backdropFilter: 'blur(6px)',
+          color: snapNear ? 'var(--accent)' : 'var(--text-primary)',
+          opacity: snapNear || snapDone ? 1 : 0,
+          transform: `translateY(-50%) translateX(${snapNear || snapDone ? 6 : 0}px) scale(${snapNear || snapDone ? 1 : 0.9})`,
+          transition: 'opacity 0.18s ease, transform 0.18s ease',
+        }}
+      >
+        {snapNear ? <Magnet size={13} /> : <Check size={13} className="text-[var(--success)]" />}
+        {snapNear ? '松手吸附到主窗口' : '已吸附'}
+      </div>
       {/* 表头：拖拽区（按住移动窗口） */}
       <div
         className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-tertiary)] px-3"
