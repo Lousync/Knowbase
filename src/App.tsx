@@ -331,7 +331,7 @@ export default function App() {
       <PomodoroProvider>
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
-<main className="flex-1 flex overflow-hidden relative">
+<main className="flex-1 flex gap-1.5 overflow-hidden relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称 */}
             <div className="my-1.5 flex min-w-0 flex-1">
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
