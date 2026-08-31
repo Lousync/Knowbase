@@ -12,13 +12,16 @@ import { join } from 'path'
  * - 生命周期随主窗口：主窗口 closed → destroy；关闭面板默认 hide 保活
  * - 跨窗口数据同步见 electron/main/windowBus.ts（data:notify → kb:data-changed）
  *
- * 几何规则（2026-08-31 重写，修三个硬伤）：
- * - 吸附态位置一律 clamp 回工作区；右侧空间不足时改贴主窗口右缘内侧，绝不跑出屏幕
+ * 几何规则（2026-08-31 重写，修四个硬伤）：
+ * - 吸附态位置一律 clamp 回工作区；主窗口右缘外放不下时整窗贴工作区右缘（宽度不压缩），绝不跑出屏幕
  * - 吸附态尺寸由用户自由调整并持久化，不再被主窗口高度绑架（首次打开默认与主窗口等高）
  * - 调整大小期间不判「拖离」（Electron 无 resize 起止事件，用时间窗兜底），否则拖左缘调宽会误解除吸附
+ * - 程序化 setBounds 记录目标矩形 + 时间窗双重保护，move 回声（含 Windows 忙时延迟到达）不误判脱附
  */
 
 export interface DayPanelState {
+  /** 持久化几何状态版本。v2 起与旧的失控尺寸/脱附状态隔离。 */
+  version: 2
   x: number | null
   y: number | null
   width: number
@@ -26,6 +29,7 @@ export interface DayPanelState {
   docked: boolean
 }
 
+const DAY_PANEL_STATE_VERSION = 2
 const DEFAULT_WIDTH = 300
 const DEFAULT_HEIGHT = 820
 const MIN_WIDTH = 240
@@ -36,7 +40,9 @@ const DOCK_SLIP_THRESHOLD = 8
 /** resize 事件后的静默窗口：期间 move 事件不判拖离，也不做磁吸 */
 const RESIZE_GUARD_MS = 200
 /** 程序化 setBounds 后的静默窗口：期间 move/moved 不做任何判定 */
-const PROGRAMMATIC_GUARD_MS = 250
+const PROGRAMMATIC_GUARD_MS = 400
+/** move 事件与最近一次程序化目标的位置容差：≤该值视为程序化回声（Windows 忙时事件延迟可能超保护窗） */
+const PROGRAMMATIC_ECHO_PX = 3
 /** 磁吸提示范围：自由摆放状态下，左缘距主窗口右缘小于该值 → 出现吸附气泡提示 */
 const MAGNET_RANGE = 160
 /** 磁吸触发距离：|距离| 小于该值 → 拖拽松手后自动吸附（磁铁效果） */
@@ -55,7 +61,7 @@ interface DayPanelDeps {
 
 let deps: DayPanelDeps | null = null
 let panel: BrowserWindow | null = null
-let state: DayPanelState = { x: null, y: null, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT, docked: true }
+let state: DayPanelState = { version: DAY_PANEL_STATE_VERSION, x: null, y: null, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT, docked: true }
 let quitting = false
 let attachedMain: BrowserWindow | null = null
 let persistTimer: ReturnType<typeof setTimeout> | null = null
@@ -90,12 +96,33 @@ function workAreaNear(ref: { x: number; y: number }): { x: number; y: number; wi
 
 function normalizeState(raw: unknown): DayPanelState {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<DayPanelState>
+
+  // v1 曾在主窗口跟随过程中把 resize 反馈写回 settings，可能留下全屏尺寸与 docked=false。
+  // 此类状态无法区分“用户自由摆放”与“程序误脱附”，因此只迁移一次：重置为可靠的默认吸附态。
+  if (s.version !== DAY_PANEL_STATE_VERSION) {
+    return {
+      version: DAY_PANEL_STATE_VERSION,
+      x: null,
+      y: null,
+      width: DEFAULT_WIDTH,
+      height: defaultHeight(),
+      docked: true,
+    }
+  }
+
+  const main = mainBounds()
+  const ref = {
+    x: typeof s.x === 'number' ? s.x : (main?.x ?? 0),
+    y: typeof s.y === 'number' ? s.y : (main?.y ?? 0),
+  }
+  const wa = workAreaNear(ref)
   return {
+    version: DAY_PANEL_STATE_VERSION,
     x: typeof s.x === 'number' ? s.x : null,
     y: typeof s.y === 'number' ? s.y : null,
-    width: typeof s.width === 'number' && s.width >= MIN_WIDTH ? s.width : DEFAULT_WIDTH,
-    // 高度未持久化过（首次使用）→ 跟随主窗口高度；之后完全由用户掌控
-    height: typeof s.height === 'number' && s.height >= MIN_HEIGHT ? s.height : defaultHeight(),
+    // 即使状态文件被外部改坏，单窗尺寸也不能超过当前显示器工作区。
+    width: clamp(typeof s.width === 'number' && s.width >= MIN_WIDTH ? s.width : DEFAULT_WIDTH, MIN_WIDTH, wa.width),
+    height: clamp(typeof s.height === 'number' && s.height >= MIN_HEIGHT ? s.height : defaultHeight(), MIN_HEIGHT, wa.height),
     docked: s.docked !== false,
   }
 }
@@ -118,22 +145,21 @@ function schedulePersist(): void {
 }
 
 /**
- * 吸附态期望矩形：贴主窗口右缘（外侧优先，空间不足则退到内侧，子窗口天然在主窗口之上）。
- * 尺寸始终取 state 自有宽高，整体 clamp 回工作区 —— 杜绝「最大化时整窗跑出屏幕」。
+ * 吸附态期望矩形：优先贴主窗口右缘外侧；放不下则整窗贴工作区右缘（宽度不变）；
+ * 极端情况（小窗比工作区还宽）才压缩宽度。
+ * 关键约束：宽度压缩是最后手段 —— 旧版曾按 rightSpace 提前压缩，导致主窗口最大化时
+ * 用户宽度 300 被压成 240 且只 setPosition 不 setSize，出现「右侧出屏 + 宽度永久缩水」。
  */
 function dockedBounds(width: number, height: number): { x: number; y: number; width: number; height: number } | null {
   const b = mainBounds()
   if (!b) return null
   const wa = workAreaNear(b)
+  // 极端兜底：工作区本身放不下期望宽高（超宽屏竖屏/极小分辨率）才压缩
+  const w = Math.min(Math.max(width, MIN_WIDTH), wa.width)
   const h = Math.min(Math.max(height, MIN_HEIGHT), wa.height)
-  // 右侧剩余空间不足 → 先压缩宽度（不低于 MIN_WIDTH），始终贴主窗口右缘外侧。
-  // 绝不退到主窗口内侧：独立窗口虽可能与主窗口重叠，但用户点主窗口即可把它调到前面；
-  // 而「内侧」在 z-order 上同样覆盖主窗口内容，却更容易让人以为窗口错位。
-  const rightSpace = Math.max(0, wa.x + wa.width - (b.x + b.width + DOCK_GAP))
-  let w = Math.min(Math.max(width, MIN_WIDTH), wa.width)
-  if (w > rightSpace) w = Math.max(MIN_WIDTH, Math.min(w, rightSpace))
   let x = b.x + b.width + DOCK_GAP
-  // 剩余空间连 MIN_WIDTH 都放不下（主窗口几乎占满工作区）→ 贴工作区右缘
+  // 主窗口右缘外放不下（主窗口最大化/贴着屏幕右缘）→ 整窗贴工作区右缘，宽度保持不变。
+  // 此时小窗与最大化的主窗口重叠属预期：独立窗口层级，点击主窗口即可把小窗压下去。
   if (x + w > wa.x + wa.width) x = wa.x + wa.width - w
   return {
     x: clamp(x, wa.x, wa.x + wa.width - w),
@@ -143,11 +169,19 @@ function dockedBounds(width: number, height: number): { x: number; y: number; wi
   }
 }
 
-/** 程序化 setBounds：打静默标记，避免随后的 move/moved 事件被误判成用户操作 */
+/** 程序化 setBounds：打静默标记并记录目标矩形，避免随后的 move/moved 事件被误判成用户操作 */
 function applyBounds(r: { x: number; y: number; width: number; height: number }): void {
   if (!panel || panel.isDestroyed()) return
   programmaticUntil = Date.now() + PROGRAMMATIC_GUARD_MS
+  lastProgrammaticTarget = r
   panel.setBounds(r)
+}
+let lastProgrammaticTarget: { x: number; y: number; width: number; height: number } | null = null
+
+/** move 事件位置与最近一次程序化目标几乎一致 → 程序化回声（不是用户拖动），忽略 */
+function isProgrammaticEcho(b: { x: number; y: number }): boolean {
+  const t = lastProgrammaticTarget
+  return !!t && Math.abs(b.x - t.x) <= PROGRAMMATIC_ECHO_PX && Math.abs(b.y - t.y) <= PROGRAMMATIC_ECHO_PX
 }
 
 /** 归一化吸附尺寸；主窗口移动时不应通过 setBounds 反复设置子窗口尺寸。 */
@@ -165,14 +199,16 @@ function applyDocked(): void {
   applyBounds(expect)
 }
 
-/** 吸附态跟随主窗口移动：只改位置，禁止 setBounds 触发 resize 事件造成尺寸漂移。 */
-function followDockedPosition(): void {
+/** 吸附态跟随主窗口：位置+尺寸整体 setBounds。
+ *  旧版只 setPosition：dockedBounds 归一化出的尺寸（如换显示器/分辨率变化后）从未被应用，
+ *  造成「state 尺寸 ≠ 实际尺寸」漂移，并在下次 applyDocked 时突然跳变。统一走 applyBounds
+ *  （带 programmaticUntil 保护，触发的 resize/move 回声会被忽略）。 */
+function followDocked(): void {
   if (!panel || panel.isDestroyed()) return
   const expect = dockedBounds(state.width, state.height)
   if (!expect) return
   normalizeDockedSize(expect)
-  programmaticUntil = Date.now() + PROGRAMMATIC_GUARD_MS
-  panel.setPosition(expect.x, expect.y)
+  applyBounds(expect)
 }
 
 function broadcast(channel: string, payload: unknown): void {
@@ -189,19 +225,21 @@ function isPanelVisible(): boolean {
   return !!panel && !panel.isDestroyed() && panel.isVisible()
 }
 
-/** 主窗口 move/resize → 吸附态下小窗跟随位置（不跟随尺寸） */
+/** 主窗口 move/resize → 吸附态下小窗跟随（位置+尺寸）；最大化/还原时 Windows 上
+ *  事件触发瞬间 getBounds() 可能仍是旧矩形（平台时序），故额外延迟二次校正。 */
 function attachMainListeners(): void {
   const main = deps?.getMainWindow() ?? null
   if (!main || main.isDestroyed() || main === attachedMain) return
   attachedMain = main
   const follow = () => {
     if (!panel || panel.isDestroyed() || !panel.isVisible() || !state.docked || quitting) return
-    followDockedPosition()
+    followDocked()
   }
   main.on('move', follow)
   main.on('resize', follow)
-  main.on('maximize', follow)
-  main.on('unmaximize', follow)
+  // 最大化/还原：事件时 getBounds 可能未更新 → 立即跟随一次 + 120ms 后按最终矩形再校正一次
+  main.on('maximize', () => { follow(); setTimeout(follow, 120) })
+  main.on('unmaximize', () => { follow(); setTimeout(follow, 120) })
   // 伴随最小化路径①：平台事件（快速响应）
   main.on('minimize', () => { lastMainMinimized = true; dayPanelOnMainMinimized() })
   main.on('restore', () => { lastMainMinimized = false; restoreFollowMinimize() })
@@ -252,6 +290,9 @@ function onPanelMove(): void {
   if (!panel || panel.isDestroyed() || quitting) return
   const b = panel.getBounds()
   if (Date.now() < programmaticUntil) return
+  // 保护窗已过但位置仍停在程序化目标上 → 是延迟到达的程序化回声，不是用户拖动
+  // （Windows 卡顿时 move 事件可能晚于保护窗到达，此前会被误判脱附）
+  if (isProgrammaticEcho(b)) return
 
   if (state.docked) {
     // 调整大小期间不判拖离：拖左缘/顶缘改尺寸会同时改 x/y，若按位置判定会误解除吸附
@@ -305,6 +346,7 @@ function onPanelMoveEnd(): void {
   if (state.docked || Date.now() < programmaticUntil) return
   if (Date.now() - lastResizeAt < RESIZE_GUARD_MS) return
   const b = panel.getBounds()
+  if (isProgrammaticEcho(b)) return
   const mb = mainBounds()
   if (!mb) return
   const dist = b.x - (mb.x + mb.width)
@@ -324,6 +366,8 @@ function onPanelMoveEnd(): void {
 function createPanel(): void {
   if (!deps) return
   state = normalizeState(deps.loadState())
+  // 立即落盘 v2 状态：避免下一次启动再次读取旧的失控尺寸/误脱附状态。
+  persist()
   let bounds: { x: number; y: number; width: number; height: number }
   if (state.docked || state.x == null || state.y == null) {
     bounds = dockedBounds(state.width, state.height) ?? { x: 120, y: 120, width: state.width, height: state.height }
