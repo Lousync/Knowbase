@@ -137,6 +137,9 @@ let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   console.log('[Window] ELECTRON_RENDERER_URL =', process.env.ELECTRON_RENDERER_URL || '(empty)')
+  // 半透明亚克力：窗口背景材质跟随系统（Windows 11 22H2+），渲染层把根容器/标题栏/卡片衔接处
+  // 做成半透明，透出材质形成玻璃感；旧系统不生效时 backgroundColor 按主题兜底，视觉不破坏
+  const theme = String(settingsCache['theme'] || 'dark')
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -145,7 +148,8 @@ function createWindow(): void {
     title: 'Knowbase',
     frame: false,                          // 无边框 → 自定义标题栏
     titleBarStyle: 'hidden',              // macOS 隐藏原生标题栏
-    backgroundColor: '#1e1e1e',           // 深色背景，防启动白屏
+    backgroundColor: theme === 'light' ? '#f3f3f3' : '#1e1e1e', // 按主题设底色，防启动白屏
+    backgroundMaterial: process.platform === 'win32' ? 'acrylic' : 'auto',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,                         // preload 仅用 contextBridge/ipcRenderer/webUtils,完全兼容沙箱

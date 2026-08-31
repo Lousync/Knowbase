@@ -20,7 +20,6 @@ import { PluginsModule } from './modules/plugins'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
-import { LockScreen } from './components/shared/LockScreen'
 import { Onboarding } from './components/shared/Onboarding'
 import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
@@ -47,7 +46,6 @@ export default function App() {
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [locked, setLocked] = useState(false)
   // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
   const [dayPanelVisible, setDayPanelVisible] = useState(false)
   const [dayPanelDetached, setDayPanelDetached] = useState(false)
@@ -125,15 +123,6 @@ export default function App() {
     return () => window.removeEventListener('settings-encoding-changed', handler)
   }, [])
 
-  // Auto-lock on startup (once, after settings load)
-  const startupLockedRef = useRef(false)
-  useEffect(() => {
-    if (!startupLockedRef.current && s.lockOnStartup && s.lockPassword) {
-      startupLockedRef.current = true
-      setLocked(true)
-    }
-  }, [s.lockOnStartup, s.lockPassword])
-
   // Listen for import modal open
   useEffect(() => {
     const handler = () => { setImportBackupPath(null); setImportModalOpen(true) }
@@ -160,13 +149,6 @@ export default function App() {
     }
     document.addEventListener('drop', onDrop, true)
     return () => document.removeEventListener('drop', onDrop, true)
-  }, [])
-
-  // Listen for lockscreen toggle
-  useEffect(() => {
-    const handler = () => setLocked(v => !v)
-    window.addEventListener('lockscreen:toggle', handler)
-    return () => window.removeEventListener('lockscreen:toggle', handler)
   }, [])
 
   // Listen for settings:open — navigate to settings tab
@@ -246,8 +228,8 @@ export default function App() {
   // 依赖 settingsReady:等真实设置到位后再判断,避免默认值 onboardingDone:false 造成的竞态弹出
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   useEffect(() => {
-    if (settingsReady && loaded && !locked && !s.onboardingDone) setOnboardingOpen(true)
-  }, [settingsReady, loaded, locked, s.onboardingDone])
+    if (settingsReady && loaded && !s.onboardingDone) setOnboardingOpen(true)
+  }, [settingsReady, loaded, s.onboardingDone])
   useEffect(() => {
     const handler = () => setOnboardingOpen(true)
     window.addEventListener('onboarding:show', handler)
@@ -343,12 +325,12 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden">
+    <div className="flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_58%,transparent)] overflow-hidden">
       <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} />
       <PomodoroProvider>
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
-<main className="flex-1 flex overflow-hidden bg-[var(--bg-primary)] relative">
+<main className="flex-1 flex overflow-hidden relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称 */}
             <div className="m-1.5 flex min-w-0 flex-1">
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
@@ -401,13 +383,12 @@ export default function App() {
         <StatusBar encoding={encoding} />
       </PomodoroProvider>
       <Toast />
-      {onboardingOpen && !locked && (
+      {onboardingOpen && (
         <Onboarding
           onComplete={() => { update('onboardingDone', true); setOnboardingOpen(false) }}
           onSwitchTab={tab => setActiveTab(tab)}
         />
       )}
-      <LockScreen locked={locked} onUnlock={() => setLocked(false)} />
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
     </div>
   )

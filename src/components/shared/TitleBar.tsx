@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../../lib/SettingsContext'
 import {
-  Minus, Square, X, Copy, Pin, Lock, ArrowDownToLine, Loader2, Play,
+  Minus, Square, X, Copy, Pin, ArrowDownToLine, Loader2, Play,
   Pause, Download, AlertTriangle, RefreshCw, SlidersHorizontal, ExternalLink,
   CalendarCheck2,
 } from 'lucide-react'
@@ -97,7 +97,7 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarP
 
   return (
     <div
-      className="relative flex items-center justify-between h-9 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] select-none shrink-0 drag-region"
+      className="relative flex items-center justify-between h-9 bg-[color-mix(in_srgb,var(--bg-tertiary)_72%,transparent)] backdrop-blur-md border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
       {/* drag region spacer */}
       <div className="flex-1" />
@@ -248,9 +248,6 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarP
               fill={dayPanelActive ? 'var(--accent)' : 'transparent'}
               fillOpacity={dayPanelActive ? 0.25 : 0}
             />
-          </WinBtn>
-          <WinBtn onClick={() => window.dispatchEvent(new CustomEvent('lockscreen:toggle'))} title="锁屏">
-            <Lock size={14} strokeWidth={1.5} />
           </WinBtn>
           <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'}>
             <Pin size={14} strokeWidth={1.5} fill={isPinned ? 'var(--text-primary)' : 'transparent'} />
