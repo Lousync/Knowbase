@@ -5,11 +5,11 @@ import {
   PanelRightClose, PanelRightOpen,
 } from 'lucide-react'
 import type { ScheduleTodo, Habit, HabitRecord } from '../types'
-import { localToday, formatEntryDate } from '../lib/date'
+import { localToday } from '../lib/date'
 import {
   getScheduleTodos, getScheduleOverdue, getScheduleSubtasks,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo,
-  habitGetAll, createHabit, toggleHabitCheck,
+  habitGetAll, toggleHabitCheck,
 } from '../lib/ipc'
 import { notifyDataChanged, useDataChanged } from '../lib/dataChanged'
 import { showToast } from '../lib/toast'
@@ -59,9 +59,7 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
   const [subtasks, setSubtasks] = useState<Record<string, ScheduleTodo[]>>({})
   const [editing, setEditing] = useState<{ id: string; title: string; date: string; time: string } | null>(null)
   const [quick, setQuick] = useState('')
-  const [manualDate, setManualDate] = useState<string | null>(null)
   const [manualTime, setManualTime] = useState<string | null>(null)
-  const [newHabit, setNewHabit] = useState('')
 
   // 跨零点自动翻页
   useEffect(() => {
@@ -121,7 +119,7 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
   const doneCount = topTodos.filter(t => t.status === 'done').length
 
   const parsed = useMemo(() => parseQuickDate(quick, todayDate), [quick, todayDate])
-  const finalDate = manualDate ?? parsed.date
+  // 任务栏快速添加固定为今日琐碎任务：日期强制今天，时间可用解析结果或手动填
   const finalTime = manualTime !== null ? manualTime : parsed.time
 
   const habitIndex = useMemo(() => buildRecordIndex(records), [records])
@@ -199,34 +197,17 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
     const title = parsed.title.trim()
     if (!title) return
     try {
-      await createScheduleTodo({ title, date: finalDate, time: finalTime || undefined, taskType: 'plan' })
+      // 任务栏快速添加 = 今日琐碎任务（daily）：日期固定今天，时间可解析/手填
+      await createScheduleTodo({ title, date: todayStr, time: finalTime || undefined, taskType: 'daily' })
       setQuick('')
-      setManualDate(null)
       setManualTime(null)
       notifyDataChanged('schedule')
-      showToast({
-        type: 'info',
-        message: finalDate === todayStr ? `已添加到今天：${title}` : `已添加到 ${formatEntryDate(finalDate)}：${title}`,
-      })
+      showToast({ type: 'info', message: `已添加今日琐碎：${title}` })
     } catch (e) {
       console.error('[DayPanel] 快速添加失败', e)
       showToast({ type: 'error', message: '添加失败，请重试' })
     }
-  }, [parsed, finalDate, finalTime, todayStr])
-
-  const addHabit = useCallback(async () => {
-    const name = newHabit.trim()
-    if (!name) return
-    try {
-      await createHabit({ name })
-      setNewHabit('')
-      notifyDataChanged('habit')
-      showToast({ type: 'info', message: `已新增习惯：${name}（规则默认每日，可在工具箱调整）` })
-    } catch (e) {
-      console.error('[DayPanel] 新增习惯失败', e)
-      showToast({ type: 'error', message: '新增习惯失败，请重试' })
-    }
-  }, [newHabit])
+  }, [parsed, finalTime, todayStr])
 
   const checkHabit = useCallback(async (h: Habit) => {
     const willCheck = !(habitIndex.get(h.id)?.has(todayStr) ?? false)
@@ -407,9 +388,9 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
             <div className="flex items-center gap-1.5">
               <input
                 value={quick}
-                onChange={e => { setQuick(e.target.value); setManualDate(null); setManualTime(null) }}
+                onChange={e => { setQuick(e.target.value); setManualTime(null) }}
                 onKeyDown={e => { if (e.key === 'Enter') void addQuick() }}
-                placeholder="添加任务，周五 14:00 复习计网"
+                placeholder="添加任务"
                 className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
               />
               <button
@@ -422,13 +403,7 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
             </div>
             {quick.trim() && (
               <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-[var(--text-muted)]">
-                <input
-                  type="date"
-                  value={finalDate}
-                  onChange={e => setManualDate(e.target.value || null)}
-                  title="日期（可修改）"
-                  className="rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1 py-0.5 text-[11px] text-[var(--accent)] outline-none focus:border-[var(--accent)]"
-                />
+                <span className="rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[11px] text-[var(--accent)]">今天</span>
                 <input
                   type="time"
                   value={finalTime ?? ''}
@@ -436,16 +411,16 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
                   title="时间（可填写 / 修改）"
                   className="w-[74px] rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] px-1 py-0.5 text-[11px] text-[var(--accent)] outline-none focus:border-[var(--accent)]"
                 />
-                {(manualDate || manualTime !== null) && (
+                {manualTime !== null && (
                   <button
-                    onClick={() => { setManualDate(null); setManualTime(null) }}
+                    onClick={() => setManualTime(null)}
                     className="rounded px-1 py-0.5 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]"
-                    title="恢复自动解析结果"
+                    title="恢复自动解析时间"
                   >
                     重解析
                   </button>
                 )}
-                <span className="min-w-0 flex-1 truncate" title={parsed.title}>标题：{parsed.title || '（空）'}</span>
+                <span className="min-w-0 flex-1 truncate" title={parsed.title}>{parsed.title || '（空）'}</span>
               </div>
             )}
           </div>
@@ -490,18 +465,6 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
               )
             })}
             {plannedHabits.length === 0 && <p className="px-1 py-1 text-xs text-[var(--text-muted)]">今天没有计划中的习惯</p>}
-          </div>
-          <div className="mt-2 flex items-center gap-1.5 px-0.5">
-            <input
-              value={newHabit}
-              onChange={e => setNewHabit(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') void addHabit() }}
-              placeholder="新增习惯（规则默认每日）"
-              className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
-            />
-            <button onClick={() => void addHabit()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]" title="添加习惯">
-              <Plus size={14} />
-            </button>
           </div>
         </section>
       </div>
