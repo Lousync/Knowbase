@@ -25,12 +25,17 @@ import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
 import { useHabitAutoCheckinToast } from './lib/useHabitAutoCheckin'
 import { AssistantPanel } from './components/shared/AssistantPanel'
+import { DayPanelWindowApp } from './daypanel/DayPanelWindowApp'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
 export default function App() {
   // Fill popup mode: render standalone popup instead of full app
   if (window.api.isFillPopup) {
     return <FillPopup />
+  }
+  // 日程与打卡小窗：独立 BrowserWindow 加载 #/day-panel（argv 由主进程注入），渲染独立面板
+  if (window.api.isDayPanel) {
+    return <DayPanelWindowApp />
   }
   const [activeTab, setActiveTab] = useState<TabName>('blog')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -176,6 +181,17 @@ export default function App() {
     const handler = () => { setActiveTab('plugins'); setSidebarOpen(true) }
     window.addEventListener('plugins:open', handler)
     return () => window.removeEventListener('plugins:open', handler)
+  }, [])
+
+  // 接收小窗指令：日程与打卡小窗「打开任务模块/完整配置」→ 切换主窗口 Tab
+  useEffect(() => {
+    const off = window.api?.onMainCommand?.((p) => {
+      if (p?.type === 'switch-tab' && typeof p.tab === 'string') {
+        const all: string[] = ['blog', 'schedule', 'knowledge', 'moments', 'toolbox', 'plugins', 'recycle', 'help', 'settings', 'user']
+        if (all.includes(p.tab)) { setActiveTab(p.tab as TabName); setSidebarOpen(true) }
+      }
+    })
+    return () => { off?.() }
   }, [])
 
   // 开发者工具 — 仅 DEV 动态加载:打包构建时 import.meta.env.DEV 被静态替换为 false,

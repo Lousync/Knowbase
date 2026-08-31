@@ -25,6 +25,7 @@ import { registerBlogTemplateHandlers } from '../database/repositories/blogTempl
 import { registerQuizHandlers } from '../database/repositories/quizRepo'
 import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
+import { initDayPanel, disposeDayPanel } from './dayPanelWindow'
 import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
@@ -194,7 +195,11 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.on('closed', () => {
+    mainWindow = null
+    // 生命周期随主窗口：主窗口关闭 → 销毁小窗，让 window-all-closed 正常触发退出
+    disposeDayPanel()
+  })
 }
 
 // ===== 窗口控制 + 缩放 + 设置 IPC =====
@@ -520,6 +525,22 @@ app.whenReady().then(async () => {
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()
 
+  // 日程与打卡小窗：IPC + 全局快捷键 Ctrl+Alt+S；启动不自动打开，状态持久化走 settings 缓存
+  initDayPanel({
+    getMainWindow: () => mainWindow,
+    loadState: () => {
+      try {
+        const raw = settingsCache['dayPanelState']
+        return raw ? JSON.parse(String(raw)) : undefined
+      } catch { return undefined }
+    },
+    saveState: (st) => {
+      settingsCache['dayPanelState'] = JSON.stringify(st)
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(flushSettingsToDisk, 500)
+    },
+  })
+
   app.on('activate', () => {
     // macOS: 点击 dock 图标时重建窗口
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -541,6 +562,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   destroyPasswordFiller()
   stopSuperviseScheduler()
+  disposeDayPanel()
   // Flush pending settings writes
   if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
   closeDatabase()

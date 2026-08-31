@@ -30,6 +30,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const update = useCallback(<K extends SettingsKey>(key: K, value: AppSettings[K]) => {
     setS(prev => ({ ...prev, [key]: value }))
     setSetting(key, value)
+    // 外观类设置变更 → 通知日程打卡小窗重新应用主题/缩放（跨窗口同步）
+    if (key === 'theme' || key === 'zoom' || key === 'editorFont') {
+      try { window.api?.dataNotify?.({ scope: 'settings' }) } catch { /* ignore */ }
+    }
   }, [])
 
   return <Ctx.Provider value={{ s, ready, update }}>{children}</Ctx.Provider>

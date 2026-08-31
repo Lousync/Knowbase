@@ -194,6 +194,9 @@ export const SETTINGS = {
   // ---- AI 助手侧栏 ----
   assistantWidth: { default: 380, desc: 'AI 助手侧栏宽度(px)' },
 
+  // ---- 日程打卡小窗 ----
+  dayPanelState: { default: '', desc: '日程打卡小窗状态(JSON: x/y/width/height/docked，主进程直写)' },
+
   // ---- 单词本 ----
   wordbookActiveBook: { default: '',  desc: '当前学习的词书(\'\'=未选 cet4|cet6|ky)' },
   wordbookNewPerDay:  { default: 10,  desc: '每日建议新学词数' },

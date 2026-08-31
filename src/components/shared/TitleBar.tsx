@@ -3,6 +3,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import {
   Minus, Square, X, Copy, Pin, Lock, ArrowDownToLine, Loader2, Play,
   Pause, Download, AlertTriangle, RefreshCw, SlidersHorizontal, ExternalLink,
+  CalendarCheck2,
 } from 'lucide-react'
 import {
   useUpdateStore, updateStartupCheck, updateDownload, updatePause, updateCancel, updateInstall,
@@ -21,6 +22,14 @@ export function TitleBar() {
   const badgeEgg = settings.badgeEggActivated
   const [isMaximized, setIsMaximized] = useState(false)
   const [isPinned, setIsPinned] = useState(false)
+
+  // ---- 日程打卡小窗开关：状态由主进程推送（toggle 的发起方可能是小窗自身/快捷键） ----
+  const [dayPanelVisible, setDayPanelVisible] = useState(false)
+  useEffect(() => {
+    window.api?.dayPanelGetState?.().then(st => setDayPanelVisible(!!st?.visible)).catch(() => {})
+    const off = window.api?.onDayPanelVisibleChange?.((v: boolean) => setDayPanelVisible(v))
+    return () => { off?.() }
+  }, [])
 
   // ---- 更新入口:全部状态来自全局 updateStore,与设置页(高级)完全同步 ----
   const upd = useUpdateStore()
@@ -229,6 +238,18 @@ export function TitleBar() {
               )}
             </div>
           )}
+          <WinBtn
+            onClick={() => { void window.api?.dayPanelToggle?.() }}
+            title="日程与打卡小窗 (Ctrl+Alt+S)"
+          >
+            <CalendarCheck2
+              size={14}
+              strokeWidth={1.5}
+              className={dayPanelVisible ? 'text-[var(--accent)]' : ''}
+              fill={dayPanelVisible ? 'var(--accent)' : 'transparent'}
+              fillOpacity={dayPanelVisible ? 0.25 : 0}
+            />
+          </WinBtn>
           <WinBtn onClick={() => window.dispatchEvent(new CustomEvent('lockscreen:toggle'))} title="锁屏">
             <Lock size={14} strokeWidth={1.5} />
           </WinBtn>

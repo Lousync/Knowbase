@@ -927,6 +927,17 @@ export interface ElectronAPI {
   quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => Promise<{ ok: boolean; favorite: boolean }>
   // fill popup
   isFillPopup: boolean
+  isDayPanel: boolean
+  // 日程与打卡小窗（独立伴随窗口）
+  dayPanelToggle: () => Promise<boolean>
+  dayPanelClose: () => Promise<boolean>
+  dayPanelDock: () => Promise<boolean>
+  dayPanelGetState: () => Promise<{ visible: boolean; docked: boolean }>
+  dayPanelOpenInMain: (tab: string) => void
+  onDayPanelVisibleChange: (cb: (visible: boolean) => void) => () => void
+  onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => () => void
+  dataNotify: (payload: { scope: string }) => void
+  onDataChanged: (cb: (payload: { scope: string }) => void) => () => void
   fillPopupTheme: string
   fillPopupGetEntries: () => Promise<PasswordEntry[]>
   fillPopupCopy: (field: string, value: string) => Promise<void>

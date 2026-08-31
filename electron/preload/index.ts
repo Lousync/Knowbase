@@ -5,6 +5,9 @@ const fillTheme = isFillPopup
   ? (process.argv.find(a => a.startsWith('--theme=')) || '--theme=dark').split('=')[1]
   : 'dark'
 
+/** 日程与打卡小窗：主进程创建面板窗口时通过 additionalArguments 注入 */
+const isDayPanel = process.argv.includes('--day-panel-window')
+
 const api = {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   copyImage: (src: { path?: string; dataUrl?: string }) => ipcRenderer.invoke('clipboard:copyImage', src),
@@ -359,6 +362,31 @@ const api = {
 
   // fill popup
   isFillPopup,
+  isDayPanel,
+  // 日程与打卡小窗（独立伴随窗口，主窗口 TitleBar 按钮 / Ctrl+Alt+S 开关）
+  dayPanelToggle: () => ipcRenderer.invoke('daypanel:toggle'),
+  dayPanelClose: () => ipcRenderer.invoke('daypanel:close'),
+  dayPanelDock: () => ipcRenderer.invoke('daypanel:dock'),
+  dayPanelGetState: () => ipcRenderer.invoke('daypanel:get-state') as Promise<{ visible: boolean; docked: boolean }>,
+  dayPanelOpenInMain: (tab: string) => ipcRenderer.send('daypanel:open-in-main', tab),
+  onDayPanelVisibleChange: (cb: (visible: boolean) => void) => {
+    const handler = (_e: unknown, v: boolean) => cb(v)
+    ipcRenderer.on('daypanel:visible-changed', handler)
+    return () => { ipcRenderer.removeListener('daypanel:visible-changed', handler) }
+  },
+  // 主窗口接收小窗指令（如切换模块 Tab）
+  onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => {
+    const handler = (_e: unknown, p: { type: string; tab?: string }) => cb(p)
+    ipcRenderer.on('main:command', handler)
+    return () => { ipcRenderer.removeListener('main:command', handler) }
+  },
+  // 跨窗口数据同步：本窗口数据变更后上报 → 主进程广播给其它窗口（kb:data-changed）
+  dataNotify: (payload: { scope: string }) => ipcRenderer.send('data:notify', payload),
+  onDataChanged: (cb: (payload: { scope: string }) => void) => {
+    const handler = (_e: unknown, p: { scope: string }) => cb(p)
+    ipcRenderer.on('kb:data-changed', handler)
+    return () => { ipcRenderer.removeListener('kb:data-changed', handler) }
+  },
   fillPopupTheme: fillTheme,
   fillPopupGetEntries: () => ipcRenderer.invoke('fillPopup:getEntries'),
   fillPopupCopy: (field: string, value: string) => ipcRenderer.invoke('fillPopup:copy', field, value),

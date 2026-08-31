@@ -4,6 +4,7 @@ import type { Habit, HabitRecord } from '../../../../types'
 import { deleteHabit, updateHabit, toggleHabitCheck } from '../../../../lib/ipc'
 import { showToast } from '../../../../lib/toast'
 import { buildRecordIndex, currentStreak } from './dateUtils'
+import { useDataChanged } from '../../../../lib/dataChanged'
 import { HabitSidebar } from './components/HabitSidebar'
 import { TodayView } from './components/TodayView'
 import { CalendarView } from './components/CalendarView'
@@ -40,6 +41,9 @@ export function HabitTracker({ onBack }: Props) {
   }, [])
 
   useEffect(() => { void refresh() }, [refresh])
+
+  // 监听跨窗口数据变更 — 日程打卡小窗内的打卡/新增习惯实时同步到本视图
+  useDataChanged('habit', refresh)
 
   const handleToggle = useCallback(async (habitId: string, date: string) => {
     try {

@@ -15,6 +15,7 @@ import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
+import { useDataChanged } from '../../lib/dataChanged'
 
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]' }
@@ -139,6 +140,9 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     window.addEventListener('data-imported', handler)
     return () => window.removeEventListener('data-imported', handler)
   }, [])
+
+  // 监听跨窗口数据变更 — 日程打卡小窗内的增删改/勾选实时同步到本模块
+  useDataChanged('schedule', () => { refreshAllRef.current(); loadTagsRef.current() })
 
   // ---- calendar navigation ----
   function goToPrevMonth() {
