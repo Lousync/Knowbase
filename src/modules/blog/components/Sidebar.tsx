@@ -270,7 +270,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
       <div className="px-3 py-3 space-y-1.5">
         <button
           onClick={onNewEntry}
-          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-white text-sm rounded hover:bg-[var(--accent-hover)] transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-white text-[13px] rounded hover:bg-[var(--accent-hover)] transition-colors"
         >
           <Edit3 size={15} />
           {hasToday ? '继续编写' : '今日文章编写'}
@@ -279,7 +279,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
         {onShowAll && (
           <button
             onClick={onShowAll}
-            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1 text-[12px] rounded border transition-colors ${
+            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1 text-[13px] rounded border transition-colors ${
               !selectedDate
                 ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
@@ -387,7 +387,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                 }
               }}
               placeholder="搜索日期 / 标签 / 标题"
-              className="w-full pl-7 pr-2 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+              className="w-full pl-7 pr-2 py-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
             />
           </div>
         </div>
@@ -460,10 +460,10 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
           return (
             <div key={year}>
               <button onClick={() => toggle(year)}
-                className="w-full flex items-center gap-1 px-2 py-1.5 text-[14px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
+                className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
                 {yearOpen
-                  ? <ChevronDown size={18} className="text-[#888] shrink-0" />
-                  : <ChevronRight size={18} className="text-[#888] shrink-0" />}
+                  ? <ChevronDown size={15} className="text-[#888] shrink-0" />
+                  : <ChevronRight size={15} className="text-[#888] shrink-0" />}
                 <span className="font-semibold">{year} 年</span>
                 <span className="text-[10px] text-[var(--text-disabled)] ml-1">
                   {searchResults ? '搜索' : ''}
@@ -478,10 +478,10 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                 return (
                   <div key={mk} className="ml-3">
                     <button onClick={() => toggle(mk)}
-                      className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
+                      className="w-full flex items-center gap-1 px-2 py-1 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
                       {mOpen
-                        ? <ChevronDown size={18} className="text-[#888] shrink-0" />
-                        : <ChevronRight size={18} className="text-[#888] shrink-0" />}
+                        ? <ChevronDown size={15} className="text-[#888] shrink-0" />
+                        : <ChevronRight size={15} className="text-[#888] shrink-0" />}
                       <span>{MONTH_NAMES[month] || `${month}月`}</span>
                       <span className="text-[10px] text-[var(--text-muted)] ml-1">
                         {days.filter(d => d.hasContent).length || ''}
