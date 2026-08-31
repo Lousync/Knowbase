@@ -314,13 +314,13 @@ export default function App() {
   if (!loaded) return null
 
   function renderTab(name: TabName, children: React.ReactNode) {
-    // 模块根 max-w 限宽但不居中：避免在宽主体卡片内产生大块空白(就是白条)。
+    // 模块根填满外壳 + px-4 内边距：避免 max-w 限宽后右侧大块空白（拖宽窗口时更明显）
     if (activeTab === name) {
       mountedTabs.current.add(name)
-      return <div key={name} className="flex-1 min-h-0 max-w-[1080px] w-full">{children}</div>
+      return <div key={name} className="flex-1 min-h-0 w-full px-4">{children}</div>
     }
     if (mountedTabs.current.has(name)) {
-      return <div key={name} className="flex-1 min-h-0 max-w-[1080px] w-full" style={{ display: 'none' }}>{children}</div>
+      return <div key={name} className="flex-1 min-h-0 w-full px-4" style={{ display: 'none' }}>{children}</div>
     }
     return null
   }
