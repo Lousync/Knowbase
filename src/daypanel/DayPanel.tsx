@@ -409,7 +409,7 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
                 value={quick}
                 onChange={e => { setQuick(e.target.value); setManualDate(null); setManualTime(null) }}
                 onKeyDown={e => { if (e.key === 'Enter') void addQuick() }}
-                placeholder="快速添加：周五 14:00 复习计网"
+                placeholder="添加任务，周五 14:00 复习计网"
                 className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
               />
               <button
@@ -504,10 +504,6 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
             </button>
           </div>
         </section>
-      </div>
-
-      <div className="shrink-0 select-none border-t border-[var(--border-color)] px-3 py-1.5 text-[10px] leading-relaxed text-[var(--text-muted)]">
-        {mode === 'embedded' ? 'Esc 或 × 关闭 · 顶部按钮可脱离为独立窗口' : 'Ctrl+Alt+S 开关 · Esc 回到内嵌 · 拖动表头移动窗口'}
       </div>
     </div>
   )
