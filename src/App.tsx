@@ -363,11 +363,14 @@ export default function App() {
                 visible
                 showHandle
               >
-                <DayPanel
-                  mode="embedded"
-                  onPopout={() => { void window.api?.dayPanelPopout?.() }}
-                  onClose={() => setDayPanelVisible(false)}
-                />
+                {/* 内嵌面板的"子窗口"外壳：留白 + 圆角 + 阴影，让它在主窗口内像独立浮窗（微信会议窗同款） */}
+                <div className="m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
+                  <DayPanel
+                    mode="embedded"
+                    onPopout={() => { void window.api?.dayPanelPopout?.() }}
+                    onClose={() => setDayPanelVisible(false)}
+                  />
+                </div>
               </ResizablePanel>
             )}
             <PomodoroPanel />

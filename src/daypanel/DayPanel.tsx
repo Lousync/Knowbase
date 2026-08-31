@@ -329,9 +329,9 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
     )
   }
 
-  // 容器高度：嵌入式由 flex 父容器提供（h-full）；独立窗口自己 h-screen
+  // 容器高度：嵌入式由外层卡片壳 flex 提供（flex-1）；独立窗口自己 h-screen
   const containerCls = mode === 'embedded'
-    ? 'relative flex h-full min-h-0 flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
+    ? 'relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
     : 'relative flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] select-none'
 
   return (
@@ -344,7 +344,6 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
         <div className="flex items-center gap-1.5 text-[13px] font-medium">
           {mode === 'popout' && <GripHorizontal size={14} className="text-[var(--text-muted)]" />}
           日程与打卡
-          {mode === 'embedded' && <span className="rounded bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[10px] font-normal text-[var(--text-muted)]">内嵌</span>}
         </div>
         <div className="flex items-center gap-0.5" style={mode === 'popout' ? noDrag : undefined}>
           {mode === 'embedded' && (
