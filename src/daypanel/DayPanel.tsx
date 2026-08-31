@@ -322,8 +322,8 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
         className="flex h-10 shrink-0 select-none items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-tertiary)] px-3"
         style={mode === 'popout' ? dragRegion : undefined}
       >
-        <div className="flex items-center gap-1.5 text-[13px] font-medium">
-          {mode === 'popout' && <GripHorizontal size={14} className="text-[var(--text-muted)]" />}
+        <div className="flex items-center gap-1.5 text-[12px]">
+          {mode === 'popout' && <GripHorizontal size={13} className="text-[var(--text-muted)]" />}
           日程与打卡
         </div>
         <div className="flex items-center gap-0.5" style={mode === 'popout' ? noDrag : undefined}>
@@ -359,29 +359,29 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
         {/* 逾期 */}
         {overdue.length > 0 && (
           <section>
-            <p className="mb-1 px-1 text-xs font-medium text-[var(--danger)]">⏰ 逾期（{overdue.length}）</p>
+            <p className="mb-1 px-1 text-[11px] font-medium text-[var(--danger)]">⏰ 逾期（{overdue.length}）</p>
             <div className="space-y-0.5">{overdue.map(t => taskRow(t, true))}</div>
           </section>
         )}
 
         {/* 今日任务 */}
         <section>
-          <div className="mb-1 flex items-center justify-between gap-2 px-1">
-            <p className="min-w-0 truncate text-xs font-medium text-[var(--text-primary)]">
-              今天 · {todayDate.getMonth() + 1}月{todayDate.getDate()}日 {WEEKDAY_LABELS[todayDate.getDay()]}
-              <span className="ml-1 font-normal text-[var(--text-muted)]">（{pendingCount} 待办 / {doneCount} 完成）</span>
+          <div className="mb-1 flex items-center justify-between gap-1 px-1">
+            <p className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-primary)]">
+              <span className="font-medium">今天 · {todayDate.getMonth() + 1}月{todayDate.getDate()}日 {WEEKDAY_LABELS[todayDate.getDay()]}</span>
+              <span className="ml-1 text-[var(--text-muted)]">（{pendingCount} 待办 / {doneCount} 完成）</span>
             </p>
             <button
               onClick={() => openInMain('schedule')}
-              className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)]"
+              className="inline-flex shrink-0 items-center text-[var(--text-muted)] hover:text-[var(--accent)]"
               title="在主窗口任务模块中管理"
             >
-              任务模块<ExternalLink size={10} />
+              <ExternalLink size={11} />
             </button>
           </div>
           <div className="space-y-0.5">{topTodos.map(t => taskRow(t, false))}</div>
           {topTodos.length === 0 && (
-            <p className="px-1 py-2 text-xs text-[var(--text-muted)]">今天暂无任务，下方快速添加一条吧</p>
+            <p className="px-1 py-2 text-[11px] text-[var(--text-muted)]">今天暂无任务，下方快速添加一条吧</p>
           )}
           {/* 快速添加 */}
           <div className="mt-2 px-0.5">
@@ -430,17 +430,17 @@ export function DayPanel({ mode, onPopout, onDockBack, onClose }: DayPanelProps)
 
         {/* 今日打卡 */}
         <section>
-          <div className="mb-1 flex items-center justify-between px-1">
-            <p className="text-xs font-medium">
-              今日打卡
-              <span className="ml-1 font-normal text-[var(--text-muted)]">（{checkedToday}/{plannedHabits.length}）</span>
+          <div className="mb-1 flex items-center justify-between gap-1 px-1">
+            <p className="min-w-0 flex-1 truncate text-[11px]">
+              <span className="font-medium">今日打卡</span>
+              <span className="ml-1 text-[var(--text-muted)]">（{checkedToday}/{plannedHabits.length}）</span>
             </p>
             <button
               onClick={() => openInMain('toolbox')}
-              className="inline-flex items-center gap-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)]"
+              className="inline-flex shrink-0 items-center text-[var(--text-muted)] hover:text-[var(--accent)]"
               title="在主窗口工具箱中管理习惯"
             >
-              完整配置<ExternalLink size={10} />
+              <ExternalLink size={11} />
             </button>
           </div>
           <div className="space-y-0.5">
