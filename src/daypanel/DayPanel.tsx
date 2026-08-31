@@ -80,6 +80,11 @@ export function DayPanel() {
   useDataChanged('schedule', load)
   useDataChanged('habit', load)
 
+  // 主进程自动打卡（跨模块联动/定时）→ 小窗同步刷新打卡区
+  useEffect(() => {
+    window.api?.onHabitAutoChecked?.(() => { void load() })
+  }, [load])
+
   // 小窗获得焦点时刷新吸附状态（用户拖离后自动解除，按钮图标需同步）
   useEffect(() => {
     const onFocus = () => {
