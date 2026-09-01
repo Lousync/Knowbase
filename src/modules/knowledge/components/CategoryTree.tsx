@@ -71,10 +71,10 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
       return (
         <div key={cat.id}>
           <div
-            className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer group text-[14px] hover:bg-[var(--bg-hover)] ${
+            className={`flex items-center gap-1.5 pr-2 cursor-pointer group hover:bg-[var(--bg-hover)] ${
               isSelected ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-primary)]'
             }`}
-            style={{ paddingLeft: `${depth * 20 + 12}px` }}
+            style={{ paddingLeft: `${depth * 20 + 12}px`, paddingTop: 'var(--kb-row-py)', paddingBottom: 'var(--kb-row-py)' }}
             onClick={() => { onSelect(cat.id); toggleExpand(cat.id) }}
           >
             <span className="shrink-0 w-4 flex items-center justify-center text-[var(--text-secondary)]">
@@ -89,7 +89,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
             </span>
             {editingId === cat.id ? (
               <input
-                className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 text-[14px] outline-none"
+                className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 text-[var(--kb-row-fs)] outline-none"
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
                 onBlur={() => handleRename(cat.id)}
@@ -130,7 +130,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
           {newCatParent === cat.id && (
             <div className="flex items-center gap-1 py-1 pl-2" style={{ paddingLeft: `${(depth + 1) * 20 + 12}px` }}>
               <input
-                className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 text-[14px] outline-none text-[var(--text-primary)]"
+                className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onBlur={() => handleCreate()}
@@ -153,9 +153,10 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
       <div className="px-2 py-1.5 border-b border-[var(--border-color)] space-y-1">
         <button
           onClick={handleCollapseAll}
-          className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-[14px] text-left hover:bg-[var(--bg-hover)] ${
+          className={`w-full flex items-center gap-1.5 px-2 rounded text-left hover:bg-[var(--bg-hover)] text-[var(--kb-row-fs)] ${
             selectedId === null ? 'bg-[var(--bg-selected)] text-white hover:bg-[#0b5a8f]' : 'text-[var(--text-primary)]'
           }`}
+          style={{ paddingTop: 'var(--kb-row-py-lg)', paddingBottom: 'var(--kb-row-py-lg)' }}
         >
           <Folder size={24} className="shrink-0" />
           <span>全部页面</span>
@@ -163,7 +164,8 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
         {!showRootInput ? (
           <button
             onClick={() => setShowRootInput(true)}
-            className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] text-left"
+            className="w-full flex items-center gap-1.5 px-2 rounded text-[var(--kb-row-fs)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] text-left"
+            style={{ paddingTop: 'var(--kb-row-py-lg)', paddingBottom: 'var(--kb-row-py-lg)' }}
           >
             <Plus size={21} className="shrink-0" />
             <span>新建主题</span>
@@ -171,7 +173,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
         ) : (
           <div className="flex items-center gap-1 px-2">
             <input
-              className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[14px] outline-none text-[var(--text-primary)]"
+              className="flex-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onBlur={() => handleCreate()}

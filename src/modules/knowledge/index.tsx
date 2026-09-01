@@ -1067,10 +1067,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               </div>
             )}
 
-            {/* 空间列表层：顶部居中「工作区」标题 */}
+            {/* 空间列表层：顶部居中「工作区」标题 — 字号跟随知识库侧边栏设置（与下方条目节奏一致） */}
             {!selectedSpaceId && (
-              <div className="flex items-center justify-center px-2 py-1.5 border-b border-[var(--border-color)] shrink-0">
-                <span className="text-[12px] font-medium text-[var(--text-secondary)] text-center">工作区</span>
+              <div className="flex items-center justify-center px-2 py-[var(--kb-row-py-lg)] border-b border-[var(--border-color)] shrink-0">
+                <span className="font-medium text-[var(--text-secondary)] text-center text-[var(--kb-row-fs)]">工作区</span>
               </div>
             )}
 
