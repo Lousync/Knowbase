@@ -29,7 +29,7 @@ export function AdvancedView() {
       <p className="text-[12px] text-[var(--text-muted)] mb-6">其他偏好设置</p>
 
       {/* 关于与更新 */}
-      <div className="mb-8">
+      <div className="mb-8" data-setting-anchor="advanced.update">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">关于与更新</h3>
         <div className="flex items-center gap-3 mb-3">
           <span className="text-[13px] text-[var(--text-primary)]">当前版本 v{appVersion || '…'}</span>
@@ -44,7 +44,7 @@ export function AdvancedView() {
         </div>
 
         {/* 下载镜像:GitHub 加速代理前缀,失效可随时替换(留空直连) */}
-        <div className="mb-4 max-w-md">
+        <div className="mb-4 max-w-md" data-setting-anchor="advanced.mirror">
           <label className="block text-[12px] text-[var(--text-secondary)] mb-1">下载镜像(GitHub 加速代理)</label>
           <input
             ref={mirrorInputRef}
@@ -182,7 +182,7 @@ export function AdvancedView() {
       </div>
 
       {/* Zoom */}
-      <div className="mb-8">
+      <div className="mb-8" data-setting-anchor="advanced.zoom">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">缩放</h3>
         <div className="flex items-center gap-4">
           <span className="text-[13px] text-[var(--text-primary)]">
@@ -199,7 +199,7 @@ export function AdvancedView() {
       </div>
 
       {/* Delete confirmation */}
-      <div className="mb-8">
+      <div className="mb-8" data-setting-anchor="advanced.deleteConfirm">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">删除确认</h3>
         <div className="space-y-2.5 max-w-sm">
           <label className="flex items-center justify-between cursor-pointer">
@@ -230,7 +230,7 @@ export function AdvancedView() {
       </div>
 
       {/* Onboarding */}
-      <div className="mb-8">
+      <div className="mb-8" data-setting-anchor="advanced.onboarding">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">新手引导</h3>
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('onboarding:show'))}
@@ -242,7 +242,7 @@ export function AdvancedView() {
       </div>
 
       {/* Auto-save info */}
-      <div>
+      <div data-setting-anchor="advanced.autosave">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">自动保存</h3>
         <div className="text-[13px] text-[var(--text-muted)]">
           编辑器将在停止输入 {s.autoSaveDebounceMs / 1000} 秒后自动保存

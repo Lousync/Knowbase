@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Palette, Type, FileDown, Wrench, Info, Search, Keyboard, PencilLine, BellRing, Bot } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Info } from 'lucide-react'
 import { getAppVersion } from '../../lib/ipc'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
@@ -9,40 +9,28 @@ import { ShortcutsView } from './views/ShortcutsView'
 import { BlogView } from './views/BlogView'
 import { ReminderView } from './views/ReminderView'
 import { AiToolsView } from './views/AiToolsView'
+import { SearchResultsView } from './views/SearchResultsView'
+import { SettingsSearchBox } from './components/SettingsSearchBox'
+import {
+  SECTIONS, RECOMMENDED_ITEMS, searchSettings, countBySection, completionFor,
+  setPendingAnchor, type SettingsSection, type SettingItem, type AiTab,
+} from './sections'
 
-type SettingsSection = 'appearance' | 'editor' | 'blog' | 'export' | 'aiTools' | 'advanced' | 'shortcuts' | 'reminder'
-
-interface SectionDef {
-  id: SettingsSection
-  label: string
-  icon: React.ReactNode
-  keywords: string[]
-}
-
-const SECTIONS: SectionDef[] = [
-  { id: 'appearance', label: '外观',   icon: <Palette size={16} />,  keywords: ['主题', 'theme', '颜色', '字体', '外观', '界面', '深色', '浅色'] },
-  { id: 'editor',     label: '编辑器', icon: <Type size={16} />,     keywords: ['字体', '行号', '编辑', '代码', '样式', 'font', '字号'] },
-  { id: 'blog',       label: '博客',   icon: <PencilLine size={16} />, keywords: ['博客', '总结', '周总结', '月总结', '模板', '打卡', '周期'] },
-  { id: 'export',     label: '导出',   icon: <FileDown size={16} />, keywords: ['编码', '导出', 'encoding', 'utf', 'gbk', '保存'] },
-  { id: 'aiTools',    label: 'AI 工具', icon: <Bot size={16} />,    keywords: ['AI', '工具', 'agent', '智能体', 'MCP', '内置工具', '调用', '上限'] },
-  { id: 'advanced',   label: '高级',   icon: <Wrench size={16} />,   keywords: ['缩放', '删除', '确认', '保存', 'zoom', '重置', '自动', '跳过'] },
-  { id: 'shortcuts',  label: '快捷键', icon: <Keyboard size={16} />, keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', 'ctrl', 'tab', '删除', '保存', '预览', '重命名', '侧栏', '切换'] },
-  { id: 'reminder',   label: '提醒',   icon: <BellRing size={16} />, keywords: ['提醒', '打卡', '通知', '时间', 'remind'] },
-]
+export type { SettingsSection, AiTab }
 
 // Module-level target for cross-component navigation (toast "查看详情" etc.)
 let pendingSection: SettingsSection | null = null
 // AI 工具页内部页签直达(如助手"去配置模型"→ models)
-let pendingAiTab: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms' | null = null
+let pendingAiTab: AiTab | null = null
 
 // 模块评估期即捕获事件:设置模块未挂载时 dispatch 的 detail 不会丢(组件内监听器来不及注册)
 window.addEventListener('settings:open', (e: Event) => {
-  const detail = (e as CustomEvent).detail as { section?: SettingsSection; aiTab?: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms' } | undefined
+  const detail = (e as CustomEvent).detail as { section?: SettingsSection; aiTab?: AiTab } | undefined
   if (detail?.section) pendingSection = detail.section
   if (detail?.aiTab) pendingAiTab = detail.aiTab
 })
 
-export function navigateToSettingsSection(section: SettingsSection, aiTab?: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms') {
+export function navigateToSettingsSection(section: SettingsSection, aiTab?: AiTab) {
   pendingSection = section
   pendingAiTab = aiTab ?? null
   window.dispatchEvent(new CustomEvent('settings:open'))
@@ -50,9 +38,16 @@ export function navigateToSettingsSection(section: SettingsSection, aiTab?: 'bui
 
 export function SettingsModule() {
   const [section, setSection] = useState<SettingsSection>('appearance')
-  const [aiTabOverride, setAiTabOverride] = useState<'builtin' | 'mcp' | 'skill' | 'models' | 'perms' | undefined>(undefined)
+  const [aiTabOverride, setAiTabOverride] = useState<AiTab | undefined>(undefined)
+  /** 每次跳转自增，用于强制重挂 AI 工具视图并重新触发滚动高亮 */
+  const [jumpSeq, setJumpSeq] = useState(0)
   const [query, setQuery] = useState('')
+  const [comboOpen, setComboOpen] = useState(false)
+  const [anchor, setAnchor] = useState<string | null>(null)
   const [appVersion, setAppVersion] = useState('')
+
+  const contentRef = useRef<HTMLDivElement>(null)
+  const flashTimer = useRef<number | null>(null)
 
   useEffect(() => { getAppVersion().then(setAppVersion).catch(() => {}) }, [])
 
@@ -61,32 +56,80 @@ export function SettingsModule() {
     if (pendingSection) {
       setSection(pendingSection)
       pendingSection = null
-      setAiTabOverride((pendingAiTab as never) ?? undefined)
+      setAiTabOverride((pendingAiTab as AiTab | null) ?? undefined)
       pendingAiTab = null
     }
     // 模块常驻保活:后续跳转经事件 detail/pending 到达,这里同步消费
     const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { section?: SettingsSection; aiTab?: 'builtin' | 'mcp' | 'skill' | 'models' | 'perms' } | undefined
+      const detail = (e as CustomEvent).detail as { section?: SettingsSection; aiTab?: AiTab } | undefined
       const target = detail?.section ?? pendingSection
       if (!target) return
       pendingSection = null
       if (detail?.aiTab) pendingAiTab = detail.aiTab
+      setQuery('')
+      setComboOpen(false)
       setSection(target)
-      setAiTabOverride(target === 'aiTools' ? ((pendingAiTab as never) ?? undefined) : undefined)
+      setAiTabOverride(target === 'aiTools' ? ((pendingAiTab as AiTab | null) ?? undefined) : undefined)
       pendingAiTab = null
     }
     window.addEventListener('settings:open', onOpen)
     return () => window.removeEventListener('settings:open', onOpen)
   }, [])
 
-  const visibleSections = useMemo(() => {
-    if (!query.trim()) return null
-    const q = query.toLowerCase()
-    return SECTIONS.filter(s => {
-      if (s.label.includes(q)) return true
-      return s.keywords.some(kw => kw.toLowerCase().includes(q))
-    })
-  }, [query])
+  // ---- 搜索 ----
+  const searching = query.trim().length > 0
+  const hits = useMemo(() => searchSettings(query), [query])
+  const counts = useMemo(() => countBySection(hits), [hits])
+  const suggestions = useMemo<SettingItem[]>(
+    () => (searching ? hits.map(h => h.item) : RECOMMENDED_ITEMS),
+    [searching, hits],
+  )
+  const completion = comboOpen ? completionFor(query, suggestions) : ''
+
+  // 跳转到具体设置项：切大项 → (必要时)切 AI 页签 → 滚动并高亮
+  const jumpTo = (item: SettingItem) => {
+    setSection(item.section)
+    setAiTabOverride(item.section === 'aiTools' ? (item.aiTab ?? 'builtin') : undefined)
+    setJumpSeq(n => n + 1)
+    setQuery('')
+    setComboOpen(false)
+    // 先回到顶部：锚点可能条件渲染（如「固定日期」仅在月总结为固定日时出现），
+    // 找不到时至少让用户落在目标大项的开头，而不是上一页的滚动位置
+    contentRef.current?.scrollTo({ top: 0 })
+    // 广播给各视图：目标若在默认收起的折叠分组内，视图自动展开
+    setPendingAnchor(item.id)
+    setAnchor(item.id)
+  }
+
+  // 目标锚点出现后再滚动 + 闪烁高亮（AI 页签需要等子视图渲染）
+  useEffect(() => {
+    if (!anchor) return
+    let raf = 0
+    let tries = 0
+    let settled = false
+
+    const tick = () => {
+      const el = contentRef.current?.querySelector<HTMLElement>(`[data-setting-anchor="${anchor}"]`)
+      if (el) {
+        settled = true
+        setPendingAnchor(null) // 滚动定位成功，清除待展开标记
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.remove('setting-anchor-flash')
+        void el.offsetWidth // 强制回流，保证连续跳转时动画能重放
+        el.classList.add('setting-anchor-flash')
+        if (flashTimer.current) window.clearTimeout(flashTimer.current)
+        flashTimer.current = window.setTimeout(() => {
+          el.classList.remove('setting-anchor-flash')
+        }, 2000)
+        return
+      }
+      if (tries++ < 180) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => { if (!settled) cancelAnimationFrame(raf) }
+  }, [anchor, jumpSeq])
+
+  useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current) }, [])
 
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
@@ -97,23 +140,28 @@ export function SettingsModule() {
         </div>
 
         {SECTIONS.map(s => {
-          const hidden = visibleSections && !visibleSections.some(vs => vs.id === s.id)
+          const hitCount = counts[s.id] ?? 0
+          const hidden = searching && hitCount === 0
+          if (hidden) return null
           return (
             <button
               key={s.id}
-              onClick={() => { setSection(s.id); setQuery('') }}
-              className={`w-full flex items-center gap-2 px-4 py-2 text-[13px] transition-colors ${
-                hidden ? 'hidden' : ''
-              } ${
+              onClick={() => { setSection(s.id); setQuery(''); setComboOpen(false) }}
+              className={`w-full flex items-center gap-2 px-4 py-2 text-[13px] transition-colors pl-[14px] ${
                 section === s.id
-                  ? 'bg-[var(--bg-selected)] text-[var(--text-primary)] border-l-2 border-l-[var(--accent)] pl-[14px]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border-l-2 border-l-transparent pl-[14px]'
+                  ? 'bg-[var(--bg-selected)] text-[var(--text-primary)] border-l-2 border-l-[var(--accent)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border-l-2 border-l-transparent'
               }`}
             >
               <span className={section === s.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}>
                 {s.icon}
               </span>
-              {s.label}
+              <span className="truncate">{s.label}</span>
+              {searching && hitCount > 0 && (
+                <span className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] tabular-nums">
+                  {hitCount}
+                </span>
+              )}
             </button>
           )
         })}
@@ -131,34 +179,48 @@ export function SettingsModule() {
         {/* Search bar */}
         <div className="px-8 pt-6 pb-2 shrink-0">
           <div className="max-w-2xl mx-auto">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="搜索设置..."
-              className="w-full pl-9 pr-4 py-2 bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+            <SettingsSearchBox
+              query={query}
+              onQueryChange={setQuery}
+              suggestions={suggestions}
+              open={comboOpen}
+              onOpenChange={setComboOpen}
+              onPick={jumpTo}
+              completion={completion}
+              total={searching ? hits.length : suggestions.length}
             />
-          </div>
-          {query.trim() && visibleSections && visibleSections.length === 0 && (
-            <p className="text-[12px] text-[var(--text-muted)] mt-3 text-center">
-              未找到匹配的设置项
-            </p>
-          )}
+            {searching && hits.length === 0 && !comboOpen && (
+              <p className="text-[12px] text-[var(--text-muted)] mt-3 text-center">
+                没有匹配的设置项，试试“字体”“行号”“提醒”“MCP”“编码”等关键词
+              </p>
+            )}
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto py-6">
+        <div ref={contentRef} className="flex-1 overflow-y-auto py-6">
           <div className="max-w-2xl mx-auto px-8">
-          {section === 'appearance' && <AppearanceView />}
-          {section === 'editor' && <EditorView />}
-          {section === 'blog' && <BlogView />}
-          {section === 'export' && <ExportSettingsView />}
-          {section === 'aiTools' && <AiToolsView initialTab={aiTabOverride} />}
-          {section === 'advanced' && <AdvancedView />}
-          {section === 'shortcuts' && <ShortcutsView />}
-          {section === 'reminder' && <ReminderView />}
+            {searching ? (
+              hits.length > 0
+                ? <SearchResultsView query={query.trim()} hits={hits} onPick={jumpTo} />
+                : null
+            ) : (
+              <>
+                {section === 'appearance' && <AppearanceView />}
+                {section === 'editor' && <EditorView />}
+                {section === 'blog' && <BlogView />}
+                {section === 'export' && <ExportSettingsView />}
+                {section === 'aiTools' && (
+                  <AiToolsView
+                    key={`${aiTabOverride ?? 'builtin'}-${jumpSeq}`}
+                    initialTab={aiTabOverride}
+                  />
+                )}
+                {section === 'advanced' && <AdvancedView />}
+                {section === 'shortcuts' && <ShortcutsView />}
+                {section === 'reminder' && <ReminderView />}
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -9,7 +9,7 @@ export function ExportSettingsView() {
       <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">导出</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">自定义数据导出行为</p>
 
-      <div className="mb-8">
+      <div className="mb-8" data-setting-anchor="export.encoding">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">默认编码</h3>
         <div className="space-y-1.5 max-w-xs">
           {ENCODING_OPTIONS.map(e => (

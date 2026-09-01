@@ -9,6 +9,7 @@ import {
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
 import { AiPermissionsTab } from './AiPermissionsTab'
+import { CollapseList } from '../components/CollapseList'
 import type { AgentToolInfo, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpTestResult, SkillInfo } from '../../../types'
 
 const SOURCE_LABEL: Record<AgentToolInfo['source'], string> = {
@@ -63,14 +64,16 @@ export function AiToolsView({ initialTab }: { initialTab?: AiTab } = {}) {
       </div>
 
       {/* 汇总条 */}
-      <UsageSummary usage={usage} />
+      <div data-setting-anchor="aiTools.usage">
+        <UsageSummary usage={usage} />
+      </div>
 
       {tab === 'builtin' && <BuiltinToolsTab usage={usage} onUsageChange={setUsage} monthlyLimit={s.aiToolMonthlyLimit ?? 0} />}
       {tab === 'mcp' && <McpServersTab onInvoked={refreshUsage} />}
       {tab === 'skill' && <SkillsTab />}
-      {tab === 'models' && <AiModelsTab />}
+      {tab === 'models' && <div data-setting-anchor="aiTools.models"><AiModelsTab /></div>}
 
-      {tab === 'perms' && <AiPermissionsTab />}
+      {tab === 'perms' && <div data-setting-anchor="aiTools.perms"><AiPermissionsTab /></div>}
     </div>
   )
 }
@@ -139,7 +142,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
   return (
     <div className="space-y-8">
       {/* 月度上限 */}
-      <div>
+      <div data-setting-anchor="aiTools.monthlyLimit">
         <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">月度调用上限</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">
           达到上限后工具调用将被拒绝并提示（防止失控循环调用）。0 表示不限制。
@@ -166,21 +169,23 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
       </div>
 
       {/* 内置工具只读列表 */}
-      <div>
-        <div className="flex items-center justify-between max-w-md">
-          <div>
-            <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">内置工具</h2>
-            <p className="text-[12px] text-[var(--text-muted)]">
-              官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。
-            </p>
-          </div>
-          <button onClick={() => { void refresh() }} title="刷新"
-            className="shrink-0 p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-            <RefreshCw size={14} />
-          </button>
-        </div>
-
-        <div className="space-y-2 mt-4 max-w-md">
+      <div data-setting-anchor="aiTools.builtin">
+        <CollapseList
+          title="内置工具"
+          count={tools.length}
+          anchorId="aiTools.builtin"
+          titleClassName="text-[16px] font-semibold text-[var(--text-primary)]"
+          headerRight={
+            <button onClick={() => { void refresh() }} title="刷新"
+              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+              <RefreshCw size={14} />
+            </button>
+          }
+        >
+          <p className="text-[12px] text-[var(--text-muted)] mb-3 max-w-md">
+            官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。
+          </p>
+          <div className="space-y-2 max-w-md">
           {tools.map(t => (
             <div key={t.name} className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
               <div className="flex items-center gap-2 flex-wrap">
@@ -203,17 +208,24 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
             </div>
           ))}
           {!loading && tools.length === 0 && <p className="text-[12px] text-[var(--text-muted)]">暂无已注册工具</p>}
-        </div>
+          </div>
+        </CollapseList>
       </div>
 
       {/* 最近调用 */}
-      <div>
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">最近调用</h2>
-        <p className="text-[12px] text-[var(--text-muted)] mb-4">最近 10 条审计记录（含入参摘要与耗时，不含返回内容）。</p>
-        <div className="space-y-1.5 max-w-md">
-          {recentAudit.map(e => <AuditRow key={e.id} entry={e} />)}
-          {recentAudit.length === 0 && <p className="text-[12px] text-[var(--text-muted)]">暂无调用记录</p>}
-        </div>
+      <div data-setting-anchor="aiTools.audit">
+        <CollapseList
+          title="最近调用"
+          count={recentAudit.length}
+          anchorId="aiTools.audit"
+          titleClassName="text-[16px] font-semibold text-[var(--text-primary)]"
+        >
+          <p className="text-[12px] text-[var(--text-muted)] mb-3">最近 10 条审计记录（含入参摘要与耗时，不含返回内容）。</p>
+          <div className="space-y-1.5 max-w-md">
+            {recentAudit.map(e => <AuditRow key={e.id} entry={e} />)}
+            {recentAudit.length === 0 && <p className="text-[12px] text-[var(--text-muted)]">暂无调用记录</p>}
+          </div>
+        </CollapseList>
       </div>
     </div>
   )
@@ -288,7 +300,7 @@ function McpServersTab({ onInvoked }: { onInvoked: () => void }) {
   }
 
   return (
-    <div>
+    <div data-setting-anchor="aiTools.mcp">
       <div className="flex items-center justify-between max-w-md">
         <div>
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">MCP 服务器</h2>
@@ -575,7 +587,7 @@ function SkillsTab() {
   }
 
   return (
-    <div>
+    <div data-setting-anchor="aiTools.skill">
       <div className="flex items-center justify-between max-w-md">
         <div>
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">Skill 技能</h2>

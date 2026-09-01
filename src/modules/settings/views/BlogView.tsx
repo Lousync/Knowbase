@@ -69,7 +69,7 @@ export function BlogView() {
         </p>
 
         <div className="space-y-3 max-w-md">
-          <label className="flex items-center gap-3 text-[13px]">
+          <label className="flex items-center gap-3 text-[13px]" data-setting-anchor="blog.summaryWeeklyDay">
             <span className="flex items-center gap-1.5 text-[var(--text-secondary)] w-28 shrink-0">
               <CalendarCheck2 size={14} /> 周总结日
             </span>
@@ -81,7 +81,7 @@ export function BlogView() {
               {WEEKDAY_LABELS.map((lbl, i) => <option key={i} value={i}>每周{lbl}</option>)}
             </select>
           </label>
-          <label className="flex items-center gap-3 text-[13px]">
+          <label className="flex items-center gap-3 text-[13px]" data-setting-anchor="blog.summaryMonthlyMode">
             <span className="text-[var(--text-secondary)] w-28 shrink-0">月总结日</span>
             <select
               value={monthlyMode}
@@ -94,7 +94,7 @@ export function BlogView() {
             </select>
           </label>
           {monthlyMode === 'fixed' && (
-            <label className="flex items-center gap-3 text-[13px]">
+            <label className="flex items-center gap-3 text-[13px]" data-setting-anchor="blog.summaryMonthlyFixedDay">
               <span className="text-[var(--text-secondary)] w-28 shrink-0">固定日期</span>
               <input
                 type="number" min={1} max={28}
@@ -112,7 +112,7 @@ export function BlogView() {
         </div>
       </div>
 
-      <div>
+      <div data-setting-anchor="blog.templates">
         <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">博客模板</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">
           写日记时点工具栏「模板」一键套用；当天没那么多可写时特别有用。

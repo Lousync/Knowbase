@@ -18,7 +18,7 @@ export function ReminderView() {
         </p>
 
         <div className="space-y-3 max-w-md">
-          <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] cursor-pointer">
+          <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] cursor-pointer" data-setting-anchor="reminder.enable">
             <span className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
               <BellRing size={14} className={s.checkinReminderEnabled ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
               启用打卡提醒
@@ -31,7 +31,7 @@ export function ReminderView() {
             />
           </label>
 
-          <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+          <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]" data-setting-anchor="reminder.time">
             <span className="text-[13px] text-[var(--text-primary)]">提醒时间</span>
             <input
               type="time"
