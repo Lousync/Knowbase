@@ -1197,18 +1197,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                     <span className="ml-auto text-[10px] text-[var(--text-disabled)] shrink-0">插件</span>
                   </button>
                 ))}
-                {/* 插件版未安装时的占位入口（跳插件模块安装） */}
-                {settings.quizbookMode === 'plugin' && !pluginViews.some(v => v.pluginId === 'knowbase.quizbook') && (
-                  <button
-                    onClick={() => window.dispatchEvent(new CustomEvent('plugins:open'))}
-                    title="错题本已切换为插件版，但 knowbase.quizbook 插件未安装/未启用"
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                  >
-                    <Puzzle size={14} />
-                    <span className="truncate">错题本(需装插件)</span>
-                    <span className="ml-auto text-[10px] text-[var(--accent)] shrink-0">去安装</span>
-                  </button>
-                )}
               </div>
             )}
           </div>

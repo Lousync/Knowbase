@@ -151,11 +151,29 @@ function SettingsIconHandDrawn(props: IconProps) {
   )
 }
 
-/** 插件:拼图块 */
+/** 插件：拼图块——圆角主体 + 顶部凸起 + 右侧凹槽 */
 function PluginIconHandDrawn(props: IconProps) {
   return (
     <Svg {...props}>
-      <path d="M9.5 4.5a2 2 0 1 1 4 0V6h3A1.5 1.5 0 0 1 18 7.5v3h1.5a2 2 0 1 1 0 4H18v3a1.5 1.5 0 0 1-1.5 1.5h-3v-1.5a2 2 0 1 0-4 0V19h-3A1.5 1.5 0 0 1 5 17.5v-3H3.5a2 2 0 1 1 0-4H5v-3A1.5 1.5 0 0 1 6.5 6h3V4.5Z" />
+      {/* 轮廓：四圆角主体，顶部中央凸出半圆，右侧中央内陷半圆 */}
+      <path d="
+        M 6 7
+        a 1 1 0 0 1 1 -1
+        h 3
+        a 2 2 0 0 0 4 0
+        h 3
+        a 1 1 0 0 1 1 1
+        v 2.5
+        a 1.5 1.5 0 0 1 0 3
+        V 15
+        a 1 1 0 0 1 -1 1
+        h -10
+        a 1 1 0 0 1 -1 -1
+        V 7
+        Z
+      " />
+      {/* 中心连接点：实心小圆点，呼应"接入/扩展"语义 */}
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
     </Svg>
   )
 }
