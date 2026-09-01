@@ -78,11 +78,12 @@ export const KNOWLEDGE_SIDEBAR_SIZE_OPTIONS = [
 ] as const
 
 /** 知识库侧边栏条目大小 → CSS 变量（--kb-row-py 树行内边距 / --kb-row-py-lg 章节行内边距 / --kb-row-fs 行字号）。
- *  m 档与原实现像素完全一致（2px / 4px / 13px），切换 s/l 只改变密度不改变布局。 */
+ *  三档必须拉开足够差距，否则切换时视觉几乎无变化（用户会以为设置无效）。
+ *  字号 12/14/18px + 行高递进，紧凑↔标准↔宽松一眼可辨；标准档(m)接近原默认外观。 */
 export const KNOWLEDGE_SIDEBAR_ITEM_VARS: Record<string, Record<string, string>> = {
   s: { '--kb-row-py': '0px', '--kb-row-py-lg': '2px', '--kb-row-fs': '12px' },
-  m: { '--kb-row-py': '2px', '--kb-row-py-lg': '4px', '--kb-row-fs': '13px' },
-  l: { '--kb-row-py': '7px', '--kb-row-py-lg': '9px', '--kb-row-fs': '14px' },
+  m: { '--kb-row-py': '3px', '--kb-row-py-lg': '5px', '--kb-row-fs': '14px' },
+  l: { '--kb-row-py': '9px', '--kb-row-py-lg': '12px', '--kb-row-fs': '18px' },
 }
 
 export const FONT_SIZE_OPTIONS = [
