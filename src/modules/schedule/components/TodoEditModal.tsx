@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { ScheduleTag, ScheduleTodo } from '../../../types'
 import { X, Plus, Trash2, Check } from 'lucide-react'
 import { localToday } from '../../../lib/date'
+import { isSummaryTagName } from '../../../lib/summary'
 
 interface TodoForm {
   title: string; description: string; time: string
@@ -305,18 +306,23 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
           )}
 
           <Field label="标签">
-            {tags.length === 0 ? (
-              <p className="text-[12px] text-[var(--text-disabled)] italic">暂无标签，使用右侧按钮创建</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {tags.map(t => (
-                  <button key={t.id} onClick={() => setForm(f => ({ ...f, tagId: f.tagId === t.id ? '' : t.id }))}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors ${form.tagId === t.id ? 'ring-1 ring-white/40' : ''}`}
-                    style={{ backgroundColor: t.color + '30', color: t.color, border: `1px solid ${t.color}50` }}
-                  >{t.name}</button>
-                ))}
-              </div>
-            )}
+            {/* 来源标签（周任务/月任务）不进选择器：它们表达任务来源而非用户分类 */}
+            {(() => {
+              const selectable = tags.filter(t => !isSummaryTagName(t.name))
+              if (selectable.length === 0) {
+                return <p className="text-[12px] text-[var(--text-disabled)] italic">暂无标签，使用右侧按钮创建</p>
+              }
+              return (
+                <div className="flex flex-wrap gap-2">
+                  {selectable.map(t => (
+                    <button key={t.id} onClick={() => setForm(f => ({ ...f, tagId: f.tagId === t.id ? '' : t.id }))}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors ${form.tagId === t.id ? 'ring-1 ring-white/40' : ''}`}
+                      style={{ backgroundColor: t.color + '30', color: t.color, border: `1px solid ${t.color}50` }}
+                    >{t.name}</button>
+                  ))}
+                </div>
+              )
+            })()}
           </Field>
         </div>
 

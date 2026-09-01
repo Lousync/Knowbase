@@ -26,6 +26,15 @@ export const SUMMARY_TAG_DEFS: Record<PeriodWindow['type'], { name: string; colo
   month: { name: '月任务', color: '#0ea5e9' },
 }
 
+/**
+ * 判断是否为「来源标签」（周任务/月任务）。
+ * 这些标签表达的是任务来源（来自周/月总结），不是用户的分类维度：
+ * 在标签管理器中锁定不可删、在任务编辑的标签选择器中隐藏，仅作为来源徽章显示在任务卡片上。
+ */
+export function isSummaryTagName(name: string): boolean {
+  return Object.values(SUMMARY_TAG_DEFS).some(d => d.name === name)
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }

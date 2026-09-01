@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ScheduleTag } from '../../../types'
-import { X, Plus, Trash2 } from 'lucide-react'
+import { isSummaryTagName } from '../../../lib/summary'
+import { X, Plus, Trash2, Lock } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -77,13 +78,13 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
           {/* existing tags list */}
           <div>
             <label className="block text-[11px] text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">
-              已有标签 ({tags.length})
+              已有标签 ({tags.filter(t => !isSummaryTagName(t.name)).length})
             </label>
-            {tags.length === 0 ? (
+            {tags.filter(t => !isSummaryTagName(t.name)).length === 0 ? (
               <p className="text-[12px] text-[var(--text-disabled)] italic">暂无标签</p>
             ) : (
               <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                {tags.map(t => (
+                {tags.filter(t => !isSummaryTagName(t.name)).map(t => (
                   <div key={t.id} className="flex items-center justify-between px-3 py-2 bg-[var(--bg-tertiary)] rounded">
                     <div className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
@@ -101,6 +102,28 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
               </div>
             )}
           </div>
+
+          {/* 系统来源标签（周任务/月任务）：表达任务来源而非用户分类，锁定不可删 */}
+          {tags.some(t => isSummaryTagName(t.name)) && (
+            <div>
+              <label className="block text-[11px] text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">
+                来源标签（系统维护）
+              </label>
+              <div className="space-y-1">
+                {tags.filter(t => isSummaryTagName(t.name)).map(t => (
+                  <div key={t.id} className="flex items-center justify-between px-3 py-2 bg-[var(--bg-tertiary)]/60 rounded opacity-80">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
+                      <span className="text-[13px] text-[var(--text-secondary)]">{t.name}</span>
+                    </div>
+                    <span className="flex items-center gap-1 text-[11px] text-[var(--text-disabled)]" title="由周/月总结功能自动维护，创建对应总结任务时自动使用">
+                      <Lock size={11} /> 来源
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

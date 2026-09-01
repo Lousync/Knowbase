@@ -16,8 +16,6 @@ import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 import { useDataChanged, notifyDataChanged } from '../../lib/dataChanged'
-import { SUMMARY_TAG_DEFS } from '../../lib/summary'
-
 const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]' }
 
@@ -126,14 +124,9 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
   const loadTags = useCallback(async () => {
     try {
-      let list = await getScheduleTags()
-      // 确保默认标签存在：周任务 / 月任务（周/月总结创建任务时也会按需创建，这里兜底）
-      const missing = Object.values(SUMMARY_TAG_DEFS).filter(d => !list.some(t => t.name === d.name))
-      if (missing.length > 0) {
-        for (const d of missing) await createScheduleTag(d.name, d.color)
-        list = await getScheduleTags()
-      }
-      setTags(list)
+      // 只读取用户实际的标签列表。周任务/月任务由周/月总结面板按需创建（SummaryPanel），
+      // 不在这里兜底重建 —— 否则用户删除后又会自动回来，表现为「默认标签无法取消」。
+      setTags(await getScheduleTags())
     } catch (e) { console.error(e) }
   }, [])
 
