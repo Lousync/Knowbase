@@ -132,7 +132,12 @@ app.commandLine.appendSwitch('allow-file-access-from-files')
 // 单实例锁 — 防止多窗口数据不同步（sql.js 内存数据库无跨进程共享能力）
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
-  app.quit()
+  // 已有实例在运行：本实例立即终止，不得执行任何后续初始化。
+  // 注意不能用 app.quit()（异步，不阻断同步代码）：whenReady 回调仍会
+  // initDatabase + 注册 232 个 IPC + createWindow()，导致窗口闪现后进程
+  // 退出，表现为「关闭后再次启动窗口闪烁闪退」。app.exit() 直接终止，
+  // 非主实例无任何资源可清理（数据库/窗口尚未创建），安全。
+  app.exit(0)
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -623,6 +628,8 @@ app.whenReady().then(async () => {
 app.on('second-instance', () => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore()
+    // 托盘常驻下窗口可能处于 hide() 状态：focus() 对隐藏窗口无效，必须 show()
+    if (!mainWindow.isVisible()) mainWindow.show()
     mainWindow.focus()
   }
 })
