@@ -381,6 +381,8 @@ const api = {
   dayPanelTopdockCancelCollapse: () => ipcRenderer.invoke('daypanel:topdock-cancel-collapse'),
   // - desktop-widget：可交互态切换（穿透 ⇄ 可点）
   dayPanelWidgetInteractive: (active: boolean) => ipcRenderer.invoke('daypanel:widget-interactive', active) as Promise<boolean>,
+  // 渲染层报告 document 所需尺寸（用于独立窗口高度自适应）
+  dayPanelReportContentSize: (width: number, height: number) => { ipcRenderer.send('daypanel:content-size', { width, height }) },
   // - 跨窗口 detached/模式状态推送
   onDayPanelStateChanged: (cb: (s: { detached: boolean; mode: string; collapsed: boolean; widgetInteractive: boolean }) => void) => {
     const handler = (_e: unknown, s: { detached: boolean; mode: string; collapsed: boolean; widgetInteractive: boolean }) => cb(s)
@@ -434,6 +436,16 @@ const api = {
     const handler = () => cb()
     ipcRenderer.on('fillPopup:refresh', handler)
     return () => ipcRenderer.removeListener('fillPopup:refresh', handler)
+  },
+  // 番茄钟状态跨窗口同步：主进程维护快照，渲染层上报 + 接收广播
+  pomodoroUpdateState: (snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => {
+    ipcRenderer.send('pomodoro:state-update', snapshot)
+  },
+  pomodoroGetState: () => ipcRenderer.invoke('pomodoro:get-state') as Promise<{ visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }>,
+  onPomodoroState: (cb: (snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => cb(snapshot)
+    ipcRenderer.on('pomodoro:state-broadcast', handler)
+    return () => ipcRenderer.removeListener('pomodoro:state-broadcast', handler)
   },
 }
 

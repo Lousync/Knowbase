@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sparkles } from 'lucide-react'
 import type { TabName } from './types'
-import { TitleBar, ActivityBar, StatusBar } from './components/shared'
+import { TitleBar, ActivityBar } from './components/shared'
 import { Toast } from './components/shared/Toast'
 import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
@@ -41,7 +41,6 @@ export default function App() {
   }
   const [activeTab, setActiveTab] = useState<TabName>('blog')
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [encoding, setEncoding] = useState('UTF-8')
   const [sidebarWidths, setSidebarWidths] = useState<Record<string, number>>({})
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
@@ -101,7 +100,6 @@ export default function App() {
   useEffect(() => {
     if (!settingsReady) return
     if (FONT_CSS_MAP[s.editorFont]) document.documentElement.style.setProperty('--font-sans', FONT_CSS_MAP[s.editorFont])
-    setEncoding(s.exportEncoding.toUpperCase())
     setSidebarWidths({
       sidebarWidth_blog: s.sidebarWidth_blog,
       sidebarWidth_schedule: s.sidebarWidth_schedule,
@@ -112,16 +110,6 @@ export default function App() {
     document.documentElement.style.fontSize = `${Math.min(s.zoomMax, Math.max(s.zoomMin, s.zoom)) * 16}px`
     setLoaded(true)
   }, [settingsReady]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Listen for encoding changes from settings
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const v = (e as CustomEvent).detail
-      if (typeof v === 'string') setEncoding(v.toUpperCase())
-    }
-    window.addEventListener('settings-encoding-changed', handler)
-    return () => window.removeEventListener('settings-encoding-changed', handler)
-  }, [])
 
   // Listen for import modal open
   useEffect(() => {
@@ -353,6 +341,9 @@ export default function App() {
               >
                 <Sparkles size={19} />
               </button>
+              {/* 番茄钟全屏面板：挂在内容卡片内（而非 main），只覆盖主内容区 ——
+                  否则会盖住右侧的任务栏（DayPanel），表现为「进入番茄钟任务栏被关闭/唤不出」 */}
+              <PomodoroPanel />
               </div>
             </div>
             {dayPanelVisible && !dayPanelDetached && (
@@ -375,12 +366,10 @@ export default function App() {
                 </div>
               </ResizablePanel>
             )}
-            <PomodoroPanel />
           </main>
       {/* 全局 AI 助手侧栏 */}
       <AssistantPanel />
         </div>
-        <StatusBar encoding={encoding} />
       </PomodoroProvider>
       <Toast />
       {onboardingOpen && (

@@ -5,6 +5,7 @@ import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
+import { registerPomodoroBroadcast } from './pomodoroState'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
@@ -494,6 +495,8 @@ app.whenReady().then(async () => {
     }
   })
   await initDatabase()
+  // 番茄钟状态跨窗口中转：主进程维护快照，渲染层上报 + 接收广播（让 popout 独立窗口也能显示番茄钟状态）
+  registerPomodoroBroadcast()
   // AI 测试桥(构建期由 __DEV_BRIDGE__ 消除, 运行期再以 app.isPackaged 兜底)。
   // installCapture 同步安装采集, 必须早于下方各 Repository 注册 handler,
   // 否则 IPC 追踪一个通道都覆盖不到; HTTP 服务改为异步启动, 不阻塞启动流程。

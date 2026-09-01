@@ -2,23 +2,26 @@ import { BrowserWindow, ipcMain, screen, globalShortcut, shell } from 'electron'
 import { join } from 'path'
 
 /**
- * 日程与打卡侧边栏管理器（WeChat 模式 + 桌面互动模式）
+ * 日程与打卡侧边栏管理器
  *
- * - 主窗口内嵌：<DayPanel mode="embedded" /> 由 src/App.tsx 在主窗口右侧作为 flex 面板渲染，
- *   拉伸主窗口自动跟随高度与位置。
- * - 独立窗口（脱离态）：createPopout() 创建 BrowserWindow 渲染 <DayPanel mode="popout" />。
- *   脱离态有三种桌面互动模式（mode，持久化）：
- *   - floating      自由漂浮：当前默认形态，独立可拖可调，不置顶
- *   - top-dock      顶部停靠：贴工作区顶缘，QQ 式收缩为 10px 触碰条，鼠标悬停自动展开，
- *                   移出 500ms grace 后自动收回；置顶（全屏时由系统独占覆盖）
- *   - desktop-widget 桌面小组件：透明窗口 + 鼠标穿透（默认），只读展示待办/打卡，
- *                   鼠标划过激活为可交互态（操作锚点）
- * - 关闭独立窗口 X = 自动回内嵌。数据同步见 windowBus.ts。
- * - 生命周期：主窗口隐藏到托盘时 popout 独立存活（托盘常驻方案）。
+ * 三种桌面互动模式（floating / top-dock / desktop-widget）共享一个 BrowserWindow，
+ * 通过运行时切换 alwaysOnTop / 鼠标穿透 / 位置 / 尺寸（动画过渡）实现形态变化，
+ * 不再 destroy+create，杜绝「脱离→闪一下回主窗口→重新以新形态出现」的动画断点。
  *
- * 状态机：
- *   - detached=false：内嵌
- *   - detached=true：popout，mode 决定桌面形态
+ * - detached=false：内嵌（主窗口内 flex 面板）
+ * - detached=true：popout 独立窗口，mode 决定桌面形态
+ *   - floating      自由漂浮：可拖动、可调整大小
+ *   - top-dock      顶部停靠：贴工作区顶缘，QQ 式收缩为 10px 触碰条，悬停展开
+ *   - desktop-widget 桌面小组件：固定尺寸，鼠标穿透 ⇄ 可交互
+ *
+ * 高度自适应（2026-09-01 调整）：
+ *   渲染层用 ResizeObserver 报告 document 所需高度，主进程据此把窗口高度贴合内容
+ *   （floating 直接 setSize；top-dock 展开态 animateHeight；收缩态/小组件固定）。
+ *   「内容变多」会跟上；「内容变少」不缩（保留用户拉大的空间）。
+ *   首次开窗（firstSizeSet=false）强制贴合内容，避免开窗闪一下默认高度再缩到内容。
+ *
+ * 脱离入口中间态：
+ *   「脱离」一律先开出独立漂浮窗口，仅本会话显式选过形态时才沿用。
  */
 
 export type PanelMode = 'floating' | 'top-dock' | 'desktop-widget'
@@ -27,12 +30,16 @@ const MODES: readonly PanelMode[] = ['floating', 'top-dock', 'desktop-widget']
 const TOUCH_STRIP_H = 10          // 触碰条高度
 const WIDGET_W = 264              // 桌面小组件尺寸（固定）
 const WIDGET_H = 150
-const EXPAND_MS = 200             // 展开/收回动画时长
+const POSITION_MS = 200           // 位置动画时长
+const EXPAND_MS = 220             // top-dock 高度动画时长
 const COLLAPSE_DELAY_MS = 500     // 鼠标移出后收回的 grace 窗口
 const DEFAULT_W = 300
 const DEFAULT_H = 520
 const BOUNDS_SAVE_MS = 400        // 位置/尺寸落盘防抖
-const DOCK_DRAG_THRESHOLD = 20    // 自由漂浮拖拽松手时：窗口顶部距工作区顶缘 ≤ 该值 → 自动停靠
+const DOCK_DRAG_THRESHOLD = 20    // 自由漂浮拖拽松手：窗口顶部距工作区顶缘 ≤ 该值 → 自动停靠
+const DOCK_JUDGE_MS = 180         // 拖拽停止判定：moved 停止该时长后才判定是否吸附
+const POPOUT_GRACE_MS = 800       // 脱离后宽限：期间不判定吸附，避免刚开窗就被吸走
+const TOP_EDGE_DIRTY = 48         // 保存位置距顶缘 ≤ 该值视为「停靠残留」，漂浮态改用默认偏移
 
 let popout: BrowserWindow | null = null
 let getMainWindow: () => BrowserWindow | null = () => null
@@ -41,56 +48,40 @@ let getSetting: (key: string) => unknown = () => undefined
 let setSetting: (key: string, value: unknown) => void = () => {}
 
 let mode: PanelMode = 'floating'
-let windowMode: PanelMode | null = null   // popout 创建时的模式（transparent 等创建期选项）
+/** 本会话内用户显式选择的形态（托盘/快捷键/窗口按钮）。null = 脱离走漂浮中间态 */
+let explicitMode: PanelMode | null = null
 let collapsed = false                      // top-dock 收缩态
 let widgetInteractive = false              // desktop-widget 可交互态
 let topDockAnimating = false
-let collapseTimer: ReturnType<typeof setTimeout> | null = null
 let animTimer: ReturnType<typeof setInterval> | null = null
+let collapseTimer: ReturnType<typeof setTimeout> | null = null
 let boundsSaveTimer: ReturnType<typeof setTimeout> | null = null
+let dockJudgeTimer: ReturnType<typeof setTimeout> | null = null
+let popoutShownAt = 0                      // popout 显示时刻（吸附判定宽限起点）
+/** 上次 setSize 过的目标高度（floating/top-dock 展开态），仅向上跟随 */
+let lastAppliedH = 0
+let lastAppliedW = 0
+/** 本次 detached 是否已收到首次内容尺寸（决定开窗是否仍需等待） */
+let firstSizeSet = false
 
 function broadcast(channel: string, payload?: unknown): void {
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) w.webContents.send(channel, payload)
   }
 }
-
 function broadcastState(): void {
   broadcast('daypanel:state-changed', { detached: isPopoutOpen(), mode, collapsed, widgetInteractive })
 }
-
 export function isPopoutOpen(): boolean {
   return !!popout && !popout.isDestroyed()
 }
-
 export function getPanelMode(): PanelMode {
   return mode
 }
-
 let onModeChangedCb: (() => void) | null = null
 /** 主进程订阅模式变化（托盘菜单刷新 radio 状态） */
 export function onPanelModeChanged(cb: () => void): void {
   onModeChangedCb = cb
-}
-
-/** 模式切换（托盘菜单 / 快捷键 / 窗口内按钮共用入口）；不兼容创建期选项时重建窗口 */
-export function setPanelMode(m: PanelMode): void {
-  if (!MODES.includes(m)) return
-  mode = m
-  setSetting('dayPanelMode', m)
-  if (isPopoutOpen()) {
-    if (windowMode !== m) {
-      destroyPopout()
-      createPopout()
-    }
-  }
-  broadcast('daypanel:mode-changed', { mode: m })
-  onModeChangedCb?.()
-}
-
-/** 主窗口内容区高度（脱离时的默认高度） */
-function innerHeightOf(main: BrowserWindow): number {
-  return Math.max(420, main.getContentSize()[1])
 }
 
 function savedBounds(): { x?: number; y?: number; width?: number; height?: number } {
@@ -98,156 +89,166 @@ function savedBounds(): { x?: number; y?: number; width?: number; height?: numbe
   if (raw && typeof raw === 'object') return raw as { x?: number; y?: number; width?: number; height?: number }
   return {}
 }
+function innerHeightOf(main: BrowserWindow): number {
+  return Math.max(420, main.getContentSize()[1])
+}
+function clampToWorkArea(x: number, y: number, w: number, h: number): { x: number; y: number } {
+  const wa = screen.getPrimaryDisplay().workArea
+  return {
+    x: Math.max(wa.x, Math.min(x, wa.x + wa.width - w)),
+    y: Math.max(wa.y, Math.min(y, wa.y + wa.height - h)),
+  }
+}
 
-/** top-dock 展开目标高度（永远取持久化高度，收缩态不覆盖） */
+/**
+ * 模式切换（托盘菜单 / 快捷键 / 窗口内按钮 / 拖拽吸附共用入口）。
+ * 同一窗口内运行时切换形态（alwaysOnTop / mouseEvents / resizable / 位置），不再 destroy+create。
+ * @param opts.explicit false 表示隐式切换（拖拽吸附）：只改当前窗口形态，不写入偏好，
+ *        保证下次「脱离」仍从独立漂浮窗口（中间态）开始。
+ */
+export function setPanelMode(m: PanelMode, opts?: { explicit?: boolean }): void {
+  if (!MODES.includes(m)) return
+  const explicit = opts?.explicit !== false
+  if (mode === m) return
+  mode = m
+  if (explicit) {
+    explicitMode = m
+    setSetting('dayPanelMode', m)
+  }
+  collapsed = false
+  if (isPopoutOpen()) applyMode(popout!, m)
+  broadcast('daypanel:mode-changed', { mode: m })
+  onModeChangedCb?.()
+}
+
+/** 按当前 mode 计算 popout 应在的位置（尺寸由 applyContentSize 决定） */
+function computeTargetPos(m: PanelMode): { x: number; y: number; width: number } {
+  const wa = screen.getPrimaryDisplay().workArea
+  const main = getMainWindow()
+  const mb = main && !main.isDestroyed() ? main.getBounds() : null
+  const saved = savedBounds()
+  if (m === 'top-dock') {
+    const w = saved.width ?? DEFAULT_W
+    return { x: saved.x ?? wa.x + wa.width - w - 80, y: wa.y, width: w }
+  }
+  if (m === 'desktop-widget') {
+    return { x: saved.x ?? wa.x + wa.width - WIDGET_W - 24, y: saved.y ?? wa.y + 24, width: WIDGET_W }
+  }
+  // floating
+  const w = DEFAULT_W
+  // 停靠/贴顶时期存下的位置（y≈工作区顶缘）直接复用，会让漂浮态「一开窗就贴在最上面」，
+  // 且轻微拖动即触发自动停靠 → 判为残留，改回主窗口右侧偏移，给出独立子窗口观感
+  const dockResidue = typeof saved.y === 'number' && saved.y - wa.y <= TOP_EDGE_DIRTY
+  const x = !dockResidue && typeof saved.x === 'number'
+    ? saved.x
+    : (mb ? Math.min(mb.x + mb.width + 12, wa.x + wa.width - w) : wa.x + wa.width - w - 80)
+  const y = !dockResidue && typeof saved.y === 'number'
+    ? saved.y
+    : (mb ? mb.y + 36 : wa.y + 60)
+  return { x, y, width: w }
+}
+
+/** 把 popout 窗口按当前 mode 调整形态（运行时，无重建）。尺寸由 applyContentSize 驱动 */
+function applyMode(win: BrowserWindow, m: PanelMode): void {
+  const wa = screen.getPrimaryDisplay().workArea
+  // 形态属性 + 限制
+  if (m === 'floating') {
+    win.setAlwaysOnTop(false)
+    win.setIgnoreMouseEvents(false)
+    win.setResizable(true)
+    win.setMinimumSize(240, 60)
+    win.setMaximumSize(wa.width - 80, wa.height - 80)
+  } else if (m === 'top-dock') {
+    win.setAlwaysOnTop(true, 'floating')
+    win.setIgnoreMouseEvents(false)
+    win.setResizable(false)
+    win.setMinimumSize(240, TOUCH_STRIP_H)
+    win.setMaximumSize(wa.width - 40, wa.height - 20)
+  } else {
+    // desktop-widget
+    win.setAlwaysOnTop(true)
+    widgetInteractive = false
+    win.setIgnoreMouseEvents(true, { forward: true })
+    win.setResizable(false)
+    win.setMinimumSize(WIDGET_W, WIDGET_H)
+    win.setMaximumSize(WIDGET_W, WIDGET_H)
+    broadcast('daypanel:widget-interactive-changed', { interactive: false })
+  }
+  // 位置（动画到目标 x/y；尺寸由 applyContentSize 决定）
+  const target = computeTargetPos(m)
+  animatePositionXY(win, target.x, target.y)
+  // 内容自适应基线重置（不同模式策略不同，重新等首次内容报告）
+  lastAppliedH = 0
+  lastAppliedW = 0
+  firstSizeSet = false
+  broadcastState()
+}
+
+/** top-dock 展开目标高度（首次开窗的占位期望高度，随后被内容覆盖） */
 function expandedHeightOf(): number {
   const h = savedBounds().height
   return h && h > 100 ? h : DEFAULT_H
 }
 
-function createPopout(): void {
-  if (popout && !popout.isDestroyed()) {
-    popout.show()
-    popout.focus()
-    return
-  }
-  const main = getMainWindow()
-  const mb = main && !main.isDestroyed() ? main.getBounds() : null
-  const wa = screen.getPrimaryDisplay().workArea
-  const saved = savedBounds()
-
-  let x: number, y: number, w: number, h: number
-  if (mode === 'top-dock') {
-    w = saved.width ?? DEFAULT_W
-    h = collapsed ? TOUCH_STRIP_H : expandedHeightOf()
-    x = saved.x ?? wa.x + wa.width - w - 80
-    y = wa.y
-  } else if (mode === 'desktop-widget') {
-    w = WIDGET_W
-    h = WIDGET_H
-    x = saved.x ?? wa.x + wa.width - w - 24
-    y = saved.y ?? wa.y + 24
-  } else {
-    w = saved.width ?? DEFAULT_W
-    h = saved.height ?? (main ? innerHeightOf(main) : DEFAULT_H)
-    x = saved.x ?? (mb ? Math.min(mb.x + mb.width + 12, wa.x + wa.width - w) : wa.x + wa.width - w - 80)
-    y = saved.y ?? (mb ? mb.y + 36 : wa.y + 60)
-  }
-
-  const isWidget = mode === 'desktop-widget'
-  // 顶部停靠与桌面小组件都走透明圆角窗口（圆润感）；自由漂浮保持不透明实体窗口
-  const isGlass = mode === 'top-dock' || isWidget
-  windowMode = mode
-
-  popout = new BrowserWindow({
-    x: Math.max(wa.x, Math.min(x, wa.x + wa.width - w)),
-    y: Math.max(wa.y, Math.min(y, wa.y + wa.height - h)),
-    width: w,
-    height: h,
-    minWidth: isWidget ? WIDGET_W : 240,
-    minHeight: isWidget ? WIDGET_H : 60,
-    maxWidth: isWidget ? WIDGET_W : undefined,
-    maxHeight: isWidget ? WIDGET_H : undefined,
-    frame: false,
-    skipTaskbar: true,
-    maximizable: false,
-    fullscreenable: false,
-    resizable: !isWidget && mode !== 'top-dock',
-    show: false,
-    title: '日程与打卡',
-    transparent: isGlass,
-    backgroundColor: isGlass ? '#00000000' : '#1e1e1e',
-    alwaysOnTop: mode === 'top-dock' || isWidget,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-      additionalArguments: ['--day-panel-window'],
-    },
-  })
-
-  if (mode === 'top-dock') popout.setAlwaysOnTop(true, 'floating')
-
-  // 安全策略与主窗口一致
-  popout.webContents.on('will-navigate', (e) => e.preventDefault())
-  popout.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
-    return { action: 'deny' }
-  })
-  popout.webContents.on('render-process-gone', (_e, details) => {
-    console.error('[DayPanel popout] render-process-gone:', details)
-  })
-
-  const devUrl = getRendererUrl()
-  if (devUrl) void popout.loadURL(`${devUrl}#/day-panel`)
-  else void popout.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'day-panel' })
-
-  popout.once('ready-to-show', () => {
-    if (!popout || popout.isDestroyed()) return
-    popout.show()
-    syncWindowBehavior()
-    broadcastState()
-  })
-
-  // 位置/尺寸持久化（top-dock 收缩态、动画期间跳过，避免覆盖展开高度）
-  popout.on('moved', onPopoutMoved)
-  popout.on('resized', scheduleSaveBounds)
-
-  // X 关闭 = 自动回内嵌
-  popout.on('closed', () => {
-    popout = null
-    windowMode = null
-    stopAnim()
-    if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
-    broadcastState()
-  })
-}
-
-/** 按当前模式同步窗口行为（创建期选项之外的运行时行为） */
-function syncWindowBehavior(): void {
+/** 收到渲染层报告的「内容所需尺寸」：让窗口高度贴合内容（仅向上跟随；首次强制贴合） */
+function applyContentSize(scrollW: number, scrollH: number): void {
   if (!popout || popout.isDestroyed()) return
   if (mode === 'desktop-widget') {
-    widgetInteractive = false
-    popout.setIgnoreMouseEvents(true, { forward: true })
-    broadcast('daypanel:widget-interactive-changed', { interactive: false })
+    // widget 固定尺寸，仅在首次时按内容摆位（基本不会触发，因为 widget 走 ready-to-show 直接 show）
+    if (!firstSizeSet) {
+      popout.setSize(WIDGET_W, WIDGET_H)
+      firstSizeSet = true
+      if (!popout.isVisible()) popout.show()
+    }
+    return
   }
-}
-
-function scheduleSaveBounds(): void {
-  if (boundsSaveTimer) clearTimeout(boundsSaveTimer)
-  boundsSaveTimer = setTimeout(() => {
-    boundsSaveTimer = null
-    if (!popout || popout.isDestroyed()) return
-    if (topDockAnimating) { scheduleSaveBounds(); return }
-    if (mode === 'top-dock' && collapsed) return
-    const b = popout.getBounds()
-    if (b.width < 40 || b.height < 20) return
-    setSetting('dayPanelPopoutBounds', { x: b.x, y: b.y, width: b.width, height: b.height })
-  }, BOUNDS_SAVE_MS)
-}
-
-/** 自由漂浮拖拽松手（moved）：窗口顶部贴近工作区顶缘 → 自动切换顶部停靠（无需快捷键） */
-function onPopoutMoved(): void {
-  scheduleSaveBounds()
-  if (mode !== 'floating' || !popout || popout.isDestroyed()) return
-  const b = popout.getBounds()
   const wa = screen.getPrimaryDisplay().workArea
-  if (b.y - wa.y <= DOCK_DRAG_THRESHOLD) {
-    setPanelMode('top-dock')
+
+  if (mode === 'floating') {
+    const w = Math.max(240, Math.min(scrollW, wa.width - 80))
+    const minH = 60
+    const maxH = wa.height - 80
+    const targetH = Math.max(minH, Math.min(scrollH, maxH))
+    if (!firstSizeSet) {
+      // 首次：直接贴合内容尺寸并显示（避免开窗先默认高度再缩的闪烁）
+      popout.setSize(w, targetH)
+      lastAppliedH = targetH
+      lastAppliedW = w
+      firstSizeSet = true
+      if (!popout.isVisible()) popout.show()
+      scheduleSaveBounds()
+      return
+    }
+    if (targetH > lastAppliedH || Math.abs(w - lastAppliedW) > 1) {
+      // 内容变高 / 宽度变了 → 跟上；内容变少不缩（保留用户拉大的空间）
+      popout.setSize(w, targetH)
+      lastAppliedH = targetH
+      lastAppliedW = w
+      scheduleSaveBounds()
+    }
+  } else {
+    // top-dock（展开态跟内容，收缩态不动）
+    if (collapsed) return
+    const maxH = wa.height - 20
+    const targetH = Math.max(60, Math.min(scrollH, maxH))
+    const cur = popout.getBounds()
+    if (!firstSizeSet) {
+      // 首次：直接展开到内容高度并显示
+      popout.setBounds({ ...cur, height: targetH })
+      lastAppliedH = targetH
+      firstSizeSet = true
+      if (!popout.isVisible()) popout.show()
+      scheduleSaveBounds()
+      return
+    }
+    if (targetH > cur.height + 1) {
+      animateHeight(targetH)
+      lastAppliedH = targetH
+    }
   }
 }
 
-function destroyPopout(): void {
-  stopAnim()
-  if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
-  if (popout && !popout.isDestroyed()) popout.destroy()
-  popout = null
-  windowMode = null
-  broadcastState()
-}
-
-/** top-dock 展开/收回动画（主进程逐帧 setBounds，仅动高度，顶部边缘不动） */
+/** top-dock 高度动画（缓动） */
 function animateHeight(target: number): void {
   if (!popout || popout.isDestroyed()) return
   const b = popout.getBounds()
@@ -263,12 +264,153 @@ function animateHeight(target: number): void {
     const h = Math.round(start + (target - start) * ease)
     const cur = popout.getBounds()
     popout.setBounds({ ...cur, height: h })
-    if (p >= 1) { stopAnim(); topDockAnimating = false }
+    if (p >= 1) { stopAnim(); topDockAnimating = false; scheduleSaveBounds() }
+  }, 16)
+}
+
+/** 位置缓动（x/y 单独动画，不动尺寸） */
+function animatePositionXY(win: BrowserWindow, tx: number, ty: number): void {
+  const cur = win.getBounds()
+  if (Math.abs(tx - cur.x) < 1 && Math.abs(ty - cur.y) < 1) return
+  const t0 = Date.now()
+  topDockAnimating = true
+  stopAnim()
+  const startX = cur.x
+  const startY = cur.y
+  animTimer = setInterval(() => {
+    if (win.isDestroyed()) { stopAnim(); topDockAnimating = false; return }
+    const p = Math.min(1, (Date.now() - t0) / POSITION_MS)
+    const ease = 1 - Math.pow(1 - p, 3)
+    const x = Math.round(startX + (tx - startX) * ease)
+    const y = Math.round(startY + (ty - startY) * ease)
+    win.setPosition(x, y)
+    if (p >= 1) { stopAnim(); topDockAnimating = false; scheduleSaveBounds() }
   }, 16)
 }
 
 function stopAnim(): void {
   if (animTimer) { clearInterval(animTimer); animTimer = null }
+}
+
+function createPopout(): void {
+  if (popout && !popout.isDestroyed()) {
+    popout.show()
+    popout.focus()
+    return
+  }
+  // 脱离 = 独立漂浮中间态；仅当本会话显式选过形态时才沿用
+  mode = explicitMode ?? 'floating'
+  collapsed = false
+  firstSizeSet = false
+  lastAppliedH = 0
+  lastAppliedW = 0
+
+  // 统一 transparent：floating 渲染层 html 有不透明背景 → 视觉不透明；
+  // top-dock / widget 需要玻璃感也走 transparent；统一后模式切换无需重建窗口
+  popout = new BrowserWindow({
+    x: 0, y: 0, width: DEFAULT_W, height: DEFAULT_H,
+    frame: false,
+    skipTaskbar: true,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    title: '日程与打卡',
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      additionalArguments: ['--day-panel-window'],
+    },
+  })
+
+  popout.webContents.on('will-navigate', (e) => e.preventDefault())
+  popout.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  popout.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[DayPanel popout] render-process-gone:', details)
+  })
+
+  const devUrl = getRendererUrl()
+  if (devUrl) void popout.loadURL(`${devUrl}#/day-panel`)
+  else void popout.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'day-panel' })
+
+  popout.once('ready-to-show', () => {
+    if (!popout || popout.isDestroyed()) return
+    popoutShownAt = Date.now()
+    // 先应用形态属性 + 位置（widget 固定尺寸可直接显示）
+    applyMode(popout, mode)
+    if (mode === 'desktop-widget') {
+      popout.setSize(WIDGET_W, WIDGET_H)
+      if (!popout.isVisible()) popout.show()
+    }
+    // floating / top-dock 等待渲染层首次报告内容尺寸（applyContentSize 中 firstSizeSet 时再 show），
+    // 避免「开窗先默认高度再缩到内容」的闪烁
+  })
+
+  popout.on('moved', onPopoutMoved)
+  popout.on('resized', scheduleSaveBounds)
+
+  popout.on('closed', () => {
+    popout = null
+    stopAnim()
+    if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
+    if (dockJudgeTimer) { clearTimeout(dockJudgeTimer); dockJudgeTimer = null }
+    lastAppliedH = 0
+    lastAppliedW = 0
+    firstSizeSet = false
+    broadcastState()
+  })
+}
+
+function scheduleSaveBounds(): void {
+  if (boundsSaveTimer) clearTimeout(boundsSaveTimer)
+  boundsSaveTimer = setTimeout(() => {
+    boundsSaveTimer = null
+    if (!popout || popout.isDestroyed()) return
+    if (topDockAnimating) { scheduleSaveBounds(); return }
+    if (mode === 'top-dock' && collapsed) return
+    const b = popout.getBounds()
+    if (b.width < 40 || b.height < 20) return
+    setSetting('dayPanelPopoutBounds', { x: b.x, y: b.y, width: b.width, height: b.height })
+  }, BOUNDS_SAVE_MS)
+}
+
+/** 自由漂浮拖拽松手：窗口顶部贴近工作区顶缘 → 自动停靠（隐式，不写偏好） */
+function onPopoutMoved(): void {
+  scheduleSaveBounds()
+  if (mode !== 'floating' || !popout || popout.isDestroyed()) return
+  // 刚脱离的宽限期内不判定：窗口可能刚被创建/动画落位，此时不应立刻被吸走
+  if (Date.now() - popoutShownAt < POPOUT_GRACE_MS) return
+  // 拖拽停止后才判定（moved 每次移动都触发），避免拖动途中掠过顶缘就被吸走
+  if (dockJudgeTimer) clearTimeout(dockJudgeTimer)
+  dockJudgeTimer = setTimeout(() => {
+    dockJudgeTimer = null
+    if (mode !== 'floating' || !popout || popout.isDestroyed()) return
+    const b = popout.getBounds()
+    const wa = screen.getPrimaryDisplay().workArea
+    if (b.y - wa.y <= DOCK_DRAG_THRESHOLD) {
+      // 隐式：不写入偏好，下次脱离仍回到独立漂浮中间态
+      setPanelMode('top-dock', { explicit: false })
+    }
+  }, DOCK_JUDGE_MS)
+}
+
+function destroyPopout(): void {
+  stopAnim()
+  if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
+  if (dockJudgeTimer) { clearTimeout(dockJudgeTimer); dockJudgeTimer = null }
+  if (popout && !popout.isDestroyed()) popout.destroy()
+  popout = null
+  lastAppliedH = 0
+  lastAppliedW = 0
+  firstSizeSet = false
+  broadcastState()
 }
 
 export function initDayPanel(opts: {
@@ -281,8 +423,10 @@ export function initDayPanel(opts: {
   getRendererUrl = opts.rendererUrl
   getSetting = opts.getSetting
   setSetting = opts.setSetting
-  const savedMode = opts.getSetting('dayPanelMode') as PanelMode | undefined
-  if (savedMode && MODES.includes(savedMode)) mode = savedMode
+  // 不再跨会话恢复 dayPanelMode：旧逻辑中「拖拽吸附」也会写入该设置，恢复它会导致
+  // 下次「脱离」直接变成停靠/小组件、跳过独立漂浮中间态。形态只在会话内有效。
+  mode = 'floating'
+  explicitMode = null
   registerHandlers()
   try {
     globalShortcut.register('Control+Alt+S', () => { togglePanel() })
@@ -293,14 +437,20 @@ export function initDayPanel(opts: {
   }
 }
 
-/** 快捷键：若独立窗口开 → 吸附；否则通知主窗口切换可见性 */
 function togglePanel(): void {
   if (isPopoutOpen()) destroyPopout()
   else broadcast('daypanel:toggle-visibility')
 }
 
 function registerHandlers(): void {
-  ipcMain.handle('daypanel:popout', () => { createPopout(); return isPopoutOpen() })
+  ipcMain.handle('daypanel:popout', () => {
+    if (!isPopoutOpen()) {
+      mode = explicitMode ?? 'floating'
+      collapsed = false
+    }
+    createPopout()
+    return isPopoutOpen()
+  })
   ipcMain.handle('daypanel:dock-back', () => { destroyPopout(); return isPopoutOpen() })
   ipcMain.handle('daypanel:get-state', () => ({ detached: isPopoutOpen(), mode, collapsed, widgetInteractive }))
   ipcMain.handle('daypanel:toggle', () => {
@@ -310,13 +460,23 @@ function registerHandlers(): void {
   ipcMain.handle('daypanel:mode-set', (_e, m: PanelMode) => { setPanelMode(m); return mode })
   ipcMain.handle('daypanel:mode-get', () => mode)
 
+  // 渲染层报告 document 所需尺寸（floating/top-dock 高度自适应）
+  ipcMain.on('daypanel:content-size', (_e, payload: { width?: number; height?: number }) => {
+    if (!payload) return
+    const w = Number(payload.width)
+    const h = Number(payload.height)
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return
+    applyContentSize(w, h)
+  })
+
   // ---- top-dock：展开 / 收回意图（500ms grace）/ 取消收回 ----
   ipcMain.handle('daypanel:topdock-expand', () => {
     if (mode !== 'top-dock' || !isPopoutOpen()) return
     if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null }
     if (collapsed && !topDockAnimating) {
       collapsed = false
-      animateHeight(expandedHeightOf())
+      const target = lastAppliedH || expandedHeightOf()
+      animateHeight(target)
       broadcast('daypanel:collapsed-changed', { collapsed: false })
     }
   })
@@ -344,7 +504,6 @@ function registerHandlers(): void {
     return widgetInteractive
   })
 
-  // 小窗「打开任务模块」→ 唤起主窗口并切 Tab
   ipcMain.on('daypanel:open-in-main', (_e, tab: string) => {
     const main = getMainWindow()
     if (!main || main.isDestroyed() || typeof tab !== 'string') return

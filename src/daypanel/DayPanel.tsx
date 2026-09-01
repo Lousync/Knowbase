@@ -3,9 +3,11 @@ import {
   GripHorizontal, X, Check, Pencil, Trash2, CalendarClock,
   Plus, ChevronRight, ChevronDown, ExternalLink,
   PanelRightClose, PanelRightOpen,
-  FileText, BookOpen, MessageCircle, Wrench, Settings,
+  FileText, BookOpen, MessageCircle, Wrench,
+  Timer,
 } from 'lucide-react'
 import type { ScheduleTodo, Habit, HabitRecord } from '../types'
+import { usePomodoro } from '../modules/toolbox/hooks/PomodoroContext'
 import { localToday } from '../lib/date'
 import {
   getScheduleTodos, getScheduleOverdue, getScheduleSubtasks,
@@ -19,14 +21,13 @@ import { isPlannedOn, currentStreak, buildRecordIndex } from '../modules/toolbox
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-/** 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块 */
+/** 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块（设置入口已移走，避免与停靠面板视觉竞争） */
 const MODULE_LINKS: { tab: string; icon: typeof FileText; label: string }[] = [
   { tab: 'blog', icon: FileText, label: '博客' },
   { tab: 'schedule', icon: CalendarClock, label: '日程' },
   { tab: 'knowledge', icon: BookOpen, label: '知识库' },
   { tab: 'moments', icon: MessageCircle, label: '说说' },
   { tab: 'toolbox', icon: Wrench, label: '工具箱' },
-  { tab: 'settings', icon: Settings, label: '设置' },
 ]
 
 /** 距次日 00:00:05 的毫秒数（用于跨零点刷新定时器） */
@@ -56,6 +57,10 @@ export interface DayPanelProps {
   onDockBack?: () => void
   /** 关闭（嵌入模式隐藏面板；脱离模式等同 dockBack） */
   onClose?: () => void
+  /** popout 专属：番茄钟状态快照（主进程广播，popout 不持有计时器；embedded 态忽略此 prop） */
+  pomodoroStatus?: {
+    visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number
+  } | null
 }
 
 /**
@@ -63,7 +68,7 @@ export interface DayPanelProps {
  * 逾期置顶红分组 → 今日任务（子任务展开一级）→ 快速添加（轻量时间解析）→ 今日打卡
  * popout 态支持三种桌面互动模式（panelMode），交互协议见 dayPanelWindow.ts
  */
-export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widgetInteractive = false, onPopout, onDockBack, onClose }: DayPanelProps) {
+export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widgetInteractive = false, onPopout, onDockBack, onClose, pomodoroStatus = null }: DayPanelProps) {
   const [todayStr, setTodayStr] = useState(() => localToday())
   const todayDate = useMemo(() => {
     const [y, m, d] = todayStr.split('-').map(Number)
@@ -80,6 +85,10 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   const [editing, setEditing] = useState<{ id: string; title: string; date: string; time: string } | null>(null)
   const [quick, setQuick] = useState('')
   const [manualTime, setManualTime] = useState<string | null>(null)
+
+  // 番茄钟状态（从 PomodoroContext 取；嵌入式与脱离态都由 Provider 包裹）
+  const pom = usePomodoro()
+  const { state: ps } = pom
 
   // 跨零点自动翻页
   useEffect(() => {
@@ -590,6 +599,39 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
           </div>
         </section>
       </div>
+
+      {/* 番茄钟状态条（停靠态 + 番茄钟在用时才显示，置于模块栏上方）
+          原 StatusBar 已删除，番茄钟失去常驻入口；停靠态下显示倒计时+状态+展开主面板的入口。
+          embedded 态（pomodoroStatus 为 null 默认值）：从 PomodoroContext 取权威（同一 Provider）。
+          popout 态（pomodoroStatus 来自主进程广播）：独立 BrowserWindow 无 Provider 上下文，点击
+          会唤起主窗口切到工具箱（番茄钟主面板在工具箱内）。 */}
+      {isTopDock && (pomodoroStatus ? pomodoroStatus.visible : ps.visible) && (
+        <div className="shrink-0 border-t border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-tertiary)_55%,transparent)] px-2 py-1">
+          <button
+            onClick={pomodoroStatus
+              ? () => { void window.api?.dayPanelOpenInMain?.('toolbox') }
+              : () => { pom.setState(s => ({ ...s, expanded: !s.expanded })) }
+            }
+            className={`relative w-full flex items-center justify-center gap-1.5 rounded-md py-1 text-[11px] font-medium transition-colors overflow-hidden ${
+              !pomodoroStatus && ps.expanded ? 'bg-[var(--bg-hover)]' : ''
+            } hover:bg-[var(--bg-hover)]`}
+            title="番茄钟"
+          >
+            {/* 阶段进度填充：已完成比例从左到右增长（accent 淡色，不喧宾夺主） */}
+            <div
+              className="absolute inset-y-0 left-0 bg-[var(--accent)]/15 transition-[width] duration-700 ease-linear"
+              style={{ width: `${Math.max(0, Math.min(1, pomodoroStatus ? pomodoroStatus.progress : pom.progress)) * 100}%` }}
+            />
+            <Timer size={12} className="relative text-[var(--accent)]" />
+            <span className="relative font-mono">{pomodoroStatus ? pomodoroStatus.display : pom.display}</span>
+            <span className="relative opacity-80">
+              {pomodoroStatus
+                ? (pomodoroStatus.done ? '✓' : pomodoroStatus.running ? (pomodoroStatus.phase === 'work' ? '专注中' : '休息中') : '已暂停')
+                : (ps.done ? '✓' : ps.running ? (ps.phase === 'work' ? '专注中' : '休息中') : '已暂停')}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块 */}
       {isTopDock && (

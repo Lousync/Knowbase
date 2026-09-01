@@ -939,6 +939,8 @@ export interface ElectronAPI {
   dayPanelTopdockCollapseIntent: () => Promise<void>
   dayPanelTopdockCancelCollapse: () => Promise<void>
   dayPanelWidgetInteractive: (active: boolean) => Promise<boolean>
+  /** 渲染层报告 document 所需尺寸（用于独立窗口高度自适应） */
+  dayPanelReportContentSize: (width: number, height: number) => void
   onDayPanelStateChanged: (cb: (s: { detached: boolean; mode: string; collapsed: boolean; widgetInteractive: boolean }) => void) => () => void
   onDayPanelModeChanged: (cb: (s: { mode: string }) => void) => () => void
   onDayPanelCollapsedChanged: (cb: (s: { collapsed: boolean }) => void) => () => void
@@ -995,6 +997,10 @@ export interface ElectronAPI {
   wordbookSetBook: (book: string) => Promise<{ ok: boolean }>
   wordbookStats: () => Promise<WordbookStatsDto>
   wordbookCheck: (word: string) => Promise<{ inBook: boolean; status?: WordbookStatus }>
+  // 番茄钟状态跨窗口同步（主进程权威快照，所有 BrowserWindow 共享）
+  pomodoroUpdateState: (snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => void
+  pomodoroGetState: () => Promise<{ visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }>
+  onPomodoroState: (cb: (snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => void) => () => void
   wordbookMarkKnown: (word: string) => Promise<{ ok: boolean }>
   wordbookBookWords: (book: string, query: string, offset: number, limit: number, orderBy?: string) => Promise<BookWordsResultDto>
   wordbookRootClusters: () => Promise<RootClusterDto[]>

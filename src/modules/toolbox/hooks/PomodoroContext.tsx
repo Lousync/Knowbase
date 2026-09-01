@@ -7,8 +7,32 @@ type Ctx = ReturnType<typeof usePomodoroState>
 
 const C = createContext<Ctx | null>(null)
 
-export function PomodoroProvider({ children }: { children: ReactNode }) {
-  // 内置预设 + 已启用插件贡献的扩展预设(异步加载,加载完成前先用内置)
+/** popout 端的占位 value：被动模式不持有计时器/状态，仅让 usePomodoro() 在被动 Provider 内不 throw */
+function createPassivePlaceholder(): Ctx {
+  const noopSetState: React.Dispatch<React.SetStateAction<PomodoroState>> = () => {}
+  return {
+    state: { visible: false, running: false, phase: 'work', done: false, expanded: false, currentPreset: 0, remainingMs: 0, totalMs: 0, startTimestamp: 0, endTimestamp: 0 },
+    setState: noopSetState,
+    presets: BASE_PRESETS,
+    activate: () => {},
+    pause: () => {},
+    resume: () => {},
+    reset: () => {},
+    hide: () => {},
+    skipPhase: () => {},
+    setPreset: () => {},
+    display: '00:00',
+    progress: 0,
+  } as unknown as Ctx
+}
+
+export function PomodoroProvider({ children, passive = false }: { children: ReactNode; passive?: boolean }) {
+  // 被动模式（popout 独立窗口用）：不持有计时器，状态从 IPC 接收通过 prop 注入到子组件
+  if (passive) {
+    return <C.Provider value={createPassivePlaceholder()}>{children}</C.Provider>
+  }
+
+  // 主动模式（主窗口工具箱用）：权威状态机 + 同步给主进程（让 popout 也能看到倒计时）
   const [presets, setPresets] = useState<PomodoroPresetDef[]>(BASE_PRESETS)
   const loadPresets = useCallback(() => {
     getPluginPomodoroPresets()
@@ -22,6 +46,41 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('plugins-changed', loadPresets)
   }, [loadPresets])
   const pom = usePomodoroState(presets)
+
+  // 全局激活入口：工具箱等处 dispatch 'pomodoro:activate' 启动/展开番茄钟。
+  // 原由 StatusBar 监听，状态栏移除后下沉到 Provider，保证任何页面都能响应。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { preset?: number } | undefined
+      if (pom.state.visible) {
+        // 已激活 — 仅展开，不重置计时
+        pom.setState(s => ({ ...s, expanded: true }))
+      } else {
+        pom.activate(detail?.preset)
+      }
+    }
+    window.addEventListener('pomodoro:activate', handler)
+    return () => window.removeEventListener('pomodoro:activate', handler)
+  }, [pom])
+
+  // 状态变化 → 同步到主进程（主进程再广播给所有窗口，让 popout 也能看到倒计时）。
+  // 关键：popout 端的 PomodoroProvider 是 passive，不会走这个 useEffect → 无循环。
+  useEffect(() => {
+    if (!window.api?.pomodoroUpdateState) return
+    const t = setTimeout(() => {
+      window.api?.pomodoroUpdateState?.({
+        visible: pom.state.visible,
+        display: pom.display,
+        running: pom.state.running,
+        phase: pom.state.phase,
+        done: pom.state.done,
+        expanded: pom.state.expanded,
+        progress: pom.progress,
+      })
+    }, 200)
+    return () => clearTimeout(t)
+  }, [pom.state.visible, pom.display, pom.state.running, pom.state.phase, pom.state.done, pom.state.expanded, pom.progress])
+
   return <C.Provider value={pom}>{children}</C.Provider>
 }
 
