@@ -1,3 +1,5 @@
+// 必须最先引入：IPC 注册幂等包装（dev 下 repo 模块被打包两份时避免重复注册崩溃）
+import './ipcSafe'
 import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu, net, Tray } from 'electron'
 import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'

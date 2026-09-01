@@ -13,6 +13,10 @@ export default defineConfig({
     },
     build: {
       outDir: 'out/main',
+      // 本机 safe-delete 钩子会拦截 Vite 清空 outDir 的操作（Error during a `trash` operation），
+      // 导致 dev/build 直接失败。关闭自动清空改为覆盖写：旧产物残留无害（文件名带 hash 或固定），
+      // 需要彻底清理时手动删除 out/ 目录。
+      emptyOutDir: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'electron/main/index.ts')
@@ -24,6 +28,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'out/preload',
+      emptyOutDir: false,   // 同上：规避 safe-delete 拦截
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'electron/preload/index.ts')
@@ -40,6 +45,7 @@ export default defineConfig({
     },
     build: {
       outDir: 'out/renderer',
+      emptyOutDir: false,   // 同上：规避 safe-delete 拦截
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'index.html')
