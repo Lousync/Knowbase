@@ -5,12 +5,10 @@ import {
   getScheduleTags, createScheduleTag, createScheduleTodo, getScheduleTodos,
 } from '../../../lib/ipc'
 import type { PeriodStats } from '../../../lib/ipc'
-import { getSummaryWindow, type PeriodWindow, type MonthlyMode } from '../../../lib/summary'
+import { getSummaryWindow, type PeriodWindow, type MonthlyMode, SUMMARY_TAG_DEFS } from '../../../lib/summary'
 import { useSettings } from '../../../lib/SettingsContext'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-/** 与日程模块联动的专用标签 */
-const LINK_TAG_NAME = '周期任务'
 
 /**
  * 周/月总结附页 —— 以"文档最后一节"的姿态渲染在 Markdown 内容之后，
@@ -47,15 +45,16 @@ export function SummaryPanel({ date }: { date: string }) {
     return () => { alive = false }
   }, [win])
 
-  // 确保联动标签存在，并拉取下期日期已有的关联任务
+  // 确保联动标签（周任务/月任务）存在，并拉取下期日期已有的关联任务
   useEffect(() => {
     if (!win) return
     let alive = true
+    const def = SUMMARY_TAG_DEFS[win.type]
     void (async () => {
       try {
         let tags = await getScheduleTags()
-        let tag = tags.find(t => t.name === LINK_TAG_NAME)
-        if (!tag) tag = await createScheduleTag(LINK_TAG_NAME, '#8b5cf6')
+        let tag = tags.find(t => t.name === def.name)
+        if (!tag) tag = await createScheduleTag(def.name, def.color)
         if (!alive || !tag) return
         const todos = await getScheduleTodos(win.nextDate)
         if (alive) setTasks(todos.filter(t => t.tagId === tag!.id))
@@ -69,9 +68,10 @@ export function SummaryPanel({ date }: { date: string }) {
     if (!title || !win || adding) return
     setAdding(true)
     try {
+      const def = SUMMARY_TAG_DEFS[win.type]
       let tags = await getScheduleTags()
-      let tag = tags.find(t => t.name === LINK_TAG_NAME)
-      if (!tag) tag = await createScheduleTag(LINK_TAG_NAME, '#8b5cf6')
+      let tag = tags.find(t => t.name === def.name)
+      if (!tag) tag = await createScheduleTag(def.name, def.color)
       await createScheduleTodo({
         title,
         date: win.nextDate,
@@ -121,7 +121,7 @@ export function SummaryPanel({ date }: { date: string }) {
         下{win.type === 'week' ? '一周' : '一个月'}的任务
       </h3>
       <p className="text-[12px] text-[var(--text-muted)]">
-        落在 {win.nextDate} · 自动同步到「日程」模块并带「周期任务」标签，细节可在那边继续编辑
+        落在 {win.nextDate} · 自动同步到「日程」模块并带「{SUMMARY_TAG_DEFS[win.type].name}」标签，细节可在那边继续编辑
       </p>
 
       <ul className="mt-3 space-y-0.5">

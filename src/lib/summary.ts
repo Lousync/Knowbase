@@ -20,6 +20,12 @@ export interface PeriodWindow {
   nextDate: string
 }
 
+/** 周/月总结联动任务标签：周总结创建的任务自带「周任务」，月总结自带「月任务」 */
+export const SUMMARY_TAG_DEFS: Record<PeriodWindow['type'], { name: string; color: string }> = {
+  week: { name: '周任务', color: '#8b5cf6' },
+  month: { name: '月任务', color: '#0ea5e9' },
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
