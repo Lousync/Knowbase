@@ -54,8 +54,20 @@ export function GeneralView() {
       {/* 自动保存 */}
       <div data-setting-anchor="advanced.autosave">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">自动保存</h3>
-        <div className="text-[13px] text-[var(--text-muted)]">
-          编辑器将在停止输入 {s.autoSaveDebounceMs / 1000} 秒后自动保存
+        <div className="max-w-md">
+          <NumberField
+            value={s.autoSaveDebounceMs}
+            onCommit={(v) => update('autoSaveDebounceMs', v)}
+            min={100}
+            max={30000}
+            step={100}
+            unit="ms"
+            presets={[500, 1000, 2000, 5000]}
+            defaultValue={2000}
+          />
+          <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            停止输入后 {s.autoSaveDebounceMs / 1000} 秒自动保存（可直接输入毫秒）。
+          </p>
         </div>
       </div>
     </div>

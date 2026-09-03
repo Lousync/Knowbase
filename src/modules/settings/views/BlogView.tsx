@@ -5,6 +5,7 @@ import {
   getSetting, setSetting,
   listBlogTemplates, createBlogTemplate, updateBlogTemplate, deleteBlogTemplate,
 } from '../../../lib/ipc'
+import { NumberField } from '../components/fields/NumberField'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 type MonthlyMode = 'first' | 'last' | 'fixed'
@@ -94,20 +95,20 @@ export function BlogView() {
             </select>
           </label>
           {monthlyMode === 'fixed' && (
-            <label className="flex items-center gap-3 text-[13px]" data-setting-anchor="blog.summaryMonthlyFixedDay">
+            <div className="flex items-center gap-3 text-[13px]" data-setting-anchor="blog.summaryMonthlyFixedDay">
               <span className="text-[var(--text-secondary)] w-28 shrink-0">固定日期</span>
-              <input
-                type="number" min={1} max={28}
+              <NumberField
                 value={monthlyFixedDay}
-                onChange={e => {
-                  const v = Math.min(28, Math.max(1, Number(e.target.value) || 1))
-                  setMonthlyFixedDay(v)
-                  void setSetting('summaryMonthlyFixedDay', v)
-                }}
-                className="w-24 px-2.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                onCommit={(v) => { setMonthlyFixedDay(v); void setSetting('summaryMonthlyFixedDay', v) }}
+                min={1}
+                max={28}
+                step={1}
+                unit="号"
+                presets={[1, 5, 10, 15, 20, 25, 28]}
+                defaultValue={1}
               />
               <span className="text-[11px] text-[var(--text-muted)]">每月 {monthlyFixedDay} 号为月总结日（1-28）</span>
-            </label>
+            </div>
           )}
         </div>
       </div>

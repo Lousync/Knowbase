@@ -9,6 +9,7 @@ import {
   vaultBackupPickArchive, vaultBackupRestoreArchive, vaultBackupRestoreDb,
 } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
+import { NumberField } from '../components/fields/NumberField'
 import { ExportSettingsView } from './ExportSettingsView'
 
 /** 设置 → 数据与仓库：存储读源 / 旧数据导入 / 整仓备份恢复 + 导出 */
@@ -207,6 +208,29 @@ export function DataView() {
               导出会把 sqlite 全量快照放入本仓库 <code className="bg-[var(--bg-hover)] px-1 rounded">.knowbase/backup/knowledge.db</code> 后整仓压缩；
               导入 = 解压备份 zip 到目标目录重建仓库，可再还原 sqlite 快照让数据库读源的小模块数据恢复。
               {backupState.hasBackupDb ? `当前仓库已有 sqlite 快照（${(backupState.dbBytes / 1024).toFixed(0)} KB）` : '当前仓库还没有 sqlite 快照'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 回收站 */}
+      <div className="mb-8" data-setting-anchor="data.recycleDays">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">回收站</h3>
+        <div className="max-w-md space-y-3">
+          <div>
+            <label className="block text-[12px] text-[var(--text-secondary)] mb-1">保留天数</label>
+            <NumberField
+              value={s.recycleBinRetentionDays}
+              onCommit={(v) => update('recycleBinRetentionDays', v)}
+              min={1}
+              max={3650}
+              step={1}
+              unit="天"
+              presets={[7, 30, 90, 365]}
+              defaultValue={30}
+            />
+            <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+              回收站内的内容保留满该天数后自动清除（1-3650 天）。
             </p>
           </div>
         </div>
