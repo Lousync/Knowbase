@@ -1,0 +1,17 @@
+{
+  "id": "kb.weight-tracker",
+  "name": "体重追踪（插件版）",
+  "version": "0.1.0",
+  "type": "ui",
+  "entry": "index.html",
+  "author": "Knowbase",
+  "description": "工具箱插件化第二批试点：体重记录 + 趋势曲线。数据走 kb.store（.knowbase/plugins/kb.weight-tracker/records.json，纯本地 JSON），kg/斤切换，多日曲线 + hover 查看",
+  "category": "健康",
+  "riskLevel": "B",
+  "capabilities": [],
+  "contributes": {
+    "tools": [
+      { "id": "weight-tracker", "name": "体重" }
+    ]
+  }
+}

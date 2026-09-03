@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>体重追踪</title>
+<style>
+  :root {
+    --bg: #fafafa; --card: #fff; --line: #e5e5e5; --text: #333; --sub: #888; --accent: #378add;
+  }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  * { box-sizing: border-box; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: var(--sub); margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat .v { font-size: 18px; font-weight: 600; }
+  .stat .k { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input, select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 13px; background: #fff; color: var(--text); outline: none; }
+  input:focus { border-color: var(--accent); }
+  button { border: none; border-radius: 8px; padding: 7px 16px; font-size: 13px; cursor: pointer; }
+  .primary { background: var(--accent); color: #fff; }
+  .ghost { background: transparent; border: 1px solid var(--line); color: var(--sub); }
+  .ghost:hover { color: var(--text); border-color: var(--sub); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border-radius: 0; background: transparent; color: var(--sub); padding: 6px 14px; font-size: 12px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  canvas { width: 100%; display: block; border-radius: 6px; }
+  .empty { text-align: center; color: var(--sub); font-size: 13px; padding: 46px 0; }
+  .list { display: flex; flex-direction: column; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .item:last-child { border-bottom: none; }
+  .item .date { width: 92px; color: var(--sub); }
+  .item .val { font-weight: 600; width: 76px; }
+  .item .note { flex: 1; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .del { color: #d33; background: none; padding: 2px 8px; font-size: 12px; }
+  .err { color: #d33; font-size: 12px; min-height: 16px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>体重追踪</h1>
+  <div class="sub">数据存 kb.store（本仓库 .knowbase/plugins/）· 插件版（工具箱插件化试点）</div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="stLatest">—</div><div class="k">最近</div></div>
+    <div class="stat"><div class="v" id="stMin">—</div><div class="k">最低</div></div>
+    <div class="stat"><div class="v" id="stMax">—</div><div class="k">最高</div></div>
+    <div class="stat"><div class="v" id="stDelta">—</div><div class="k">较首日</div></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <input type="date" id="inDate" style="width:150px">
+      <input type="number" id="inWeight" placeholder="体重" step="0.1" min="20" max="300" style="width:110px">
+      <div class="seg" id="segUnit">
+        <button data-u="kg" class="on">kg</button><button data-u="jin">斤</button>
+      </div>
+      <button class="primary" id="btnAdd">记录</button>
+      <button class="ghost" id="btnDelLast" title="删除最近一条">撤销</button>
+    </div>
+    <div class="row">
+      <input type="text" id="inNote" placeholder="备注（可选，如：晨起空腹）" style="flex:1;min-width:180px">
+    </div>
+    <div class="err" id="errBox"></div>
+  </div>
+
+  <div class="card" id="chartCard">
+    <div style="position:relative">
+      <canvas id="cv" height="240"></canvas>
+      <div id="cvTip" style="display:none;position:absolute;top:6px;left:0;pointer-events:none;background:rgba(0,0,0,0.78);color:#fff;font-size:11px;padding:4px 9px;border-radius:6px;white-space:nowrap;z-index:2"></div>
+    </div>
+    <div class="empty" id="emptyBox" style="display:none">还没有记录 — 录入第一条开始追踪</div>
+  </div>
+
+  <div class="card">
+    <div class="sub" style="margin-bottom:6px">全部记录（共 <span id="cnt">0</span> 条）</div>
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<script>
+var CHANNEL = 'kb-plugin'
+var TOKEN = null
+var seq = 0
+var pend = {}
+var records = []
+var unit = 'kg' // kg | jin
+
+function b64ToU8(){ /* 未用到，占位保持结构 */ }
+function rpc(method, params) {
+  return new Promise(function (resolve) {
+    var id = 'w' + (++seq)
+    pend[id] = resolve
+    parent.postMessage({ channel: CHANNEL, v: 2, id: id, method: method, params: params }, '*')
+  })
+}
+async function storeSet(key, val) { var r = await rpc('kb.store.set', { key: key, value: val }); if (!r.ok) throw new Error((r.error && r.error.message) || '写入失败'); return r.result }
+async function storeGet(key) { var r = await rpc('kb.store.get', { key: key }); if (!r.ok) throw new Error((r.error && r.error.message) || '读取失败'); return r.result ? r.result.value : null }
+async function storeDelete(key) { var r = await rpc('kb.store.delete', { key: key }); if (!r.ok) throw new Error('删除失败'); return r.result }
+
+window.addEventListener('message', function (e) {
+  var d = (e.data || {})
+  if (d.channel !== CHANNEL) return
+  if (d.v === 2 && d.action === 'init') {
+    TOKEN = (d.payload && d.payload.token) || null
+    applyTheme((d.payload && d.payload.vars) || {})
+    load()
+    return
+  }
+  if (d.v === 2 && d.id && pend[d.id]) {
+    var p = pend[d.id]; delete pend[d.id]
+    if (d.ok) p({ ok: true, result: d.result })
+    else p({ ok: false, error: d.error || {} })
+  }
+})
+
+function applyTheme(vars) {
+  var map = { bg: vars['--bg-primary'], card: vars['--bg-secondary'], line: vars['--border-color'], text: vars['--text-primary'], sub: vars['--text-secondary'], accent: vars['--accent'] }
+  var s = document.documentElement.style
+  if (map.bg) s.setProperty('--bg', map.bg)
+  if (map.card) s.setProperty('--card', map.card)
+  if (map.line) s.setProperty('--line', map.line)
+  if (map.text) s.setProperty('--text', map.text)
+  if (map.sub) s.setProperty('--sub', map.sub)
+  if (map.accent) s.setProperty('--accent', map.accent)
+}
+
+function today() {
+  var d = new Date(); var m = String(d.getMonth() + 1).padStart(2, '0'); var dd = String(d.getDate()).padStart(2, '0')
+  return d.getFullYear() + '-' + m + '-' + dd
+}
+function fmtDate(s) { return s.replace(/-/g, '.') }
+function dispW(v) { return unit === 'jin' ? (v * 2) : v }
+
+var KEY = 'records.json'
+
+async function load() {
+  try {
+    var r = await storeGet(KEY)
+    records = Array.isArray(r) ? r : []
+  } catch (err) { showErr(String(err)); records = [] }
+  records.sort(function (a, b) { return a.date < b.date ? -1 : 1 })
+  renderAll()
+}
+async function save() { await storeSet(KEY, records) }
+
+function showErr(msg) { document.getElementById('errBox').textContent = msg || '' }
+function statEl(id, v, suffix) { var el = document.getElementById(id); if (v === null) { el.textContent = '—'; return } el.textContent = Number(v.toFixed ? v.toFixed(1) : v) + (suffix || '') }
+function renderAll() {
+  var kgList = records.map(function (r) { return r.weight }).filter(function (x) { return x > 0 })
+  var suf = unit === 'jin' ? ' 斤' : ' kg'
+  if (kgList.length === 0) {
+    ['stLatest', 'stMin', 'stMax', 'stDelta'].forEach(function (id) { statEl(id, null) })
+  } else {
+    var latest = records[records.length - 1], first = records[0]
+    statEl('stLatest', dispW(latest.weight), suf)
+    statEl('stMin', dispW(Math.min.apply(null, kgList)), suf)
+    statEl('stMax', dispW(Math.max.apply(null, kgList)), suf)
+    var delta = dispW(latest.weight) - dispW(first.weight)
+    var de = document.getElementById('stDelta')
+    de.textContent = (delta >= 0 ? '+' : '') + (Math.round(delta * 10) / 10) + suf
+    de.style.color = delta > 0 ? '#d33' : (delta < 0 ? '#1d9e75' : '')
+  }
+  document.getElementById('cnt').textContent = records.length
+  renderChart()
+  renderList()
+}
+
+function renderList() {
+  var box = document.getElementById('list')
+  if (records.length === 0) { box.innerHTML = '<div class="empty">暂无记录</div>'; return }
+  box.innerHTML = ''
+  for (var i = records.length - 1; i >= 0; i--) {
+    (function (rec, idx) {
+      var item = document.createElement('div'); item.className = 'item'
+      var date = document.createElement('span'); date.className = 'date'; date.textContent = fmtDate(rec.date)
+      var val = document.createElement('span'); val.className = 'val'; val.textContent = (Math.round(dispW(rec.weight) * 10) / 10) + (unit === 'jin' ? ' 斤' : ' kg')
+      var note = document.createElement('span'); note.className = 'note'; note.textContent = rec.note || ''
+      var del = document.createElement('button'); del.className = 'del'; del.textContent = '删'
+      del.onclick = async function () { records.splice(idx, 1); try { await save(); renderAll() } catch (e) { showErr(String(e)) } }
+      item.appendChild(date); item.appendChild(val); item.appendChild(note); item.appendChild(del)
+      box.appendChild(item)
+    })(records[i], i)
+  }
+}
+
+function renderChart() {
+  var empty = document.getElementById('emptyBox')
+  var cv = document.getElementById('cv')
+  if (records.length < 2) {
+    empty.style.display = records.length === 0 ? 'block' : 'none'
+    cv.style.display = records.length < 2 ? 'none' : 'block'
+    if (records.length === 0) { cv.style.display = 'none'; return }
+    if (records.length === 1) { empty.style.display = 'block'; empty.textContent = '再记一条即可绘制曲线'; cv.style.display = 'none'; return }
+  } else { empty.style.display = 'none'; cv.style.display = 'block' }
+  var dpr = window.devicePixelRatio || 1
+  var W = cv.clientWidth || 640, H = cv.height
+  cv.width = W * dpr; cv.height = H * dpr
+  var ctx = cv.getContext('2d'); ctx.scale(dpr, dpr)
+  ctx.clearRect(0, 0, W, H)
+  var P = { l: 46, r: 14, t: 16, b: 26 }
+  var iw = W - P.l - P.r, ih = H - P.t - P.b
+  var minT = records[0].date, maxT = records[records.length - 1].date
+  var span = Math.max(1, (new Date(maxT).getTime() - new Date(minT).getTime()) / 86400000)
+  var ws = records.map(function (r) { return r.weight })
+  var minW = Math.min.apply(null, ws), maxW = Math.max.apply(null, ws)
+  var pad = Math.max(1, (maxW - minW) * 0.15)
+  var yLo = minW - pad, yHi = maxW + pad
+  var x = function (d) { return P.l + ((new Date(d).getTime() - new Date(minT).getTime()) / 86400000) / span * iw }
+  var y = function (w) { return P.t + (1 - (w - yLo) / (yHi - yLo)) * ih }
+  // 网格 + Y 刻度
+  ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
+  var steps = 5
+  for (var i = 0; i <= steps; i++) {
+    var v = yLo + (yHi - yLo) * i / steps
+    var yy = y(v)
+    ctx.strokeStyle = 'rgba(128,128,128,0.15)'; ctx.beginPath(); ctx.moveTo(P.l, yy); ctx.lineTo(W - P.r, yy); ctx.stroke()
+    ctx.fillStyle = 'rgba(128,128,128,0.8)'; ctx.fillText((Math.round(dispW(v) * 10) / 10).toString(), P.l - 8, yy)
+  }
+  // X 轴标签（首/中/尾日期）
+  var xLabels = [0, 0.5, 1].map(function (f) {
+    var t = new Date(minT).getTime() + f * span * 86400000
+    var d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+  })
+  ctx.textAlign = 'center'
+  xLabels.forEach(function (d, i) {
+    var xv = x(d); ctx.fillStyle = 'rgba(128,128,128,0.8)'; ctx.fillText(d, xv, H - P.b + 10)
+  })
+  // 折线 + 点
+  var main = records.map(function (r) { return { x: x(r.date), y: y(r.weight), r: r } })
+  ctx.strokeStyle = 'rgba(55,138,221,0.9)'; ctx.lineWidth = 2; ctx.lineJoin = 'round'
+  ctx.beginPath()
+  main.forEach(function (p, i) { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y) })
+  ctx.stroke()
+  main.forEach(function (p) {
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2)
+    ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#378add'; ctx.lineWidth = 1.5; ctx.stroke()
+  })
+  // hover tooltip：canvas 上叠 div（pointer-events:none），不重绘画布不闪烁
+  var tipEl = document.getElementById('cvTip')
+  cv.onmousemove = function (ev) {
+    var rect = cv.getBoundingClientRect()
+    var mx = (ev.clientX - rect.left) * (W / rect.width)
+    var best = null, bd = 12
+    main.forEach(function (p) { var dx = Math.abs(p.x - mx); if (dx < bd) { bd = dx; best = p } })
+    if (!best) { tipEl.style.display = 'none'; return }
+    var tip = fmtDate(best.r.date) + '  ' + (Math.round(dispW(best.r.weight) * 10) / 10) + (unit === 'jin' ? ' 斤' : ' kg') + (best.r.note ? '  · ' + best.r.note : '')
+    tipEl.textContent = tip
+    var left = best.x * (rect.width / W)
+    tipEl.style.left = Math.min(Math.max(6, left - 60), rect.width - 140) + 'px'
+    tipEl.style.top = '6px'
+    tipEl.style.display = 'block'
+  }
+  cv.onmouseleave = function () { tipEl.style.display = 'none' }
+}
+
+// ---- 事件绑定 ----
+document.getElementById('inDate').value = today()
+
+// 单位切换
+var seg = document.getElementById('segUnit')
+seg.querySelectorAll('button').forEach(function (btn) {
+  btn.onclick = function () {
+    unit = btn.getAttribute('data-u')
+    seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b === btn) })
+    document.getElementById('inWeight').placeholder = unit === 'jin' ? '体重（斤）' : '体重'
+    renderAll()
+  }
+})
+
+function setErr(msg) { document.getElementById('errBox').textContent = msg || '' }
+
+// 录入
+document.getElementById('btnAdd').onclick = async function () {
+  setErr('')
+  var date = document.getElementById('inDate').value
+  var raw = parseFloat(document.getElementById('inWeight').value)
+  var note = document.getElementById('inNote').value.trim()
+  if (!date) { setErr('请选择日期'); return }
+  if (!raw || raw <= 0) { setErr('请输入有效体重'); return }
+  var kg = unit === 'jin' ? raw / 2 : raw
+  if (kg < 20 || kg > 300) { setErr('体重超出合理范围（20-300kg）'); return }
+  // 同日覆盖（保留最新一次录入）
+  var idx = records.findIndex(function (r) { return r.date === date })
+  var rec = { date: date, weight: Math.round(kg * 100) / 100, note: note || '' }
+  if (idx >= 0) records[idx] = rec; else records.push(rec)
+  records.sort(function (a, b) { return a.date < b.date ? -1 : 1 })
+  try {
+    await save(); document.getElementById('inWeight').value = ''; document.getElementById('inNote').value = ''
+    renderAll()
+  } catch (e) { setErr(String(e)); records = records.filter(function (r) { return !(r.date === date) }); load() }
+}
+
+// 撤销最近一条
+document.getElementById('btnDelLast').onclick = async function () {
+  setErr('')
+  if (records.length === 0) return
+  var removed = records.pop()
+  try { await save(); renderAll() } catch (e) { records.push(removed); setErr(String(e)) }
+}
+</script>
+</body>
+</html>

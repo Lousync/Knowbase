@@ -12,7 +12,7 @@ import { LanShare } from './components/lan-share'
 import { getPluginTools, type PluginTool } from '../../lib/pluginService'
 import { showToast } from '../../lib/toast'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
-import { pluginAuditWrite } from '../../lib/ipc'
+import { PluginFrame } from '../../components/shared/PluginFrame'
 
 // ---- Tool registry ----
 interface ToolDefinition {
@@ -257,73 +257,9 @@ export function ToolboxModule() {
 
 /** UI 插件宿主:sandbox iframe 加载 plugin:// 页面,postMessage 桥按授权白名单执行 */
 function PluginToolHost({ tool, onBack }: { tool: PluginTool; onBack: () => void }) {
-  const src = `plugin://${tool.pluginId}/${tool.entry}`
-  const grantedRef = useRef(tool.grantedCapabilities)
-
-  // 桥接消息白名单:按已授权能力执行;未授权/未开放 → 回复 denied 并写审计
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      const d = e.data
-      if (!d || d.channel !== 'kb-plugin') return
-      const reply = (payload: unknown) => {
-        const iframe = document.querySelector<HTMLIFrameElement>('iframe[data-plugin-frame]')
-        iframe?.contentWindow?.postMessage({ channel: 'kb-plugin', action: d.action, payload }, '*')
-      }
-      const deny = (reason: string) => {
-        reply({ denied: true, reason })
-        void pluginAuditWrite(tool.pluginId, 'deny', { action: d.action, reason })
-        showToast({ type: 'warning', message: `插件请求被拒绝:${reason}` })
-      }
-      switch (d.action) {
-        case 'clipboard.write': {
-          if (!grantedRef.current.includes('clipboard')) { deny('未授予剪贴板能力'); return }
-          if (typeof d.payload !== 'string') return
-          navigator.clipboard.writeText(d.payload)
-            .then(() => showToast({ type: 'info', message: '已复制到剪贴板' }))
-            .catch(() => showToast({ type: 'error', message: '复制失败' }))
-          break
-        }
-        case 'theme.apply': {
-          if (!grantedRef.current.includes('theme')) { deny('未授予主题能力'); return }
-          // 复用消毒逻辑:仅允许 CSS 变量形式,关闭宿主即恢复
-          const vars = (d.payload && typeof d.payload === 'object') ? d.payload.vars ?? d.payload : null
-          if (!vars || typeof vars !== 'object') return
-          for (const [k, v] of Object.entries(vars as Record<string, unknown>)) {
-            if (!/^--[a-zA-Z0-9-]{1,64}$/.test(k) || typeof v !== 'string' || v.length > 200) continue
-            if (/url\s*\(|expression|@|{|}|<|>/i.test(v)) continue
-            document.documentElement.style.setProperty(k, v)
-          }
-          reply({ denied: false })
-          break
-        }
-        case 'data.query':
-        case 'data.write': {
-          deny('数据通道本期未开放')
-          break
-        }
-        case 'toast': {
-          if (typeof d.payload === 'string') showToast({ type: 'info', message: d.payload })
-          break
-        }
-        default:
-          deny(`未知消息类型: ${String(d.action)}`)
-      }
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [tool.pluginId])
-
-  // iframe 加载完成后下发主题变量(插件据此适配深浅色)
-  const sendInit = () => {
-    const iframe = document.querySelector<HTMLIFrameElement>('iframe[data-plugin-frame]')
-    if (!iframe?.contentWindow) return
-    const style = getComputedStyle(document.documentElement)
-    const varNames = ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-hover', '--text-primary', '--text-secondary', '--text-muted', '--text-disabled', '--accent', '--accent-hover', '--border-color', '--success', '--danger', '--warning']
-    const vars: Record<string, string> = {}
-    for (const name of varNames) vars[name] = style.getPropertyValue(name).trim()
-    iframe.contentWindow.postMessage({ channel: 'kb-plugin', action: 'init', payload: { vars } }, '*')
-  }
-
+  // V3-2 授权单点化：改用 PluginFrame v2 双轨宿主（v2 报文 → host:rpc 主进程 Gateway 裁决，
+  // data.*/kb.store.*/files.* 全可用；v1 报文保留兼容分支服务存量插件）。
+  // 替代原 v1 手工 iframe + 白名单桥（data 通道此前「未开放」）。
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       <div className="px-5 py-3 border-b border-[var(--border-color)] shrink-0 flex items-center gap-3">
@@ -336,14 +272,13 @@ function PluginToolHost({ tool, onBack }: { tool: PluginTool; onBack: () => void
           <span className="text-[10px] text-[var(--text-disabled)] font-normal">插件</span>
         </h2>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <iframe
-          data-plugin-frame
-          src={src}
-          onLoad={sendInit}
-          sandbox="allow-scripts"
-          className="w-full h-full border-0"
-          title={tool.name}
+      <div className="min-h-0 flex-1">
+        <PluginFrame
+          key={`${tool.pluginId}:${tool.entry}`}
+          pluginId={tool.pluginId}
+          entry={tool.entry}
+          grantedCapabilities={tool.grantedCapabilities}
+          onDenied={(reason) => showToast({ type: 'warning', message: `插件请求被拒绝:${reason}` })}
         />
       </div>
     </div>
