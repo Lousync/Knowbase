@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { listTools, invokeToolInternal, getSettingReader, checkModulePermission } from './aiTools'
+import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
 import type { ToolDescription } from './aiTools'
 import { invokeLlmInternal } from './llmService'
 import {
@@ -74,6 +74,8 @@ function buildToolsPayload(): {
   nameMap: Map<string, string>
   /** 因模块权限被过滤掉的工具所属模块（用于 system prompt 给出可操作指引） */
   deniedModules: Set<string>
+  /** 是否有 vault.* 工具被 vaultFile 文件域权限拦截（指引文案用） */
+  deniedVaultFile: boolean
   /** 权限过滤后仍可用的 skill 清单（注入 system prompt，让 AI 感知已配置的能力包） */
   skills: Array<{ registryName: string; title: string; description: string }>
 } {
@@ -81,9 +83,14 @@ function buildToolsPayload(): {
   // 按模块权限预过滤：AI 无权使用的操作不进入其视野（invoke 处另有硬校验兜底）
   const all = listTools().filter(t => t.enabled)
   const deniedModules = new Set<string>()
+  let deniedVaultFile = false
   const tools: ToolDescription[] = all.filter(t => {
     const denied = checkModulePermission(t, reader)
     if (denied && t.module) deniedModules.add(t.module)
+    if (!denied && t.vaultFile && checkVaultFilePermission(t, reader)) {
+      deniedVaultFile = true
+      return false
+    }
     return !denied
   })
   const payload = tools.map(t => ({
@@ -103,7 +110,7 @@ function buildToolsPayload(): {
       title: t.title,
       description: t.description.replace(/^\[Skill\]\s*/, ''),
     }))
-  return { payload, nameMap, deniedModules, skills }
+  return { payload, nameMap, deniedModules, deniedVaultFile, skills }
 }
 
 const SYSTEM_PROMPT_BASE = [
@@ -164,9 +171,12 @@ async function runAgentLoop(
     return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
   }
 
-  const { payload: toolPayload, nameMap, deniedModules, skills } = buildToolsPayload()
+  const { payload: toolPayload, nameMap, deniedModules, deniedVaultFile, skills } = buildToolsPayload()
   const deniedHint = deniedModules.size > 0
     ? `\n\n【权限提示】以下模块用户尚未授权 AI 操作：${[...deniedModules].join('、')}。若用户请求这些模块的操作，请如实说明当前未授权，并提示可在 设置 → AI 工具 → 权限 中开启后重试。`
+    : ''
+  const vaultFileHint = deniedVaultFile
+    ? '\n\n【权限提示】仓库文件读写（vault.* 工具）当前被权限限制。若用户请求操作仓库内笔记文件（列目录/读文件/搜内容），请如实说明需在 设置 → AI 工具 → 权限 → 仓库文件 中开启后重试。'
     : ''
   // 注入 skill 清单：让 AI 明确知道自己配置了多少个提示词能力包及其用途（描述截断防 token 膨胀）
   const skillHint = skills.length > 0
@@ -175,7 +185,7 @@ async function runAgentLoop(
       '\nSkill 是声明式提示词资产。当用户请求恰好对应某个 Skill 的能力时，调用该 skill 工具获取提示词并遵循执行；不确定时优先用通用内置工具。'
     : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + deniedHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
 

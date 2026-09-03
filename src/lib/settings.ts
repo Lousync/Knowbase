@@ -194,6 +194,7 @@ export const SETTINGS = {
 
   // ---- AI 模块权限 ----
   aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","bookmarks":"read","pomodoro":"read"}', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写(JSON)' },
+  aiVaultFilePerm: { default: 'read', desc: 'AI 访问仓库文件(vault.* 工具)：off=禁止 read=只读(默认) write=可读写(预留)' },
 
   // ---- AI 助手侧栏 ----
   assistantWidth: { default: 380, desc: 'AI 助手侧栏宽度(px)' },

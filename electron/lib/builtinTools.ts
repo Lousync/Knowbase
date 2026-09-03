@@ -1,7 +1,11 @@
 import { randomUUID } from 'crypto'
+import { readdirSync, lstatSync, readFileSync, statSync } from 'fs'
+import { join, relative, extname, sep } from 'path'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { registerTool, getSettingReader } from './aiTools'
 import { webSearch } from './webSearch'
+import { resolveSafe } from './workspaceManager'
+import { getCurrentVault } from './kbStore/vaultContext'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
@@ -168,6 +172,78 @@ function ruleSummary(ruleType: string, ruleDays: number[], weeklyTarget: number)
   const days = [...ruleDays].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
   if (days.length === 0) return '未设置计划日'
   return '每周' + days.map(d => WEEKDAY_NAMES[d]).join('、')
+}
+
+// ===== vault.* 仓库文件工具（B1，F1 只读三件）：AI 视角文件系统 =====
+// 可见性（2026-09-02 拍板）：仓库 .md/.txt 全可见；.knowbase/modules/*.json 只读可见（结构化数据）；
+// .knowbase 其余（cache/config/plugins/密钥/_attachments 等）完全不可见；隐藏文件/目录不可见。
+// 守卫复用 workspaceManager.resolveSafe（防越界/符号链接逃逸），越界与受限区一律拒。
+
+const VAULT_DOT_DIR = '.knowbase'
+const VAULT_MODULES_DIR = 'modules'
+const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
+const MAX_VAULT_SEARCH_FILE = 1024 * 1024 // search 只扫 ≤1MB 文本
+const MAX_VAULT_SEARCH_FILES = 400
+const MAX_VAULT_LIST_ENTRIES = 200
+
+function vaultRootPath(): string {
+  const cur = getCurrentVault()
+  if (!cur || !cur.rootPath) throw new Error('当前没有打开的仓库：请先在应用中打开知识仓库')
+  return cur.rootPath
+}
+
+function vaultRelParts(root: string, abs: string): string[] {
+  const rel = relative(root, abs)
+  return rel ? rel.split(sep).filter(Boolean) : []
+}
+
+/** .knowbase/modules/.../<file>.json（AI 只读可见的结构化模块数据） */
+function isModulesJson(parts: string[]): boolean {
+  return parts.length >= 3 && parts[0] === VAULT_DOT_DIR && parts[1] === VAULT_MODULES_DIR &&
+    parts[parts.length - 1].toLowerCase().endsWith('.json')
+}
+
+/** 子路径是否 AI 允许（目录枚举用）：点目录一律拒，.knowbase 仅 modules 子树放行 */
+function childAiAllowed(root: string, childAbs: string): boolean {
+  const parts = vaultRelParts(root, childAbs)
+  if (parts.length === 0) return false
+  const first = parts[0]
+  if (first.startsWith('.')) {
+    if (first !== VAULT_DOT_DIR) return false
+    return parts.length === 1 || parts[1] === VAULT_MODULES_DIR
+  }
+  return true
+}
+
+/** 读白名单：.md/.txt（可见区任意处）+ .json（仅 .knowbase/modules） */
+function isAiReadableFile(root: string, abs: string): boolean {
+  const parts = vaultRelParts(root, abs)
+  if (parts.length === 0) return false
+  if (!childAiAllowed(root, abs)) return false
+  const ext = extname(abs).slice(1).toLowerCase()
+  if (ext === 'json') return isModulesJson(parts)
+  return ext === 'md' || ext === 'txt'
+}
+
+/** 递归收集可搜索文本文件（.knowbase 只深入 modules；隐藏区跳过；数量预算封顶） */
+function walkAiFiles(root: string, dirAbs: string, out: string[], budget: { count: number }): void {
+  if (budget.count >= MAX_VAULT_SEARCH_FILES) return
+  let names: string[] = []
+  try { names = readdirSync(dirAbs) } catch { return }
+  for (const name of names) {
+    if (budget.count >= MAX_VAULT_SEARCH_FILES) return
+    const full = join(dirAbs, name)
+    if (!childAiAllowed(root, full)) continue
+    let st: ReturnType<typeof lstatSync>
+    try { st = lstatSync(full) } catch { continue }
+    if (st.isSymbolicLink()) continue
+    if (st.isDirectory()) { walkAiFiles(root, full, out, budget); continue }
+    if (!st.isFile()) continue
+    if (st.size > MAX_VAULT_SEARCH_FILE) continue
+    if (!isAiReadableFile(root, full)) continue
+    budget.count++
+    out.push(full)
+  }
 }
 
 // ===== 六个内置工具 =====
@@ -693,5 +769,135 @@ export function registerBuiltinTools(): void {
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 20)
     const { source, results } = await webSearch(q, limit)
     return { source, count: results.length, results }
+  })
+
+  // ===== vault.* 仓库文件只读工具（B1）：受 vaultFile 权限域（设置 → AI 工具 → 权限 → 仓库文件）控制 =====
+
+  // 14. builtin.vault.list —— 列仓库目录（AI 视角，禁区自动隐藏）
+  registerTool({
+    name: 'builtin.vault.list',
+    title: '列仓库目录',
+    description: '列当前知识仓库某目录下的条目（目录与可读文本文件）；隐藏区(.knowbase 内部非 modules)不出现。用于让 AI 了解仓库结构',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对目录路径，省略或空串 = 仓库根目录' },
+      },
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    vaultFile: 'read',
+  }, args => {
+    const rel = str(args.path).trim()
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, rel)
+    if (!abs) throw new Error(`路径非法或越出仓库: ${rel || '.'}`)
+    let isDir = false
+    try { isDir = statSync(abs).isDirectory() } catch { throw new Error(`路径不存在: ${rel || '.'}`) }
+    if (!isDir) throw new Error('vault.list 只接受目录路径（读文件请用 vault.read）')
+    const entries: Array<{ name: string; type: 'dir' | 'file'; size?: number }> = []
+    let names: string[] = []
+    try { names = readdirSync(abs) } catch { throw new Error('目录读取失败') }
+    for (const name of names) {
+      if (entries.length >= MAX_VAULT_LIST_ENTRIES) break
+      const full = join(abs, name)
+      if (!childAiAllowed(root, full)) continue
+      let st: ReturnType<typeof lstatSync>
+      try { st = lstatSync(full) } catch { continue }
+      if (st.isSymbolicLink()) continue
+      if (st.isDirectory()) entries.push({ name, type: 'dir' })
+      else if (st.isFile() && isAiReadableFile(root, full)) entries.push({ name, type: 'file', size: st.size })
+    }
+    entries.sort((a, b) => a.type !== b.type ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name, 'zh-Hans-CN'))
+    return { path: rel || '.', total: entries.length, entries }
+  })
+
+  // 15. builtin.vault.read —— 读仓库内文本文件（.md/.txt 与 .knowbase/modules/*.json）
+  registerTool({
+    name: 'builtin.vault.read',
+    title: '读仓库文件',
+    description: '读取仓库内文本文件全文（.md/.txt；.knowbase/modules/*.json 结构化数据只读）。返回 mtimeMs 供后续写回冲突校验。二进制/图片/PDF/>10MB/保护区文件拒绝',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对文件路径（如 笔记/内存管理.md）' },
+        maxChars: { type: 'number', description: '最多返回字符，默认8000' },
+      },
+      required: ['path'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    vaultFile: 'read',
+  }, args => {
+    const rel = str(args.path).trim()
+    if (!rel) throw new Error('缺少必填参数: path')
+    const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, rel)
+    if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
+    let st: ReturnType<typeof statSync>
+    try { st = statSync(abs) } catch { throw new Error(`文件不存在: ${rel}`) }
+    if (!st.isFile()) throw new Error('vault.read 只接受文件路径（列目录请用 vault.list）')
+    if (!isAiReadableFile(root, abs)) {
+      throw new Error(`文件不可读：仅支持 .md/.txt（仓库内）与 .knowbase/modules/*.json（只读）；该文件位于保护区或类型不在白名单: ${rel}`)
+    }
+    if (st.size > MAX_VAULT_FILE) throw new Error(`文件过大（${st.size} 字节 > 10MB），拒绝读取: ${rel}`)
+    const text = readFileSync(abs, 'utf-8')
+    const truncated = text.length > maxChars
+    return {
+      path: rel,
+      size: st.size,
+      mtimeMs: st.mtimeMs,
+      content: truncated ? text.slice(0, maxChars) : text,
+      truncated,
+      totalChars: text.length,
+    }
+  })
+
+  // 16. builtin.vault.search —— 仓库内内容搜索（文本 grep 语义）
+  registerTool({
+    name: 'builtin.vault.search',
+    title: '搜索仓库内容',
+    description: '在当前知识仓库内按关键词搜索可读文本文件（.md/.txt 与 .knowbase/modules/*.json）内容，返回命中文件与上下文摘录。用于在仓库内定位内容',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '关键词，空格分隔为 AND' },
+        limit: { type: 'number', description: '命中上限, 默认20' },
+      },
+      required: ['query'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    vaultFile: 'read',
+  }, args => {
+    const q = str(args.query).trim()
+    const limit = clamp(Math.floor(num(args.limit, 20)), 1, 50)
+    const terms = q.split(/\s+/).filter(Boolean)
+    if (terms.length === 0) throw new Error('缺少关键词 query')
+    const root = vaultRootPath()
+    const files: string[] = []
+    const budget = { count: 0 }
+    walkAiFiles(root, root, files, budget)
+    const hits: Array<{ relPath: string; excerpt: string; size: number }> = []
+    for (const f of files) {
+      let text = ''
+      try { text = readFileSync(f, 'utf-8') } catch { continue }
+      const lower = text.toLowerCase()
+      if (!terms.every(t => lower.includes(t.toLowerCase()))) continue
+      hits.push({
+        relPath: vaultRelParts(root, f).join('/'),
+        excerpt: buildExcerpt(text.replace(/\s+/g, ' '), terms) || text.replace(/\s+/g, ' ').slice(0, 100),
+        size: text.length,
+      })
+      if (hits.length >= limit) break
+    }
+    return { query: q, total: hits.length, scannedFiles: budget.count, hits }
   })
 }
