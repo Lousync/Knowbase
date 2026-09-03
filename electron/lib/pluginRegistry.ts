@@ -1,4 +1,4 @@
-import { app, ipcMain, net, dialog, BrowserWindow } from 'electron'
+import { app, ipcMain, net, dialog, BrowserWindow, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync } from 'fs'
 import { join, resolve, sep, extname, basename } from 'path'
 import { randomUUID } from 'crypto'
@@ -1189,6 +1189,24 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       'kb.ui.clipboard.write': { capability: 'clipboard', run: () => ({ local: 'clipboard' }) },
       'kb.ui.theme.apply': { capability: 'theme', run: () => ({ local: 'theme' }) },
       'kb.ui.hostReview': { capability: 'knowledge', run: () => ({ local: 'host.review' }) },
+      // 打开外部链接（navigation 能力）：仅 http(s) 白名单，主进程 shell.openExternal 默认浏览器打开。
+      // 沙箱 iframe 无法 window.open，必须宿主中转——网址导航等插件的关键出口。
+      'kb.ui.openExternal': {
+        capability: 'navigation',
+        run: async (_ctx, params) => {
+          const p = (params ?? {}) as { url?: unknown }
+          const url = p.url
+          if (typeof url !== 'string' || !/^https?:\/\/[^\s"'<>]+$/i.test(url)) {
+            throw Object.assign(new Error('仅允许 http(s) 链接'), { code: 'EPARAM' })
+          }
+          try {
+            await shell.openExternal(url)
+            return { ok: true }
+          } catch (e) {
+            throw Object.assign(new Error('打开链接失败'), { code: 'EEXTERNAL' })
+          }
+        },
+      },
 
       // ---- 文件读取（files 能力）----
       // 语义：插件无法直接触达磁盘，只能「弹系统对话框由用户显式挑文件」，

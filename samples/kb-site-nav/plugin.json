@@ -1,0 +1,17 @@
+{
+  "id": "kb.site-nav",
+  "name": "网址导航（插件版）",
+  "version": "0.1.0",
+  "type": "ui",
+  "entry": "index.html",
+  "author": "Knowbase",
+  "description": "工具箱插件化 C 级试点：分类管理网址收藏，点击经 kb.ui.openExternal 由宿主默认浏览器打开（sandbox 内无法直开）。数据存 kb.store（.knowbase/plugins/kb.site-nav/）",
+  "category": "效率",
+  "riskLevel": "C",
+  "capabilities": ["navigation"],
+  "contributes": {
+    "tools": [
+      { "id": "site-nav", "name": "网址导航" }
+    ]
+  }
+}
