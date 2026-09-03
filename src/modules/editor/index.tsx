@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
-  Pencil, Trash2, ChevronRight, FilePlus2, Braces, BookOpen, ListTree,
+  Pencil, Trash2, ChevronRight, FilePlus2, Braces, BookOpen, ListTree, Eye, PanelRightClose,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
 import {
@@ -17,6 +17,7 @@ import { extractOutline } from '../../lib/markdownOutline'
 import type { EditorDoc, DirCache, TreeNode } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
 import { ConfirmDialog } from '../../components/shared'
+import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 
 interface Props {
   isActive?: boolean
@@ -39,6 +40,10 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [rootName, setRootName] = useState('')
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
+  /** R5：分栏预览开关（左侧 Monaco 编辑 / 右侧 MarkdownPreview 实时渲染），localStorage 记忆 */
+  const [previewOpen, setPreviewOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('kb.editor.previewOpen') === '1' } catch { return false }
+  })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [openFiles, setOpenFiles] = useState<Record<string, EditorDoc>>({})
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -175,6 +180,37 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       },
     }))
   }, [toggleDir])
+
+  // ---- R5 分栏预览 ----
+  /** 切换预览并记忆到 localStorage（下次打开编辑器保持上次状态） */
+  const togglePreview = useCallback(() => {
+    setPreviewOpen((v) => {
+      const next = !v
+      try { localStorage.setItem('kb.editor.previewOpen', next ? '1' : '0') } catch { /* 隐私模式忽略 */ }
+      return next
+    })
+  }, [])
+
+  /** 已缓存目录里出现过的 .md 文件名（去扩展名）——预览里 [[双链]] 是否渲染为「空链接」的依据 */
+  const knownWikiTitles = useMemo(() => {
+    const s = new Set<string>()
+    for (const entries of Object.values(dirCache)) {
+      for (const e of entries) {
+        if (e.type === 'file' && /\.md$/i.test(e.name)) s.add(e.name.replace(/\.md$/i, ''))
+      }
+    }
+    return s
+  }, [dirCache])
+
+  /** 预览里点 [[双链]]：在已加载目录缓存内按文件名命中并打开；未命中提示（目录懒加载，未展开的目录查不到） */
+  const handleWikiLink = useCallback((title: string) => {
+    const target = `${title.toLowerCase()}.md`
+    for (const entries of Object.values(dirCache)) {
+      const hit = entries.find((e) => e.type === 'file' && e.name.toLowerCase() === target)
+      if (hit) { void openFile(hit); return }
+    }
+    showToast({ type: 'info', message: `未在当前仓库找到「${title}」（该目录可能未展开）` })
+  }, [dirCache, openFile])
 
   // 跨模块跳转：知识库「在编辑器中打开」→ 打开同一文件（读写分工协议，见 .AGENT/docs/读写分工设计.md）
   useEffect(() => {
@@ -478,6 +514,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   }, [ctxMenu])
 
   const activeDoc = activePath ? openFiles[activePath] ?? null : null
+  /** 预览内容延迟值：React 19 并发渲染，预览重解析不阻塞输入（大文档打字不卡） */
+  const previewContent = useDeferredValue(activeDoc?.content ?? '')
   // 标签栏只驻留「未保存修改」的文件；干净文件仅作当前预览，不占标签（切走即回收）
   const openList = Object.keys(openFiles).filter((rel) => isDirtyDoc(openFiles[rel]))
 
@@ -575,6 +613,18 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               <BookOpen size={14} />
               在知识库中阅读
             </button>
+            <button
+              onClick={togglePreview}
+              title="分栏预览（左编辑 / 右实时渲染）"
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] transition-colors ${
+                previewOpen
+                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {previewOpen ? <PanelRightClose size={14} /> : <Eye size={14} />}
+              预览
+            </button>
           </>
         )}
         {dirtyCount > 0 && (
@@ -659,7 +709,31 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
           )}
           {/* 编辑器 */}
           <div className="min-h-0 flex-1 relative" onClick={() => setOutlineOpen(false)}>
-            <MonacoPane ref={monacoRef} doc={activeDoc} onChange={handleChange} dimEnabled={markdownDim} />
+            {/* R5 分栏：Monaco（左）| 预览（右，50/50）。预览仅 markdown 文档可用 */}
+            <div className="flex h-full min-h-0">
+              <div className="min-w-0 flex-1">
+                <MonacoPane ref={monacoRef} doc={activeDoc} onChange={handleChange} dimEnabled={markdownDim} />
+              </div>
+              {previewOpen && activeDoc?.language === 'markdown' && (
+                <>
+                  <div className="w-px shrink-0 bg-[var(--border-color)]" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex items-center gap-1.5 border-b border-[var(--border-color)] px-3 py-1 text-[11.5px] text-[var(--text-muted)]">
+                      <Eye size={12} />
+                      预览
+                      <span className="ml-auto text-[var(--text-tertiary)]">随编辑实时更新</span>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+                      <MarkdownPreview
+                        content={previewContent}
+                        onWikiLink={handleWikiLink}
+                        knownWikiTitles={knownWikiTitles}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             {/* 大纲浮层：markdown 标题树 → 点击跳转 */}
             {outlineOpen && activeDoc?.language === 'markdown' && (
               <div

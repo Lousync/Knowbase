@@ -70,9 +70,9 @@
 | **R2 编辑器与链接** | 双链跳转/反链面板（GraphIndex）→ 全局搜索（底部面板）→ Breadcrumbs → Editor Groups 分屏 | 外壳线+原阶段3/5 | ✅ 反链/搜索/分屏 + 编辑器 [[ 补全、大纲、wiki 常驻高亮（Breadcrumbs 挂账） |
 | **R3 数据层推广** | 博客(.md) → 说说/日程/打卡/书签 → 密码本(加密) → quiz/wordbook(仓库级)+agent/mcp(全局) | 原 P1-P4 | ✅ 博客/书签/wordbook + 目录重构 + 插件 vault 适配（小模块留 sqlite 为拍板决定） |
 | **R4 图谱** | G0-G4（GraphIndex→物理动画→交互→过滤→增删动画），入口在知识库模块 | 原 阶段6 | ✅ G0-G3 + A8 收尾（含设置持久化），G4 其余挂账 |
-| **R5 Live Preview** | CodeMirror 6，md 所见即所得；Monaco 保留给代码 | 原 阶段4 | — |
+| **R5 分栏预览**（原 Live Preview，**2026-09-03 用户拍板改方案**） | ~~CodeMirror 6 所见即所得~~ → **编辑区分栏：左 Monaco 编辑 / 右 MarkdownPreview 实时渲染**（复用现有 react-markdown 基建，不引入 CM6） | 原 阶段4 | ✅ 落地（预览开关 + 双链跳转 + localStorage 记忆） |
 | **R6 去库收尾** | 移除 sql.js、删库、备份适配——**最后一步** | 原 P5 | — |
-| **R7 插件开放** | 沙箱运行时 + capability 网关 + 签名（修订 plugin-api v2） | D3 | 设计待修订 |
+| **R7 插件开放** | 沙箱运行时 + capability 网关 + 签名（修订 plugin-api v2） | D3 | ✅ V3-1 契约定稿 / V3-2a 网关骨架 / V3-2b code 放行 / V3-2c UI+Worker 宿主 / V3-2d 自动挂载 / V3-3 code-hello 试点 / V3-4 签名链路（2026-09-03 收官） |
 
 关键排序理由：R0 之前不动知识库读路径；R1 是后续一切外壳功能的容器（命令面板/分屏/底部面板都长在 Workbench 上）；R6 必须等所有模块读完仓库（今日已验证：当前 0 个模块能读仓库文件，此时删库必丢数据）。
 
