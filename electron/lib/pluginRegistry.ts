@@ -51,6 +51,8 @@ const MAX_MANIFEST_BYTES = 256 * 1024         // manifest 上限
 const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
+/** code 插件入口：单文件 .js/.mjs（Worker 加载）；拒绝目录/嵌套，防路径穿越 */
+const CODE_ENTRY_RE = /^[\w][\w.-]{0,64}\.(js|mjs)$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
 const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx', 'tables', 'views']
 /** Skill 变量名规则（提示词 {{var}} 占位符） */
@@ -187,11 +189,14 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
   if (typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 50) return { error: '插件 name 缺失或过长' }
   if (typeof raw.version !== 'string' || !VER_RE.test(raw.version)) return { error: '插件 version 缺失或格式非法(需 x.y.z)' }
   if (raw.type === 'code') {
-    // v3（R7）契约允许 type: code，但运行时（沙箱 Worker/iframe 通道）在 V3-2 才落地——
-    // 在此之前拒装，避免装上无法执行的半成品。报错信息指引到契约文档。
-    return { error: '代码插件(type: code)需要 v3 沙箱运行时，暂未开放安装（契约见 docs/plugin-api-v2-design.md §6.1）' }
+    // v3 契约放行（V3-2b）：entry 须为单 .js/.mjs（Worker 加载），capabilities 可声明；
+    // 运行时 = 宿主创建 Worker + 同一 kb-plugin v2 协议（PluginFrame code 分支）。
+    if (typeof raw.entry !== 'string' || !CODE_ENTRY_RE.test(raw.entry)) {
+      return { error: 'code 插件必须提供 entry(单 JS 文件,如 main.js)' }
+    }
+  } else if (raw.type !== 'ui' && raw.type !== 'declarative') {
+    return { error: `未知的插件类型: ${String(raw.type)}` }
   }
-  if (raw.type !== 'ui' && raw.type !== 'declarative') return { error: `未知的插件类型: ${String(raw.type)}` }
   // v3 元数据字段（V3-1：仅门禁校验；消费在后续阶段）
   if (raw.apiVersion !== undefined) {
     if (raw.apiVersion !== 1 && raw.apiVersion !== 2) return { error: 'apiVersion 仅支持 1 / 2（缺省 1）' }
@@ -223,7 +228,8 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
     if (typeof raw.riskLevel !== 'string' || !['S', 'A', 'B', 'C'].includes(raw.riskLevel)) return { error: 'riskLevel 仅允许 S / A / B / C' }
   }
   if (raw.capabilities !== undefined) {
-    if (raw.type !== 'ui') return { error: 'capabilities 仅 UI 插件(type: ui)可声明' }
+    // code 与 ui 同属可执行插件，均可声明 capabilities（declarative 纯声明式不可）
+    if (raw.type !== 'ui' && raw.type !== 'code') return { error: 'capabilities 仅可执行插件(type: ui / code)可声明' }
     if (!Array.isArray(raw.capabilities) || raw.capabilities.length > 10) return { error: 'capabilities 必须是数组(最多 10 项)' }
     for (const c of raw.capabilities) {
       if (typeof c !== 'string' || !KNOWN_CAPABILITIES.includes(c)) {
@@ -277,17 +283,18 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
         let chapterLists: unknown[][] = []
         if (Array.isArray(k.notebooks)) {
           if (k.notebooks.length === 0 || k.notebooks.length > 20) return { error: 'notebooks 需为 1-20 个笔记本' }
-          for (const nb of k.notebooks as Record<string, unknown>[]) {
+          for (const nb of k.notebooks) {
             if (!nb || typeof nb !== 'object') return { error: '笔记本条目非法' }
-            if (typeof nb.name !== 'string' || !nb.name.trim() || nb.name.length > 50) return { error: '笔记本 name 缺失或过长' }
-            if (nb.coverColor !== undefined && (typeof nb.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(nb.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
-            chapterLists.push(nb.chapters)
+            const nbObj = nb as Record<string, unknown>
+            if (typeof nbObj.name !== 'string' || !nbObj.name.trim() || nbObj.name.length > 50) return { error: '笔记本 name 缺失或过长' }
+            if (nbObj.coverColor !== undefined && (typeof nbObj.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(nbObj.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
+            if (Array.isArray(nbObj.chapters)) chapterLists.push(nbObj.chapters)
           }
           if (k.space !== undefined && (typeof k.space !== 'string' || !k.space.trim() || k.space.length > 60)) return { error: 'space 缺失或过长(≤60 字符)' }
         } else {
           if (typeof k.notebook !== 'string' || !k.notebook.trim() || k.notebook.length > 50) return { error: 'knowledgePages.notebook 缺失或过长' }
           if (k.coverColor !== undefined && (typeof k.coverColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(k.coverColor))) return { error: 'coverColor 需为 #RRGGBB' }
-          chapterLists = [k.chapters]
+          chapterLists = [k.chapters] as unknown[][]
         }
         let pageTotal = 0
         for (const chapters of chapterLists) {
@@ -362,9 +369,10 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
         }
       }
     }
-  } else {
+  } else if (raw.type === 'declarative') {
     return { error: '插件缺少 contributes(没有任何可提供的内容)' }
   }
+  // 可执行插件（ui/code）可不带 contributes——能力经 entry 运行时执行，无需声明式贡献
   // 兼容性检查:engineVersion 形如 ">=2.7.0"
   if (raw.engineVersion !== undefined) {
     const match = /^>=(\d+\.\d+\.\d+)$/.exec(String(raw.engineVersion))
@@ -378,9 +386,9 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
 
 // ---------- 安全分级 ----------
 
-/** 主进程强算等级(防骗标):ui+数据表/宿主API 能力→C;ui→B;含数据级贡献→A;仅内容级贡献→S */
+/** 主进程强算等级(防骗标):ui+数据表/宿主API 能力→C;ui→B;code 可执行→B(能力强→C);含数据级贡献→A;仅内容级贡献→S */
 function computeRiskLevel(m: PluginManifest): RiskLevel {
-  if (m.type === 'ui') {
+  if (m.type === 'ui' || m.type === 'code') {
     const caps = Array.isArray(m.capabilities) ? m.capabilities : []
     const keys = Object.keys(m.contributes || {})
     // 声明自有数据表并申请 data / knowledge / navigation 能力 = 模块级插件
@@ -704,7 +712,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
             usedHost = new URL(u).hostname
             break outer
           } catch (e) {
-            const msg = `${new URL(u).hostname}: ${String(e?.message || e).slice(0, 60)}`
+            const msg = `${new URL(u).hostname}: ${String((e as { message?: string } | null)?.message || e).slice(0, 60)}`
             if (!diag.includes(msg)) diag.push(msg)
             push(0, 0, usedHost) /* 切换下一候选,进度归零 */
           }
