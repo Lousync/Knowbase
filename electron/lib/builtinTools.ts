@@ -4,7 +4,7 @@ import { join, relative, extname, sep, dirname } from 'path'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { registerTool, getSettingReader } from './aiTools'
 import { webSearch } from './webSearch'
-import { resolveSafe, detectConflict, writeWorkspaceFile } from './workspaceManager'
+import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
@@ -191,6 +191,12 @@ function vaultRootPath(): string {
   const cur = getCurrentVault()
   if (!cur || !cur.rootPath) throw new Error('当前没有打开的仓库：请先在应用中打开知识仓库')
   return cur.rootPath
+}
+
+/** 取路径最后一段（兼容 / 与 \ 分隔，非文件系统语义，纯字符串） */
+function baseNameOf(p: string): string {
+  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
+  return i < 0 ? p : p.slice(i + 1)
 }
 
 function vaultRelParts(root: string, abs: string): string[] {
@@ -1069,5 +1075,90 @@ export function registerBuiltinTools(): void {
       matches: matched,
       hint: matched.length === 0 ? '未找到匹配页面标题；可用 vault.search 搜内容定位后用其标题作为引用' : undefined,
     }
+  })
+
+  // ===== vault.* 高危整理工具（B3/F3）：rename/trash 走回收站语义，全程审计 =====
+
+  // 20. builtin.vault.rename —— 重命名/移动 .md/.txt（跨目录；目标已存在拒绝）
+  registerTool({
+    name: 'builtin.vault.rename',
+    title: '重命名/移动仓库文件',
+    description: '重命名或移动仓库内 .md/.txt 文件（同 ws:rename 语义）。若 newPath 是已存在目录则移入该目录；否则按新文件名改名。危险操作：全程审计且不可自动回滚（回收站可恢复需先 trash）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '当前仓库内相对文件路径' },
+        newPath: { type: 'string', description: '目标：新相对路径（含新文件名），或已存在目录（表示移入）' },
+      },
+      required: ['path', 'newPath'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    vaultFile: 'write',
+  }, args => {
+    const rel = str(args.path).trim()
+    const newRel = str(args.newPath).trim()
+    if (!rel || !newRel) throw new Error('缺少必填参数: path / newPath')
+    const root = vaultRootPath()
+    const oldAbs = resolveSafe(root, rel)
+    if (!oldAbs) throw new Error(`源路径非法或越出仓库: ${rel}`)
+    const newAbs = resolveSafe(root, newRel)
+    if (!newAbs) throw new Error(`目标路径非法或越出仓库: ${newRel}`)
+    // 源必须是普通区 .md/.txt（目录或 .knowbase 内一律不开放 AI rename）
+    if (!isAiWritableFile(root, oldAbs)) throw new Error('仅可重命名/移动仓库内普通 .md/.txt 文件（.knowbase 内部数据禁动）')
+    let targetIsDir = false
+    try { targetIsDir = statSync(newAbs).isDirectory() } catch { /* 目标不存在=改名 */ }
+    let finalNewRel = newRel
+    if (targetIsDir) {
+      // 移入目录：保持文件名
+      finalNewRel = join(relative(root, newAbs), baseNameOf(rel)).replace(/\\/g, '/')
+      if (!finalNewRel) throw new Error('目标目录与源在同一位置')
+    } else {
+      // 改名/移动到新文件名：目标也须普通区 .md/.txt
+      const probe = newAbs
+      if (!isAiWritableFile(root, probe)) throw new Error('目标须为仓库内普通 .md/.txt 路径')
+    }
+    const finalAbs = resolveSafe(root, finalNewRel)
+    if (!finalAbs) throw new Error('目标路径非法')
+    const rootId = getCurrentVault()?.rootId
+    if (!rootId) throw new Error('仓库上下文未就绪')
+    try { mkdirSync(dirname(finalAbs), { recursive: true }) } catch { /* 目录已存在 */ }
+    renameWorkspacePath(rootId, rel, finalNewRel)
+    return { ok: true, from: rel, to: finalNewRel }
+  })
+
+  // 21. builtin.vault.trash —— 移入系统回收站（绝不删除）
+  registerTool({
+    name: 'builtin.vault.trash',
+    title: '移入回收站',
+    description: '把仓库内 .md/.txt 移入系统回收站（可恢复，非永久删除）。危险操作：全程审计；执行前确认用户明确要求删除该文件',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对文件路径' },
+      },
+      required: ['path'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    vaultFile: 'write',
+  }, async args => {
+    const rel = str(args.path).trim()
+    if (!rel) throw new Error('缺少必填参数: path')
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, rel)
+    if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
+    if (!isAiWritableFile(root, abs)) throw new Error('仅可移入回收站普通区 .md/.txt 文件（.knowbase 内部数据禁动）')
+    let isFile = false
+    try { isFile = statSync(abs).isFile() } catch { throw new Error(`文件不存在: ${rel}`) }
+    if (!isFile) throw new Error('vault.trash 仅支持文件（目录整理请用编辑器）')
+    const rootId = getCurrentVault()?.rootId
+    if (!rootId) throw new Error('仓库上下文未就绪')
+    await trashWorkspacePath(rootId, rel)
+    return { ok: true, trashed: rel }
   })
 }

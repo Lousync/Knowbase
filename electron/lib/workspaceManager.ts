@@ -374,15 +374,34 @@ function requireInside(rootId: string, relPath: unknown): string {
   return abs
 }
 
+/** 知识索引失效：仅当被改动的根就是当前仓库时才有缓存可失效（P0 懒重建，只删缓存 JSON） */
+function invalidateIndexIfCurrentVault(rootId: string): void {
+  if (getCurrentVault()?.rootId !== rootId) return
+  invalidateKnowledgeIndex()
+  invalidateGraphIndex()
+}
+
+/** 重命名/移动（跨目录；ws:rename 与 AI vault.rename 共用同一语义，成功后失效索引） */
+export function renameWorkspacePath(rootId: string, oldRel: string, newRel: string): void {
+  const from = requireInside(rootId, oldRel)
+  const to = requireInside(rootId, newRel)
+  if (!existsSync(from)) throw new Error('源文件不存在')
+  if (existsSync(to)) throw new Error('目标已存在')
+  renameSync(from, to)
+  invalidateIndexIfCurrentVault(rootId)
+}
+
+/** 移入系统回收站（绝不 rm；ws:trash 与 AI vault.trash 共用同一语义） */
+export async function trashWorkspacePath(rootId: string, relPath: string): Promise<void> {
+  const abs = requireInside(rootId, relPath)
+  if (!existsSync(abs)) throw new Error('文件不存在')
+  const trash = (await import('trash')).default
+  await trash([abs])
+  invalidateIndexIfCurrentVault(rootId)
+}
+
 export function registerWorkspaceHandlers(): void {
   loadVaults()
-
-  // 知识索引失效：仅当被改动的根就是当前仓库时才有缓存可失效（P0 懒重建，只删缓存 JSON）
-  function invalidateIndexIfCurrentVault(rootId: string): void {
-    if (getCurrentVault()?.rootId !== rootId) return
-    invalidateKnowledgeIndex()
-    invalidateGraphIndex()
-  }
 
   // 打开/登记仓库：系统对话框授权（用户意图的唯一来源）
   ipcMain.handle('ws:openDir', async () => {
@@ -521,29 +540,20 @@ export function registerWorkspaceHandlers(): void {
     }
   })
 
-  // 重命名/移动（新旧路径都必须在根内）
+  // 重命名/移动（新旧路径都必须在根内；实现见模块级 renameWorkspacePath）
   ipcMain.handle('ws:rename', (_e, rootId: string, oldRel: string, newRel: string) => {
     try {
-      const from = requireInside(rootId, oldRel)
-      const to = requireInside(rootId, newRel)
-      if (!existsSync(from)) throw new Error('源文件不存在')
-      if (existsSync(to)) throw new Error('目标已存在')
-      renameSync(from, to)
-      invalidateIndexIfCurrentVault(rootId) // 改名/移动可能是目录，目标含 .md 时也需失效
+      renameWorkspacePath(rootId, oldRel, newRel)
       return { ok: true }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
   })
 
-  // 删除 → 系统回收站（绝不 rm）
+  // 删除 → 系统回收站（绝不 rm；实现见模块级 trashWorkspacePath）
   ipcMain.handle('ws:trash', async (_e, rootId: string, relPath: string) => {
     try {
-      const abs = requireInside(rootId, relPath)
-      if (!existsSync(abs)) throw new Error('文件不存在')
-      const trash = (await import('trash')).default
-      await trash([abs])
-      invalidateIndexIfCurrentVault(rootId) // 删除可能是目录，含 .md 时也需失效
+      await trashWorkspacePath(rootId, relPath)
       return { ok: true }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
