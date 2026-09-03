@@ -6,13 +6,15 @@
  *       未解析 [[引用]] 合成 dangling 虚节点渲染、着色/簇力/文字阈值开关
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ExternalLink, FileText, Folder as FolderIcon, Maximize2, Minus, Plus, RotateCcw, Settings, Share2, Tag, X, Network } from 'lucide-react'
+import { ExternalLink, FileText, Folder as FolderIcon, Maximize2, Minus, Plus, RotateCcw, Settings, Share2, Tag, X, Network, BookOpen } from 'lucide-react'
 import type { GraphIndexData, GraphNode, GraphViewConfig } from '../../../../lib/graphTypes'
 import { getKnowledgeGraph, getGraphViewConfig, updateGraphViewConfig } from '../../../../lib/ipc'
 import { GraphCanvas, type GraphCanvasHandle } from './GraphCanvas'
 
 interface GraphViewProps {
   onExit: () => void
+  /** 卡片「在阅读器中打开」：知识库内沉浸阅读该页（id = 页面 id） */
+  onOpenInReader?: (pageId: string) => void
   /**
    * 图谱目录 scope（R4 用户需求）：仓库内相对目录前缀（如 学习空间/C++教学），
    * 任意层级。非空 = 只展示该目录（含子目录）的页 + 与它们有边的跨目录关联节点/标签；
@@ -112,7 +114,7 @@ function applyScope(data: GraphIndexData, scopePath: string): GraphIndexData {
   return { ...data, nodes, edges }
 }
 
-export function GraphView({ onExit, scopePath, scopeName, onClearScope }: GraphViewProps) {
+export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenInReader }: GraphViewProps) {
   const [data, setData] = useState<GraphIndexData | null>(null)
   const [error, setError] = useState('')
   const [cfg, setCfg] = useState<GraphViewConfig>(DEFAULT_GVC)
@@ -203,6 +205,11 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope }: GraphV
     if (!sel || sel.kind !== 'page') return
     window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: sel.path } }))
   }, [sel])
+
+  const openInReader = useCallback(() => {
+    if (!sel || sel.kind !== 'page') return
+    onOpenInReader?.(sel.id)
+  }, [sel, onOpenInReader])
 
   if (error) {
     return (
@@ -415,8 +422,15 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope }: GraphV
           {sel.kind === 'page' ? (
             <>
               <button
-                onClick={openInEditor}
+                onClick={openInReader}
                 className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity"
+              >
+                <BookOpen size={12} />
+                在阅读器中打开
+              </button>
+              <button
+                onClick={openInEditor}
+                className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] text-[12px] transition-colors"
               >
                 <ExternalLink size={12} />
                 在编辑器中打开

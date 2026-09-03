@@ -418,6 +418,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }, [])
 
+  /** 图谱卡片「在阅读器中打开」：从图谱直接进入该页沉浸阅读（先退图谱覆盖层） */
+  const openPageInReader = useCallback(async (pageId: string) => {
+    try {
+      const p = await getKnowledgePageById(pageId)
+      if (!p) return
+      const ft = (p.fileType || 'md').toLowerCase()
+      if (ft !== 'md' && ft !== 'txt') { showToast({ type: 'warning', message: '沉浸阅读仅支持 md / txt 页面' }); return }
+      setGraphMode(false)
+      setReadingPage(p)
+      setReadingMode(true)
+    } catch (e) { console.error(e) }
+  }, [])
+
   /** P1 附件路由：PDF/文档附件 → 编辑器 PdfReaderView（App 收到 kb-open-in-editor 会切编辑器 Tab） */
   const openAttachmentInEditor = useCallback((relPath: string) => {
     if (!relPath) { showToast({ type: 'warning', message: '附件路径为空' }); return }
@@ -1358,6 +1371,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               scopePath={graphScope?.path}
               scopeName={graphScope?.name}
               onClearScope={() => setGraphScope(null)}
+              onOpenInReader={(id) => void openPageInReader(id)}
             />
           ) : (
           <>

@@ -308,7 +308,15 @@ export default function App() {
 
   // 读写分工：知识库「在编辑器中打开」→ 切到编辑器 Tab（EditorModule 自行处理文件打开）
   useEffect(() => {
-    const handler = () => setActiveTab('editor')
+    const handler = (e: Event) => {
+      const relPath = (e as CustomEvent).detail?.relPath as string | undefined
+      if (typeof relPath === 'string' && relPath) {
+        // 事件丢失竞态修复：EditorModule 首次挂载前派发的事件无监听者 →
+        // App 层（始终活着）把最近一次待打开路径暂存到 window，EditorModule 首挂后消费
+        ;(window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor = relPath
+      }
+      setActiveTab('editor')
+    }
     window.addEventListener('kb-open-in-editor', handler)
     return () => window.removeEventListener('kb-open-in-editor', handler)
   }, [])

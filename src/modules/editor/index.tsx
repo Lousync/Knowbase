@@ -219,21 +219,38 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   }, [dirCache, openFile])
 
   // 跨模块跳转：知识库「在编辑器中打开」→ 打开同一文件（读写分工协议，见 .AGENT/docs/读写分工设计.md）
+  const openRelFromJump = useCallback(async (relPath: string) => {
+    // 已消费即清暂存（防模块重挂载时误开旧文件）
+    delete (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
+    if (!rootIdRef.current) {
+      const cur = await workspaceGetCurrent()
+      if (cur?.rootId) await enterWorkspace(cur.rootId, cur.name ?? '')
+    }
+    if (!rootIdRef.current) { showToast({ type: 'warning', message: '尚未打开任何仓库' }); return }
+    const name = relPath.split('/').pop() || relPath
+    await openFile({ relPath, name, type: 'file' } as TreeNode)
+  }, [openFile, enterWorkspace])
+
   useEffect(() => {
     const handler = async (e: Event) => {
       const relPath = (e as CustomEvent).detail?.relPath as string
       if (!relPath || typeof relPath !== 'string') return
-      if (!rootIdRef.current) {
-        const cur = await workspaceGetCurrent()
-        if (cur?.rootId) await enterWorkspace(cur.rootId, cur.name ?? '')
-      }
-      if (!rootIdRef.current) { showToast({ type: 'warning', message: '尚未打开任何仓库' }); return }
-      const name = relPath.split('/').pop() || relPath
-      await openFile({ relPath, name, type: 'file' } as TreeNode)
+      await openRelFromJump(relPath)
     }
     window.addEventListener('kb-open-in-editor', handler)
     return () => window.removeEventListener('kb-open-in-editor', handler)
-  }, [openFile, enterWorkspace])
+  }, [openRelFromJump])
+
+  // 事件丢失竞态修复（首次打开编辑器 Tab 前派发的 kb-open-in-editor 无监听者）：
+  // App.tsx 把最近一次待打开路径暂存 window.__kbPendingOpenInEditor；本模块首挂后消费一次
+  useEffect(() => {
+    const pending = (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
+    if (typeof pending === 'string' && pending) {
+      delete (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
+      void openRelFromJump(pending)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleChange = useCallback((relPath: string, value: string) => {
     setOpenFiles((prev) => (prev[relPath] ? { ...prev, [relPath]: { ...prev[relPath], content: value } } : prev))
