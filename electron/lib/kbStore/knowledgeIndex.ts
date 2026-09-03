@@ -12,6 +12,8 @@ export interface KnowledgeCategoryIndexEntry {
   parentId: string | null
   sortOrder: number
   categoryType: KnowledgeCategoryType
+  /** 仓库内相对目录路径（如 学习空间/C++教学）；graph 目录 scope 依赖此字段 */
+  path?: string
 }
 
 export interface KnowledgePageIndexEntry {
@@ -44,25 +46,13 @@ export function extractWikiOutlinks(md: string): string[] {
 }
 
 export interface KnowledgeIndex {
-  schemaVersion: 2
+  schemaVersion: 3
   generatedAt: string
   source: 'vault'
   categories: KnowledgeCategoryIndexEntry[]
   pages: KnowledgePageIndexEntry[]
   byId: Record<string, KnowledgePageIndexEntry>
   warnings: string[]
-}
-
-interface StoredCategory {
-  id?: unknown
-  name?: unknown
-  parentId?: unknown
-  sortOrder?: unknown
-  categoryType?: unknown
-}
-
-function normalizeCategoryType(value: unknown): KnowledgeCategoryType {
-  return value === 'space' || value === 'notebook' ? value : 'folder'
 }
 
 function asString(value: unknown): string {
@@ -107,23 +97,39 @@ function scanMarkdownFiles(root: string, dir: string, out: string[]): void {
   }
 }
 
+/**
+ * 读取分类树。兼容两种落盘格式：
+ *  - dict（vaultMigration / 迁移器产物）: { "<uuid>": { id,name,type,parent,sortOrder,...,path } }
+ *  - array（早期/其它写入路径）: [{ id,name,categoryType,parentId,... }]
+ * dict 优先——迁移产物是 dict 且带 path（graph 目录 scope 依赖）。
+ */
 function readCategories(): { categories: KnowledgeCategoryIndexEntry[]; warnings: string[] } {
   const raw = readJson<unknown>('modules/knowledge', 'categories.json', [])
-  if (!Array.isArray(raw)) return { categories: [], warnings: ['modules/knowledge/categories.json 不是数组'] }
-  const categories: KnowledgeCategoryIndexEntry[] = []
   const warnings: string[] = []
-  for (const item of raw as StoredCategory[]) {
+  const items: Array<Record<string, unknown>> = []
+  if (Array.isArray(raw)) {
+    for (const it of raw as unknown[]) if (it && typeof it === 'object') items.push(it as Record<string, unknown>)
+  } else if (raw && typeof raw === 'object') {
+    for (const it of Object.values(raw as Record<string, unknown>)) if (it && typeof it === 'object') items.push(it as Record<string, unknown>)
+  }
+
+  const categories: KnowledgeCategoryIndexEntry[] = []
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
     const id = asString(item.id)
     if (!id) {
       warnings.push('发现没有 id 的分类，已跳过')
       continue
     }
+    const type = asString(item.categoryType) || asString(item.type) || 'folder'
     categories.push({
       id,
       name: asString(item.name) || id,
-      parentId: asString(item.parentId) || null,
+      parentId: asString(item.parentId) || asString(item.parent) || null,
       sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : 0,
-      categoryType: normalizeCategoryType(item.categoryType),
+      categoryType: type === 'space' || type === 'notebook' ? type : 'folder',
+      // dict 格式带仓库内相对目录路径；array 无 path 时置空（graph scope 不生效，不崩）
+      path: asString(item.path) || undefined,
     })
   }
   return { categories, warnings }
@@ -135,7 +141,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const warnings: string[] = []
   if (!current) {
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: new Date().toISOString(),
       source: 'vault',
       categories: [],
@@ -190,7 +196,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
 
   pages.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'zh-Hans'))
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     source: 'vault',
     categories: categoryResult.categories.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hans')),
@@ -204,7 +210,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
 export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
   if (!forceRebuild) {
     const cached = readJson<KnowledgeIndex | null>('cache', 'knowledge-index.json', null)
-    if (cached && cached.schemaVersion === 2 && cached.source === 'vault' && Array.isArray(cached.pages) && cached.byId) return cached
+    if (cached && cached.schemaVersion === 3 && cached.source === 'vault' && Array.isArray(cached.pages) && cached.byId) return cached
   }
   const fresh = rebuildKnowledgeIndex()
   writeJson('cache', 'knowledge-index.json', fresh)
