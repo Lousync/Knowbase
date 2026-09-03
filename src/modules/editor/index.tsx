@@ -13,6 +13,7 @@ import {
 import { showToast } from '../../lib/toast'
 import { FileTree } from './components/FileTree'
 import { MonacoPane, type MonacoPaneHandle } from './components/MonacoPane'
+import { PdfReaderView } from './components/PdfReaderView'
 import { extractOutline } from '../../lib/markdownOutline'
 import type { EditorDoc, DirCache, TreeNode } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
@@ -160,19 +161,22 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     const res = await workspaceReadFile(root, node.relPath)
     if (res.error) { showToast({ type: 'error', message: res.error }); return }
     const language = languageFor(node.name)
+    // PDF 文档类型（P1）：不按文本读——内容置空、binary 标记、路由 PdfReaderView 懒加载渲染。
+    // 注：readFile 的 NUL 探测对 PDF 头部不敏感（%PDF 头是 ASCII），必须显式按扩展名判定。
+    const isPdf = /\.pdf$/i.test(node.name)
     // frontmatter 隐藏：markdown 文档拆分前缀，Monaco 只见正文（保存时拼回，roundtrip 无损）
-    const fm = res.editable && language === 'markdown' && !res.binary ? splitFrontmatter(res.content) : null
+    const fm = !isPdf && res.editable && language === 'markdown' && !res.binary ? splitFrontmatter(res.content) : null
     setOpenFiles((prev) => ({
       ...prev,
       [node.relPath]: {
         relPath: node.relPath,
-        content: fm ? fm.body : res.content,
-        savedContent: fm ? fm.body : res.content,
-        binary: res.binary,
+        content: isPdf ? '' : (fm ? fm.body : res.content),
+        savedContent: isPdf ? '' : (fm ? fm.body : res.content),
+        binary: isPdf || res.binary,
         editable: res.editable,
         truncated: res.truncated,
         size: res.size,
-        language,
+        language: isPdf ? 'pdf' : language,
         lastSavedAt: Date.now(),
         mtimeMs: res.mtimeMs,
         frontmatterPrefix: fm ? fm.prefix : undefined,
@@ -280,8 +284,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     setConflictState(null)
     const res = await workspaceReadFile(root, relPath)
     if (res.error) { showToast({ type: 'error', message: res.error }); return }
-    const language = languageFor(baseName(relPath))
-    const fm = res.editable && language === 'markdown' && !res.binary ? splitFrontmatter(res.content) : null
+    const isPdf = /\.pdf$/i.test(relPath)
+    const language = isPdf ? 'pdf' : languageFor(baseName(relPath))
+    const fm = !isPdf && res.editable && language === 'markdown' && !res.binary ? splitFrontmatter(res.content) : null
     setOpenFiles((prev) => (prev[relPath]
       ? {
         ...prev,
@@ -709,7 +714,10 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
           )}
           {/* 编辑器 */}
           <div className="min-h-0 flex-1 relative" onClick={() => setOutlineOpen(false)}>
-            {/* R5 分栏：Monaco（左）| 预览（右，50/50）。预览仅 markdown 文档可用 */}
+            {/* 主体：pdf 文档类型 → PdfReaderView（懒加载 canvas）；其余 → R5 分栏（Monaco | 预览） */}
+            {activeDoc?.language === 'pdf' && rootId ? (
+              <PdfReaderView key={activeDoc.relPath} rootId={rootId} relPath={activeDoc.relPath} name={baseName(activeDoc.relPath)} />
+            ) : (
             <div className="flex h-full min-h-0">
               <div className="min-w-0 flex-1">
                 <MonacoPane ref={monacoRef} doc={activeDoc} onChange={handleChange} dimEnabled={markdownDim} />
@@ -734,6 +742,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 </>
               )}
             </div>
+            )}
             {/* 大纲浮层：markdown 标题树 → 点击跳转 */}
             {outlineOpen && activeDoc?.language === 'markdown' && (
               <div
