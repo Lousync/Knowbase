@@ -583,6 +583,9 @@ export function registerWorkspaceHandlers(): void {
       if (!r) throw new Error('工作区不存在或已被移除')
       setCurrentVault({ rootId: r.id, name: r.name, rootPath: r.rootPath })
       ensureKbRoot()
+      // 切换仓库后失效新仓库缓存（多仓库陈旧兜底，与 ws:openDir 同策略）
+      invalidateIndexIfCurrentVault(r.id)
+      invalidateGraphIndex()
       return { rootId: r.id, name: r.name, path: r.rootPath }
     } catch (e) {
       return { error: (e as Error).message }
