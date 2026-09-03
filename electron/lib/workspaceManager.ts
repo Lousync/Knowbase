@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
-import { basename, join, relative, resolve, sep } from 'path'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
+import { basename, join, relative, resolve, sep, extname } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault } from './kbStore/vaultContext'
@@ -151,6 +151,50 @@ export function readWorkspaceFile(absPath: string): ReadFileResult {
     editable: buf.length <= MAX_EDIT_SIZE,
     truncated: false,
     mtimeMs: st.mtimeMs,
+  }
+}
+
+// ===== 二进制范围读取（PDF 阅读器懒加载通道，plugin-pdf-reader-design §4）=====
+
+/** 范围读取白名单扩展名：范围通道 = 二进制放行口，只允许可视化文档类型（防变成任意二进制窃取口） */
+const RANGE_EXT_WHITELIST = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg']
+
+export interface ReadRangeResult {
+  /** base64 编码的 [offset, offset+len) 段数据（不足段取到文件尾） */
+  data: string
+  /** 本段实际起始字节偏移 */
+  offset: number
+  /** 文件总字节数（pdf.js 据此知道全貌，配合 range 懒加载） */
+  size: number
+  /** 本段是否截断（end < size） */
+  truncated: boolean
+}
+
+/**
+ * 范围读取：open+read 精确读段（不整文件载入内存），仅白名单扩展名放行。
+ * 纯逻辑可冒烟（不依赖 electron）。
+ */
+export function readWorkspaceRange(absPath: string, offset: unknown, length: unknown): ReadRangeResult | { error: string } {
+  try {
+    const ext = extname(absPath).slice(1).toLowerCase()
+    if (!RANGE_EXT_WHITELIST.includes(ext)) return { error: `文件类型不支持范围读取: .${ext}` }
+    const st = statSync(absPath)
+    const start = Math.max(0, Math.floor(Number(offset) || 0))
+    const want = Math.max(0, Math.floor(Number(length) || 0))
+    const end = Math.min(st.size, start + want)
+    if (start >= st.size) {
+      return { data: '', offset: start, size: st.size, truncated: false }
+    }
+    const fd = openSync(absPath, 'r')
+    try {
+      const buf = Buffer.alloc(end - start)
+      readSync(fd, buf, 0, buf.length, start)
+      return { data: buf.toString('base64'), offset: start, size: st.size, truncated: end < st.size }
+    } finally {
+      closeSync(fd)
+    }
+  } catch (e) {
+    return { error: (e as Error).message }
   }
 }
 
@@ -344,6 +388,16 @@ export function registerWorkspaceHandlers(): void {
     try {
       const abs = requireInside(rootId, relPath)
       return readWorkspaceFile(abs)
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
+  })
+
+  // 二进制范围读取（PDF 阅读器懒加载）：白名单扩展名 + 精确读段，复用 resolveSafe 防穿越
+  ipcMain.handle('ws:readRange', (_e, rootId: string, relPath: string, offset: unknown, length: unknown) => {
+    try {
+      const abs = requireInside(rootId, relPath)
+      return readWorkspaceRange(abs, offset, length)
     } catch (e) {
       return { error: (e as Error).message }
     }

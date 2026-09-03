@@ -730,6 +730,13 @@ export interface WorkspaceReadResult {
   /** 磁盘 mtime（保存冲突检测基线） */
   mtimeMs: number
 }
+/** 二进制范围读取结果（PDF 阅读器懒加载；data 为 base64 段） */
+export interface WorkspaceRangeResult {
+  data: string
+  offset: number
+  size: number
+  truncated: boolean
+}
 /** 写文件结果：conflict=true 表示磁盘已被外部修改（或已删除），需用户决策 */
 export interface WorkspaceWriteResult {
   ok: boolean
@@ -937,6 +944,7 @@ export interface ElectronAPI {
   workspaceOpenDir: () => Promise<({ rootId: string; name: string; path: string } & { error?: string }) | null>
   workspaceListDir: (rootId: string, relPath?: string) => Promise<{ entries?: WorkspaceEntry[]; error?: string }>
   workspaceReadFile: (rootId: string, relPath: string) => Promise<WorkspaceReadResult & { error?: string }>
+  workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => Promise<WorkspaceRangeResult & { error?: string }>
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => Promise<WorkspaceWriteResult>
   workspaceCreateFile: (rootId: string, relPath: string, content?: string) => Promise<{ ok: boolean; error?: string }>
   workspaceMkdir: (rootId: string, relPath: string) => Promise<{ ok: boolean; error?: string }>
