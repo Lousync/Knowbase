@@ -73,6 +73,8 @@ export interface AgentChange {
   action: string
   /** 目标：文件 relPath / 标题 / 日期等（取写工具关键入参） */
   target: string
+  /** 可点击直达编辑器的仓库内文件 relPath（仅 vault 文件写类工具；trash 后文件已移走不设） */
+  file?: string
 }
 
 export interface AgentChatResult {
@@ -292,8 +294,16 @@ async function runAgentLoop(
         // 收集真实写改动 → 完成时列为「本次改动」清单
         const label = CHANGE_LABELS[realName]
         if (label) {
-          const target = String(args?.path ?? args?.title ?? args?.date ?? args?.name ?? '').trim().slice(0, 120)
-          if (target) changes.push({ tool: realName, action: label, target })
+          const data = (typeof exec.data === 'object' && exec.data !== null)
+            ? exec.data as Record<string, unknown>
+            : {}
+          // vault 文件写类工具：目标=真实落盘路径（rename 取目标路径 to）；trash 后文件已移走不可跳转
+          const vaultPath = realName.startsWith('builtin.vault.')
+            ? String(data?.to ?? data?.path ?? data?.trashed ?? '').trim()
+            : ''
+          const file = realName !== 'builtin.vault.trash' && vaultPath ? vaultPath : undefined
+          const target = vaultPath || String(args?.title ?? args?.date ?? args?.name ?? '').trim().slice(0, 120)
+          if (target) changes.push({ tool: realName, action: label, target, ...(file ? { file } : {}) })
         }
       }
       convo.push({

@@ -27,6 +27,10 @@ ok('llm/tool 步骤均实时 emit',
   AG.includes('stepEmitters.get(signal)?.(llmStep)') && AG.includes('stepEmitters.get(signal)?.(toolStep)'))
 ok('写改动收集（CHANGE_LABELS 覆盖 vault/knowledge/blog/schedule/checkin 写工具）',
   AG.includes("'builtin.vault.edit': '修改文件'") && AG.includes("'builtin.checkin.check-habit': '习惯打卡'"))
+ok('AgentChange.file 字段（vault 写类工具取真实落盘路径；trash 排除不可跳转）',
+  AG.includes('file?: string') &&
+  AG.includes("data?.to ?? data?.path ?? data?.trashed") &&
+  AG.includes("realName !== 'builtin.vault.trash' && vaultPath"))
 ok('完成时 reply 自动附「本次改动」清单（落库持久化）+ 结构化 changes 返回',
   AG.includes("reply = r.content + changesText") && AG.includes("return { ok: true, sessionId, reply, changes, trace }"))
 
@@ -45,6 +49,10 @@ ok('AgentLiveSteps 实时组件（思考中/正在调用 N 次/失败调整）',
   PN.includes('function AgentLiveSteps') && PN.includes('正在调用') && PN.includes('失败，正在调整策略'))
 ok('改动卡片 lastChanges（header 计数 + 列表 + 关闭）',
   PN.includes('本次已改动') && PN.includes('setLastChanges(null)'))
+ok('改动项可点击跳编辑器（c.file → kb-open-in-editor{relPath}，trash 项不可点）',
+  PN.includes("new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file } })") &&
+  PN.includes('const canOpen = Boolean(c.file)') &&
+  PN.includes('ArrowUpRight'))
 ok('send/regenerate/edit 发送前清状态、成功后注入 changes',
   PN.includes('setLiveSteps([])') && PN.includes('setLastChanges(r.changes'))
 

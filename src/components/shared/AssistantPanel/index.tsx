@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check, Square,
-  Pencil, RefreshCw, Languages,
+  Pencil, RefreshCw, Languages, ArrowUpRight,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext } from '../../../lib/assistantContext'
@@ -604,13 +604,32 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                           </button>
                         </div>
                         <ul className="py-1 max-h-32 overflow-y-auto">
-                          {lastChanges.map((c, i) => (
-                            <li key={i} className="flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-[var(--text-primary)]">
-                              <FileText size={10} className="shrink-0 text-[var(--text-muted)]" />
-                              <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
-                              <span className="truncate" title={c.target}>{c.target}</span>
-                            </li>
-                          ))}
+                          {lastChanges.map((c, i) => {
+                            const canOpen = Boolean(c.file)
+                            const row = (
+                              <>
+                                <FileText size={10} className={`shrink-0 ${canOpen ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
+                                <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
+                                <span className="truncate">{c.target}</span>
+                                {canOpen && <ArrowUpRight size={11} className="ml-auto shrink-0 text-[var(--text-muted)] group-hover/item:text-[var(--accent)]" />}
+                              </>
+                            )
+                            return (
+                              <li key={i}>
+                                {canOpen ? (
+                                  <button
+                                    onClick={() => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file } }))}
+                                    title="在编辑器中打开该文件"
+                                    className="w-full flex items-center gap-1.5 px-2.5 py-1 text-left text-[11.5px] text-[var(--text-primary)] group/item transition-colors hover:bg-[var(--bg-hover)]"
+                                  >
+                                    {row}
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-[var(--text-primary)]">{row}</div>
+                                )}
+                              </li>
+                            )
+                          })}
                         </ul>
                       </div>
                     </div>

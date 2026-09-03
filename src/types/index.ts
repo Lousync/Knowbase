@@ -691,6 +691,8 @@ export interface AgentChange {
   action: string
   /** 目标：relPath / 标题 / 日期 */
   target: string
+  /** 可点击直达编辑器的仓库内文件 relPath（仅 vault 文件写类工具） */
+  file?: string
 }
 
 export interface AgentChatResult {
