@@ -370,10 +370,12 @@ export type LlmInvokeResponse = {
   assistantMessage: ChatMessage
   model: string
   tokens: number
+  promptTokens: number
+  completionTokens: number
 } | {
   ok: false
   error: string
-  code?: 'BUDGET_EXCEEDED' | 'PROVIDER_NOT_FOUND' | 'PROVIDER_DISABLED' | 'NO_DEFAULT_MODEL'
+  code?: 'PROVIDER_NOT_FOUND' | 'PROVIDER_DISABLED' | 'NO_DEFAULT_MODEL'
 }
 
 async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
@@ -391,16 +393,6 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
   }
   if (!provider) return { ok: false, error: '未找到可用的模型供应商', code: req.providerId ? 'PROVIDER_NOT_FOUND' : 'NO_DEFAULT_MODEL' }
   if (!provider.enabled) return { ok: false, error: `供应商「${provider.name}」已禁用`, code: 'PROVIDER_DISABLED' }
-
-  // 月度预算硬限制
-  const budget = Math.floor(Number(depsRef?.getSettingValue('monthlyTokenBudget') ?? 0))
-  if (budget > 0) {
-    const used = countMonthLlmTokens()
-    if (used >= budget) {
-      appendAudit(provider.id, 'llm.invoke.budget_blocked', { monthTokens: used, budget })
-      return { ok: false, error: `本月 token 预算已用尽（${used}/${budget}）`, code: 'BUDGET_EXCEEDED' }
-    }
-  }
 
   const adapter = getAdapter(provider.type)
   const maxTokensRaw = Math.floor(Number(depsRef?.getSettingValue('llmMaxTokens') ?? 4096))
@@ -433,6 +425,8 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       assistantMessage: r.assistantMessage,
       model: finalModel,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
+      promptTokens: r.usage.promptTokens,
+      completionTokens: r.usage.completionTokens,
     }
   } catch (err) {
     appendAudit(provider.id, 'llm.invoke', {
@@ -599,7 +593,6 @@ export function registerLlmHandlers(deps: {
 
   ipcMain.handle('llm:getUsage', () => ({
     monthTokens: countMonthLlmTokens(),
-    budget: Math.max(0, Math.floor(Number(deps.getSettingValue('monthlyTokenBudget') ?? 0))),
   }))
 }
 

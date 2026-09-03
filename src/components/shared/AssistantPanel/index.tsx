@@ -59,6 +59,33 @@ function fmtTime(raw?: string | null): string {
   return sameDay ? `${m[4]}:${m[5]}` : `${m[2]}-${m[3]} ${m[4]}:${m[5]}`
 }
 
+/** 数字 → 友好 token 文本（≥1k 显示 k） */
+function fmtTok(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n)
+}
+
+/** 聚合 assistant 回复的 llm trace 用量，渲染"↑输入 ↓输出 · 合计 tokens"小字 */
+function TokensOf({ trace }: { trace?: AgentTraceStep[] }): React.ReactNode | null {
+  if (!trace || trace.length === 0) return null
+  const llm = trace.filter(s => s.kind === 'llm')
+  if (llm.length === 0) return null
+  let p = 0, c = 0, hasSplit = false, t = 0, hasTotal = false
+  for (const s of llm) {
+    if (typeof s.promptTokens === 'number') { p += s.promptTokens; hasSplit = true }
+    if (typeof s.completionTokens === 'number') { c += s.completionTokens; hasSplit = true }
+    if (typeof s.tokens === 'number') { t += s.tokens; hasTotal = true }
+  }
+  if (hasSplit && (p > 0 || c > 0)) {
+    return (
+      <span className="text-[var(--text-muted)]" title="本次回复消耗 tokens（↑=上下文输入 ↓=生成输出）">
+        ↑{fmtTok(p)} ↓{fmtTok(c)} · {fmtTok(p + c)} tokens
+      </span>
+    )
+  }
+  if (hasTotal && t > 0) return <span className="text-[var(--text-muted)]">≈{fmtTok(t)} tokens</span>
+  return null
+}
+
 export function AssistantPanel() {
   const { s, update } = useSettings()
   const [open, setOpen] = useState(false)
@@ -517,6 +544,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                         ) : (
                           <div className={`flex items-center gap-1.5 px-1 mt-0.5 text-[10px] text-[var(--text-disabled)] ${m.role === 'user' ? 'justify-end ml-6' : 'justify-start mr-6'}`}>
                             {m.createdAt && <span>{fmtTime(m.createdAt)}</span>}
+                            {m.role === 'assistant' && <TokensOf trace={m.trace} />}
                             <button
                               onClick={async () => {
                                 const okFlag = await copyText(m.content)

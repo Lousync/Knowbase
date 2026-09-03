@@ -619,7 +619,6 @@ export interface LlmModelTestResultInfo {
 
 export interface LlmUsageInfo {
   monthTokens: number
-  budget: number
 }
 
 // ===== CC Switch 一键导入 =====
@@ -651,6 +650,9 @@ export interface AgentTraceStep {
   ok: boolean
   durationMs: number
   tokens?: number
+  /** 拆分用量（llm step；prompt=本次上下文输入，completion=本次生成） */
+  promptTokens?: number
+  completionTokens?: number
   summary?: string
 }
 

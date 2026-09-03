@@ -37,6 +37,9 @@ export interface AgentTraceStep {
   ok: boolean
   durationMs: number
   tokens?: number
+  /** 拆分用量（llm step） */
+  promptTokens?: number
+  completionTokens?: number
   summary?: string
 }
 
@@ -189,6 +192,8 @@ async function runAgentLoop(
       ok: r.ok,
       durationMs: Date.now() - t0,
       tokens: r.ok ? r.tokens : undefined,
+      promptTokens: r.ok ? r.promptTokens : undefined,
+      completionTokens: r.ok ? r.completionTokens : undefined,
     })
     if (!r.ok) return { ok: false, sessionId, error: r.error, code: r.code, trace }
 

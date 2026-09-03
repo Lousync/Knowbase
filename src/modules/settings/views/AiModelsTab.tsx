@@ -34,7 +34,7 @@ export function AiModelsTab() {
   const { s, update } = useSettings()
   const [providers, setProviders] = useState<LlmProviderInfo[]>([])
   const [defaultModel, setDefaultModel] = useState('')
-  const [usage, setUsage] = useState({ monthTokens: 0, budget: 0 })
+  const [usage, setUsage] = useState({ monthTokens: 0 })
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [ccsOpen, setCcsOpen] = useState(false)
@@ -71,37 +71,27 @@ export function AiModelsTab() {
 
   useEffect(() => { void refresh() }, [refresh])
 
-  const pct = usage.budget > 0 ? Math.min(100, Math.round((usage.monthTokens / usage.budget) * 100)) : 0
   const freeSet = parseFreeSet(s.aiFreeModelIds ?? '[]')
 
   return (
     <div className="space-y-8">
-      {/* 用量与预算 */}
+      {/* 用量统计（仅统计不限额） */}
       <div>
         <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">Token 用量</h2>
-        <p className="text-[12px] text-[var(--text-muted)] mb-4">本月累计消耗；预算用尽后调用将被拦截。0 表示不限。</p>
+        <p className="text-[12px] text-[var(--text-muted)] mb-4">本月累计消耗（仅统计，不设限额拦截）；每次对话回复下方的 ↑↓ 标记为单轮消耗。</p>
         <div className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md">
           <div className="flex items-center justify-between text-[13px]">
             <span className="flex items-center gap-2"><Gauge size={14} className="text-[var(--accent)]" />本月 tokens</span>
-            <span className="tabular-nums text-[var(--text-secondary)]">{usage.monthTokens} / {usage.budget > 0 ? usage.budget : '不限'}</span>
+            <span className="tabular-nums text-[var(--text-secondary)]">{usage.monthTokens.toLocaleString()}</span>
           </div>
-          {usage.budget > 0 && (
-            <div className="mt-2 h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
-              <div className="h-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
-            </div>
-          )}
-          <label className="flex items-center justify-between gap-3 mt-3">
-            <span className="text-[12px] text-[var(--text-muted)]">月度预算</span>
-            <input type="number" min={0} value={String(s.monthlyTokenBudget ?? 0)}
-              onChange={e => { void update('monthlyTokenBudget', Math.max(0, Math.floor(Number(e.target.value) || 0))) }}
-              className="w-28 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] text-right outline-none focus:border-[var(--accent)]" />
-          </label>
-          <label className="flex items-center justify-between gap-3 mt-2">
-            <span className="text-[12px] text-[var(--text-muted)]">单次 maxTokens</span>
-            <input type="number" min={256} max={32768} value={String(s.llmMaxTokens ?? 4096)}
-              onChange={e => { void update('llmMaxTokens', Math.min(32768, Math.max(256, Math.floor(Number(e.target.value) || 4096)))) }}
-              className="w-28 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] text-right outline-none focus:border-[var(--accent)]" />
-          </label>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+            <label className="flex items-center justify-between gap-3 text-[12px]">
+              <span className="text-[var(--text-muted)] mr-2">单次 maxTokens</span>
+              <input type="number" min={256} max={32768} value={String(s.llmMaxTokens ?? 4096)}
+                onChange={e => { void update('llmMaxTokens', Math.min(32768, Math.max(256, Math.floor(Number(e.target.value) || 4096)))) }}
+                className="w-28 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] text-right outline-none focus:border-[var(--accent)]" />
+            </label>
+          </div>
         </div>
       </div>
 
