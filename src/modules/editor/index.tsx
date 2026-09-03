@@ -418,8 +418,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       await doCreateKnowledgePage(dirRel, name)
       return
     }
-    // 文件名净化（Windows 非法字符 → _），中文保留；无扩展名文件补 .md? 不补——用户给什么是什么
+    // 文件名净化（Windows 非法字符 → _），中文保留
     const cleaned = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || (type === 'dir' ? '新目录' : '新建文件.md')
+    // 用户拍板（2026-09-03）：知识仓库里新建 .md = 知识页 —— 自动注入 frontmatter id 模板，
+    // 否则无 id 文件被知识索引跳过（草稿），知识库/图谱看不到（历史困惑点）
+    if (type === 'file' && cleaned.toLowerCase().endsWith('.md')) {
+      await doCreateKnowledgePage(dirRel, cleaned.slice(0, -3))
+      return
+    }
     const rel = joinRel(dirRel, cleaned)
     const res = type === 'file' ? await workspaceCreateFile(root, rel) : await workspaceMkdir(root, rel)
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
