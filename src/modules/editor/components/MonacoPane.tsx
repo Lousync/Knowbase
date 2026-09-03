@@ -183,6 +183,7 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
         path={doc.relPath}
         language={doc.language}
         value={doc.content}
+        theme="knowbase-auto"
         beforeMount={bindEditorTheme}
         onMount={onMount}
         onChange={(v) => onChange(doc.relPath, v ?? '')}
