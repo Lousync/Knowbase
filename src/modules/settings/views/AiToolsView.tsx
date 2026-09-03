@@ -10,6 +10,7 @@ import {
 import { AiModelsTab } from './AiModelsTab'
 import { AiPermissionsTab } from './AiPermissionsTab'
 import { CollapseList } from '../components/CollapseList'
+import { SettingListPanel } from '../components/SettingListPanel'
 import type { AgentToolInfo, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpTestResult, SkillInfo, SkillInstallResult } from '../../../types'
 
 const SOURCE_LABEL: Record<AgentToolInfo['source'], string> = {
@@ -183,35 +184,23 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
             </button>
           }
         >
-          <p className="text-[12px] text-[var(--text-muted)] mb-3 max-w-md">
-            官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。
-          </p>
-          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md overflow-hidden">
-          {tools.map((t, i) => (
-            <div key={t.name} className={`px-3.5 py-2.5 flex items-start gap-2 ${i > 0 ? 'border-t border-[var(--border-color)]' : ''}`}>
-              <Bot size={14} className="text-[var(--accent)] mt-0.5 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <code className="text-[12px] font-medium text-[var(--text-primary)]">{t.name}</code>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)]">{SOURCE_LABEL[t.source]}</span>
-                  {t.readOnly && (
-                    <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-emerald-700/40 text-emerald-400">
-                      <ShieldCheck size={10} /> 只读
-                    </span>
-                  )}
-                  {t.requires === 'write' && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-700/40 text-orange-400">写入</span>
-                  )}
-                  {t.module && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)]">{t.module}</span>
-                  )}
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">{t.description}</p>
-              </div>
-            </div>
-          ))}
-          {!loading && tools.length === 0 && <p className="text-[12px] text-[var(--text-muted)] px-3.5 py-3">暂无已注册工具</p>}
-        </div>
+          <SettingListPanel
+            description="官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。"
+            items={tools.map(t => ({
+              id: t.name,
+              label: t.name,
+              icon: <Bot size={14} />,
+              tags: [
+                { label: SOURCE_LABEL[t.source] },
+                ...(t.readOnly ? [{ label: '只读', tone: 'success' as const }] : []),
+                ...(t.requires === 'write' ? [{ label: '写入', tone: 'warning' as const }] : []),
+                ...(t.module ? [{ label: t.module }] : []),
+              ],
+              desc: t.description,
+            }))}
+            defaultSelectedId={tools[0]?.name}
+            maxListHeightClassName="max-h-[260px]"
+          />
         </CollapseList>
       </div>
 
