@@ -50,9 +50,9 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
 
 /** 工具箱插件化样例（samples/ 平铺 zip）：已安装页顶部一键装入口 */
 const sampleBundles: Array<{ id: string; zip: string; name: string; desc: string; level: 'B' | 'C' }> = [
-  { id: 'kb.weight-tracker', zip: 'weight-tracker-0.1.0.zip', name: '体重追踪', desc: 'B 级 · 零能力 · 记录与曲线（工具箱工具）', level: 'B' },
-  { id: 'kb.site-nav', zip: 'site-nav-0.1.0.zip', name: '网址导航', desc: 'C 级 · navigation · 分类网址 + 宿主开链（工具箱工具）', level: 'C' },
-  { id: 'kb.habit-tracker', zip: 'habit-tracker-0.1.0.zip', name: '习惯打卡', desc: 'B 级 · 零能力 · 打卡 + 反馈动画（工具箱工具）', level: 'B' },
+  { id: 'kb.weight-tracker', zip: 'kb-weight-tracker-0.1.0.zip', name: '体重追踪', desc: 'B 级 · 零能力 · 记录与曲线（工具箱工具）', level: 'B' },
+  { id: 'kb.site-nav', zip: 'kb-site-nav-0.1.0.zip', name: '网址导航', desc: 'C 级 · navigation · 分类网址 + 宿主开链（工具箱工具）', level: 'C' },
+  { id: 'kb.habit-tracker', zip: 'kb-habit-tracker-0.1.0.zip', name: '习惯打卡', desc: 'B 级 · 零能力 · 打卡 + 反馈动画（工具箱工具）', level: 'B' },
 ]
 const CAPABILITY_LABELS: Record<string, string> = {
   clipboard: '剪贴板写入',
