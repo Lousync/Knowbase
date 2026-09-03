@@ -15,7 +15,6 @@ const MODULES = [
   { icon: Wrench, name: '工具箱', desc: '番茄钟、习惯打卡、数据导出等 8 个工具' },
   { icon: Bot, name: 'AI 助手', desc: '本地模型驱动，边看边问（Ctrl+J）' },
   { icon: Puzzle, name: '插件', desc: '主题 / 预设 / 知识包官方市场' },
-  { icon: Archive, name: '回收站', desc: '误删恢复，一键还原' },
 ]
 
 const SHORTCUTS = [
