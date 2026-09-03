@@ -125,8 +125,15 @@ let settingsCache: Record<string, unknown> = {}
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 function loadSettingsFromDisk(): Record<string, unknown> {
-  try { return existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} }
-  catch { return {} }
+  let raw: Record<string, unknown> = {}
+  try { raw = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} } catch { raw = {} }
+  // 数据源默认值兜底（对齐渲染层 settings.ts default）：旧 settings.json 缺失键时
+  // 主进程曾判定为 sqlite（undefined !== 'vault'）→ 知识包导入/写通道误走 sqlite。
+  // 2026-09-03 修复：storageData / storageKnowledge / storageBlog 缺省一律 vault（仓库文件）。
+  for (const k of ['storageData', 'storageKnowledge', 'storageBlog'] as const) {
+    if (raw[k] === undefined) raw[k] = 'vault'
+  }
+  return raw
 }
 
 function flushSettingsToDisk(): void {
