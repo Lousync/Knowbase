@@ -1,6 +1,7 @@
 import { useSettings } from '../../../lib/SettingsContext'
-import { FONT_OPTIONS, FONT_CSS_MAP, FONT_SIZE_OPTIONS } from '../../../lib/settings'
+import { FONT_OPTIONS, FONT_CSS_MAP } from '../../../lib/settings'
 import { SettingSelect } from '../components/SettingSelect'
+import { NumberField } from '../components/fields/NumberField'
 
 export function EditorView() {
   const { s, update } = useSettings()
@@ -34,21 +35,19 @@ export function EditorView() {
 
       <div className="mb-8" data-setting-anchor="editor.fontSize">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">字号</h3>
-        <div className="flex gap-1.5 max-w-xs">
-          {FONT_SIZE_OPTIONS.map(fs => (
-            <button
-              key={fs.id}
-              onClick={() => update('editorFontSize', fs.id)}
-              className={`flex-1 px-2 py-2 rounded text-[12px] border transition-colors ${
-                s.editorFontSize === fs.id
-                  ? 'border-[var(--accent)] bg-[var(--bg-selected)] text-[var(--text-primary)]'
-                  : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              {fs.label}
-            </button>
-          ))}
-        </div>
+        <NumberField
+          value={s.editorFontSize}
+          onCommit={(v) => update('editorFontSize', v)}
+          min={10}
+          max={40}
+          step={1}
+          unit="px"
+          presets={[12, 13, 14, 15, 16, 18, 20]}
+          defaultValue={13}
+        />
+        <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+          可直接输入任意字号（10-40px），或点预设档位；输入越界会提示且不生效。
+        </p>
       </div>
 
       <div data-setting-anchor="editor.lineNumbers">

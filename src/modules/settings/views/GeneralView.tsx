@@ -1,9 +1,11 @@
-import { RotateCcw } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
+import { NumberField } from '../components/fields/NumberField'
 
 /** 设置 → 通用与行为：界面缩放 / 外壳布局（Workbench 灰度）/ 自动保存信息 */
 export function GeneralView() {
   const { s, update } = useSettings()
+
+  const zoomPct = Math.round(s.zoom * 100)
 
   return (
     <div>
@@ -13,18 +15,19 @@ export function GeneralView() {
       {/* 界面缩放 */}
       <div className="mb-8" data-setting-anchor="advanced.zoom">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">界面缩放</h3>
-        <div className="flex items-center gap-4">
-          <span className="text-[13px] text-[var(--text-primary)]">
-            当前缩放：{Math.round(s.zoom * 100)}%
-          </span>
-          <button
-            onClick={() => { update('zoom', 1.0); document.documentElement.style.fontSize = '16px' }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            <RotateCcw size={12} />
-            重置缩放
-          </button>
-        </div>
+        <NumberField
+          value={zoomPct}
+          onCommit={(pct) => update('zoom', pct / 100)}
+          min={85}
+          max={150}
+          step={5}
+          unit="%"
+          presets={[100, 110, 125, 150]}
+          defaultValue={100}
+        />
+        <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+          可直接输入任意百分比，或点预设档位；步进 ±5%。当前 {zoomPct}%。
+        </p>
       </div>
 
       {/* 外壳布局（Workbench 灰度 R1-W1） */}
