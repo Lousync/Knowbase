@@ -13,7 +13,7 @@ import {
   showFolderDialog, importFolder,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
-  getKnowledgeTags, pluginListViews
+  getKnowledgeTags, pluginListViews, getKnowledgeGraph
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { NotebookList } from './components/NotebookList'
@@ -1099,6 +1099,20 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** 已知页面标题集合：阅读模式区分空链接 */
   const knownWikiTitles = useMemo(() => new Set(allPages.map(p => p.title)), [allPages])
 
+  // 草稿页 title 集（status: draft）：正文 [[引用]] 渲染为虚化样式（修改中）——数据源=图谱缓存节点 status
+  const [draftWikiTitles, setDraftWikiTitles] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!isActive) return
+    let alive = true
+    getKnowledgeGraph()
+      .then((g) => {
+        if (!alive) return
+        setDraftWikiTitles(new Set(g.nodes.filter((n) => n.kind === 'page' && n.status === 'draft').map((n) => n.title)))
+      })
+      .catch(() => { /* 无仓库/失败忽略 */ })
+    return () => { alive = false }
+  }, [isActive, knownWikiTitles])
+
   return (
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full bg-[var(--bg-primary)]">
@@ -1159,7 +1173,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                     pageId={readingPage.id}
                     pageTitle={readingPage.title}
                     knownWikiTitles={knownWikiTitles}
+                    draftWikiTitles={draftWikiTitles}
                     onWikiLink={t => {
+                      if (draftWikiTitles.has(t)) {
+                        showToast({ type: 'warning', message: `「${t}」为草稿（修改中）— 归档为知识页后可阅读` })
+                        return
+                      }
                       const hit = allPages.find(p => p.title === t)
                       if (hit) void openInReading(hit.id)
                       else showToast({ type: 'warning', message: `未找到「${t}」— 退出阅读后可点击虚线创建` })

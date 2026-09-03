@@ -50,6 +50,8 @@ interface Props {
   onLinkClick?: (href: string) => void
   /** 已存在的页面标题集合：不在其中的 wiki 链接渲染为「空链接」虚线样式 */
   knownWikiTitles?: Set<string>
+  /** 草稿页标题集合（status: draft = 修改中）：命中渲染半透明「虚化」样式（非正式可点） */
+  draftWikiTitles?: Set<string>
   /** 来源页面 ID（传入后，页面内选择题启用收藏 + 错题上报） */
   pageId?: string
   /** 来源页面标题（用于错题本快照） */
@@ -83,7 +85,7 @@ function SpoilerBlock({ content }: { content: string }) {
   )
 }
 
-export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles, pageId, pageTitle }: Props) {
+export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles, draftWikiTitles, pageId, pageTitle }: Props) {
   // 旧 408 选择题格式 → ```quiz 围栏（供 pre 组件渲染判题卡片）；非选择题块原样保留
   const processedContent = useMemo(() => preprocessContent(content), [content])
 
@@ -192,35 +194,35 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
           },
           // Convert [[wiki links]] + 脚注（word^[标注]） in paragraph text to interactive spans
           p({ children }) {
-            return <p>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</p>
+            return <p>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</p>
           },
           // Also handle wiki links in list items, headings, etc.
           li({ children }) {
-            return <li>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</li>
+            return <li>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</li>
           },
           h1({ children }) {
             const text = extractText(children)
-            return <h1 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h1>
+            return <h1 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h1>
           },
           h2({ children }) {
             const text = extractText(children)
-            return <h2 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h2>
+            return <h2 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h2>
           },
           h3({ children }) {
             const text = extractText(children)
-            return <h3 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h3>
+            return <h3 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h3>
           },
           h4({ children }) {
             const text = extractText(children)
-            return <h4 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h4>
+            return <h4 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h4>
           },
           h5({ children }) {
             const text = extractText(children)
-            return <h5 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h5>
+            return <h5 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h5>
           },
           h6({ children }) {
             const text = extractText(children)
-            return <h6 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles)}</h6>
+            return <h6 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h6>
           },
         }}
       >
@@ -311,11 +313,11 @@ function renderFootnotes(children: React.ReactNode): React.ReactNode {
 }
 
 /** 行内扩展统一入口：先脚注，后双链（脚注词不被双链二次处理） */
-function renderInlineExtras(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>): React.ReactNode {
-  return renderWikiLinks(renderFootnotes(children), onWikiLink, knownWikiTitles)
+function renderInlineExtras(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>, draftWikiTitles?: Set<string>): React.ReactNode {
+  return renderWikiLinks(renderFootnotes(children), onWikiLink, knownWikiTitles, draftWikiTitles)
 }
 
-function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>): React.ReactNode {
+function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string) => void, knownWikiTitles?: Set<string>, draftWikiTitles?: Set<string>): React.ReactNode {
   if (!onWikiLink) return children
   return React.Children.map(children, child => {
     if (typeof child === 'string') {
@@ -335,15 +337,18 @@ function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string)
         // The wiki link
         const display = match[1].split('|')[0].trim()
         const exists = knownWikiTitles ? knownWikiTitles.has(display) : true
+        const isDraft = !exists && draftWikiTitles ? draftWikiTitles.has(display) : false
         parts.push(
           <span
             key={key++}
             className={
-              exists
-                ? 'text-[var(--accent)] cursor-pointer hover:underline'
-                : 'text-[var(--text-muted)]/70 cursor-pointer hover:text-[var(--accent)] border-b border-dashed border-[var(--text-muted)]/50'
+              isDraft
+                ? 'text-[var(--accent)]/55 cursor-pointer border-b border-dotted border-[var(--accent)]/45'
+                : exists
+                  ? 'text-[var(--accent)] cursor-pointer hover:underline'
+                  : 'text-[var(--text-muted)]/70 cursor-pointer hover:text-[var(--accent)] border-b border-dashed border-[var(--text-muted)]/50'
             }
-            title={exists ? display : `创建页面「${display}」`}
+            title={isDraft ? `「${display}」为草稿（修改中），归档后方可阅读` : exists ? display : `创建页面「${display}」`}
             onClick={() => onWikiLink(display)}
           >
             {display}
@@ -356,7 +361,7 @@ function renderWikiLinks(children: React.ReactNode, onWikiLink?: (title: string)
     if (React.isValidElement(child) && (child.props as any)?.children) {
       return React.cloneElement(child, {
         ...(child.props as any),
-        children: renderWikiLinks((child.props as any).children, onWikiLink, knownWikiTitles),
+        children: renderWikiLinks((child.props as any).children, onWikiLink, knownWikiTitles, draftWikiTitles),
       } as any)
     }
     return child
