@@ -338,6 +338,16 @@ export interface ImportFileResult {
   error?: string
 }
 
+// recycle bin
+export interface RecycleBinItem {
+  id: string
+  originalId: string
+  module: 'blog' | 'knowledge' | 'knowledge_category' | 'passwordVault' | 'moments'
+  title: string
+  data: any
+  deletedAt: string
+}
+
 // export
 export interface BlogExportData { entries: (Entry & { tags: Tag[] })[]; tags: Tag[] }
 export interface ScheduleExportData { todos: (ScheduleTodo & { tag: ScheduleTag | null })[]; tags: ScheduleTag[] }
@@ -826,7 +836,6 @@ export interface ElectronAPI {
   importPdf: (base64: string, fileName: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   importPdfFile: (filePath: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   openExternal: (filePath: string) => Promise<void>
-  openRecycleBin: () => Promise<{ success: boolean; error?: string }>
   getAppVersion: () => Promise<string>
   checkForUpdate: () => Promise<{ ok: boolean; hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; notes: string; asset: { name: string; url: string; size: number } | null; message?: string }>
   downloadUpdate: (url: string, name: string, size?: number) => Promise<{ success: boolean; filePath?: string; message?: string; paused?: boolean; cancelled?: boolean; receivedBytes?: number; reason?: 'size-mismatch' | 'sha512-mismatch' | 'network' | 'channel-all-failed' | 'cancelled' | 'unknown'; step?: 'download' | 'verify' | 'sha512'; metaMissing?: boolean }>
@@ -870,6 +879,16 @@ export interface ElectronAPI {
   executeImport: (data: object) => Promise<{ success: boolean; imported: number; skipped: number; message: string }>
   importDb: (srcPath: string) => Promise<{ success: boolean; message: string }>
   previewUserFromDb: (filePath: string) => Promise<{ profile?: { username: string; avatar_path: string; password_hash: string }; stats?: { blogCount: number; scheduleCount: number; knowledgeCount: number }; error?: string }>
+  // recycle bin
+  getRecycleBinItems: () => Promise<RecycleBinItem[]>
+  restoreRecycleBinItem: (id: string) => Promise<void>
+  permanentlyDeleteRecycleBinItem: (id: string) => Promise<void>
+  restoreRecycleBinPartial: (id: string, path: string) => Promise<void>
+  trashRecycleBinItem: (id: string) => Promise<void>
+  trashAllRecycleBin: () => Promise<void>
+  trashRecycleBinPartial: (id: string, path: string) => Promise<void>
+  emptyRecycleBin: () => Promise<void>
+  purgeExpiredRecycleBinItems: () => Promise<void>
   // user
   getUserProfile: () => Promise<UserProfile | null>
   setUserUsername: (username: string) => Promise<{ success: boolean }>

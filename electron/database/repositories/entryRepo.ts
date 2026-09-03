@@ -288,10 +288,18 @@ export function registerEntryHandlers(getSettingValue?: (key: string) => unknown
     return rowToEntry(rows[0])
   })
 
-  // 删除博文（去库化后直删：vault md 走系统回收站可恢复，不再写 sqlite recycle_bin）
+  // 删除博文（软删除 → 回收站）
   ipcMain.handle('db:deleteEntry', (_event, id: string) => {
+    // vault：删 md 文件，回收站载荷（全文 JSON）仍写入 sqlite recycle_bin（恢复时经 create/update vault 路径回写文件）
     if (isVault()) {
-      vaultDeleteEntry(id)
+      const info = vaultDeleteEntry(id)
+      if (!info) return
+      const binId = randomUUID()
+      run(
+        `INSERT INTO recycle_bin (id, original_id, module, title, data)
+         VALUES (?, ?, 'blog', ?, ?)`,
+        [binId, id, info.title, info.data]
+      )
       return
     }
     // 读取完整条目
@@ -300,9 +308,39 @@ export function registerEntryHandlers(getSettingValue?: (key: string) => unknown
 
     const entry = rows[0]
 
-    // 直删（去库化后不再进 sqlite recycle_bin）：附件文件一并 trash，行删除（CASCADE 清 entry_tags）
+    // 读取关联标签
+    const tags = queryAll<{ id: string; name: string; color: string }>(
+      `SELECT t.id, t.name, t.color FROM tags t
+       JOIN entry_tags et ON t.id = et.tag_id
+       WHERE et.entry_id = ?`, [id]
+    )
+
+    // 序列化完整数据
+    const data = JSON.stringify({
+      id: entry.id,
+      title: entry.title,
+      contentMd: entry.content_md,
+      contentHtml: entry.content_html || '',
+      date: entry.date,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at,
+      isPinned: entry.is_pinned === 1,
+      wordCount: entry.word_count,
+      states: entry.states || '',
+      tags
+    })
+
+    // 插入回收站
+    const binId = randomUUID()
     const inlineAttachmentIds = parseInlineAttachmentIds(entry.content_md)
-    if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, '')
+    if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, binId)
+    run(
+      `INSERT INTO recycle_bin (id, original_id, module, title, data)
+       VALUES (?, ?, 'blog', ?, ?)`,
+      [binId, id, entry.title, data]
+    )
+
+    // 从原表删除（CASCADE 自动清理 entry_tags）
     run('DELETE FROM entries WHERE id = ?', [id])
   })
 

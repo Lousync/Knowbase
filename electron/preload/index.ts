@@ -101,7 +101,6 @@ const api = {
   installUpdate: (filePath: string) => ipcRenderer.invoke('update:install', filePath),
   updatePauseDownload: () => ipcRenderer.invoke('update:pauseDownload'),
   updateCancelDownload: () => ipcRenderer.invoke('update:cancelDownload'),
-  openRecycleBin: () => ipcRenderer.invoke('app:openRecycleBin'),
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => {
     const handler = (_e: unknown, p: { percent: number; receivedBytes: number; totalBytes: number }) => cb(p)
     ipcRenderer.on('update:download-progress', handler)
@@ -240,6 +239,17 @@ const api = {
   importDb: (srcPath: string) => ipcRenderer.invoke('import:importDb', srcPath),
   previewUserFromDb: (filePath: string) => ipcRenderer.invoke('import:previewUserFromDb', filePath),
   getAttachmentsPath: () => ipcRenderer.invoke('app:getAttachmentsPath'),
+
+  // recycle bin
+  getRecycleBinItems: () => ipcRenderer.invoke('recycleBin:getItems'),
+  restoreRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:restoreItem', id),
+  restoreRecycleBinPartial: (id: string, path: string) => ipcRenderer.invoke('recycleBin:restorePartial', id, path),
+  trashRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:trashToOS', id),
+  permanentlyDeleteRecycleBinItem: (id: string) => ipcRenderer.invoke('recycleBin:permanentlyDelete', id),
+  trashAllRecycleBin: () => ipcRenderer.invoke('recycleBin:trashAllToOS'),
+  trashRecycleBinPartial: (id: string, path: string) => ipcRenderer.invoke('recycleBin:trashPartialToOS', id, path),
+  emptyRecycleBin: () => ipcRenderer.invoke('recycleBin:emptyAll'),
+  purgeExpiredRecycleBinItems: () => ipcRenderer.invoke('recycleBin:purgeExpired'),
 
   // user
   getUserProfile: () => ipcRenderer.invoke('user:getProfile'),

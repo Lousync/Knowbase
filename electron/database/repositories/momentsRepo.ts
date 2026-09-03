@@ -190,9 +190,15 @@ export function registerMomentsHandlers(): void {
   ipcMain.handle('moments:delete', (_e, id: string) => {
     const rows = queryAll<MomentsRow>('SELECT * FROM moments_posts WHERE id = ?', [id])
     if (rows.length === 0) return
-    // 直删（去库化后不再写 sqlite recycle_bin）：附件文件一并 trash
     const attachmentIds = parseAttachmentIds(rows[0])
-    if (attachmentIds.length > 0) trashAttachments(attachmentIds, '')
+    const row = rowToMoments(rows[0], getAttachmentsForIds(attachmentIds))
+    const binId = randomUUID()
+    if (attachmentIds.length > 0) trashAttachments(attachmentIds, binId)
+    run(
+      `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [binId, id, 'moments', '单机说说', JSON.stringify(row), new Date().toISOString()]
+    )
     run('DELETE FROM moments_posts WHERE id = ?', [id])
   })
 

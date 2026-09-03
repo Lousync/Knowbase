@@ -9,6 +9,7 @@ const MODULE_TABS: Array<{ id: TabName; label: string }> = [
   { id: 'blog', label: '博客' },
   { id: 'schedule', label: '日程' },
   { id: 'moments', label: '说说' },
+  { id: 'recycle', label: '回收站' },
   { id: 'settings', label: '设置' },
   { id: 'toolbox', label: '工具箱' },
   { id: 'plugins', label: '插件' },
@@ -32,6 +33,7 @@ import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
 import { MomentsModule } from './modules/moments'
+import { RecycleBinModule } from './modules/recycle'
 import { SettingsModule } from './modules/settings'
 import { HelpModule } from './modules/help'
 import { UserModule } from './modules/user'
@@ -168,6 +170,7 @@ export default function App() {
       { id: 'blog', label: '打开 博客' },
       { id: 'schedule', label: '打开 日程' },
       { id: 'moments', label: '打开 说说' },
+      { id: 'recycle', label: '打开 回收站' },
       { id: 'settings', label: '打开 设置' },
       { id: 'toolbox', label: '打开 工具箱' },
       { id: 'plugins', label: '打开 插件' },
@@ -216,7 +219,7 @@ export default function App() {
     if (!settingsReady || !loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
-      const all = ['blog','schedule','knowledge','moments','toolbox','plugins','help'] as const
+      const all = ['blog','schedule','knowledge','moments','toolbox','plugins','recycle','help'] as const
       if (all.includes(s.startupTab as any) && !hidden.includes(s.startupTab)) {
         setActiveTab(s.startupTab as TabName)
         return
@@ -343,7 +346,7 @@ export default function App() {
   useEffect(() => {
     const off = window.api?.onMainCommand?.((p) => {
       if (p?.type === 'switch-tab' && typeof p.tab === 'string') {
-        const all: string[] = ['blog', 'schedule', 'knowledge', 'moments', 'toolbox', 'plugins', 'help', 'settings', 'user']
+        const all: string[] = ['blog', 'schedule', 'knowledge', 'moments', 'toolbox', 'plugins', 'recycle', 'help', 'settings', 'user']
         if (all.includes(p.tab)) { setActiveTab(p.tab as TabName); setSidebarOpen(true) }
       }
     })
@@ -490,6 +493,7 @@ export default function App() {
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
       case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} />
+      case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
       case 'toolbox': return <ToolboxModule />
       case 'plugins': return <PluginsModule />
