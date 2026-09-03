@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, FileText, Folder as FolderIcon, Maximize2, Minus, Plus, RotateCcw, Settings, Share2, Tag, X, Network, BookOpen } from 'lucide-react'
 import type { GraphIndexData, GraphNode, GraphViewConfig } from '../../../../lib/graphTypes'
-import { getKnowledgeGraph, getGraphViewConfig, updateGraphViewConfig } from '../../../../lib/ipc'
+import { getKnowledgeGraph, getKnowledgePageById, getGraphViewConfig, updateGraphViewConfig } from '../../../../lib/ipc'
 import { GraphCanvas, type GraphCanvasHandle } from './GraphCanvas'
 
 interface GraphViewProps {
@@ -119,6 +119,15 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
   const [error, setError] = useState('')
   const [cfg, setCfg] = useState<GraphViewConfig>(DEFAULT_GVC)
   const [sel, setSel] = useState<Pick<GraphNode, 'id' | 'title' | 'path' | 'kind' | 'degree' | 'status'> | null>(null)
+  // 选中页面节点时异步取正文首段，hover/卡片上让用户识别「这页讲什么」
+  const [pageExcerpt, setPageExcerpt] = useState<string>('')
+  const excerptOf = (md: string): string => {
+    const body = md.replace(/^---[\s\S]*?---\s*/m, '').trim()
+    const stripped = body
+      .replace(/```[\s\S]*?```/g, '').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^#+\s*/gm,'').replace(/[*_~`>|]/g,' ').replace(/\n+/g,' ').trim()
+    return stripped.slice(0, 90)
+  }
   /** A7 本地图谱：中心页 id；null=全图 */
   const [centerId, setCenterId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -259,7 +268,19 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
         colorBySpaceEnabled={cfg.colorBySpace}
         labelThreshold={cfg.labelThreshold}
         selectedId={sel?.id ?? null}
-        onSelect={setSel}
+        onSelect={async (n) => {
+          if (!n) { setSel(null); setPageExcerpt(''); return }
+          setSel(n)
+          if (n.kind === 'page') {
+            setPageExcerpt('')
+            try {
+              const p = await getKnowledgePageById(n.id)
+              if (p && p.contentMd) setPageExcerpt(excerptOf(p.contentMd))
+            } catch { /* 静默 */ }
+          } else {
+            setPageExcerpt('')
+          }
+        }}
       />
 
       {/* 左上：模式 + 统计 */}
@@ -423,6 +444,11 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
           </div>
           <div className="text-[10.5px] text-[var(--text-muted)]">
             关联 {sel.degree} 个节点
+          {pageExcerpt && (
+            <div className="text-[11.5px] text-[var(--text-secondary)] leading-snug border-t border-[var(--border-color)] pt-1.5 line-clamp-3" title={pageExcerpt}>
+              {pageExcerpt}{pageExcerpt.length >= 90 ? '…' : ''}
+            </div>
+          )}
           </div>
           {sel.kind === 'page' ? (
             <>
