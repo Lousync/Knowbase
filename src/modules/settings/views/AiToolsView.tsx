@@ -169,39 +169,36 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
         )}
       </div>
 
-      {/* 内置工具只读列表 */}
+      {/* 内置工具只读列表（popover 悬浮：展开覆盖下方内容，不推挤） */}
       <div data-setting-anchor="aiTools.builtin">
-        <CollapseList
+        <SettingListPanel
+          display="popover"
           title="内置工具"
           count={tools.length}
           anchorId="aiTools.builtin"
           titleClassName="text-[16px] font-semibold text-[var(--text-primary)]"
-          defaultOpen={false}
-          headerRight={
+          titleRight={
             <button onClick={() => { void refresh() }} title="刷新"
-              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+              className="p-1.5 -mr-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
               <RefreshCw size={14} />
             </button>
           }
-        >
-          <SettingListPanel
-            description="官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。"
-            items={tools.map(t => ({
-              id: t.name,
-              label: t.name,
-              icon: <Bot size={14} />,
-              tags: [
-                { label: SOURCE_LABEL[t.source] },
-                ...(t.readOnly ? [{ label: '只读', tone: 'success' as const }] : []),
-                ...(t.requires === 'write' ? [{ label: '写入', tone: 'warning' as const }] : []),
-                ...(t.module ? [{ label: t.module }] : []),
-              ],
-              desc: t.description,
-            }))}
-            defaultSelectedId={tools[0]?.name}
-            maxListHeightClassName="max-h-[260px]"
-          />
-        </CollapseList>
+          description="官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。"
+          items={tools.map(t => ({
+            id: t.name,
+            label: t.name,
+            icon: <Bot size={14} />,
+            tags: [
+              { label: SOURCE_LABEL[t.source] },
+              ...(t.readOnly ? [{ label: '只读', tone: 'success' as const }] : []),
+              ...(t.requires === 'write' ? [{ label: '写入', tone: 'warning' as const }] : []),
+              ...(t.module ? [{ label: t.module }] : []),
+            ],
+            desc: t.description,
+          }))}
+          defaultSelectedId={tools[0]?.name}
+          maxListHeightClassName="max-h-[260px]"
+        />
       </div>
 
       {/* 最近调用 */}
