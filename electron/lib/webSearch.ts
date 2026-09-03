@@ -154,3 +154,62 @@ async function trySearch(
     return { ok: false, err: String(e?.message ?? e).slice(0, 120) }
   }
 }
+
+// ===== 网页正文读取（builtin.web.read 数据源，场景 B「吃资料」）=====
+
+const MAX_READ_CHARS = 50000
+
+/** 防 SSRF：仅 https；拒本机/裸 IP/私网与链路本地地址（DNS 级绕过不在 v1 防线内） */
+function assertSafeWebUrl(raw: string): string {
+  let u: URL
+  try { u = new URL(raw) } catch { throw new Error('URL 非法，请提供完整链接（含 https://）') }
+  if (u.protocol !== 'https:') throw new Error('仅支持 https 网页（为防内网访问，http 一律拒绝）')
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost')) throw new Error('不允许访问本机地址')
+  if (host.includes(':')) throw new Error('不允许直接访问 IP 地址（IPv6）')
+  const isIpv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+  if (isIpv4) {
+    const seg = host.split('.').map(Number)
+    const priv =
+      seg[0] === 10 || seg[0] === 127 ||
+      (seg[0] === 172 && seg[1] >= 16 && seg[1] <= 31) ||
+      (seg[0] === 192 && seg[1] === 168) ||
+      (seg[0] === 169 && seg[1] === 254)
+    if (priv) throw new Error('不允许访问内网/私网地址')
+    return u.href
+  }
+  // 域名也拒掉裸 IP 形态之外的保留段（localhost 类已拒；其余域名放行，DNS rebinding 不在 v1 防线）
+  return u.href
+}
+
+/** 正文近似：优先 article/main 容器，否则整页 */
+function pickMainHtml(html: string): string {
+  const m = html.match(/<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i)
+  return m ? m[1] : html
+}
+
+function extractHtmlTitle(html: string): string {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  return m ? stripTags(m[1]).slice(0, 200) : ''
+}
+
+export interface WebReadOutput {
+  url: string
+  title: string
+  /** 纯文本正文（截断到上限） */
+  content: string
+  truncated: boolean
+  totalChars: number
+}
+
+/** 读取 https 网页正文 → 纯文本（防 SSRF + 2MB/超时护栏 + 截断保护，供 LLM 通读资料） */
+export async function webReadPage(rawUrl: string, maxChars = 8000): Promise<WebReadOutput> {
+  const url = assertSafeWebUrl(String(rawUrl ?? '').trim())
+  const html = await fetchText(url, 10000)
+  const title = extractHtmlTitle(html)
+  const text = stripTags(pickMainHtml(html))
+  const totalChars = text.length
+  const cap = Math.min(Math.max(Math.floor(maxChars) || 8000, 200), MAX_READ_CHARS)
+  const truncated = totalChars > cap
+  return { url, title, content: truncated ? text.slice(0, cap) : text, truncated, totalChars }
+}

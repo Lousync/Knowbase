@@ -217,5 +217,5 @@
 | **B1** | ① AI 能 `vault.list` 列仓库目录 ② `vault.read` 读 .md/.txt 与 `.knowbase/modules/*.json`（只读），返回 mtimeMs ③ `vault.search` 仓库内文本命中 ④ 禁区拒绝：`.knowbase/cache|config|plugins`、二进制、>10MB、越界路径 ⑤ 设置页 vaultFile 三档开关生效（off 时工具全部拒绝） | ✅ 代码完成待真机 |
 | **B2** | ① `vault.write/edit` 真实落盘且 mtime 冲突拒绝 ② 单会话写 ≤5 次后停止 ③ 编辑器打开的页被 AI 改写 → 弹「重新加载/覆盖磁盘/暂不处理」三选 ④ 场景 A：AI 给两篇相关笔记互加 `[[链接]]` → 图谱出连线、无死链 ⑤ 场景 B：AI 基于仓库内 PDF/PPT 输出总结落成一页带链接复习 .md | ✅ 代码完成待真机 |
 | **B3** | ① `vault.rename/trash` 可移动/移回收站（trash 非删除） ② 审计面板可见 relPath + 改动摘要 ③ 高危操作全流程可查可撤 | ✅ 代码完成待真机 |
-| **web.read** | AI 给一个 https 网址能通读正文返回摘要；非白名单/超时给明确失败；截断告知 | ⬜ 待开发 |
-| **docs.read-text** | 仓库内放 .pdf 与 .pptx，AI 能提取文本总结；Word/扫描件明确拒绝并说明范围 | ⬜ 待开发（依赖 B1/B2 基础设施） |
+| **web.read** | AI 给一个 https 网址能通读正文返回摘要；http/内网/裸 IP 明确拒绝（SSRF 防线）；超时给明确失败；截断告知 | ✅ 代码完成待真机 |
+| **docs.read-text** | 仓库内放 .pdf 与 .pptx，AI 能提取文本总结；Word/扫描件明确拒绝并说明范围（pdfjs Node 提取已由 tmp/smoke/pdfjs-node-probe.mjs 验证可行） | ✅ 代码完成待真机 |

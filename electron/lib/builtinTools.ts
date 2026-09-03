@@ -3,13 +3,14 @@ import { readdirSync, lstatSync, readFileSync, statSync, mkdirSync } from 'fs'
 import { join, relative, extname, sep, dirname } from 'path'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { registerTool, getSettingReader } from './aiTools'
-import { webSearch } from './webSearch'
+import { webSearch, webReadPage } from './webSearch'
 import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
+import { extractDocText } from './docsReader'
 import type { ToolJsonSchema } from './aiTools'
 
 /**
@@ -260,6 +261,15 @@ function isAiWritableFile(root: string, abs: string): boolean {
   if (parts[0].startsWith('.')) return false // 含 .knowbase：任何写操作都拒
   const ext = extname(abs).slice(1).toLowerCase()
   return ext === 'md' || ext === 'txt'
+}
+
+/** 文档白名单（docs.read-text）：普通可见区 .pdf/.pptx（.knowbase 内部暂不开放） */
+function isAiDocFile(root: string, abs: string): boolean {
+  const parts = vaultRelParts(root, abs)
+  if (parts.length === 0) return false
+  if (parts[0].startsWith('.')) return false
+  const ext = extname(abs).slice(1).toLowerCase()
+  return ext === 'pdf' || ext === 'pptx'
 }
 
 /** 写前守卫：writable 判定 + 大小 + mtime 冲突（expectedMtimeMs 来自 vault.read 基线） */
@@ -1160,5 +1170,84 @@ export function registerBuiltinTools(): void {
     if (!rootId) throw new Error('仓库上下文未就绪')
     await trashWorkspacePath(rootId, rel)
     return { ok: true, trashed: rel }
+  })
+
+  // ===== web.read：通读 https 网页正文（场景 B「吃资料」，跨模块通用，不设 module） =====
+
+  // 22. builtin.web.read —— 读指定网页全文（防 SSRF：仅 https，拒内网/IP）
+  registerTool({
+    name: 'builtin.web.read',
+    title: '读取网页全文',
+    description: '打开用户指定的 https 网页并读取正文纯文本（自动去导航/去标签、长度截断保护）。用于通读资料文章后总结、教学或提炼。仅 https；内网/私网/IP 直连与 http 一律拒绝',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: '完整网页地址（必须以 https:// 开头）' },
+        maxChars: { type: 'number', description: '最多返回字符，默认 8000' },
+      },
+      required: ['url'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+  }, async args => {
+    const url = str(args.url).trim()
+    if (!url) throw new Error('缺少必填参数: url')
+    const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
+    const out = await webReadPage(url, maxChars)
+    return {
+      url: out.url,
+      title: out.title,
+      content: out.content,
+      truncated: out.truncated,
+      totalChars: out.totalChars,
+    }
+  })
+
+  // ===== docs.read-text：仓库内 PDF/PPT 文本提取（场景 B「复习资料」，vaultFile=read） =====
+
+  // 23. builtin.docs.read-text —— 提取仓库内 .pdf/.pptx 的文本
+  registerTool({
+    name: 'builtin.docs.read-text',
+    title: '提取 PDF/PPT 文本',
+    description: '从仓库内 .pdf/.pptx 提取文字内容（纯文本，供通读总结/出复习资料）。扫描版 PDF（纯图片）提取结果为空属预期；.md/.txt 请用 vault.read；Word 暂不支持',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对文件路径（.pdf 或 .pptx）' },
+        maxChars: { type: 'number', description: '最多返回字符，默认 12000' },
+      },
+      required: ['path'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    vaultFile: 'read',
+  }, async args => {
+    const rel = str(args.path).trim()
+    if (!rel) throw new Error('缺少必填参数: path')
+    const maxChars = clamp(Math.floor(num(args.maxChars, 12000)), 200, 50000)
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, rel)
+    if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
+    if (!isAiDocFile(root, abs)) {
+      throw new Error('仅支持仓库内普通目录的 .pdf/.pptx（.md/.txt 用 vault.read；其他类型与保护区拒绝）')
+    }
+    let out: { kind: 'pdf' | 'pptx'; text: string; pages: number; totalChars: number }
+    try {
+      out = await extractDocText(abs)
+    } catch (err) {
+      throw new Error(`文档解析失败：${String((err as Error)?.message ?? err).slice(0, 200)}`)
+    }
+    const truncated = out.totalChars > maxChars
+    return {
+      kind: out.kind,
+      path: rel,
+      pages: out.pages,
+      totalChars: out.totalChars,
+      text: truncated ? out.text.slice(0, maxChars) : out.text,
+      truncated,
+    }
   })
 }
