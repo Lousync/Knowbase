@@ -17,6 +17,8 @@ interface Props {
   onCancelCreate?: () => void
   /** 双态模型：已归档知识页的仓库相对路径集合——树中隐藏（编辑器只留目录骨架 + 草稿/非知识文件） */
   hiddenRelPaths?: Set<string>
+  /** 草稿页 path 集合：树内命中 .md 文件名旁显示「草稿」徽标（辨识写作中/待归档） */
+  draftRelPaths?: Set<string>
 }
 
 const DRAG_MIME = 'text/x-kb-rel'
@@ -40,7 +42,7 @@ function FileIcon({ name }: { name: string }) {
  * 拖拽：条目均可拖（mime: text/x-kb-rel）；目录与根容器是落点，
  * drop 时把源相对路径移动到目标目录下（主进程 ws:rename 跨目录移动）。
  */
-export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths }: Props) {
+export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths, draftRelPaths }: Props) {
   const [dragOver, setDragOver] = useState<string | null>(null)
 
   const startDrag = (e: React.DragEvent, relPath: string) => {
@@ -107,6 +109,9 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                 <span className="w-[12px] shrink-0" />
                 <FileIcon name={e.name} />
                 <span className={`truncate text-[12.5px] ${activePath === e.relPath ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{e.name}</span>
+                {draftRelPaths?.has(e.relPath) && (
+                  <span className="ml-auto shrink-0 rounded bg-[var(--warning)]/15 px-1 text-[9px] leading-[14px] text-[var(--warning)]" title="草稿（修改中）— 右键可归档为知识页">草稿</span>
+                )}
               </div>
             )
         })}

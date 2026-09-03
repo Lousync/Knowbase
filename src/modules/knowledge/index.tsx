@@ -422,7 +422,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const openPageInReader = useCallback(async (pageId: string) => {
     try {
       const p = await getKnowledgePageById(pageId)
-      if (!p) return
+      if (!p) {
+        // draft 页（getKnowledgePageById 按正式集过滤返回 null）——提示改到编辑器完成
+        showToast({ type: 'warning', message: '该页面为草稿（修改中）— 请在编辑器中完成并归档后阅读' })
+        return
+      }
       const ft = (p.fileType || 'md').toLowerCase()
       if (ft !== 'md' && ft !== 'txt') { showToast({ type: 'warning', message: '沉浸阅读仅支持 md / txt 页面' }); return }
       setGraphMode(false)

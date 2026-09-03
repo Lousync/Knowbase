@@ -8,7 +8,7 @@ import type { WorkspaceRecent } from '../../types'
 import {
   workspaceOpenDir, workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
   workspaceCreateFile, workspaceMkdir, workspaceRename, workspaceTrash, workspaceGetRecent,
-  workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages,
+  workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages, getKnowledgeGraph,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { FileTree } from './components/FileTree'
@@ -56,6 +56,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [creating, setCreating] = useState<CreateIntent | null>(null)
   /** 双态模型：已归档（published）知识页 path 集合——编辑器树隐藏它们（树只留目录+草稿/非知识文件） */
   const [archivedPaths, setArchivedPaths] = useState<Set<string>>(new Set())
+  /** 草稿页 path 集合：树内 .md 文件显示「草稿」徽标（辨识写作中） */
+  const [draftRelPaths, setDraftRelPaths] = useState<Set<string>>(new Set())
   /** tab 右键（状态动作/关闭） */
   const [tabCtx, setTabCtx] = useState<{ x: number; y: number; rel: string } | null>(null)
   const [closeTarget, setCloseTarget] = useState<string | null>(null)
@@ -507,6 +509,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       const pages = await getKnowledgePages()
       setArchivedPaths(new Set(pages.filter((p) => p.path).map((p) => p.path as string)))
     } catch { /* 无仓库/失败：保持现状 */ }
+    // 草稿标记集：graph 节点（draft 保留 id 故在图谱缓存）→ 树内草稿文件显「草稿」徽标
+    try {
+      const g = await getKnowledgeGraph()
+      setDraftRelPaths(new Set(g.nodes.filter((n) => n.kind === 'page' && n.status === 'draft' && n.path).map((n) => n.path)))
+    } catch { /* 保持现状 */ }
   }, [])
 
   useEffect(() => {
@@ -724,6 +731,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 onCommitCreate={(dirRel, type, raw) => void commitCreate(dirRel, type, raw)}
                 onCancelCreate={() => setCreating(null)}
                 hiddenRelPaths={archivedPaths}
+                draftRelPaths={draftRelPaths}
                 onContextMenu={(e, n) => {
                   e.preventDefault()
                   e.stopPropagation()
