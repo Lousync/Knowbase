@@ -1,0 +1,60 @@
+import { RotateCcw } from 'lucide-react'
+import { useSettings } from '../../../lib/SettingsContext'
+
+/** 设置 → 通用与行为：界面缩放 / 外壳布局（Workbench 灰度）/ 自动保存信息 */
+export function GeneralView() {
+  const { s, update } = useSettings()
+
+  return (
+    <div>
+      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">通用与行为</h2>
+      <p className="text-[12px] text-[var(--text-muted)] mb-6">启动、缩放、外壳与基础行为</p>
+
+      {/* 界面缩放 */}
+      <div className="mb-8" data-setting-anchor="advanced.zoom">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">界面缩放</h3>
+        <div className="flex items-center gap-4">
+          <span className="text-[13px] text-[var(--text-primary)]">
+            当前缩放：{Math.round(s.zoom * 100)}%
+          </span>
+          <button
+            onClick={() => { update('zoom', 1.0); document.documentElement.style.fontSize = '16px' }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <RotateCcw size={12} />
+            重置缩放
+          </button>
+        </div>
+      </div>
+
+      {/* 外壳布局（Workbench 灰度 R1-W1） */}
+      <div className="mb-8" data-setting-anchor="advanced.workbench">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">外壳布局</h3>
+        <div className="max-w-md space-y-4">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!s.uiWorkbench}
+              onChange={(e) => update('uiWorkbench', e.target.checked)}
+              className="mt-0.5 accent-[var(--accent)]"
+            />
+            <span className="text-[13px] text-[var(--text-primary)] leading-relaxed">
+              启用 Workbench 布局
+              <span className="block text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
+                实验性 VS Code 外壳：活动栏 / 侧栏视图 / 编辑器组 / 状态栏。开启后编辑器模块的文件树抽到全局侧栏；其余模块暂以整页形态驻留编辑器组，逐步迁移。出问题随时切回旧布局。
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {/* 自动保存 */}
+      <div data-setting-anchor="advanced.autosave">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">自动保存</h3>
+        <div className="text-[13px] text-[var(--text-muted)]">
+          编辑器将在停止输入 {s.autoSaveDebounceMs / 1000} 秒后自动保存
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -106,7 +106,7 @@ export function BlogTemplateModal({ open, onClose, onApply }: Props) {
         <div className="shrink-0 px-4 py-2.5 border-t border-[var(--border-color)] flex items-center justify-between">
           <span className="text-[10px] text-[var(--text-disabled)]">点击模板将插入到当前博文末尾</span>
           <button
-            onClick={() => { onClose(); navigateToSettingsSection('blog') }}
+            onClick={() => { onClose(); navigateToSettingsSection('modules') }}
             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
           >
             <Settings2 size={12} />

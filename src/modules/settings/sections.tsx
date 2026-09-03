@@ -1,4 +1,4 @@
-import { Palette, Type, FileDown, Wrench, Keyboard, PencilLine, BellRing, Bot } from 'lucide-react'
+import { Palette, Type, SlidersHorizontal, Database, ShieldCheck, Bot, Keyboard, Boxes, Info } from 'lucide-react'
 import { SETTINGS } from '../../lib/settings'
 import type { AiTab, SettingsSection } from '../../lib/settings'
 
@@ -62,14 +62,15 @@ export interface SettingItem {
 }
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'appearance', label: '外观',   icon: <Palette size={16} />,     keywords: ['外观', '主题', 'theme', '界面', '样式', '皮肤', '布局'] },
-  { id: 'editor',     label: '编辑器', icon: <Type size={16} />,        keywords: ['编辑器', 'editor', '编写', '输入'] },
-  { id: 'blog',       label: '博客',   icon: <PencilLine size={16} />,  keywords: ['博客', 'blog', '日记', '总结', '周报', '月报'] },
-  { id: 'export',     label: '导出',   icon: <FileDown size={16} />,    keywords: ['导出', 'export', '保存', '文件'] },
-  { id: 'aiTools',    label: 'AI 工具', icon: <Bot size={16} />,        keywords: ['AI', '工具', 'agent', '智能体', 'ai', '助手'] },
-  { id: 'advanced',   label: '高级',   icon: <Wrench size={16} />,      keywords: ['高级', 'advanced', '偏好', '其它', '其他'] },
-  { id: 'shortcuts',  label: '快捷键', icon: <Keyboard size={16} />,    keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', '按键'] },
-  { id: 'reminder',   label: '提醒',   icon: <BellRing size={16} />,    keywords: ['提醒', '打卡', '通知', 'remind', '提醒时间'] },
+  { id: 'appearance', label: '外观',   icon: <Palette size={16} />,            keywords: ['外观', '主题', 'theme', '界面', '样式', '皮肤', '布局', '图标', '密度', '删除动画'] },
+  { id: 'editor',     label: '编辑器与阅读', icon: <Type size={16} />,         keywords: ['编辑器', 'editor', '阅读', 'pdf', '编写', '输入', '字体', '行号', '自动保存'] },
+  { id: 'general',    label: '通用与行为', icon: <SlidersHorizontal size={16} />, keywords: ['通用', '行为', '启动', '缩放', 'zoom', '外壳', 'workbench', '界面'] },
+  { id: 'data',       label: '数据与仓库', icon: <Database size={16} />,       keywords: ['数据', '仓库', '存储', '迁移', '备份', '导出', '回收站', 'vault', 'sqlite', '去库化'] },
+  { id: 'security',   label: '安全与隐私', icon: <ShieldCheck size={16} />,   keywords: ['安全', '隐私', '锁屏', '密码', '删除确认', '插件安全', '签名', '密钥'] },
+  { id: 'aiTools',    label: 'AI 工具',   icon: <Bot size={16} />,            keywords: ['AI', '工具', 'agent', '智能体', 'ai', '助手', '模型', 'mcp', 'skill'] },
+  { id: 'shortcuts',  label: '快捷键',    icon: <Keyboard size={16} />,       keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', '按键'] },
+  { id: 'modules',    label: '模块设置',  icon: <Boxes size={16} />,          keywords: ['模块', '博客', 'blog', '日程', '提醒', '打卡', '导出', '单词本', '词书', '错题', '高级'] },
+  { id: 'about',      label: '关于',      icon: <Info size={16} />,           keywords: ['关于', '更新', '版本', '升级', '镜像', '引导', 'about', 'update'] },
 ]
 
 export const SECTION_MAP: Record<SettingsSection, SectionDef> =
@@ -104,7 +105,7 @@ function schemaKeyItems(): SettingItem[] {
  */
 const ENTRY_ITEMS: SettingItem[] = [
   // ===== 博客 =====
-  { id: 'blog.templates', section: 'blog', group: '博客模板', label: '博客模板',
+  { id: 'blog.templates', section: 'modules', group: '博客模板', label: '博客模板',
     desc: '写日记时一键套用的 Markdown 模板', keywords: ['模板', '博客模板', '新建模板', 'template', '套用', 'markdown'] },
   // ===== AI 工具 =====
   { id: 'aiTools.usage', section: 'aiTools', group: '工具调用量', label: '工具调用量',
@@ -122,13 +123,13 @@ const ENTRY_ITEMS: SettingItem[] = [
   { id: 'aiTools.perms', section: 'aiTools', group: '权限', label: '调用权限', aiTab: 'perms',
     desc: 'AI 工具调用的权限控制', keywords: ['权限', 'permission', '授权', '允许', '拒绝', '安全'] },
   // ===== 高级 =====
-  { id: 'advanced.update', section: 'advanced', group: '关于与更新', label: '检查更新',
+  { id: 'advanced.update', section: 'about', group: '关于与更新', label: '检查更新',
     desc: '当前版本号与在线更新', keywords: ['更新', '升级', '版本', '检查更新', 'update', 'version', '新版本'] },
-  { id: 'advanced.deleteConfirm', section: 'advanced', group: '删除确认', label: '删除确认',
+  { id: 'advanced.deleteConfirm', section: 'security', group: '删除确认', label: '删除确认',
     desc: '博客 / 知识库 / 目录 / 章节删除时是否弹确认框', keywords: ['删除确认', '确认', '对话框', '弹窗', '跳过', 'confirm'] },
-  { id: 'advanced.onboarding', section: 'advanced', group: '新手引导', label: '新手引导',
+  { id: 'advanced.onboarding', section: 'about', group: '新手引导', label: '新手引导',
     desc: '重新查看新手引导', keywords: ['引导', '新手', '教程', 'onboarding', '向导', '引导页'] },
-  { id: 'advanced.storage', section: 'advanced', group: '存储与迁移', label: '知识库读源',
+  { id: 'advanced.storage', section: 'data', group: '存储与迁移', label: '知识库读源',
     desc: 'sqlite 数据库 / vault 仓库文件（实验）；以及旧数据导入入口', keywords: ['读源', '仓库', 'vault', 'sqlite', '去库化', '迁移', '导入旧数据', 'storage', '存储'] },
   // ===== 快捷键 =====
   { id: 'shortcuts.global', section: 'shortcuts', group: '全局', label: '全局快捷键',
