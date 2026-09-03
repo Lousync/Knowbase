@@ -62,7 +62,16 @@ export function CodePluginHost({ pluginId, entry, onDenied }: {
       void hostRpc({ token, id, method, params: d.payload }).then((res) => {
         if (!alive || !worker) return
         if (res.ok) {
-          worker.postMessage({ channel: CHANNEL, v: 2, id, ok: true, result: res.result })
+          // 渲染层本地动作（主进程裁决通过后回 { local }）：Worker 无 DOM，但宿主渲染层可执行 toast
+          const r = res.result as { local?: string } | undefined
+          if (r && typeof r === 'object' && r.local) {
+            if (r.local === 'toast' && typeof d.payload === 'string') {
+              showToast({ type: 'info', message: d.payload })
+            }
+            worker.postMessage({ channel: CHANNEL, v: 2, id, ok: true, result: { handled: true } })
+          } else {
+            worker.postMessage({ channel: CHANNEL, v: 2, id, ok: true, result: res.result })
+          }
         } else {
           worker.postMessage({ channel: CHANNEL, v: 2, id, ok: false, error: { code: res.code, message: res.message } })
           void pluginAuditWrite(pluginId, 'deny', { method, code: res.code })

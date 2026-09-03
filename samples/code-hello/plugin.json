@@ -1,0 +1,11 @@
+{
+  "id": "kb.code-hello",
+  "name": "Code 插件试点（Hello Worker）",
+  "version": "0.1.0",
+  "type": "code",
+  "entry": "main.js",
+  "author": "Knowbase",
+  "description": "R7 V3-3 试点：验证 type:code 插件链路——安装→启用→CodePluginHosts 自动挂 Worker→worker 内走 v2 协议调 kb.ui.toast（免授权）→宿主弹提示。零能力声明（纯协议链路验证）。",
+  "category": "开发",
+  "riskLevel": "B"
+}
