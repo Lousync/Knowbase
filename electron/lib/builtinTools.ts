@@ -1,14 +1,29 @@
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
-import { registerTool } from './aiTools'
+import { registerTool, getSettingReader } from './aiTools'
 import { webSearch } from './webSearch'
+import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
+import { vaultCreateEntry } from './kbStore/blogVaultRepo'
+import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
 import type { ToolJsonSchema } from './aiTools'
 
 /**
- * 内置只读工具首批清单（方案第六节）：给「未来 Agent」与外部 MCP 客户端的稳定契约。
- * 原则：输出面向 LLM 的紧凑结构（控制 token），不是 UI 数据结构直通；全部只读、零写库。
+ * 内置 AI 工具清单：给 AgentRunner 与外部 MCP 客户端的稳定契约。
+ * 原则：输出面向 LLM 的紧凑结构（控制 token），不是 UI 数据结构直通。
+ *
+ * ⚠️ 数据归属约定（2026-09-03 B0 起强制）：
+ * 工具按模块走「该模块当前的真相源」——已去库化模块（storageKnowledge/storageBlog/storageData=vault）
+ * 的读工具必须调用对应 kbStore vault repo，写工具走该模块受控写层；严禁绕过模块分流直连 sql.js 旧表
+ * （曾致 AI 建页写停更旧库、UI 不可见的静默分叉）。仍在 sqlite 的模块保持直查表。
  * 统计口径与渲染层 habit-tracker/dateUtils.ts 同源（本地时区 YYYY-MM-DD、计划日跳过逻辑一致）。
  */
+
+// ---- 模块读源开关：storageX=vault 表示该模块已去库化，工具走 vault repo ----
+
+function storageIs(kind: 'knowledge' | 'blog' | 'data'): boolean {
+  const key = kind === 'knowledge' ? 'storageKnowledge' : kind === 'blog' ? 'storageBlog' : 'storageData'
+  return getSettingReader()(key) === 'vault'
+}
 
 // ---- 本地日期工具（与 src/modules/toolbox/components/habit-tracker/dateUtils.ts 语义一致） ----
 
@@ -183,6 +198,19 @@ export function registerBuiltinTools(): void {
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 50)
     const terms = q.split(/\s+/).filter(Boolean)
     if (terms.length === 0) return []
+    if (storageIs('knowledge')) {
+      // vault 读源：与知识库 UI 同一份磁盘 .md（此前直查 sqlite 旧表导致 AI 搜不到 vault 页）
+      try {
+        return vaultSearchKnowledgePages(q).slice(0, limit).map(r => ({
+          id: r.id,
+          title: r.title,
+          excerpt: r.excerpt || r.title,
+          updatedAt: r.updatedAt,
+        }))
+      } catch (err) {
+        throw new Error(`知识库搜索失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
+      }
+    }
     const conds = terms.map(() => '(title LIKE ? OR content_md LIKE ?)').join(' AND ')
     const params: unknown[] = []
     for (const t of terms) params.push(`%${t}%`, `%${t}%`)
@@ -219,6 +247,26 @@ export function registerBuiltinTools(): void {
   }, args => {
     const id = str(args.id)
     const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
+    if (storageIs('knowledge')) {
+      // vault 读源：与知识库 UI 同一份磁盘 .md（id 为页面 frontmatter id，与 search 返回同体系）
+      let page
+      try {
+        page = vaultGetPageById(id)
+      } catch (err) {
+        throw new Error(`读取失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
+      }
+      if (!page) throw new Error(`页面不存在: ${id}`)
+      const content = page.contentMd
+      const truncated = content.length > maxChars
+      return {
+        id: page.id,
+        title: page.title,
+        contentMd: truncated ? content.slice(0, maxChars) : content,
+        truncated,
+        totalChars: content.length,
+        updatedAt: page.updatedAt,
+      }
+    }
     const rows = queryAll(
       'SELECT id, title, content_md, updated_at FROM knowledge_pages WHERE id = ?',
       [id]
@@ -325,6 +373,21 @@ export function registerBuiltinTools(): void {
     const limit = clamp(Math.floor(num(args.limit, 10)), 1, 50)
     const terms = q.split(/\s+/).filter(Boolean)
     if (terms.length === 0) return []
+    if (storageIs('data')) {
+      // 结构化模块 vault 读源（灰度）：与 UI 同一份 .knowbase/modules/bookmarks/*.json，内存过滤
+      const all = vaultBookmarksAll()
+      const catName = new Map(all.categories.map(c => [c.id, c.name]))
+      const hits = all.bookmarks.filter(b => {
+        const hay = `${b.title} ${b.url} ${b.description} ${catName.get(b.categoryId) ?? ''}`.toLowerCase()
+        return terms.every(t => hay.includes(t.toLowerCase()))
+      }).slice(0, limit)
+      return hits.map(b => ({
+        title: b.title,
+        url: b.url,
+        description: b.description,
+        category: catName.get(b.categoryId) || '未分类',
+      }))
+    }
     const conds = terms.map(() => '(b.title LIKE ? OR b.url LIKE ? OR b.description LIKE ?)').join(' AND ')
     const params: unknown[] = []
     for (const t of terms) { const p = `%${t}%`; params.push(p, p, p) }
@@ -444,6 +507,10 @@ export function registerBuiltinTools(): void {
     requires: 'write',
     module: 'knowledge',
   }, args => {
+    if (storageIs('knowledge')) {
+      // vault 读源下知识内容=仓库文件、编辑器为唯一写入方：绝不静默写 sqlite 旧表（曾致 AI 建页 UI 不可见的分叉）
+      throw new Error('知识库内容现由仓库文件管理（编辑器为唯一写入方），AI 建页将在「vault 写工具」上线后开放；当前请用编辑器新建，或到 设置 → 通用 将知识库数据形态切回「数据库(sqlite)」')
+    }
     const title = str(args.title).trim()
     const contentMd = str(args.contentMd)
     if (!title) throw new Error('标题不能为空')
@@ -482,6 +549,9 @@ export function registerBuiltinTools(): void {
     requires: 'write',
     module: 'knowledge',
   }, args => {
+    if (storageIs('knowledge')) {
+      throw new Error('知识库内容现由仓库文件管理（编辑器为唯一写入方），AI 追加内容将在「vault 写工具」上线后开放；当前请用编辑器修改，或到 设置 → 通用 将知识库数据形态切回「数据库(sqlite)」')
+    }
     const text = str(args.text)
     const id = str(args.id)
     const title = str(args.title)
@@ -520,6 +590,12 @@ export function registerBuiltinTools(): void {
     const contentMd = str(args.contentMd)
     if (!contentMd.trim()) throw new Error('正文不能为空')
     const date = /^\d{4}-\d{2}-\d{2}$/.test(str(args.date)) ? str(args.date) : todayLocal()
+    if (storageIs('blog')) {
+      // 博客 vault 读源（灰度）：与 UI 同一份 blog/*.md（vaultCreateEntry 自带每天一篇防重）
+      const e = vaultCreateEntry({ title: str(args.title).trim(), contentMd, date })
+      if (e.contentMd !== contentMd) throw new Error(`${date} 已存在日记（应用限制每天一篇），可改用其他日期`)
+      return { ok: true, id: e.id, date }
+    }
     const dup = queryAll('SELECT id FROM entries WHERE date = ? LIMIT 1', [date])
     if (dup.length > 0) throw new Error(`${date} 已存在日记（应用限制每天一篇），可改用其他日期`)
     const id = randomUUID()

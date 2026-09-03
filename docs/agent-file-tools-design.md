@@ -114,11 +114,13 @@
 - vault 模式：AI `knowledge.search` 能命中磁盘 .md 页并返回摘要；`create-page` 返回明确错误提示（含引导文案），**且 sqlite `knowledge_pages` 行数不变**。
 - sqlite 模式（灰度开关切回）：原 13 工具行为回归不变。
 
+> **实现状态（2026-09-03）**：B0 代码已完成于 `feature/agent-file-tools` 分支（落地批次提交后，修订本节为待真机）。源码级断言冒烟 `tmp/smoke/agent-b0-source-smoke.mjs` 12/12 通过；tsc(node) 零新增错误（基线 5 与主工作树一致）；electron-vite build 通过。上表行为验收待真机（dev 起后按本清单人工核对）。
+
 ---
 
 ## 10. 实施计划总览（批次表）
 
-> 依赖已全部就绪（workspaceManager ✅ / knowledgeIndex ✅ / ToolRegistry ✅），B0+B1 **可开工**；建议与图谱 A8 真机验收并行推进，落地在 `fix/optimize-v2.15.1` 分支。
+> 依赖已全部就绪（workspaceManager ✅ / knowledgeIndex ✅ / ToolRegistry ✅），B0+B1 **可开工**；开发落地于 `feature/agent-file-tools`（2026-09-03 从 `fix/optimize-v2.15.1` 基线切出的并行 worktree，定期合入主线保持同步），与图谱 A8 真机验收并行推进。
 
 | 批 | 内容 | 大白话目标 | 改动范围 | 依赖 | 验收要点 |
 |---|---|---|---|---|---|
