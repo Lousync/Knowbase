@@ -73,6 +73,7 @@
 | **R5 分栏预览**（原 Live Preview，**2026-09-03 用户拍板改方案**） | ~~CodeMirror 6 所见即所得~~ → **编辑区分栏：左 Monaco 编辑 / 右 MarkdownPreview 实时渲染**（复用现有 react-markdown 基建，不引入 CM6） | 原 阶段4 | ✅ 落地（预览开关 + 双链跳转 + localStorage 记忆） |
 | **R6 去库收尾** | 移除 sql.js、删库、备份适配——**最后一步** | 原 P5 | — |
 | **R7 插件开放** | 沙箱运行时 + capability 网关 + 签名（修订 plugin-api v2） | D3 | ✅ V3-1 契约定稿 / V3-2a 网关骨架 / V3-2b code 放行 / V3-2c UI+Worker 宿主 / V3-2d 自动挂载 / V3-3 code-hello 试点 / V3-4 签名链路（2026-09-03 收官） |
+| **PDF 阅读器 P1**（[plugin-pdf-reader-design](./plugin-pdf-reader-design.md) v1 冻结项全落地，2026-09-03） | 二进制范围读取 ws:readRange → 编辑器 .pdf 文档类型路由（PdfReaderView 懒加载 range transport）→ 大纲/文本层/Ctrl+F 搜索/沉浸 → 知识库附件路由（含无扩展名 PDF 头探测） | 原 阶段4 子项 | ✅ 594d426 → c0ab7f9 → f86e136 → 77c540c（v2 注解/引用/进度 + P2 外壳插件化待做） |
 
 关键排序理由：R0 之前不动知识库读路径；R1 是后续一切外壳功能的容器（命令面板/分屏/底部面板都长在 Workbench 上）；R6 必须等所有模块读完仓库（今日已验证：当前 0 个模块能读仓库文件，此时删库必丢数据）。
 
