@@ -40,6 +40,7 @@ import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
 import { PluginsModule } from './modules/plugins'
 import { EditorModule } from './modules/editor'
+import { ImModule } from './modules/immersive'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { WelcomeOverlay } from './components/shared/WelcomeOverlay'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
@@ -493,6 +494,7 @@ export default function App() {
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
       case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} />
+      case 'immersive': return <ImModule isActive={on} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
       case 'toolbox': return <ToolboxModule />
