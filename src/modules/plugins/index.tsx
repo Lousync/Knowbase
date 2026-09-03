@@ -692,8 +692,8 @@ export function PluginsModule() {
 
           {p.description && <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed mb-6">{p.description}</p>}
 
-          {/* 能力与授权(B 级) */}
-          {p.type === 'ui' && !p.broken && (
+          {/* 能力与授权(B/C 级可执行插件: ui 与 code 均可声明能力) */}
+          {(p.type === 'ui' || p.type === 'code') && !p.broken && (
             <>
               <SectionTitle>能力与授权</SectionTitle>
               <div className="space-y-2 mb-8">
@@ -816,7 +816,7 @@ export function PluginsModule() {
           <div className="text-[12px] space-y-1.5 text-[var(--text-muted)] mb-8">
             <div className="flex"><span className="w-24 shrink-0">插件 ID</span><span className="font-mono text-[var(--text-secondary)]">{p.id}</span></div>
             <div className="flex"><span className="w-24 shrink-0">安全等级</span><span>{p.riskLevel} · {LEVEL_META[p.riskLevel].label}</span></div>
-            <div className="flex"><span className="w-24 shrink-0">类型</span><span>{p.builtin ? '内置(随应用分发)' : p.type === 'ui' ? 'UI 插件' : '声明式插件'}</span></div>
+            <div className="flex"><span className="w-24 shrink-0">类型</span><span>{p.builtin ? '内置(随应用分发)' : p.type === 'ui' ? 'UI 插件(带界面)' : p.type === 'code' ? '代码插件(后台运行)' : '声明式插件(纯内容)'}</span></div>
             <div className="flex"><span className="w-24 shrink-0">状态</span><span className={p.enabled ? 'text-[var(--success)]' : ''}>{p.enabled ? '已启用' : '已禁用'}</span></div>
           </div>
 
