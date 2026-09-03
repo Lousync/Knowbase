@@ -54,6 +54,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [openPageInfos, setOpenPageInfos] = useState<Record<string, PageInfo>>({})
   /** R4-G1：图谱全幅视图开关（入口在左侧目录树底部；Esc/返回按钮退出） */
   const [graphMode, setGraphMode] = useState(false)
+  /** 图谱目录 scope：进入时锁定「当前最深选中目录」的仓库路径；null=全库 */
+  const [graphScope, setGraphScope] = useState<{ path: string; name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -1287,11 +1289,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                 ))}
               </div>
             )}
-            {/* 图谱入口（R4-G1）：常驻底部，顶层工作区/空间内均可用；点击进入全幅图谱 */}
+            {/* 图谱入口（R4-G1）：常驻底部，顶层工作区/空间内均可用；点击进入全幅图谱。
+                进入时若已选中某目录(笔记本/章节/空间) → 图谱只展示该目录(含子目录) +
+                跨目录关联；未选中 → 全库 */}
             {!graphMode && (
               <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5">
                 <button
-                  onClick={() => setGraphMode(true)}
+                  onClick={() => {
+                    // 当前选中目录(章节/笔记本优先,否则空间)的仓库路径 → 图谱 scope
+                    const sel = (selectedCategoryId ? categories.find((c) => c.id === selectedCategoryId) : null)
+                      ?? (selectedSpaceId ? categories.find((c) => c.id === selectedSpaceId) : null)
+                    setGraphScope(sel?.path ? { path: sel.path, name: sel.name } : null)
+                    setGraphMode(true)
+                  }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <Share2 size={14} />
@@ -1306,7 +1316,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         {/* Editor */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {graphMode ? (
-            <GraphView onExit={() => setGraphMode(false)} />
+            <GraphView
+              onExit={() => setGraphMode(false)}
+              scopePath={graphScope?.path}
+              scopeName={graphScope?.name}
+              onClearScope={() => setGraphScope(null)}
+            />
           ) : (
           <>
           <PageTabBar

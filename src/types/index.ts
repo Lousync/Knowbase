@@ -295,6 +295,8 @@ export interface KnowledgeCategory {
   id: string; name: string; parentId: string | null; sortOrder: number
   categoryType: 'notebook' | 'folder' | 'space'
   createdAt: string; updatedAt: string
+  /** vault 读源：仓库内相对目录路径（如 学习空间/C++教学）——图谱目录 scope 用 */
+  path?: string
   children?: KnowledgeCategory[]
 }
 export interface KnowledgePage {

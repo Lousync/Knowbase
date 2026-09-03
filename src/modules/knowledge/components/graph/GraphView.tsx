@@ -6,13 +6,23 @@
  *       未解析 [[引用]] 合成 dangling 虚节点渲染、着色/簇力/文字阈值开关
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ExternalLink, FileText, Maximize2, Minus, Plus, RotateCcw, Settings, Share2, Tag, X, Network } from 'lucide-react'
+import { ExternalLink, FileText, Folder as FolderIcon, Maximize2, Minus, Plus, RotateCcw, Settings, Share2, Tag, X, Network } from 'lucide-react'
 import type { GraphIndexData, GraphNode, GraphViewConfig } from '../../../../lib/graphTypes'
 import { getKnowledgeGraph, getGraphViewConfig, updateGraphViewConfig } from '../../../../lib/ipc'
 import { GraphCanvas, type GraphCanvasHandle } from './GraphCanvas'
 
 interface GraphViewProps {
   onExit: () => void
+  /**
+   * 图谱目录 scope（R4 用户需求）：仓库内相对目录前缀（如 学习空间/C++教学），
+   * 任意层级。非空 = 只展示该目录（含子目录）的页 + 与它们有边的跨目录关联节点/标签；
+   * 空/缺省 = 全库。与 A8 增量 merge 兼容：scope 变化走 data 引用变化 → 局部动画。
+   */
+  scopePath?: string
+  /** scope 生效时右上角显示目录名（缺省显示 path） */
+  scopeName?: string
+  /** 点「返回全库」清除 scope（不清则留在当前目录） */
+  onClearScope?: () => void
 }
 
 const DEFAULT_GVC: GraphViewConfig = {
@@ -46,8 +56,45 @@ function buildLocalGraph(data: GraphIndexData, centerId: string): GraphIndexData
   }
 }
 
-/** G3 过滤 + 未解析引用合成虚节点：按设置裁剪节点/边，并把 unresolved 合成 dangling 节点入图 */
-function filterAndSynth(data: GraphIndexData, cfg: GraphViewConfig): GraphIndexData {
+/**
+ * 目录 scope 裁剪：展示「某目录的图谱」。
+ *  - 范围内页：path === 前缀 或 path.startsWith(前缀 + '/')（任意层级含子目录）
+ *  - 跨目录关联：与范围内页有边（无向，双向）的外部页 / 标签 / dangling 也保留——外部连接可见
+ *  - 其余节点剔除；degree 重算为「范围内度」（孤立判定按局部，过滤不误伤）
+ */
+function applyScope(data: GraphIndexData, scopePath: string): GraphIndexData {
+  const prefix = scopePath.replace(/\/+$/, '')
+  const inScope = (p: string): boolean => p === prefix || p.startsWith(`${prefix}/`)
+  const inScopePageIds = new Set(
+    data.nodes.filter((n) => n.kind === 'page' && n.path && inScope(n.path)).map((n) => n.id),
+  )
+  if (inScopePageIds.size === 0) return { ...data, nodes: [], edges: [], unresolved: [] }
+
+  // 邻接扩展：范围内页 + 与它们直接相连的节点（1 度外联即可见）
+  const keep = new Set<string>(inScopePageIds)
+  for (const e of data.edges) {
+    if (inScopePageIds.has(e.s)) keep.add(e.t)
+    if (inScopePageIds.has(e.t)) keep.add(e.s)
+  }
+  const nodes = data.nodes.filter((n) => keep.has(n.id))
+  const keptIds = new Set(nodes.map((n) => n.id))
+  const edges = data.edges.filter((e) => keptIds.has(e.s) && keptIds.has(e.t))
+
+  // 局部 degree 重算（边两端都保留才算度）
+  const degree = new Map<string, number>()
+  for (const e of edges) {
+    degree.set(e.s, (degree.get(e.s) ?? 0) + 1)
+    degree.set(e.t, (degree.get(e.t) ?? 0) + 1)
+  }
+  return {
+    ...data,
+    nodes: nodes.map((n) => ({ ...n, degree: degree.get(n.id) ?? 0 })),
+    edges,
+    unresolved: [], // scope 模式下不合成全局虚节点（避免噪声；unresolved 引用在页节点出链里可见）
+  }
+}
+
+/** G3 过滤 + 未解析引用合成虚节点：按设置裁剪节点/边，并把 unresolved 合成 dangling 节点入图 */function filterAndSynth(data: GraphIndexData, cfg: GraphViewConfig): GraphIndexData {
   let nodes = data.nodes
   if (!cfg.showTags) nodes = nodes.filter((n) => n.kind !== 'tag')
   if (!cfg.showOrphans) nodes = nodes.filter((n) => !(n.kind === 'page' && n.degree === 0))
@@ -65,7 +112,7 @@ function filterAndSynth(data: GraphIndexData, cfg: GraphViewConfig): GraphIndexD
   return { ...data, nodes, edges }
 }
 
-export function GraphView({ onExit }: GraphViewProps) {
+export function GraphView({ onExit, scopePath, scopeName, onClearScope }: GraphViewProps) {
   const [data, setData] = useState<GraphIndexData | null>(null)
   const [error, setError] = useState('')
   const [cfg, setCfg] = useState<GraphViewConfig>(DEFAULT_GVC)
@@ -109,10 +156,14 @@ export function GraphView({ onExit }: GraphViewProps) {
     })
   }, [])
 
-  // 过滤（标签/孤儿）+ unresolved 虚节点 → 本地图谱（可选）
+  // 目录 scope（先裁剪）→ 过滤（标签/孤儿）+ unresolved 虚节点 → 本地图谱（可选）
+  const scoped = useMemo(
+    () => (data && scopePath ? applyScope(data, scopePath) : data),
+    [data, scopePath],
+  )
   const display = useMemo(
-    () => (data ? filterAndSynth(data, cfg) : null),
-    [data, cfg],
+    () => (scoped ? filterAndSynth(scoped, cfg) : null),
+    [scoped, cfg],
   )
   const displayData = useMemo(
     () => (display && centerId ? buildLocalGraph(display, centerId) : display),
@@ -210,6 +261,21 @@ export function GraphView({ onExit }: GraphViewProps) {
           <Share2 size={12} />
           图谱
         </span>
+        {scopePath && (
+          <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--bg-secondary)]/80 text-[11px] text-[var(--accent)] border border-[var(--border-color)] max-w-[180px]">
+            <FolderIcon size={11} className="shrink-0" />
+            <span className="truncate">{scopeName || scopePath}</span>
+            {onClearScope && (
+              <button
+                onClick={onClearScope}
+                title="返回全库图谱"
+                className="pointer-events-auto shrink-0 ml-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </span>
+        )}
         {centerId ? (
           <button
             onClick={() => { setCenterId(null); setSel(null) }}

@@ -91,9 +91,11 @@ function writeVaultFile(relPath: string, content: string): boolean {
   }
 }
 
-export function vaultGetCategories(): Array<{ id: string; name: string; parentId: string | null; sortOrder: number; categoryType: string }> {
+export function vaultGetCategories(): Array<{ id: string; name: string; parentId: string | null; sortOrder: number; categoryType: string; path?: string }> {
   return getKnowledgeIndex().categories.map((c) => ({
     id: c.id, name: c.name, parentId: c.parentId, sortOrder: c.sortOrder, categoryType: c.categoryType,
+    // 图谱目录 scope：仓库内相对目录（迁移产物 dict 带 path；array 缺省）
+    ...(c.path ? { path: c.path } : {}),
   }))
 }
 
