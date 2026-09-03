@@ -65,6 +65,16 @@ export interface AgentChatRequest {
   chatId?: string
 }
 
+/** 单次请求对用户数据的写改动（供 UI 列出「本次改了哪些文件/条目」） */
+export interface AgentChange {
+  /** 工具注册名（builtin.vault.edit 等） */
+  tool: string
+  /** 人类可读动作（编辑/新建/删除/打卡…） */
+  action: string
+  /** 目标：文件 relPath / 标题 / 日期等（取写工具关键入参） */
+  target: string
+}
+
 export interface AgentChatResult {
   ok: boolean
   sessionId?: string
@@ -72,10 +82,28 @@ export interface AgentChatResult {
   error?: string
   code?: string
   trace: AgentTraceStep[]
+  /** 本次执行真实发生的写改动（成功写入/创建类工具），供 UI 渲染改动清单 */
+  changes?: AgentChange[]
 }
 
 /** 进行中的对话 → 中断控制器（用户点击停止时触发） */
 const activeChats = new Map<string, AbortController>()
+
+/** signal → 步骤事件推送器（withAbort 注入发起窗口 sender，仅目标窗口收流） */
+const stepEmitters = new WeakMap<AbortSignal, (step: AgentTraceStep) => void>()
+
+/** 写改动识别：工具 → 人类动作标签（成功执行后收集 target=path/title/date/name） */
+const CHANGE_LABELS: Record<string, string> = {
+  'builtin.vault.write': '写入文件',
+  'builtin.vault.edit': '修改文件',
+  'builtin.vault.rename': '重命名文件',
+  'builtin.vault.trash': '移入回收站',
+  'builtin.knowledge.create-page': '新建知识页',
+  'builtin.knowledge.append-page': '追加知识页',
+  'builtin.blog.create-entry': '新建日记',
+  'builtin.schedule.create-todo': '创建待办',
+  'builtin.checkin.check-habit': '习惯打卡',
+}
 
 function buildToolsPayload(): {
   payload: unknown[]
@@ -197,23 +225,31 @@ async function runAgentLoop(
     ...history,
   ]
   let sessionWrites = 0
+  const changes: AgentChange[] = []
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // ---- LLM 轮 ----
     if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
     const t0 = Date.now()
     const r = await invokeLlmInternal({ messages: convo, tools: toolPayload, signal })
-    trace.push({
+    const llmStep: AgentTraceStep = {
       kind: 'llm',
       ok: r.ok,
       durationMs: Date.now() - t0,
       tokens: r.ok ? r.tokens : undefined,
-    })
+    }
+    trace.push(llmStep)
+    stepEmitters.get(signal)?.(llmStep) // 实时过程：渲染层活动气泡
     if (!r.ok) return { ok: false, sessionId, error: r.error, code: r.code, trace }
 
     if (!r.toolCalls || r.toolCalls.length === 0) {
-      appendAgentMessage(sessionId, 'assistant', r.content, trace)
-      return { ok: true, sessionId, reply: r.content, trace }
+      // 完成：把真实改动清单附在回复末尾（落库可见），并结构化返回给 UI
+      const changesText = changes.length > 0
+        ? '\n\n——\n本次改动：\n' + changes.map((c, idx) => `${idx + 1}. ${c.action}「${c.target}」`).join('\n')
+        : ''
+      const reply = r.content + changesText
+      appendAgentMessage(sessionId, 'assistant', reply, trace)
+      return { ok: true, sessionId, reply, changes, trace }
     }
 
     // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----
@@ -227,7 +263,9 @@ async function runAgentLoop(
       // 会话写上限：单次请求内 vault 写工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）
       if (VAULT_WRITE_TOOLS.has(realName)) {
         if (sessionWrites >= MAX_SESSION_WRITES) {
-          trace.push({ kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写上限 ${MAX_SESSION_WRITES}` })
+          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写上限 ${MAX_SESSION_WRITES}` }
+          trace.push(denyStep)
+          stepEmitters.get(signal)?.(denyStep)
           convo.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -241,13 +279,23 @@ async function runAgentLoop(
       const t1 = Date.now()
       const exec = await invokeToolInternal(realName, args)
       const durationMs = Date.now() - t1
-      trace.push({
+      const toolStep: AgentTraceStep = {
         kind: 'tool',
         name: realName,
         ok: exec.ok,
         durationMs,
         summary: exec.ok ? undefined : String(exec.message).slice(0, 200),
-      })
+      }
+      trace.push(toolStep)
+      stepEmitters.get(signal)?.(toolStep) // 实时过程：渲染层活动气泡
+      if (exec.ok) {
+        // 收集真实写改动 → 完成时列为「本次改动」清单
+        const label = CHANGE_LABELS[realName]
+        if (label) {
+          const target = String(args?.path ?? args?.title ?? args?.date ?? args?.name ?? '').trim().slice(0, 120)
+          if (target) changes.push({ tool: realName, action: label, target })
+        }
+      }
       convo.push({
         role: 'tool',
         tool_call_id: tc.id,
@@ -287,21 +335,32 @@ async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, 
 }
 
 export function registerAgentHandlers(): void {
-  const withAbort = async (chatId: string, fn: (signal: AbortSignal) => Promise<AgentChatResult>) => {
+  // 仅向发起窗口推送 agent:step 过程事件（chatId 过滤由渲染层做），复用 activeChats 生命周期
+  const withAbort = async (
+    chatId: string,
+    sender: Electron.WebContents | undefined,
+    fn: (signal: AbortSignal) => Promise<AgentChatResult>
+  ) => {
     const ctrl = new AbortController()
     activeChats.set(chatId, ctrl)
+    if (sender && !sender.isDestroyed()) {
+      stepEmitters.set(ctrl.signal, (step) => {
+        if (!sender.isDestroyed()) sender.send('agent:step', { chatId, step })
+      })
+    }
     try {
       return await fn(ctrl.signal)
     } finally {
       activeChats.delete(chatId)
+      stepEmitters.delete(ctrl.signal)
     }
   }
-  ipcMain.handle('agent:chat', async (_e, req: AgentChatRequest) =>
-    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentChat(req, signal, String(req?.chatId ?? ''))))
-  ipcMain.handle('agent:regenerate', async (_e, req: AgentChatRequest) =>
-    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentRegenerate(req, signal)))
-  ipcMain.handle('agent:editMessage', async (_e, req: AgentChatRequest & { messageId: string }) =>
-    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentEditAndRegen(req, signal)))
+  ipcMain.handle('agent:chat', (e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentChat(req, signal, String(req?.chatId ?? ''))))
+  ipcMain.handle('agent:regenerate', (e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentRegenerate(req, signal)))
+  ipcMain.handle('agent:editMessage', (e, req: AgentChatRequest & { messageId: string }) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentEditAndRegen(req, signal)))
   ipcMain.handle('agent:deleteMessage', (_e, messageId: string) => {
     deleteMessage(String(messageId ?? ''))
     return true

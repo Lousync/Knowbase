@@ -684,6 +684,15 @@ export interface AgentStoredMessage {
   createdAt: string
 }
 
+/** 单次请求对用户数据的写改动（UI 改动清单用） */
+export interface AgentChange {
+  tool: string
+  /** 人类可读动作（修改文件/新建知识页…） */
+  action: string
+  /** 目标：relPath / 标题 / 日期 */
+  target: string
+}
+
 export interface AgentChatResult {
   ok: boolean
   sessionId?: string
@@ -691,6 +700,8 @@ export interface AgentChatResult {
   error?: string
   code?: string
   trace: AgentTraceStep[]
+  /** 本次真实发生的写改动 */
+  changes?: AgentChange[]
 }
 
 // ===== PDF 工具箱 =====
@@ -1157,6 +1168,8 @@ export interface ElectronAPI {
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentDeleteMessage: (messageId: string) => Promise<boolean>
   agentAbort: (chatId: string) => Promise<boolean>
+  /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
+  onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void
   agentSessions: () => Promise<AgentSessionInfo[]>
   agentNewSession: (title?: string) => Promise<AgentSessionInfo>
   agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>

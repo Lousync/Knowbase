@@ -210,6 +210,12 @@ const api = {
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),
   agentDeleteMessage: (messageId: string) => ipcRenderer.invoke('agent:deleteMessage', messageId),
   agentAbort: (chatId: string) => ipcRenderer.invoke('agent:abort', chatId),
+  /** AgentRunner 实时过程步骤（chatId 过滤后驱动前端活动气泡） */
+  onAgentStep: (cb: (p: { chatId: string; step: unknown }) => void) => {
+    const handler = (_e: unknown, p: { chatId: string; step: unknown }) => cb(p)
+    ipcRenderer.on('agent:step', handler)
+    return () => { ipcRenderer.removeListener('agent:step', handler) }
+  },
   agentSessions: () => ipcRenderer.invoke('agent:sessions'),
   agentNewSession: (title?: string) => ipcRenderer.invoke('agent:newSession', title),
   agentMessages: (sessionId: string) => ipcRenderer.invoke('agent:messages', sessionId),
