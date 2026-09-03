@@ -7,6 +7,7 @@ import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { createGateway } from './pluginHostGateway'
+import { verifyPluginSignature, buildKeyring } from './pluginSigning'
 import { getPackState, importPack } from './knowledgePackImporter'
 import {
   validateTableDef, ensurePluginTables, dropPluginTables,
@@ -546,7 +547,7 @@ async function fetchRegistryRaw(): Promise<any> {
 
 // ---------- 安装 ----------
 
-function installFromBuffer(buf: Buffer, grantedCapabilities?: string[], opts?: { bypassLevelCheck?: boolean }): { success: true; manifest: PluginManifest; riskLevel: RiskLevel; isUpdate: boolean } | { success: false; message: string } {
+function installFromBuffer(buf: Buffer, grantedCapabilities?: string[], opts?: { bypassLevelCheck?: boolean; marketSource?: boolean }): { success: true; manifest: PluginManifest; riskLevel: RiskLevel; isUpdate: boolean } | { success: false; message: string } {
   // 绝对上限(内容型插件放宽到 60MB,精确限额在 manifest 解析后判定)
   if (buf.length === 0 || buf.length > 60 * 1024 * 1024) {
     return { success: false, message: '插件包为空或超出 60MB 上限' }
@@ -567,6 +568,20 @@ function installFromBuffer(buf: Buffer, grantedCapabilities?: string[], opts?: {
   const parsed = readManifestFromBuffer(files.get(manifestEntry)!)
   if ('error' in parsed) return { success: false, message: parsed.error }
   const manifest = parsed.manifest
+
+  // V3-4 签名校验（ADR-9）：canonical = 剔除 signing 的稳定序列化 manifest + entry bytes；
+  // 市场来源 + pluginRequireSignature 开启 → 无有效签名拒装；
+  // 本地/内置示例不强制，但带 signing 时仍验证（防错配）。
+  const entryBytes = manifest.entry ? (files.get(prefix + manifest.entry) ?? null) : null
+  if (manifest.signing || (opts?.marketSource && pluginSettingReader('pluginRequireSignature') === true)) {
+    const keyring = buildKeyring(pluginSettingReader('pluginTrustedKeys'))
+    const sigErr = verifyPluginSignature(files.get(manifestEntry)!, entryBytes, manifest.signing, keyring)
+    if (sigErr) {
+      if (manifest.signing) return { success: false, message: `签名校验失败: ${sigErr}` }
+      // 市场包未签名且开关开启
+      return { success: false, message: `市场插件需要有效签名: ${sigErr}` }
+    }
+  }
 
   // 限额:内容型插件(knowledgePages)单独放宽(60MB / 1500 文件),其余沿用通用值
   const isKnowledgePack = Boolean(manifest.contributes?.knowledgePages)
@@ -727,7 +742,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       if (!buf) throw new Error(`所有下载源均失败(已重试 3 轮) —— ${diag.join('; ')}`)
       push(buf.length, buf.length, usedHost)
       const grants = Array.isArray(grantedCapabilities) ? grantedCapabilities.filter((c): c is string => typeof c === 'string') : undefined
-      return installFromBuffer(buf, grants)
+      return installFromBuffer(buf, grants, { marketSource: true })
     } catch (e: any) {
       return { success: false, message: `安装失败: ${e?.message || e}` }
     }

@@ -220,6 +220,8 @@ export const SETTINGS = {
   aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },
   // ---- 插件安全分级 ----
   pluginAllowedLevels: { default: 'S,A,B', desc: '允许安装/启用的插件安全等级(S/A/B 逗号分隔)' },
+  pluginRequireSignature: { default: false, desc: '市场插件强制签名校验(开启后未签名/验签失败的市场包拒装;本地安装与内置示例不受限)' },
+  pluginTrustedKeys: { default: '', desc: '受信签名公钥 keyring(JSON {"keyId":"公钥"} 或 keyId=公钥 逗号分隔;作者公钥发布后在此登记)' },
 
   // ---- 更新下载 ----
   updateMirror: { default: 'https://gh-proxy.com', desc: '更新下载镜像(GitHub 加速代理前缀,留空直连 GitHub;失效可随时替换)' },
