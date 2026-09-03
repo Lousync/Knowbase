@@ -73,13 +73,14 @@ export function DataClearSection() {
                       此操作将<strong className="text-[var(--danger)]">永久删除</strong>以下全部数据：
                     </p>
                     <ul className="mt-2 space-y-1 text-[12px] text-[var(--text-secondary)] list-disc list-inside">
-                      <li>所有博客文章及其标签</li>
+                      <li>当前仓库内的全部内容文件（知识 .md / 博客 / 附件等，磁盘文件一并删除）</li>
+                      <li>仓库模块数据与索引/图谱缓存（.knowbase/ 重建为骨架）</li>
                       <li>所有日程待办事项</li>
                       <li>所有知识库页面、分类、标签</li>
                       <li>所有回收站内容</li>
                       <li>所有工具箱脚本</li>
                       <li>用户信息与头像</li>
-                      <li>所有偏好设置（恢复默认）</li>
+                      <li>仓库注册与所有偏好设置（恢复默认，回首启引导）</li>
                     </ul>
                   </div>
 

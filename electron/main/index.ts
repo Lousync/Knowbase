@@ -48,6 +48,8 @@ import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
 import { registerLanShareHandlers } from '../lib/lanShare'
 import { registerWorkspaceHandlers } from '../lib/workspaceManager'
+import { getCurrentVault, setCurrentVault } from '../lib/kbStore/vaultContext'
+import { clearVaultContent, isAllowedClearRoot } from '../lib/kbStore/clearVaultContent'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -333,12 +335,23 @@ function registerWindowHandlers(): void {
     return true
   })
 
-  // 清空所有数据 + 恢复默认设置
+  // 清空所有数据（2026-09-03 对齐去库化重写）：真删当前仓库内容（文件 + .knowbase）+ 全局重置 → 回首启引导
   ipcMain.handle('db:clearAllData', () => {
     try {
       const db = getDatabase()
 
-      // Drop all user data tables
+      // 1) 当前仓库内容真删：根下非隐藏内容 + .knowbase 整体重建（护栏校验失败则中止不删）
+      //    修复旧实现只 DROP sqlite 空表不碰 vault 文件 → 「清了文件还在、列表/图谱不一致」的历史问题
+      const vault = getCurrentVault()
+      if (vault?.rootPath) {
+        if (!isAllowedClearRoot(vault.rootPath)) {
+          return { success: false, error: '仓库路径校验失败，已中止（未删除任何内容）' }
+        }
+        const cleared = clearVaultContent(vault.rootPath)
+        console.log(`[clearAllData] 仓库内容已清空: ${cleared.removed} 项 / ${cleared.removedDirs} 目录 / .knowbase 重建`)
+      }
+
+      // 2) 回退 sqlite 残留表（老模块兜底）+ vault 注册清空（回首启引导重新选/建仓库）
       const tables = [
         'entries', 'tags', 'entry_tags',
         'schedule_todos', 'schedule_tags',
@@ -354,15 +367,16 @@ function registerWindowHandlers(): void {
       for (const t of tables) {
         db.run(`DROP TABLE IF EXISTS ${t}`)
       }
-      // Clear migration records so schema is re-created fresh
-      db.run('DELETE FROM _migrations')
+      // 仓库注册清空（回首启引导）+ 当前仓库内存态/持久化一并清
+      try { db.run('DELETE FROM vaults'); saveToDisk() } catch { /* 旧库无 vaults 表 */ }
+      setCurrentVault(null)
 
-      // Wipe settings to defaults
+      // 3) settings 恢复默认
       settingsCache = {}
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
       flushSettingsToDisk()
 
-      // Re-create all tables from scratch
+      // 4) 重建 sqlite schema（残留表结构，数据为空）
       runMigrations()
       saveToDisk()
       return { success: true }
