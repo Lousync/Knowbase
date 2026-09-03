@@ -318,18 +318,16 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   // date mode: pending tasks visible on selected date
   // - daily: only on its own date
   // - deadline: creation date + every day from today to deadline
-  // - plan: creation date + every day from today forward
+  // - plan: 无截止日期、不逾期 —— 未完成则任何日期都常驻显示（跨月由 getMonthTodos 兜底）
   const dateTodos = useMemo(() =>
     pendingTodos.filter(t => {
       if (t.date === selectedDate) return true
       if (t.taskType === 'daily') return false
+      if (t.taskType === 'plan') return true
+      // deadline
       if (selectedDate < todayDateStr) return false
-      if (t.taskType === 'deadline') {
-        const deadlineDate = (t.time || '').slice(0, 10)
-        return !!deadlineDate && selectedDate <= deadlineDate
-      }
-      // plan: visible on all dates from today onward
-      return true
+      const deadlineDate = (t.time || '').slice(0, 10)
+      return !!deadlineDate && selectedDate <= deadlineDate
     }),
     [pendingTodos, selectedDate, todayDateStr]
   )

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { registerTool } from './aiTools'
+import { webSearch } from './webSearch'
 import type { ToolJsonSchema } from './aiTools'
 
 /**
@@ -592,5 +593,29 @@ export function registerBuiltinTools(): void {
     if (exist.length > 0) return { ok: true, habitId: str(hit.id), name: str(hit.name), alreadyChecked: true }
     run('INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)', [randomUUID(), str(hit.id), date])
     return { ok: true, habitId: str(hit.id), name: str(hit.name), checked: true }
+  })
+
+  // 13. builtin.web.search —— 联网搜索（跨模块通用能力，不设 module：不受 aiModulePermissions 限制）
+  registerTool({
+    name: 'builtin.web.search',
+    title: '联网搜索',
+    description: '搜索互联网（DuckDuckGo / Bing），返回标题/链接/摘要。用于需要时效性信息、本地知识库之外的内容、或用户询问实时事实时',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '搜索关键词，越具体越好（可带引号或日期）' },
+        limit: { type: 'number', description: '返回条数，默认 8，最大 20' },
+      },
+      required: ['query'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    // 不设 module：联网搜索不归属任何业务模块
+  }, async args => {
+    const q = str(args.query)
+    const limit = clamp(Math.floor(num(args.limit, 8)), 1, 20)
+    const { source, results } = await webSearch(q, limit)
+    return { source, count: results.length, results }
   })
 }

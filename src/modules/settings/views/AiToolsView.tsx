@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Bot, Gauge, RefreshCw, ShieldCheck, Server, Plus, Plug, Trash2, AlertTriangle, Loader2, Sparkles, Store, Copy, Cpu } from 'lucide-react'
+import { Bot, Gauge, RefreshCw, ShieldCheck, Server, Plus, Plug, Trash2, AlertTriangle, Loader2, Sparkles, Store, Copy, Cpu, Upload } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import {
   aiToolsList, aiToolsGetRecentAudit,
   mcpListServers, mcpAddServer, mcpRemoveServer, mcpToggleServer, mcpRefreshTools, mcpTestConnection,
-  aiToolsListSkills, aiToolsCopySkillPrompt,
+  aiToolsListSkills, aiToolsCopySkillPrompt, aiToolsInstallSkill, aiToolsInstallSkillFromFile, aiToolsUninstallSkill, aiToolsToggleSkill,
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
 import { AiPermissionsTab } from './AiPermissionsTab'
 import { CollapseList } from '../components/CollapseList'
-import type { AgentToolInfo, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpTestResult, SkillInfo } from '../../../types'
+import type { AgentToolInfo, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpTestResult, SkillInfo, SkillInstallResult } from '../../../types'
 
 const SOURCE_LABEL: Record<AgentToolInfo['source'], string> = {
   builtin: '内置',
@@ -566,6 +566,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function SkillsTab() {
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const [installing, setInstalling] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -586,19 +589,89 @@ function SkillsTab() {
       : { type: 'error', message: '复制失败：技能可能已被禁用或卸载' })
   }
 
+  const finishInstall = async (r: SkillInstallResult, installingName?: string) => {
+    if (r.success) {
+      showToast({ type: 'info', message: `「${r.skill?.title ?? installingName ?? 'Skill'}」已安装，AI 助手立即可用` })
+    } else if (r.message !== '已取消') {
+      showToast({ type: 'error', message: `安装失败：${r.message ?? '未知错误'}` })
+    }
+    await refresh()
+  }
+
+  const handleInstallBuffer = async (data: ArrayBuffer, name: string) => {
+    setInstalling(true)
+    try {
+      await finishInstall(await aiToolsInstallSkill(new Uint8Array(data), name), name)
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const handlePickFile = async () => {
+    setInstalling(true)
+    try {
+      await finishInstall(await aiToolsInstallSkillFromFile())
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      showToast({ type: 'error', message: '仅支持 .zip 格式的 Skill 包' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => { void handleInstallBuffer(reader.result as ArrayBuffer, file.name) }
+    reader.onerror = () => showToast({ type: 'error', message: '读取文件失败' })
+    reader.readAsArrayBuffer(file)
+  }
+
+  const handleUninstall = async (s: SkillInfo) => {
+    if (confirmingId !== s.id) {
+      setConfirmingId(s.id)
+      setTimeout(() => setConfirmingId(cur => (cur === s.id ? null : cur)), 3000)
+      return
+    }
+    setConfirmingId(null)
+    const r = await aiToolsUninstallSkill(s.id)
+    showToast(r.success
+      ? { type: 'info', message: `「${s.title}」已卸载` }
+      : { type: 'error', message: `卸载失败：${r.message ?? '未知错误'}` })
+    await refresh()
+  }
+
+  const handleToggle = async (s: SkillInfo) => {
+    const r = await aiToolsToggleSkill(s.registryName, s.disabled)
+    showToast(r.success
+      ? { type: 'info', message: `「${s.title}」已${s.disabled ? '启用' : '停用'}` }
+      : { type: 'error', message: `操作失败：${r.message ?? '未知错误'}` })
+    await refresh()
+  }
+
   return (
     <div data-setting-anchor="aiTools.skill">
       <div className="flex items-center justify-between max-w-md">
         <div>
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">Skill 技能</h2>
           <p className="text-[12px] text-[var(--text-muted)]">
-            插件提供的声明式提示词资产。未来的 AI 助手会引用它们；本期可浏览与复制。
+            声明式提示词资产，AI 助手会引用它们。可拖入 zip 独立安装，或来自插件贡献。
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => { void refresh() }} title="刷新"
             className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
             <RefreshCw size={14} />
+          </button>
+          <button onClick={() => { void handlePickFile() }} disabled={installing}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
+            {installing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            安装 Skill
           </button>
           <button onClick={() => window.dispatchEvent(new CustomEvent('plugins:open'))}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[12px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
@@ -607,15 +680,42 @@ function SkillsTab() {
         </div>
       </div>
 
+      {/* 拖拽安装区 */}
+      <div
+        onDragOver={e => { e.preventDefault(); e.stopPropagation() }}
+        onDragEnter={e => { e.preventDefault(); e.stopPropagation(); setDragOver(true) }}
+        onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false) }}
+        onDrop={handleDrop}
+        onClick={() => { void handlePickFile() }}
+        className={`mt-4 max-w-md rounded-lg border-2 border-dashed px-4 py-5 text-center cursor-pointer transition-colors ${
+          dragOver
+            ? 'border-[var(--accent)] bg-[var(--bg-selected)]'
+            : 'border-[var(--border-color)] hover:border-[var(--text-disabled)]'
+        }`}
+      >
+        <div className="flex flex-col items-center gap-1.5">
+          <Upload size={20} className={dragOver ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+          <p className="text-[12px] text-[var(--text-secondary)]">
+            {installing ? '安装中…' : dragOver ? '释放以安装' : '拖入 Skill 包（.zip）到此处，或点击选择文件'}
+          </p>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            支持 SKILL.md 或 skill.json 格式（详见帮助文档）
+          </p>
+        </div>
+      </div>
+
       <div className="space-y-2 mt-4 max-w-md">
         {skills.map(s => (
-          <div key={s.registryName} className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+          <div key={s.registryName} className={`px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] transition-opacity ${s.disabled ? 'opacity-60' : ''}`}>
             <div className="flex items-center gap-2 flex-wrap">
-              <Sparkles size={14} className="text-[var(--accent)] shrink-0" />
+              <Sparkles size={14} className={`shrink-0 ${s.disabled ? 'text-[var(--text-disabled)]' : 'text-[var(--accent)]'}`} />
               <span className="text-[13px] font-medium text-[var(--text-primary)]">{s.title}</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)]">
-                {s.pluginName}
+                {s.source === 'standalone' ? '独立安装' : s.pluginName}
               </span>
+              {s.disabled && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-500/40 text-[var(--text-disabled)]">已停用</span>
+              )}
               {s.variables.length > 0 && (
                 <span className="flex items-center gap-1 flex-wrap">
                   {s.variables.map(v => (
@@ -623,6 +723,10 @@ function SkillsTab() {
                   ))}
                 </span>
               )}
+              <label className="ml-auto flex items-center gap-1.5 cursor-pointer shrink-0" title={s.disabled ? '启用该 Skill' : '停用该 Skill（AI 不再使用，文件保留）'}>
+                <input type="checkbox" checked={!s.disabled} onChange={() => { void handleToggle(s) }} className="accent-[var(--accent)] w-4 h-4" />
+                <span className="text-[11px] text-[var(--text-muted)]">{s.disabled ? '停用' : '启用'}</span>
+              </label>
             </div>
             {s.description && (
               <p className="text-[12px] text-[var(--text-secondary)] mt-1.5 leading-relaxed">{s.description}</p>
@@ -632,15 +736,28 @@ function SkillsTab() {
                 依赖工具：{s.tools.join('、')}
               </p>
             )}
-            <button onClick={() => { void handleCopy(s) }}
-              className="flex items-center gap-1 mt-2 text-[11px] px-2 py-1 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-              <Copy size={11} /> 复制提示词
-            </button>
+            <div className="flex items-center gap-2 mt-2">
+              <button onClick={() => { void handleCopy(s) }}
+                className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                <Copy size={11} /> 复制提示词
+              </button>
+              {s.source === 'standalone' && (
+                <button onClick={() => { void handleUninstall(s) }}
+                  className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${
+                    confirmingId === s.id
+                      ? 'border-red-500 text-red-400 hover:bg-red-500/10'
+                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                  }`}>
+                  <Trash2 size={11} />
+                  {confirmingId === s.id ? '再点一次确认卸载' : '卸载'}
+                </button>
+              )}
+            </div>
           </div>
         ))}
         {!loading && skills.length === 0 && (
           <p className="text-[12px] text-[var(--text-muted)] px-1">
-            暂无已装 Skill。安装含 skills 贡献的插件包后会出现在这里（官方示例：AI 技能包）。
+            暂无已装 Skill。拖入 zip 独立安装，或安装含 skills 贡献的插件包（官方示例：AI 技能包）。
           </p>
         )}
       </div>

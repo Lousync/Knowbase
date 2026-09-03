@@ -120,6 +120,10 @@ export const SETTING_ITEMS: SettingItem[] = [
     desc: '重新查看新手引导', keywords: ['引导', '新手', '教程', 'onboarding', '向导', '引导页'] },
   { id: 'advanced.autosave', section: 'advanced', group: '自动保存', label: '自动保存',
     desc: '停止输入后自动保存的延迟时间', keywords: ['自动保存', '保存', '防抖', 'autosave', '延迟', 'debounce'] },
+  { id: 'advanced.storage', section: 'advanced', group: '存储与迁移', label: '知识库读源',
+    desc: 'sqlite 数据库 / vault 仓库文件（实验）；以及旧数据导入入口', keywords: ['读源', '仓库', 'vault', 'sqlite', '去库化', '迁移', '导入旧数据', 'storage', '存储'] },
+  { id: 'advanced.workbench', section: 'advanced', group: '外壳布局', label: 'Workbench 布局',
+    desc: '实验性 VS Code 外壳（活动栏/侧栏/编辑器组/状态栏）；开启后编辑器模块文件树移到全局侧栏', keywords: ['workbench', '外壳', '布局', '侧栏', '编辑器组', '状态栏', 'vscode', '活动栏', 'shell', 'layout'] },
 
   // ===== 快捷键 =====
   { id: 'shortcuts.global', section: 'shortcuts', group: '全局', label: '全局快捷键',

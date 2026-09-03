@@ -59,6 +59,16 @@ export function EditorView() {
             className="accent-[var(--accent)]" />
           <span className="text-[13px] text-[var(--text-primary)]">显示行号</span>
         </label>
+        <label className="flex items-center gap-3 cursor-pointer mt-2.5">
+          <input type="checkbox" checked={s.markdownDim}
+            onChange={() => update('markdownDim', !s.markdownDim)}
+            className="accent-[var(--accent)]" />
+          <span className="text-[13px] text-[var(--text-primary)]">Markdown 标记淡化（光标行保留原始标记）</span>
+        </label>
+        <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+          编辑 .md 时光标所在行之外的格式标记（**、#、链接、[[双链]] 等）会淡化显示，
+          被包裹的内容以加粗/斜体/链接色呈现——写作时更接近阅读效果。
+        </p>
       </div>
     </div>
   )

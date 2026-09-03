@@ -152,8 +152,7 @@ function SettingsIconHandDrawn(props: IconProps) {
 }
 
 /** 插件：拼图块——圆角主体 + 顶部凸起 + 右侧凹槽 */
-function PluginIconHandDrawn(props: IconProps) {
-  return (
+function PluginIconHandDrawn(props: IconProps) {  return (
     <Svg {...props}>
       {/* 轮廓：四圆角主体，顶部中央凸出半圆，右侧中央内陷半圆 */}
       <path d="
@@ -174,6 +173,17 @@ function PluginIconHandDrawn(props: IconProps) {
       " />
       {/* 中心连接点：实心小圆点，呼应"接入/扩展"语义 */}
       <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    </Svg>
+  )
+}
+
+/** 编辑器：尖括号代码图标（VS Code 风格） */
+function EditorIconHandDrawn(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8.5 7.2 4.7 12l3.8 4.8" />
+      <path d="M15.5 7.2 19.3 12l-3.8 4.8" />
+      <path d="M13.6 5.8l-3.2 12.4" />
     </Svg>
   )
 }
@@ -201,6 +211,7 @@ const HAND_DRAWN: Record<IconModuleId, (props: IconProps) => React.ReactElement>
   user: UserIconHandDrawn,
   settings: SettingsIconHandDrawn,
   export: ExportIconHandDrawn,
+  editor: EditorIconHandDrawn,
 }
 
 export function BlogIcon(props: IconProps) { return <StyleAware moduleId="blog" Fallback={BlogIconHandDrawn} {...props} /> }
@@ -214,6 +225,7 @@ export function HelpIcon(props: IconProps) { return <StyleAware moduleId="help" 
 export function UserIcon(props: IconProps) { return <StyleAware moduleId="user" Fallback={UserIconHandDrawn} {...props} /> }
 export function SettingsIcon(props: IconProps) { return <StyleAware moduleId="settings" Fallback={SettingsIconHandDrawn} {...props} /> }
 export function PluginIcon(props: IconProps) { return <StyleAware moduleId="plugins" Fallback={PluginIconHandDrawn} {...props} /> }
+export function EditorIcon(props: IconProps) { return <StyleAware moduleId="editor" Fallback={EditorIconHandDrawn} {...props} /> }
 
 /** 任意包预览:设置→外观 的图标选择器用它渲染每个包的效果 */
 export function IconPreview({ moduleId, packId, size = 24, className }: { moduleId: IconModuleId; packId: string } & IconProps) {

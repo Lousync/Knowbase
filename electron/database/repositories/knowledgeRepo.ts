@@ -6,6 +6,12 @@ import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
 import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 import { buildUpdateSet } from '../../lib/safeUpdate'
 import { recordActivity } from '../../lib/habitLinkService'
+import {
+  vaultGetCategories, vaultGetPages, vaultGetPageById, vaultToggleStar,
+  vaultGetStarredPages, vaultGetTags, vaultSearchPages,
+  vaultGetBacklinks, vaultGetBacklinkContext,
+} from '../../lib/kbStore/knowledgeVaultRepo'
+import { getGraphIndex } from '../../lib/kbStore/graphIndex'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
@@ -149,9 +155,32 @@ function run(sql: string, params: unknown[] = []): void {
 }
 
 // ===== Category handlers =====
-export function registerKnowledgeHandlers(): void {
+
+// ---- 读写分工（.AGENT/docs/读写分工设计.md）----
+// vault 读源模式：读通道 + toggleStar 走仓库；其余全部友好拒绝，防止 SQLite 与 Vault 静默分叉
+const VAULT_ALLOWED = new Set([
+  'knowledge:getCategories', 'knowledge:getPages', 'knowledge:getPageById',
+  'knowledge:searchPages', 'knowledge:toggleStar', 'knowledge:getStarredPages', 'knowledge:getTags',
+  'knowledge:getBacklinks', 'knowledge:getBacklinkContext', 'knowledge:getGraph',
+])
+
+export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unknown): void {
+  const isVaultMode = (): boolean => getSettingValue?.('storageKnowledge') === 'vault'
+  /** vault 模式下非白名单通道统一拒绝 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function kHandle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ipcMain.handle(channel, (e: Electron.IpcMainInvokeEvent, ...args: any[]) => {
+      if (isVaultMode() && !VAULT_ALLOWED.has(channel)) {
+        throw new Error('仓库读源模式下该操作暂不支持：请在编辑器模块中编辑内容，或到 设置 → 通用 切回数据库读源')
+      }
+      return fn(e, ...args)
+    })
+  }
+
   // 获取所有分类
-  ipcMain.handle('knowledge:getCategories', () => {
+  kHandle('knowledge:getCategories', () => {
+    if (isVaultMode()) return vaultGetCategories()
     const rows = queryAll<CategoryRow>(
       'SELECT * FROM knowledge_categories ORDER BY sort_order, name'
     )
@@ -159,7 +188,7 @@ export function registerKnowledgeHandlers(): void {
   })
 
   // 创建分类
-  ipcMain.handle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: CategoryType }) => {
+  kHandle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: CategoryType }) => {
     const id = randomUUID()
     const ct = normalizeCategoryType(data.categoryType || 'folder')
     const parentId = data.parentId === undefined ? null : data.parentId
@@ -177,7 +206,7 @@ export function registerKnowledgeHandlers(): void {
   })
 
   // 更新分类（重命名/移动）— 72b2480 兼容逻辑：不引用 updated_at
-  ipcMain.handle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: CategoryType }) => {
+  kHandle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: CategoryType }) => {
     console.log(`[knowledge:updateCategory] id=${id} data=`, JSON.stringify(data))
 
     const current = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
@@ -214,7 +243,7 @@ export function registerKnowledgeHandlers(): void {
   })
 
   // 移动分类（上下排序）
-  ipcMain.handle('knowledge:moveCategory', (_e, id: string, direction: 'up' | 'down') => {
+  kHandle('knowledge:moveCategory', (_e, id: string, direction: 'up' | 'down') => {
     const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
     if (!cat) return
     const parentId = cat.parent_id
@@ -230,7 +259,7 @@ export function registerKnowledgeHandlers(): void {
   })
 
   // 删除分类 — 软删除（完整快照存入回收站，子树页面全删）
-  ipcMain.handle('knowledge:deleteCategory', (_e, id: string) => {
+  kHandle('knowledge:deleteCategory', (_e, id: string) => {
     const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
     if (!cat) return
 
@@ -318,7 +347,8 @@ export function registerKnowledgeHandlers(): void {
   // 列表瘦身:不含 content_md / content_html / annotation_md(大字段,编辑器按需经 getPageById 取全量)
 const PAGE_LIST_COLUMNS = 'id, title, category_id, sort_order, file_type, is_starred, attachment_id, created_at, updated_at'
 
-ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
+kHandle('knowledge:getPages', (_e, categoryId?: string | null) => {
+    if (isVaultMode()) return vaultGetPages(categoryId)
     let rows: PageRow[]
     if (categoryId) {
       rows = queryAll<PageRow>(
@@ -346,7 +376,8 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 获取单个页面
-  ipcMain.handle('knowledge:getPageById', (_e, id: string) => {
+  kHandle('knowledge:getPageById', (_e, id: string) => {
+    if (isVaultMode()) return vaultGetPageById(id)
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     if (rows.length === 0) return null
     const page = mapPage(rows[0])
@@ -360,7 +391,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 创建页面
-  ipcMain.handle('knowledge:createPage', (e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
+  kHandle('knowledge:createPage', (e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
     const id = randomUUID()
     const now = new Date()
     const nowIso = now.toISOString()
@@ -385,7 +416,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 更新页面
-  ipcMain.handle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
+  kHandle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
     if (data.categoryId !== undefined) assertPageContainer(data.categoryId ?? null)
     // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
     const { sets, params } = buildUpdateSet(
@@ -421,7 +452,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 移动页面（上下排序）
-  ipcMain.handle('knowledge:movePage', (_e, id: string, direction: 'up' | 'down') => {
+  kHandle('knowledge:movePage', (_e, id: string, direction: 'up' | 'down') => {
     const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])[0]
     if (!page) return
     const catId = page.category_id
@@ -439,7 +470,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 重排页面到指定索引（拖拽排序用）
-  ipcMain.handle('knowledge:reorderPage', (_e, id: string, targetIndex: number) => {
+  kHandle('knowledge:reorderPage', (_e, id: string, targetIndex: number) => {
     const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])[0]
     if (!page) return
     const catId = page.category_id
@@ -466,7 +497,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 删除页面（软删除 → 回收站）
-  ipcMain.handle('knowledge:deletePage', (_e, id: string) => {
+  kHandle('knowledge:deletePage', (_e, id: string) => {
     // 读取完整页面
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     if (rows.length === 0) return
@@ -521,7 +552,8 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 搜索页面（多关键词 AND + 命中摘录）
-  ipcMain.handle('knowledge:searchPages', (_e, q: string) => {
+  kHandle('knowledge:searchPages', (_e, q: string) => {
+    if (isVaultMode()) return vaultSearchPages(q)
     const terms = q.trim().split(/\s+/).filter(Boolean)
     if (terms.length === 0) return []
     // 每个词都须命中（标题或正文）
@@ -543,15 +575,17 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
     })
   })
 
-  // 收藏/取消收藏页面
-  ipcMain.handle('knowledge:toggleStar', (_e, id: string) => {
+  // 收藏/取消收藏页面（读写分工拍板的例外：vault 模式下走 frontmatter 重写）
+  kHandle('knowledge:toggleStar', (_e, id: string) => {
+    if (isVaultMode()) return vaultToggleStar(id)
     run('UPDATE knowledge_pages SET is_starred = CASE WHEN is_starred THEN 0 ELSE 1 END WHERE id = ?', [id])
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])
     return mapPage(rows[0])
   })
 
   // 获取收藏的页面
-  ipcMain.handle('knowledge:getStarredPages', () => {
+  kHandle('knowledge:getStarredPages', () => {
+    if (isVaultMode()) return vaultGetStarredPages()
     const rows = queryAll<PageRow>(
       `SELECT ${PAGE_LIST_COLUMNS} FROM knowledge_pages WHERE is_starred = 1 ORDER BY updated_at DESC`
     )
@@ -560,7 +594,8 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
 
   // ===== Links =====
   // 获取反向链接（哪些页面链接到了此页面）
-  ipcMain.handle('knowledge:getBacklinks', (_e, pageId: string) => {
+  kHandle('knowledge:getBacklinks', (_e, pageId: string) => {
+    if (isVaultMode()) return vaultGetBacklinks(pageId)
     const rows = queryAll<PageRow>(
       `SELECT p.* FROM knowledge_pages p
        INNER JOIN knowledge_links l ON l.source_page_id = p.id
@@ -572,7 +607,8 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 反链上下文摘录：定位源页中 [[标题]] 引用处，取前后各约 60 字符
-  ipcMain.handle('knowledge:getBacklinkContext', (_e, pageId: string) => {
+  kHandle('knowledge:getBacklinkContext', (_e, pageId: string) => {
+    if (isVaultMode()) return vaultGetBacklinkContext(pageId)
     const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [pageId])[0]
     if (!page) return []
     const needle = `[[${page.title}]]`.toLowerCase()
@@ -609,7 +645,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // ===== 手动关联（与自动 wiki 链接分表，双向展示）=====
-  ipcMain.handle('knowledge:getManualLinks', (_e, pageId: string) => {
+  kHandle('knowledge:getManualLinks', (_e, pageId: string) => {
     const rows = queryAll<PageRow>(
       `SELECT p.* FROM knowledge_pages p
        INNER JOIN knowledge_manual_links k
@@ -621,7 +657,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
     return rows.map(mapPage)
   })
 
-  ipcMain.handle('knowledge:addManualLink', (_e, pageId: string, targetId: string) => {
+  kHandle('knowledge:addManualLink', (_e, pageId: string, targetId: string) => {
     if (!pageId || !targetId || pageId === targetId) return { ok: false }
     try {
       run(
@@ -635,7 +671,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
     }
   })
 
-  ipcMain.handle('knowledge:removeManualLink', (_e, a: string, b: string) => {
+  kHandle('knowledge:removeManualLink', (_e, a: string, b: string) => {
     run(
       'DELETE FROM knowledge_manual_links WHERE (page_id = ? AND target_id = ?) OR (page_id = ? AND target_id = ?)',
       [a, b, b, a]
@@ -644,7 +680,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 更新页面链接（保存时调用，重建所有链接关系）
-  ipcMain.handle('knowledge:updateLinks', (_e, pageId: string, linkedTitles: string[]) => {
+  kHandle('knowledge:updateLinks', (_e, pageId: string, linkedTitles: string[]) => {
     // 删除此页面的旧链接
     run('DELETE FROM knowledge_links WHERE source_page_id = ?', [pageId])
     // 根据标题查找目标页面并建立链接
@@ -662,26 +698,32 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // ===== Tags =====
-  ipcMain.handle('knowledge:getTags', () => {
+  kHandle('knowledge:getTags', () => {
+    if (isVaultMode()) return vaultGetTags()
     return queryAll<{ id: string; name: string; color: string }>(
       'SELECT * FROM knowledge_tags ORDER BY name'
     )
   })
 
-  ipcMain.handle('knowledge:createTag', (_e, name: string, color?: string) => {
+  // ===== Graph（R4-G0：GraphIndex graph.json；vault 读源专属） =====
+  kHandle('knowledge:getGraph', () => {
+    return getGraphIndex()
+  })
+
+  kHandle('knowledge:createTag', (_e, name: string, color?: string) => {
     const id = randomUUID()
     run('INSERT INTO knowledge_tags (id, name, color) VALUES (?, ?, ?)', [id, name, color || '#6b7280'])
     const rows = queryAll<{ id: string; name: string; color: string }>('SELECT * FROM knowledge_tags WHERE id = ?', [id])
     return rows[0]
   })
 
-  ipcMain.handle('knowledge:deleteTag', (_e, id: string) => {
+  kHandle('knowledge:deleteTag', (_e, id: string) => {
     run('DELETE FROM knowledge_tags WHERE id = ?', [id])
   })
 
   // ===== Duplicate =====
   // 深拷贝页面
-  ipcMain.handle('knowledge:duplicatePage', (_e, data: { pageId: string; targetCategoryId?: string | null }) => {
+  kHandle('knowledge:duplicatePage', (_e, data: { pageId: string; targetCategoryId?: string | null }) => {
     const rows = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [data.pageId])
     if (rows.length === 0) return null
     const src = rows[0]
@@ -703,7 +745,7 @@ ipcMain.handle('knowledge:getPages', (_e, categoryId?: string | null) => {
   })
 
   // 深拷贝分类（含子树和页面）
-  ipcMain.handle('knowledge:duplicateCategory', (_e, data: { categoryId: string; targetParentId?: string | null }) => {
+  kHandle('knowledge:duplicateCategory', (_e, data: { categoryId: string; targetParentId?: string | null }) => {
     const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [data.categoryId])[0]
     if (!cat) return null
 

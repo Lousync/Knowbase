@@ -23,6 +23,8 @@ export interface Activity {
   date: string
   /** 来源实体 ID（博文/页面），用于精确反查该实体的现值；可省略（按日期聚合的场景） */
   refId?: string
+  /** 指标现值覆盖：去库化模块（如博客 vault）源表已不在 sqlite，由上报方直接给出反查值（如博客字数） */
+  value?: number
 }
 
 export interface AutoCheckin {
@@ -53,6 +55,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** 源表反查：返回当前指标现值；无法确定时返回 null（本次放弃判定） */
 function computeMetric(a: Activity): number | null {
+  // 去库化模块上报方自带指标值（如博客 vault 字数）——直接使用，跳过 sqlite 源表反查
+  if (a.value !== undefined && a.value !== null) return a.value
   const db = getDatabase()
   switch (a.source) {
     // 博客：该篇日志去空白后的字符数（与 word_count 维护口径一致）

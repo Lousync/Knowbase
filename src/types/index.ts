@@ -2,6 +2,7 @@
 
 import type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult } from '../lib/translateTypes'
 import type { WordbookBook, WordFeedback, WordbookStatus, QuestionType, WordbookItemDto, WordbookExchangeDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto, BookWordRowDto, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto } from '../lib/wordbookTypes'
+import type { GraphIndexData, GraphViewConfig } from '../lib/graphTypes'
 
 export type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult }
 export type { WordbookBook, WordFeedback, WordbookStatus, QuestionType, WordbookItemDto, WordbookExchangeDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto, BookWordRowDto, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto }
@@ -16,7 +17,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor'
 
 // toolbox
 export interface ToolboxScript {
@@ -307,6 +308,8 @@ export interface KnowledgePage {
   backlinks?: KnowledgePage[]
   /** 搜索命中摘录（仅 searchPages 结果携带） */
   excerpt?: string
+  /** vault 读源模式：仓库内相对路径（「在编辑器中打开」跳转用，仅 vault 模式携带） */
+  path?: string
 }
 /** 反链条目（带引用上下文摘录） */
 export interface KnowledgeBacklinkItem {
@@ -547,9 +550,11 @@ export interface McpTestResult {
 // ===== Skill 提示词资产（M3） =====
 
 export interface SkillInfo {
+  /** 来源：插件贡献 / 独立安装（设置页拖入 zip） */
+  source: 'plugin' | 'standalone'
   pluginId: string
   pluginName: string
-  /** 注册表内名称 skill.<pluginId>.<skillId> */
+  /** 注册表内名称 skill.<pluginId>.<skillId> 或 skill.standalone.<id> */
   registryName: string
   id: string
   title: string
@@ -557,6 +562,14 @@ export interface SkillInfo {
   variables: string[]
   /** 声明依赖的工具（展示用途） */
   tools: string[]
+  /** 用户是否在设置页停用了该 Skill（停用后 AI 工具列表不可见，文件保留） */
+  disabled: boolean
+}
+
+export interface SkillInstallResult {
+  success: boolean
+  message?: string
+  skill?: SkillInfo
 }
 
 // ===== 模型网关 + AI 对话 =====
@@ -678,6 +691,61 @@ export interface AgentChatResult {
 export type PdfOpResult = { ok: true; data: Uint8Array } | { ok: false; error: string; cancelled?: boolean }
 export type PdfExportResult = { ok: true; path: string } | { ok: false; error?: string; cancelled?: boolean }
 
+// 设备传输（lanShare，工具箱）
+export interface LanShareStatus {
+  running: boolean
+  port: number
+  urls: string[]
+  remainingMs: number
+  startedAt: number
+}
+export interface LanShareInboxFile {
+  name: string
+  size: number
+  path: string
+  receivedAt: number
+}
+export interface LanShareOutboxFile {
+  name: string
+  size: number
+  path: string
+  downloaded: boolean
+}
+
+// 编辑器工作区（Vault 仓库）
+export interface WorkspaceEntry {
+  name: string
+  type: 'file' | 'dir'
+  size: number
+  mtime: number
+}
+export interface WorkspaceReadResult {
+  content: string
+  binary: boolean
+  size: number
+  editable: boolean
+  truncated: boolean
+  /** 磁盘 mtime（保存冲突检测基线） */
+  mtimeMs: number
+}
+/** 写文件结果：conflict=true 表示磁盘已被外部修改（或已删除），需用户决策 */
+export interface WorkspaceWriteResult {
+  ok: boolean
+  error?: string
+  conflict?: boolean
+  diskMtimeMs?: number
+  diskSize?: number
+  missing?: boolean
+  mtimeMs?: number
+  size?: number
+}
+export interface WorkspaceRecent {
+  rootId: string
+  name: string
+  path: string
+  updatedAt: string
+}
+
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
   copyImage: (src: { path?: string; dataUrl?: string }) => Promise<boolean>
@@ -737,6 +805,9 @@ export interface ElectronAPI {
   removeKnowledgeManualLink: (a: string, b: string) => Promise<{ ok: boolean }>
   updateKnowledgeLinks: (pageId: string, linkedTitles: string[]) => Promise<void>
   getKnowledgeTags: () => Promise<KnowledgeTag[]>
+  getKnowledgeGraph: () => Promise<GraphIndexData>
+  getGraphViewConfig: () => Promise<GraphViewConfig>
+  updateGraphViewConfig: (patch: Partial<GraphViewConfig>) => Promise<GraphViewConfig>
   createKnowledgeTag: (n: string, c?: string) => Promise<KnowledgeTag>
   deleteKnowledgeTag: (id: string) => Promise<void>
   toggleKnowledgeStar: (id: string) => Promise<KnowledgePage>
@@ -842,6 +913,35 @@ export interface ElectronAPI {
   // attachments
   uploadAttachments: (data: { ownerType?: string; ownerId?: string; files: { name?: string; mime?: string; dataUrl?: string; base64?: string; thumbDataUrl?: string }[] }) => Promise<AttachmentMeta[]>
   uploadAttachmentFromPath: (data: { ownerType?: string; ownerId?: string; filePath: string }) => Promise<AttachmentMeta | null>
+  // device transfer (lanShare, toolbox)
+  lanShareStart: (opts?: { port?: number; autoStopMinutes?: number }) => Promise<LanShareStatus>
+  lanShareStop: () => Promise<{ ok: boolean }>
+  lanShareStatus: () => Promise<LanShareStatus>
+  lanShareLanAddresses: () => Promise<string[]>
+  lanShareQr: (text: string) => Promise<string>
+  lanShareListInbox: () => Promise<LanShareInboxFile[]>
+  lanShareListOutbox: () => Promise<LanShareOutboxFile[]>
+  lanShareRemoveInbox: (name: string) => Promise<{ ok: boolean }>
+  lanShareRemoveOutbox: (name: string) => Promise<{ ok: boolean }>
+  lanShareAddToOutbox: (data: { path: string }) => Promise<{ ok: boolean; name: string }>
+  lanShareClearOutbox: () => Promise<{ ok: boolean }>
+  // 编辑器工作区（Vault 仓库）：文件服务
+  workspaceOpenDir: () => Promise<({ rootId: string; name: string; path: string } & { error?: string }) | null>
+  workspaceListDir: (rootId: string, relPath?: string) => Promise<{ entries?: WorkspaceEntry[]; error?: string }>
+  workspaceReadFile: (rootId: string, relPath: string) => Promise<WorkspaceReadResult & { error?: string }>
+  workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => Promise<WorkspaceWriteResult>
+  workspaceCreateFile: (rootId: string, relPath: string, content?: string) => Promise<{ ok: boolean; error?: string }>
+  workspaceMkdir: (rootId: string, relPath: string) => Promise<{ ok: boolean; error?: string }>
+  workspaceRename: (rootId: string, oldRel: string, newRel: string) => Promise<{ ok: boolean; error?: string }>
+  workspaceTrash: (rootId: string, relPath: string) => Promise<{ ok: boolean; error?: string }>
+  workspaceStat: (rootId: string, relPath: string) => Promise<{ size: number; mtime: number; isDir: boolean } & { error?: string }>
+  workspaceGetRecent: () => Promise<WorkspaceRecent[]>
+  workspaceOpenById: (rootId: string) => Promise<{ rootId: string; name: string; path: string } & { error?: string }>
+  workspaceGetCurrent: () => Promise<{ rootId: string; name: string; path: string } | null>
+  workspaceForget: (rootId: string) => Promise<{ ok: boolean }>
+  vaultLegacySummary: () => Promise<{ hasLegacy: boolean; categories: number; pages: number; pagesEmpty: number; blogEntries: number; attachments: number; attachmentBytes: number; error?: string }>
+  vaultImportLegacy: (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => Promise<{ started: boolean; error?: string }>
+  onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => () => void
   getAttachmentsByOwner: (ownerType: string, ownerId: string) => Promise<AttachmentMeta[]>
   deleteAttachment: (id: string) => Promise<void>
   getAttachmentPath: (id: string) => Promise<string | null>
@@ -850,6 +950,11 @@ export interface ElectronAPI {
   cleanupOrphanAttachments: () => Promise<{ removed: number }>
   exportBackupToZip: (zipPath: string, moduleIds?: string[]) => Promise<{ filePath: string; fileCount: number; totalSize: number }>
   importBackupPackage: (srcPath: string) => Promise<{ success: boolean; imported: number; skipped: number; attachments: number; message: string }>
+  vaultBackupGetState: () => Promise<{ ok: boolean; root?: string; hasBackupDb?: boolean; dbBytes?: number; message?: string }>
+  vaultBackupExportToZip: (zipPath: string) => Promise<{ ok: boolean; fileCount: number; dbBytes: number; zipPath: string }>
+  vaultBackupPickArchive: () => Promise<string | null>
+  vaultBackupRestoreArchive: (archivePath: string) => Promise<{ ok: boolean; target?: string; written?: number; dbFound?: boolean; message?: string }>
+  vaultBackupRestoreDb: () => Promise<{ ok: boolean; needRestart: boolean }>
   // weight tracker
   getWeightRecords: () => Promise<WeightRecord[]>
   getWeightSeries: () => Promise<string[]>
@@ -972,6 +1077,10 @@ export interface ElectronAPI {
   // Skills
   aiToolsListSkills: () => Promise<{ skills: SkillInfo[] }>
   aiToolsCopySkillPrompt: (pluginId: string, skillId: string) => Promise<boolean>
+  aiToolsInstallSkill: (data: Uint8Array, fileName?: string) => Promise<SkillInstallResult>
+  aiToolsInstallSkillFromFile: () => Promise<SkillInstallResult>
+  aiToolsUninstallSkill: (id: string) => Promise<SkillInstallResult>
+  aiToolsToggleSkill: (registryName: string, enabled: boolean) => Promise<SkillInstallResult & { disabled?: boolean }>
   // Model gateway + agent
   llmListProviders: () => Promise<{ providers: LlmProviderInfo[]; defaultChatModel: string }>
   llmSaveProvider: (draft: LlmProviderDraft) => Promise<{ ok: boolean; id?: string; error?: string }>

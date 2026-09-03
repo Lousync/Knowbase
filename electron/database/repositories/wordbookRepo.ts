@@ -1,10 +1,18 @@
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
+import { isVaultDataSource } from '../dataSourceMode'
+import * as V from '../../lib/kbStore/wordbookVaultRepo'
 
-/** 生词本（迁移 051）：词条 + SRS 状态 + 每日学习量 */
+/**
+ * 生词本（迁移 051）：词条 + SRS 状态 + 每日学习量。
+ * 去库化 P2：storageData=vault 时读写 .knowbase/modules/wordbook/*.json；
+ * 首次访问自动把 sqlite 存量一次性搬迁到 json（之后以 json 为权威源）。
+ */
 
 export type WordbookStatus = 'learning' | 'mastered'
-export type WordFeedback = 'known' | 'fuzzy' | 'unknown'
+export type WordbookFeedback = 'known' | 'fuzzy' | 'unknown'
+/** 兼容别名（wordbookService 及历史调用方按此名 import） */
+export type WordFeedback = WordbookFeedback
 
 export interface WordbookEntryRow {
   word: string
@@ -37,12 +45,33 @@ function run(sql: string, params: unknown[] = []): void {
   saveToDisk()
 }
 
+/** vault 首次访问时把 sqlite 存量复制到 json（幂等：json 已有数据即跳过） */
+function ensureVaultSeeded(): void {
+  if (V.vaultWordbookHasData()) return
+  const entries = queryAll<WordbookEntryRow>('SELECT * FROM wordbook_entries')
+  const daily = queryAll<{ date: string; new_words: number; reviewed: number }>('SELECT date, new_words, reviewed FROM wordbook_daily')
+  const groups = queryAll<{ id: string; name: string; created_at: string }>('SELECT id, name, created_at FROM wordbook_groups')
+  const words = queryAll<{ group_id: string; word: string }>('SELECT group_id, word FROM wordbook_group_words')
+  const byGroup = new Map<string, string[]>()
+  for (const w of words) {
+    if (!byGroup.has(w.group_id)) byGroup.set(w.group_id, [])
+    byGroup.get(w.group_id)!.push(w.word)
+  }
+  V.vaultWordbookSeed(
+    entries,
+    daily,
+    groups.map((g) => ({ id: g.id, name: g.name, created_at: g.created_at, words: byGroup.get(g.id) ?? [] })),
+  )
+}
+
 export function getWordbookEntry(word: string): WordbookEntryRow | null {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultGetWordbookEntry(word) }
   const rows = queryAll<WordbookEntryRow>('SELECT * FROM wordbook_entries WHERE word = ?', [word])
   return rows.length > 0 ? rows[0] : null
 }
 
 export function listWordbookEntries(status?: WordbookStatus): WordbookEntryRow[] {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultListWordbookEntries(status) }
   if (status) {
     return queryAll<WordbookEntryRow>('SELECT * FROM wordbook_entries WHERE status = ? ORDER BY due_at ASC, word ASC', [status])
   }
@@ -50,6 +79,7 @@ export function listWordbookEntries(status?: WordbookStatus): WordbookEntryRow[]
 }
 
 export function countWordbookEntries(status: WordbookStatus, sourcePrefix?: string): number {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultCountWordbookEntries(status, sourcePrefix) }
   const rows = sourcePrefix
     ? queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM wordbook_entries WHERE status = ? AND source LIKE ?', [status, sourcePrefix + '%'])
     : queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM wordbook_entries WHERE status = ?', [status])
@@ -57,6 +87,7 @@ export function countWordbookEntries(status: WordbookStatus, sourcePrefix?: stri
 }
 
 export function upsertWordbookEntry(word: string, source: string): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultUpsertWordbookEntry(word, source) }
   run(
     `INSERT INTO wordbook_entries (word, source) VALUES (?, ?)
      ON CONFLICT(word) DO UPDATE SET
@@ -69,10 +100,12 @@ export function upsertWordbookEntry(word: string, source: string): void {
 }
 
 export function deleteWordbookEntry(word: string): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultDeleteWordbookEntry(word) }
   run('DELETE FROM wordbook_entries WHERE word = ?', [word])
 }
 
 export function setWordbookMastered(word: string, mastered: boolean): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultSetWordbookMastered(word, mastered) }
   if (mastered) {
     // 斩词：移出复习队列，进度保留
     run("UPDATE wordbook_entries SET status = 'mastered', due_at = '9999-12-31' WHERE word = ?", [word])
@@ -84,7 +117,8 @@ export function setWordbookMastered(word: string, mastered: boolean): void {
 
 /** 应用一次记忆反馈并推进 SRS（simplified SM-2）。
  *  调用方保证词条已存在：新词先 upsertWordbookEntry 再调本函数。 */
-export function applyWordFeedback(word: string, feedback: WordFeedback): WordbookEntryRow | null {
+export function applyWordFeedback(word: string, feedback: WordbookFeedback): WordbookEntryRow | null {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultApplyWordFeedback(word, feedback) }
   const entry = getWordbookEntry(word)
   const isNew = !entry?.first_answer_at
 
@@ -143,11 +177,13 @@ export function todayKey(): string {
 }
 
 export function getDailyStat(date: string): { new_words: number; reviewed: number } {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultGetDailyStat(date) }
   const rows = queryAll<{ new_words: number; reviewed: number }>('SELECT new_words, reviewed FROM wordbook_daily WHERE date = ?', [date])
   return rows[0] ?? { new_words: 0, reviewed: 0 }
 }
 
 export function bumpDailyStat(date: string, isNew: boolean): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultBumpDailyStat(date, isNew) }
   run(
     `INSERT INTO wordbook_daily (date, new_words, reviewed) VALUES (?, ?, ?)
      ON CONFLICT(date) DO UPDATE SET
@@ -159,6 +195,7 @@ export function bumpDailyStat(date: string, isNew: boolean): void {
 
 /** 最近 N 天每日学习量（含无学习日的 0，用于连续天数与趋势） */
 export function listDailyStats(days: number): { date: string; new_words: number; reviewed: number }[] {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultListDailyStats(days) }
   return queryAll<{ date: string; new_words: number; reviewed: number }>(
     'SELECT * FROM wordbook_daily ORDER BY date DESC LIMIT ?', [days]
   )
@@ -173,6 +210,7 @@ export interface WordbookGroupRow {
 }
 
 export function listWordbookGroups(): (WordbookGroupRow & { wordCount: number })[] {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultListWordbookGroups() }
   const groups = queryAll<WordbookGroupRow>('SELECT * FROM wordbook_groups ORDER BY created_at DESC')
   const counts = queryAll<{ group_id: string; n: number }>(
     'SELECT group_id, COUNT(*) AS n FROM wordbook_group_words GROUP BY group_id'
@@ -182,35 +220,42 @@ export function listWordbookGroups(): (WordbookGroupRow & { wordCount: number })
 }
 
 export function createWordbookGroup(name: string): WordbookGroupRow {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultCreateWordbookGroup(name) }
   const id = randomUUID()
   run('INSERT INTO wordbook_groups (id, name) VALUES (?, ?)', [id, name])
   return queryAll<WordbookGroupRow>('SELECT * FROM wordbook_groups WHERE id = ?', [id])[0]
 }
 
 export function renameWordbookGroup(id: string, name: string): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultRenameWordbookGroup(id, name) }
   run('UPDATE wordbook_groups SET name = ? WHERE id = ?', [name, id])
 }
 
 export function deleteWordbookGroup(id: string): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultDeleteWordbookGroup(id) }
   // 显式先删成员：sql.js 运行时外键级联不可靠（与 agentSessionRepo 同口径）
   run('DELETE FROM wordbook_group_words WHERE group_id = ?', [id])
   run('DELETE FROM wordbook_groups WHERE id = ?', [id])
 }
 
 export function addWordToGroup(groupId: string, word: string): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultAddWordToGroup(groupId, word) }
   run('INSERT OR IGNORE INTO wordbook_group_words (group_id, word) VALUES (?, ?)', [groupId, word])
 }
 
 export function removeWordFromGroup(groupId: string, word: string): void {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultRemoveWordFromGroup(groupId, word) }
   run('DELETE FROM wordbook_group_words WHERE group_id = ? AND word = ?', [groupId, word])
 }
 
 export function listGroupWords(groupId: string): string[] {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultListGroupWords(groupId) }
   return queryAll<{ word: string }>('SELECT word FROM wordbook_group_words WHERE group_id = ? ORDER BY word', [groupId])
     .map(r => r.word)
 }
 
 export function getWordbookGroup(id: string): WordbookGroupRow | null {
+  if (isVaultDataSource()) { ensureVaultSeeded(); return V.vaultGetWordbookGroup(id) }
   const rows = queryAll<WordbookGroupRow>('SELECT * FROM wordbook_groups WHERE id = ?', [id])
   return rows.length > 0 ? rows[0] : null
 }

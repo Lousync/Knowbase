@@ -76,7 +76,13 @@ ipcMain.handle('import:previewUserFromDb', async (_e, filePath: string) => {
   }
 })
 
-export function registerImportHandlers(): void {
+export function registerImportHandlers(getSettingValue?: (key: string) => unknown): void {
+  // 读写分工（.AGENT/docs/读写分工设计.md）：vault 读源模式下导入写知识库 = 双源分叉，统一拒绝
+  const assertSqliteWrite = (): void => {
+    if (getSettingValue?.('storageKnowledge') === 'vault') {
+      throw new Error('仓库读源模式下暂不支持导入：请在编辑器模块新建知识页，或到 设置 → 高级 → 知识库读源 切回数据库')
+    }
+  }
   // ===== 导入文件对话框 =====
   ipcMain.handle('import:showOpenDialog', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -108,6 +114,7 @@ export function registerImportHandlers(): void {
 
   // ===== PDF import =====
   ipcMain.handle('import:importPdf', async (_e, base64: string, fileName: string) => {
+    assertSqliteWrite()
     try {
       const id = randomUUID()
       const pdfFileName = `${id}.pdf`
@@ -136,6 +143,7 @@ export function registerImportHandlers(): void {
 
   // ===== Generic binary import (XMind etc., drag-drop) =====
   ipcMain.handle('import:importBinary', async (_e, base64: string, fileName: string, fileType: string) => {
+    assertSqliteWrite()
     try {
       const id = randomUUID()
       const ext = fileType.toLowerCase()
@@ -163,6 +171,7 @@ export function registerImportHandlers(): void {
 
   // ===== PDF import from file path (dialog) =====
   ipcMain.handle('import:importPdfFile', async (_e, filePath: string) => {
+    assertSqliteWrite()
     try {
       const id = randomUUID()
       const pdfFileName = `${id}.pdf`
@@ -189,6 +198,7 @@ export function registerImportHandlers(): void {
 
   // ===== Generic binary file import (XMind etc.) =====
   ipcMain.handle('import:importBinaryFile', async (_e, filePath: string, fileType: string) => {
+    assertSqliteWrite()
     try {
       const ext = fileType.toLowerCase()
       const id = randomUUID()
@@ -310,6 +320,7 @@ export function registerImportHandlers(): void {
   }
 
   ipcMain.handle('import:importFolder', async (_e, folderPath: string, parentCategoryId: string | null) => {
+    assertSqliteWrite()
     try {
       return importFolderRecursive(folderPath, parentCategoryId)
     } catch (e: any) {
@@ -339,6 +350,7 @@ export function registerImportHandlers(): void {
 
   // ===== All-or-nothing db file replacement =====
   ipcMain.handle('import:importDb', async (_e, srcPath: string) => {
+    assertSqliteWrite()
     try {
       // 预检:目标必须是可正常打开的合法 SQLite 库,避免用损坏/伪造文件覆盖唯一数据库
       const buffer = readFileSync(srcPath)
@@ -365,10 +377,14 @@ export function registerImportHandlers(): void {
     }
   })
 
-  ipcMain.handle('import:executeImport', (_e, data: any) => executeImportData(data))
+  ipcMain.handle('import:executeImport', (_e, data: any) => {
+    assertSqliteWrite()
+    return executeImportData(data)
+  })
 }
 
-export function executeImportData(data: any): { success: boolean; imported: number; skipped: number; message: string } {
+export function executeImportData(data: any): {
+  success: boolean; imported: number; skipped: number; message: string } {
   const db = getDatabase()
   let imported = 0, skipped = 0
   // 事务包裹:任何一条插入失败即整体回滚,避免"半更新"状态被 saveToDisk 固化

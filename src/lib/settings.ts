@@ -108,6 +108,7 @@ export const SETTINGS = {
   showLineNumbers:   { default: true,         desc: '编辑器显示行号' },
   editorFontSize:    { default: 13,           desc: '编辑器字号' },
   zoom:              { default: 1.0,          desc: '界面缩放比例' },
+  markdownDim:       { default: true,         desc: 'Markdown 标记淡化（弱化版所见即所得，光标行保留原始标记）' },
 
   // ---- 导出 ----
   exportEncoding:    { default: 'utf-8',      desc: '导出文件编码' },
@@ -175,6 +176,7 @@ export const SETTINGS = {
   checkinReminderTime:    { default: '20:00', desc: '打卡提醒时间（HH:mm）' },
 
   // ---- 新手引导 ----
+  lanShareAutoStopMinutes: { default: 15, desc: '设备传输自动关闭分钟数（无连接超时）' },
   onboardingDone: { default: false, desc: '已完成新手引导' },
 
   // ---- 彩蛋 ----
@@ -182,6 +184,7 @@ export const SETTINGS = {
 
   // ---- AI 工具 ----
   aiToolMonthlyLimit: { default: 0, desc: 'AI 工具月度调用上限（0=不限）' },
+  aiSkillDisabled: { default: '[]', desc: '停用的 Skill 注册名列表(JSON 数组,设置 → AI 工具 → Skill 页切换)' },
 
   // ---- 模型网关 ----
   modelProviders:      { default: '',   desc: 'LLM 供应商列表（加密 JSON 容器，渲染层不可解）' },
@@ -204,6 +207,14 @@ export const SETTINGS = {
 
   // ---- 错题本形态 ----
   quizbookMode: { default: 'plugin', desc: '错题本形态:plugin 插件版(默认,C 级模块插件) / builtin 内置版(回退)' },
+
+  // ---- 存储（去库化：文件为主存储，sqlite 仅过渡索引） ----
+  storageKnowledge: { default: 'vault', desc: '知识库数据形态: vault=仓库文件(默认,页面.md+索引.json,只读导航+编辑器编辑) / sqlite=数据库(过渡期,待迁后删除)' },
+  storageBlog: { default: 'sqlite', desc: '博客数据形态: sqlite=数据库(默认,当前形态) / vault=仓库文件(blog/*.md+frontmatter,灰度验证中)' },
+  storageData: { default: 'sqlite', desc: '结构化模块数据（书签/打卡/体重/习惯等）: sqlite=数据库(默认) / vault=.knowbase/modules/*.json(灰度验证中)' },
+
+  // ---- 外壳（Workbench 灰度，R1-W1） ----
+  uiWorkbench: { default: false, desc: '启用 Workbench 布局（实验：活动栏/侧栏/编辑器组/状态栏，对标 VS Code；默认旧布局）' },
 
   // ---- 模型标记 ----
   aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },

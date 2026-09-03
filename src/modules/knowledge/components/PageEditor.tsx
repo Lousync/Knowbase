@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal, ListChecks } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal, ListChecks, SquarePen } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { QuizMode } from '../../../components/shared/QuizMode'
 import { extractQuizzes } from '../../../components/shared/QuizParser'
@@ -37,9 +37,12 @@ interface Props {
   onClearDirty?: () => void
   /** 请求进入沉浸阅读模式（由父级切换布局） */
   onRequestReading?: () => void
+  /** 仓库读源模式：显示「在编辑器模块中打开」跳转（读写分工） */
+  vaultMode?: boolean
+  onOpenInEditor?: () => void
 }
 
-export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onTagsChange, onMarkDirty, onClearDirty, onRequestReading }: Props) {
+export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onDeleted, onNavigate, onUpdate, onTitleChange, onFileTypeChange, onContentChange, onTagsChange, onMarkDirty, onClearDirty, onRequestReading, vaultMode = false, onOpenInEditor }: Props) {
   const { s } = useSettings()
   const [page, setPage] = useState<KnowledgePage | null>(null)
   const [title, setTitle] = useState('')
@@ -89,7 +92,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     setToolbarSlot(document.getElementById('editor-toolbar-slot'))
   }, [])
   const MAX_TAGS = 5
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>()
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const contentRef = useRef(content)
   const titleRef = useRef(title)
   const pageRef = useRef(page)
@@ -106,6 +109,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const showLangMenuRef = useRef(showLangMenu)
   const isCodeFileRef = useRef(false)
   const isPdfFileRef = useRef(false)
+  const vaultModeRef = useRef(vaultMode)
 
   const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt' && fileType !== 'pdf' && fileType !== 'xmind'
   const isPdfFile = fileType === 'pdf' || fileType === 'xmind'
@@ -121,6 +125,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   useEffect(() => { showLangMenuRef.current = showLangMenu }, [showLangMenu])
   useEffect(() => { isCodeFileRef.current = isCodeFile }, [isCodeFile])
   useEffect(() => { isPdfFileRef.current = isPdfFile }, [isPdfFile])
+  useEffect(() => { vaultModeRef.current = vaultMode }, [vaultMode])
 
   const [attachmentsPath, setAttachmentsPath] = useState('')
   const [pdfBase64, setPdfBase64] = useState('')
@@ -205,6 +210,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
   const doSave = useCallback(async (t: string, c: string) => {
     if (!pageRef.current) return
+    if (vaultMode) return  // 仓库文件模式：知识库只读导航，保存统一在编辑器模块（防任何进入编辑态的漏网写入）
     try {
       // 双链解析范围：正文 + 注解层
       const links = parseWikiLinks(c + '\n' + savedAnnotationRef.current)
@@ -220,6 +226,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
   // 注解独立防抖保存（不触碰 content 的脏状态机）
   const saveAnnotation = useCallback(async (id: string, value: string) => {
+    if (vaultMode) return  // 仓库文件模式：注解随页面文件统一在编辑器模块维护
     try {
       await updateKnowledgePage(id, { annotationMd: value })
       savedAnnotationRef.current = value
@@ -330,6 +337,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       // Ctrl+/ — toggle preview (md/txt only)
       if (e.ctrlKey && e.key === '/') {
         if (isCodeFileRef.current || isPdfFileRef.current) return
+        if (vaultModeRef.current) return  // 仓库文件模式：固定阅读视图，编辑切到编辑器模块
         e.preventDefault()
         setPreview(v => !v)
         return
@@ -420,7 +428,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
     monaco.languages.registerCompletionItemProvider('markdown', {
       triggerCharacters: ['['],
-      provideCompletionItems(model, position) {
+      provideCompletionItems(model: Monaco.editor.ITextModel, position: Monaco.Position) {
         const textUntilPosition = model.getValueInRange({
           startLineNumber: position.lineNumber,
           startColumn: 1,
@@ -502,6 +510,10 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
   const handleDelete = async () => {
     if (!page) return
+    if (vaultMode) {
+      showToast({ type: 'warning', message: '仓库文件模式：删除请在编辑器模块操作（将移入回收站）' })
+      return
+    }
     if (skipDeleteConfirm) {
       onDeleted()
     } else {
@@ -519,6 +531,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   }
 
   const handleAddTag = async () => {
+    if (vaultMode) { showToast({ type: 'warning', message: '仓库文件模式：标签请在编辑器模块的 frontmatter 中维护' }); setShowTagInput(false); return }
     const name = newTagName.trim()
     if (!name) { setShowTagInput(false); return }
     if (entryTags.length >= MAX_TAGS) { setShowTagInput(false); setNewTagName(''); return }
@@ -537,6 +550,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   }
 
   const handleRemoveTag = (tagId: string) => {
+    if (vaultMode) { showToast({ type: 'warning', message: '仓库文件模式：标签请在编辑器模块的 frontmatter 中维护' }); return }
     setEntryTags(prev => prev.filter(t => t.id !== tagId))
     onTagsChange?.()
   }
@@ -584,12 +598,21 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       return true
     }
     // 0 匹配 → 弹应用内确认对话框,确认后建页(不能用 window.confirm,会破坏键盘焦点)
+    // vault 模式：阅读器无建页写通道，引导去编辑器「新建知识页」
+    if (vaultMode) {
+      showToast({ type: 'warning', message: `未找到「${title}」— 请到编辑器模块「新建知识页」创建` })
+      return true
+    }
     setWikiCreateTitle(title)
     return true
   }
 
   const createPageFromWikiLink = (title: string) => {
     setWikiCreateTitle(null)
+    if (vaultMode) {
+      showToast({ type: 'warning', message: `仓库文件模式：新建「${title}」请到编辑器模块「新建知识页」` })
+      return
+    }
     void (async () => {
       try {
         const created = await createKnowledgePage({
@@ -613,7 +636,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       {/* Toolbar — portaled into the tab bar row (merged layer 1 + 2) */}
       {toolbarSlot && createPortal(
         <>
-          {!isPdfFile && (
+          {!isPdfFile && !vaultMode && (
             <div className="relative">
               <button onClick={() => setShowLangMenu(v => !v)}
                 className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors"
@@ -654,9 +677,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               <ImagePlus size={15} />
             </button>
           )}
-          {!isCodeFile && !isPdfFile && (
+          {!isCodeFile && !isPdfFile && !vaultMode && (
             <button onClick={() => setPreview(v => !v)} className={`p-1.5 rounded text-xs ${preview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`} title={preview ? '切换到编辑 (Ctrl+/)' : '切换到预览 (Ctrl+/)'}>
               {preview ? <Edit3 size={15} /> : <Eye size={15} />}
+            </button>
+          )}
+          {vaultMode && onOpenInEditor && (
+            <button onClick={onOpenInEditor} className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="在编辑器模块中打开（读写分工：编辑统一在编辑器进行）">
+              <SquarePen size={15} />
             </button>
           )}
           {/* 更多操作:收藏 / 关联 / 沉浸阅读 / 删除 */}
@@ -674,10 +702,12 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                   <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? '#c5a332' : 'none'} />
                   {page.isStarred ? '取消收藏' : '收藏页面'}
                 </button>
-                <button onClick={() => { setShowBacklinks(true); setLinkPickerOpen(true); setShowMoreMenu(false) }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                  <Link2 size={13} />添加关联
-                </button>
+                {!vaultMode && (
+                  <button onClick={() => { setShowBacklinks(true); setLinkPickerOpen(true); setShowMoreMenu(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                    <Link2 size={13} />添加关联
+                  </button>
+                )}
                 {(fileType === 'md' || fileType === 'txt') && onRequestReading && (
                   <button onClick={() => { onRequestReading(); setShowMoreMenu(false) }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
@@ -693,10 +723,12 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                   </button>
                 )}
                 <div className="my-1 border-t border-[var(--border-color)]" />
-                <button onClick={() => { setShowMoreMenu(false); handleDelete() }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] transition-colors">
-                  <Trash2 size={13} />删除页面
-                </button>
+                {!vaultMode && (
+                  <button onClick={() => { setShowMoreMenu(false); handleDelete() }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] transition-colors">
+                    <Trash2 size={13} />删除页面
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -721,9 +753,10 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               <textarea
                 value={annotation}
                 onChange={e => handleAnnotationChange(e.target.value)}
+                readOnly={vaultMode}
                 rows={3}
                 placeholder="给这份文件写点备注，可用 [[双链]] 关联其他页面…"
-                className="w-full px-4 pb-2 bg-transparent text-[12px] text-[var(--text-primary)] outline-none resize-none placeholder-[var(--text-disabled)]"
+                className="w-full px-4 pb-2 bg-transparent text-[12px] text-[var(--text-primary)] outline-none resize-none placeholder-[var(--text-disabled)] disabled:cursor-not-allowed"
               />
             )}
           </div>
@@ -843,6 +876,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 onMount={handleEditorMount}
                 loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
                 options={{
+                  readOnly: vaultMode,  // 仓库文件模式：代码/PDF 附件只读展示，编辑统一在编辑器模块
                   fontSize: Math.round(s.editorFontSize * zoom),
                   fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
                   lineNumbers: 'on',
@@ -886,14 +920,16 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 style={{ backgroundColor: t.color + '20', color: t.color, border: `1px solid ${t.color}40` }}
               >
                 {t.name}
-                <button onClick={() => handleRemoveTag(t.id)}
-                  className="hover:text-[var(--danger)] transition-colors"
-                >
-                  <X size={10} />
-                </button>
+                {!vaultMode && (
+                  <button onClick={() => handleRemoveTag(t.id)}
+                    className="hover:text-[var(--danger)] transition-colors"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
               </span>
             ))}
-            {visibleEntryTags.length < MAX_TAGS && (
+            {!vaultMode && visibleEntryTags.length < MAX_TAGS && (
               showTagInput ? (
                 <input
                   autoFocus
@@ -953,7 +989,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
               </p>
               {wikiPicker.candidates.map(p => {
                 // Show breadcrumb: derive category chain from allPages
-                const catChain = getCategoryChain(p, allPages)
+                const catChain = getCategoryChain(p)
                 // Format createdAt e.g. "2026-06-15 14:30"
                 const ts = p.createdAt ? new Date(p.createdAt) : null
                 const dateStr = ts && !isNaN(ts.getTime())

@@ -7,9 +7,11 @@ import { Readable } from 'stream'
 import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
 import { registerPomodoroBroadcast } from './pomodoroState'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
+import { bindDataSourceGetter } from '../database/dataSourceMode'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
 import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRepo'
+import { registerVaultMigrationHandlers } from '../database/repositories/vaultMigrationRepo'
 import { registerExportHandlers } from '../database/repositories/exportRepo'
 import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
@@ -19,6 +21,8 @@ import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
 import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
 import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/repositories/attachmentRepo'
 import { registerBackupHandlers } from '../database/repositories/backupRepo'
+import { registerVaultBackupHandlers } from '../database/repositories/vaultBackupRepo'
+import { registerRepoConfigHandlers } from '../database/repositories/repoConfigRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerCheckinHandlers } from '../database/repositories/checkinRepo'
 import { registerBookmarkHandlers } from '../database/repositories/bookmarkRepo'
@@ -42,6 +46,8 @@ import { registerAgentHandlers } from '../lib/agentService'
 import { registerTranslateHandlers } from '../lib/translateService'
 import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
+import { registerLanShareHandlers } from '../lib/lanShare'
+import { registerWorkspaceHandlers } from '../lib/workspaceManager'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -123,8 +129,13 @@ function loadSettingsFromDisk(): Record<string, unknown> {
 
 function flushSettingsToDisk(): void {
   saveTimer = null
-  try { writeFileSync(settingsPath, JSON.stringify(settingsCache, null, 2)) }
-  catch (err) { console.error('Failed to persist settings:', err) }
+  try {
+    // 合并写回：保留文件中 settingsCache 没有的键（如 kbStore 的 currentVaultId），
+    // 避免整体覆盖把其它模块写入 settings.json 的字段抹掉
+    const existing = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {}
+    const merged = { ...existing, ...settingsCache }
+    writeFileSync(settingsPath, JSON.stringify(merged, null, 2))
+  } catch (err) { console.error('Failed to persist settings:', err) }
 }
 
 // 允许打包后 file:// 环境下加载本地 module worker（pdf.js 阅读器需要）
@@ -509,37 +520,57 @@ app.whenReady().then(async () => {
     })
   }
   registerWindowHandlers()
-  registerEntryHandlers()
-  registerTagHandlers()
+  registerRepoConfigHandlers()
+  // 去库化数据源（storageData）：结构化 repo 每次调用按当前设置动态判定
+  bindDataSourceGetter((key) => settingsCache[key])
+  registerEntryHandlers((key) => settingsCache[key])
+  registerTagHandlers((key) => settingsCache[key])
   registerScheduleHandlers()
-  registerKnowledgeHandlers()
+  registerKnowledgeHandlers((key) => settingsCache[key])
+  registerVaultMigrationHandlers()
   registerExportHandlers()
   registerRecycleBinHandlers()
-  registerImportHandlers()
+  registerImportHandlers((key) => settingsCache[key])
   registerUserHandlers()
   registerToolboxHandlers()
   registerPasswordHandlers()
   registerMomentsHandlers()
   registerAttachmentHandlers()
   registerBackupHandlers()
+  registerVaultBackupHandlers()
   registerWeightHandlers()
   registerCheckinHandlers()
-  registerBookmarkHandlers()
+  registerBookmarkHandlers((key) => settingsCache[key])
   registerSuperviseHandlers()
   registerSummaryHandlers()
-  registerBlogTemplateHandlers()
+  registerBlogTemplateHandlers((key) => settingsCache[key])
   registerQuizHandlers({ getSettingValue: (key) => settingsCache[key] })
   // 开发者工具(内部对 app.isPackaged 自行守卫,打包版不注册任何 handler)
   registerDevtoolsHandlers()
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
+  // 设备传输：局域网短时双向互传（工具箱）
+  registerLanShareHandlers()
+  // 编辑器工作区（Vault 仓库）：文件服务 + 授权根管理
+  registerWorkspaceHandlers()
   registerPluginHandlers({ getSettingValue: (key) => settingsCache[key] })
   // AI 工具注册表（M1 地基）：内置只读工具 + 审计 + 月度调用上限
   registerAiToolHandlers({ getSettingValue: (key) => settingsCache[key] })
   registerBuiltinTools()
   // MCP 外部服务器管理面（M2）
   registerMcpHandlers()
-  // Skill 提示词资产（M3）：聚合插件贡献并登记进注册表
-  registerSkillHandlers()
+  // Skill 提示词资产（M3）：聚合插件贡献并登记进注册表（停用状态读写走设置）
+  {
+    const getSettingValue = (key: string) => settingsCache[key]
+    const setSettingValue = (key: string, value: unknown) => {
+      if (typeof key !== 'string' || !(key in SETTINGS)) return false
+      if (typeof value !== typeof (SETTINGS as unknown as Record<string, { default: unknown }>)[key].default) return false
+      settingsCache[key] = value
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(flushSettingsToDisk, 500)
+      return true
+    }
+    registerSkillHandlers({ getSettingValue, setSettingValue })
+  }
   // 模型网关 + 最小 Agent 循环
   {
     const getSettingValue = (key: string) => settingsCache[key]

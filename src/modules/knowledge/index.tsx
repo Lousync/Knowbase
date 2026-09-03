@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText, Folder, ListTree, X, BookMarked, Puzzle } from 'lucide-react'
+import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2 } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { registerAssistantContext } from '../../lib/assistantContext'
@@ -9,7 +9,7 @@ import {
   searchKnowledgePages, getKnowledgeStarredPages,
   moveKnowledgePage, moveKnowledgeCategory,
   updateKnowledgePage, toggleKnowledgeStar,
-  showImportOpenDialog, readImportFiles, importPdf, importPdfFile, importBinaryFile,
+  showImportOpenDialog, readImportFiles, importPdf, importPdfFile, importBinaryFile, importBinary,
   showFolderDialog, importFolder,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
@@ -21,6 +21,7 @@ import { ChapterPanel } from './components/ChapterPanel'
 import { SpacePanel } from './components/SpacePanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
+import { GraphView } from './components/graph/GraphView'
 import { QuickSearch } from './components/QuickSearch'
 import { QuizCollection } from './components/QuizCollection'
 import { QuizMode } from '../../components/shared/QuizMode'
@@ -51,6 +52,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [activePageId, setActivePageId] = useState<string | null>(null)
   const [openPageIds, setOpenPageIds] = useState<string[]>([])
   const [openPageInfos, setOpenPageInfos] = useState<Record<string, PageInfo>>({})
+  /** R4-G1：图谱全幅视图开关（入口在左侧目录树底部；Esc/返回按钮退出） */
+  const [graphMode, setGraphMode] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -69,6 +72,13 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [pluginReview, setPluginReview] = useState<{ title: string; pageId?: string; items: QuizItem[] } | null>(null)
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
   const { s: settings } = useSettings()
+  /** 数据形态 = vault：知识库为只读导航，一切写收口到编辑器模块（后端也已白名单拒绝，这里给前端护栏+明确提示） */
+  const vaultReadonly = settings.storageKnowledge === 'vault'
+  const writeBlocked = (action: string): boolean => {
+    if (!vaultReadonly) return false
+    showToast({ type: 'warning', message: `仓库文件模式：知识库为只读导航，「${action}」请在编辑器模块操作（或到 设置 → 高级 切回数据库读源）` })
+    return true
+  }
   const sidebarItemVars = KNOWLEDGE_SIDEBAR_ITEM_VARS[settings.knowledgeSidebarItemSize] ?? KNOWLEDGE_SIDEBAR_ITEM_VARS.m
   /** 删除动画状态：条目删除时先被红色吞噬（animating），动画后消失（done，等待 IPC 完成） */
   const [deletingMap, setDeletingMap] = useState<Map<string, 'animating' | 'done'>>(new Map())
@@ -170,6 +180,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     console.log('[Knowledge] module mounted · net-v2（手动关联/注解/沉浸阅读已启用）')
   }, [])
 
+  // 读写分工（P0 约定）：Tab 保活，编辑器保存后索引已失效 → 每次激活重读
+  const activatedOnceRef = useRef(false)
+  useEffect(() => {
+    if (!isActive) return
+    if (!activatedOnceRef.current) { activatedOnceRef.current = true; return }
+    refreshCategories(); refreshAllPages(); refreshStarred(); refreshTags()
+    // A8：图谱视图挂载中时同步刷新（编辑器保存/删除/重命名后切回知识 Tab）
+    window.dispatchEvent(new Event('kb-graph-refresh'))
+  }, [isActive])
+
   // 监听数据导入事件 — 导入完成后刷新所有数据
   useEffect(() => {
     const handler = () => { refreshCategories(); refreshAllPages(); refreshStarred(); refreshTags() }
@@ -193,14 +213,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- notebook CRUD ---
   const handleCreateNotebook = async (name: string, categoryType: 'folder' | 'notebook' | 'space', parentId: string | null) => {
+    if (writeBlocked('新建文件夹/笔记本/空间')) return
     await createKnowledgeCategory({ name, parentId, categoryType })
     refreshCategories()
   }
   const handleRenameNotebook = async (id: string, name: string) => {
+    if (writeBlocked('重命名文件夹/笔记本')) return
     await updateKnowledgeCategory(id, { name })
     refreshCategories()
   }
   const handleRenamePage = async (id: string, name: string) => {
+    if (writeBlocked('重命名页面')) return
     await updateKnowledgePage(id, { title: name })
     setAllPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
     setChapterPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
@@ -218,6 +241,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
    * 删除失败 → 动画回退（条目恢复显示）。
    */
   const deleteWithAnimation = useCallback(async (id: string, fn: () => Promise<void>) => {
+    if (vaultReadonly) { showToast({ type: 'warning', message: '仓库文件模式：删除请在编辑器模块操作（将移入回收站）' }); return }
     if (deletingRef.current.has(id)) return
     setDeletingMap(m => new Map(m).set(id, 'animating'))
     try {
@@ -232,7 +256,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       setDeletingMap(m => { const n = new Map(m); n.delete(id); return n })
       refreshCategories(); refreshAllPages(); refreshChapterPages(); refreshStarred()
     }
-  }, [])
+  }, [vaultReadonly])
 
   const handleDeleteNotebook = async (id: string) => {
     await deleteWithAnimation(id, async () => {
@@ -244,6 +268,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- chapter CRUD ---
   const handleCreateChapter = async (name: string) => {
+    if (writeBlocked('新建章节')) return
     if (!selectedCategoryId) return
     const selected = categories.find(c => c.id === selectedCategoryId)
     if (selected?.categoryType !== 'notebook') return
@@ -251,6 +276,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshCategories()
   }
   const handleRenameChapter = async (id: string, name: string) => {
+    if (writeBlocked('重命名章节')) return
     await updateKnowledgeCategory(id, { name })
     refreshCategories()
   }
@@ -263,6 +289,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- page CRUD ---
   const handleCreatePageNamed = async (categoryId: string | null, title: string) => {
+    if (writeBlocked('新建页面')) return
     try {
       const p = await createKnowledgePage({ title, categoryId })
       handleOpenPage(p.id)
@@ -272,6 +299,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleCreateChapterUnderNotebook = async (notebookId: string) => {
+    if (writeBlocked('新建章节')) return
     const newChapter = await createKnowledgeCategory({ name: '新章节', parentId: notebookId, categoryType: 'folder' })
     await refreshCategories()
     // Auto-select notebook + new chapter so user sees it highlighted in ChapterPanel
@@ -282,6 +310,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleImportFolder = async () => {
+    if (writeBlocked('导入文件夹')) return
     try {
       const paths: string[] = await showFolderDialog()
       if (!paths || paths.length === 0) return
@@ -300,6 +329,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDialogImport = async () => {
+    if (writeBlocked('导入')) return
     try {
       const paths: string[] = await showImportOpenDialog()
       if (!paths || paths.length === 0) return
@@ -331,6 +361,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropImport = async (files: Array<{ title: string; content: string; fileType: string }>) => {
+    if (writeBlocked('导入')) return
     try {
       const catId = selectedChapterId || null
       for (const f of files) {
@@ -342,6 +373,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropImportBinary = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
+    if (writeBlocked('导入')) return
     try {
       for (const f of files) {
         const ext = f.fileName.toLowerCase().split('.').pop() || ''
@@ -423,6 +455,32 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
     setActivePageId(pageId)
   }, [allLoosePages, chapterPages, starredPages])
+
+  // 读写分工反向通道：编辑器「在知识库中阅读」→ 按仓库相对路径定位并打开同一页面。
+  // 本地 allPages 优先（vault 读源携带 path）；未命中（如编辑器刚新建的知识页）则重新拉取一次。
+  // 需在 handleOpenPage 声明之后注册（useCallback 存在 TDZ）。
+  const allPagesRef = useRef(allPages)
+  allPagesRef.current = allPages
+  useEffect(() => {
+    const handler = async (e: Event): Promise<void> => {
+      const relPath = (e as CustomEvent<{ relPath?: string }>).detail?.relPath
+      if (!relPath) return
+      let page = allPagesRef.current.find((p) => p.path === relPath)
+      if (!page) {
+        try {
+          const pages = await getKnowledgePages()
+          page = pages.find((p) => p.path === relPath)
+        } catch { /* 忽略：回落到下方提示 */ }
+      }
+      if (!page) {
+        showToast({ type: 'warning', message: '该页不在知识库索引中（需带 frontmatter id）' })
+        return
+      }
+      void handleOpenPage(page.id)
+    }
+    window.addEventListener('kb-open-in-knowledge', handler)
+    return () => window.removeEventListener('kb-open-in-knowledge', handler)
+  }, [handleOpenPage])
 
   const handleCloseTab = useCallback((pageId: string) => {
     // Check unsaved changes
@@ -528,6 +586,21 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshAllPages(); refreshChapterPages(); refreshStarred()
   }
 
+  // 读写分工：仓库读源模式下跳转编辑器模块编辑同一文件（.AGENT/docs/读写分工设计.md）
+  const handleOpenInEditor = async (pageId: string) => {
+    try {
+      const p = await getKnowledgePageById(pageId)
+      if (!p?.path) {
+        showToast({ type: 'warning', message: '该页面不在仓库读源中（设置 → 通用 → 知识库读源 开启 vault）' })
+        return
+      }
+      window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: p.path } }))
+    } catch (e) {
+      console.error(e)
+      showToast({ type: 'error', message: '跳转编辑器失败' })
+    }
+  }
+
   // ---- 剪贴板操作 ----
   // 剪切项的 ID 集合（供子组件高亮半透明）
   const cutItemIds = useMemo(() => {
@@ -548,6 +621,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [])
 
   const handlePaste = useCallback(async (targetCategoryId: string | null) => {
+    if (writeBlocked('粘贴')) return
     if (!clipboard || clipboard.items.length === 0) return
     const { action, items } = clipboard
 
@@ -632,6 +706,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- drag & drop move ---
   const handleDropOnNotebook = async (pageId: string, notebookId: string) => {
+    if (writeBlocked('移动页面')) return
     const freshCats = await getKnowledgeCategories()
     const notebookChapters = freshCats.filter(c => c.parentId === notebookId)
     let targetChapterId: string | null = null
@@ -649,22 +724,26 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropOnLooseArea = async (pageId: string) => {
+    if (writeBlocked('移动页面')) return
     await updateKnowledgePage(pageId, { categoryId: null })
     refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnCategory = async (pageId: string, categoryId: string) => {
+    if (writeBlocked('移动页面')) return
     await updateKnowledgePage(pageId, { categoryId })
     refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnChapter = async (pageId: string, chapterId: string) => {
+    if (writeBlocked('移动页面')) return
     await updateKnowledgePage(pageId, { categoryId: chapterId })
     refreshAllPages(); refreshChapterPages()
   }
 
   // --- category move (drag & drop) ---
   const handleMoveCategory = async (categoryId: string, newParentId: string | null) => {
+    if (writeBlocked('移动文件夹')) return
     const catName = categories.find(c => c.id === categoryId)?.name ?? categoryId
     const targetName = newParentId ? categories.find(c => c.id === newParentId)?.name ?? newParentId : 'root'
     console.log(`[handleMoveCategory] moving "${catName}" (${categoryId}) → parent="${targetName}" (${newParentId})`)
@@ -677,10 +756,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- sort (up/down reorder) ---
   const handleSortCategory = async (id: string, direction: 'up' | 'down') => {
+    if (writeBlocked('调整顺序')) return
     await moveKnowledgeCategory(id, direction)
     refreshCategories()
   }
   const handleSortPage = async (id: string, direction: 'up' | 'down') => {
+    if (writeBlocked('调整顺序')) return
     await moveKnowledgePage(id, direction)
     refreshAllPages()
     refreshChapterPages()
@@ -1042,11 +1123,18 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         ) : (
         <>
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
-        <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
+        <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={!graphMode && panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
+            {/* vault 数据形态说明条：知识库只读导航，写收口编辑器（R0 读写分工） */}
+            {vaultReadonly && (
+              <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+                <span className="shrink-0 px-1 py-0.5 rounded text-[10px] font-medium bg-[var(--info)]/15 text-[var(--info)]">仓库文件</span>
+                <span className="text-[10.5px] text-[var(--text-muted)] leading-snug">页面以 .md 文件存放 · 新建/编辑请用编辑器模块</span>
+              </div>
+            )}
             {/* 空间沉浸视图顶部：返回栏（仅空间内显示） */}
             {selectedSpaceId && selectedSpace && (
-              <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={handleRenameNotebook} />
+              <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={vaultReadonly ? undefined : handleRenameNotebook} />
             )}
 
             {/* 文件/大纲切换 — 仅在空间内显示，位于返回栏下方 */}
@@ -1199,12 +1287,28 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                 ))}
               </div>
             )}
+            {/* 图谱入口（R4-G1）：常驻底部，顶层工作区/空间内均可用；点击进入全幅图谱 */}
+            {!graphMode && (
+              <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5">
+                <button
+                  onClick={() => setGraphMode(true)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Share2 size={14} />
+                  <span className="truncate">图谱</span>
+                </button>
+              </div>
+            )}
           </div>
         </ResizablePanel>
 
         {/* 右侧链接提示（选中章节且无L2面板时显示） */}
         {/* Editor */}
         <div className="flex-1 flex flex-col overflow-hidden">
+          {graphMode ? (
+            <GraphView onExit={() => setGraphMode(false)} />
+          ) : (
+          <>
           <PageTabBar
             openPageIds={openPageIds}
             activePageId={activePageId}
@@ -1232,12 +1336,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onMarkDirty={handleMarkDirty}
               onClearDirty={handleClearDirty}
               onRequestReading={enterReading}
+              vaultMode={settings.storageKnowledge === 'vault'}
+              onOpenInEditor={() => handleOpenInEditor(activePageId)}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
               <FileText size={48} className="mb-4 opacity-25" />
-              <p className="text-sm">选择或创建一个页面开始</p>
+              <p className="text-sm">{vaultReadonly ? '从左侧选择页面开始阅读（页面存于仓库 .md 文件）' : '选择或创建一个页面开始'}</p>
             </div>
+          )}
+          </>
           )}
         </div>
         </>

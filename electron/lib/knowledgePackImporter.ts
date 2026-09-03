@@ -5,6 +5,7 @@ import { randomUUID, createHash } from 'crypto'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../database/connection'
 import { getPluginsRoot, auditWrite } from './pluginRegistry'
 import { safePathInside } from './pathGuard'
+import { importPackToVault, packStateVault } from './knowledgePackVault'
 
 /**
  * 内容型插件(knowledgePages)导入引擎。
@@ -223,7 +224,7 @@ function pushProgress(pluginId: string, current: number, total: number, title: s
 
 // ---------- 状态查询 ----------
 
-export function getPackState(pluginId: string): {
+export function getPackState(pluginId: string, isVault = false): {
   ok: boolean
   state?: 'not-imported' | 'imported' | 'update-available'
   version?: string
@@ -244,6 +245,7 @@ export function getPackState(pluginId: string): {
     const parsed = readPackManifest(pluginDir)
     if ('error' in parsed) return { ok: false, message: parsed.error }
     const pack = parsed.pack
+    if (isVault) return packStateVault(pluginId, pack, parsed.version, pluginDir)
     const totalPages = pack.notebooks.reduce((n, nb) => n + nb.chapters.reduce((m, c) => m + c.pages.length, 0), 0)
     const chapterTotal = pack.notebooks.reduce((n, nb) => n + nb.chapters.length, 0)
 
@@ -291,7 +293,7 @@ function readPackManifest(pluginDir: string): { pack: KPPackNormalized; version:
 
 // ---------- 导入 ----------
 
-export function importPack(pluginId: string, overwriteModified: boolean, forceExternalIds?: string[]): {
+export function importPack(pluginId: string, overwriteModified: boolean, forceExternalIds?: string[], isVault = false): {
   ok: boolean
   created?: number; updated?: number; skipped?: number; conflicts?: { title: string; reason: string; externalId: string }[]
   spaceId?: string | null
@@ -304,6 +306,8 @@ export function importPack(pluginId: string, overwriteModified: boolean, forceEx
   if ('error' in mfParsed) return { ok: false, message: mfParsed.error }
   const pack = mfParsed.pack
   const packVersion = mfParsed.version
+  // vault 读源：批量写仓库 .md（见 knowledgePackVault），避免导入进 sqlite 而知识库读不到
+  if (isVault) return importPackToVault(pluginId, pack, packVersion, pluginDir, overwriteModified, forceExternalIds)
 
   const db = getDatabase()
   const mapping = readMapping(pluginId)
@@ -433,7 +437,7 @@ export function importPack(pluginId: string, overwriteModified: boolean, forceEx
             continue
           }
           // 覆盖/静默更新
-          const md = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), livePageId ?? pageId, stagedFiles)
+          const md = processImages(preprocessPageMd(mdRes.buf.toString('utf-8'), pluginId), pluginDir, dirname(page.file), livePageId, stagedFiles)
           db.run(
             'UPDATE knowledge_pages SET content_md = ?, updated_at = ? WHERE id = ?',
             [md, now, livePageId]

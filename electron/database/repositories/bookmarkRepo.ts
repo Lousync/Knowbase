@@ -2,6 +2,10 @@ import { ipcMain, dialog, shell } from 'electron'
 import { randomUUID } from 'crypto'
 import { BrowserWindow } from 'electron'
 import { getDatabase, saveToDisk } from '../connection'
+import {
+  vaultBookmarksAll, vaultCreateCategory, vaultUpdateCategory, vaultDeleteCategory,
+  vaultReorderCategories, vaultCreateBookmark, vaultUpdateBookmark, vaultDeleteBookmark,
+} from '../../lib/kbStore/bookmarkVaultRepo'
 
 interface CategoryRow {
   id: string; name: string; color: string
@@ -44,16 +48,20 @@ function rowToBookmark(row: BookmarkRow) {
   }
 }
 
-export function registerBookmarkHandlers(): void {
+export function registerBookmarkHandlers(getSettingValue?: (key: string) => unknown): void {
+  // 去库化 P2：结构化模块（storageData=vault）读写 .knowbase/modules/bookmarks/*.json
+  const isVault = (): boolean => getSettingValue?.('storageData') === 'vault'
 
   // ---- 数据 ----
   ipcMain.handle('bookmark:getAll', () => {
+    if (isVault()) return vaultBookmarksAll()
     const categories = queryAll<CategoryRow>('SELECT * FROM bookmark_categories ORDER BY sort_order ASC, created_at ASC').map(rowToCategory)
     const bookmarks = queryAll<BookmarkRow>('SELECT * FROM bookmarks ORDER BY sort_order ASC, created_at ASC').map(rowToBookmark)
     return { categories, bookmarks }
   })
 
   ipcMain.handle('bookmark:createCategory', (_e, data: { name: string; color?: string }) => {
+    if (isVault()) return vaultCreateCategory(data.name, data.color)
     const id = randomUUID()
     run(
       'INSERT INTO bookmark_categories (id, name, color, sort_order) VALUES (?, ?, ?, ?)',
@@ -63,6 +71,7 @@ export function registerBookmarkHandlers(): void {
   })
 
   ipcMain.handle('bookmark:updateCategory', (_e, id: string, data: { name?: string; color?: string }) => {
+    if (isVault()) return vaultUpdateCategory(id, data)
     const sets: string[] = []
     const params: unknown[] = []
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
@@ -74,12 +83,14 @@ export function registerBookmarkHandlers(): void {
   })
 
   ipcMain.handle('bookmark:deleteCategory', (_e, id: string) => {
+    if (isVault()) { vaultDeleteCategory(id); return }
     // 分类下的书签移入未分类，不删书签
     run("UPDATE bookmarks SET category_id = '' WHERE category_id = ?", [id])
     run('DELETE FROM bookmark_categories WHERE id = ?', [id])
   })
 
   ipcMain.handle('bookmark:reorderCategories', (_e, orderedIds: string[]) => {
+    if (isVault()) { vaultReorderCategories(orderedIds); return }
     const base = Date.now()
     orderedIds.forEach((id, i) => {
       run('UPDATE bookmark_categories SET sort_order = ? WHERE id = ?', [i + base - orderedIds.length, id])
@@ -89,6 +100,7 @@ export function registerBookmarkHandlers(): void {
   ipcMain.handle('bookmark:createBookmark', (_e, data: {
     title: string; url: string; description?: string; categoryId?: string
   }) => {
+    if (isVault()) return vaultCreateBookmark(data)
     const id = randomUUID()
     run(
       "INSERT INTO bookmarks (id, category_id, title, url, description, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
@@ -100,6 +112,7 @@ export function registerBookmarkHandlers(): void {
   ipcMain.handle('bookmark:updateBookmark', (_e, id: string, data: {
     title?: string; url?: string; description?: string; categoryId?: string | null
   }) => {
+    if (isVault()) return vaultUpdateBookmark(id, data)
     const sets: string[] = []
     const params: unknown[] = []
     if (data.title !== undefined) { sets.push('title = ?'); params.push(data.title) }
@@ -113,10 +126,11 @@ export function registerBookmarkHandlers(): void {
   })
 
   ipcMain.handle('bookmark:deleteBookmark', (_e, id: string) => {
+    if (isVault()) { vaultDeleteBookmark(id); return }
     run('DELETE FROM bookmarks WHERE id = ?', [id])
   })
 
-  // ---- 外链 / 文件 ----
+  // ---- 外链 / 文件（与存储形态无关，恒可用）----
   // 协议白名单:书签 URL 可经 JSON 导入植入,仅放行网页协议,防 file:// / 自定义协议拉起外部程序
   ipcMain.handle('bookmark:openUrl', async (_e, url: string) => {
     if (typeof url !== 'string' || !url) return

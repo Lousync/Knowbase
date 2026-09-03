@@ -141,6 +141,18 @@ input:focus, textarea:focus, select:focus {
   -webkit-user-drag: auto;
 }
 
+/* ===== Markdown 标记淡化（编辑器弱化版 Live Preview，光标所在行除外）=====
+   Monaco inline decoration 的类直接落在包裹 token 的 span 上——token 的 mtk 颜色在
+   更深层 span，会覆盖我们的 color，故语义强调色用 !important；淡化用 opacity（作用于
+   整层含内部颜色），加粗/斜体/删除线/背景不受层级影响。 */
+.kb-md-dim    { opacity: 0.32; }
+.kb-md-strong { font-weight: 700; }
+.kb-md-em     { font-style: italic; }
+.kb-md-del    { text-decoration: line-through; opacity: 0.7; }
+.kb-md-code   { font-family: var(--font-mono); background: var(--bg-hover); border-radius: 3px; padding: 0 2px; }
+.kb-md-link   { color: var(--accent) !important; text-decoration: underline; text-underline-offset: 2px; }
+.kb-md-wiki   { color: var(--accent) !important; }
+
 /* ===== Markdown 预览样式 ===== */
 .prose-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.25rem 0 0.5rem; color: var(--text-primary); padding-bottom: 0.35rem; border-bottom: var(--divider-style); }
 .prose-content h2 { font-size: 1.4rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--text-primary); padding-bottom: 0.25rem; border-bottom: var(--heading-rule); }

@@ -4,7 +4,7 @@ import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, Life
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
-import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, RecycleIcon, UserIcon, SettingsIcon, PluginIcon } from './ModuleIcons'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, RecycleIcon, UserIcon, SettingsIcon, PluginIcon, EditorIcon } from './ModuleIcons'
 
 /** All draggable module tabs (excluding user/settings; 帮助已在用户菜单内,侧边栏不再单列) */
 const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.ReactNode }[] = [
@@ -12,6 +12,7 @@ const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.R
   { id: 'schedule',  label: '日程',   icon: s => <ScheduleIcon size={s} /> },
   { id: 'knowledge', label: '知识库', icon: s => <KnowledgeIcon size={s} /> },
   { id: 'moments',   label: '说说',   icon: s => <MomentsIcon size={s} /> },
+  { id: 'editor',    label: '编辑器', icon: s => <EditorIcon size={s} /> },
   { id: 'toolbox',   label: '工具箱', icon: s => <ToolboxIcon size={s} /> },
   { id: 'plugins',   label: '插件',   icon: s => <PluginIcon size={s} /> },
   { id: 'recycle',   label: '回收站', icon: s => <RecycleIcon size={s} /> },

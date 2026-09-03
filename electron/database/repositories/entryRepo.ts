@@ -3,6 +3,10 @@ import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 import { recordActivity } from '../../lib/habitLinkService'
+import {
+  vaultListEntries, vaultGetEntryById, vaultCreateEntry, vaultUpdateEntry,
+  vaultDeleteEntry, vaultSearchEntries,
+} from '../../lib/kbStore/blogVaultRepo'
 
 /** 博文字数:去空白后的字符数(中英混排统一口径,与 habitLinkService 一致) */
 function countWords(md: string): number {
@@ -59,7 +63,9 @@ function run(sql: string, params: unknown[] = []): void {
   saveToDisk()
 }
 
-export function registerEntryHandlers(): void {
+export function registerEntryHandlers(getSettingValue?: (key: string) => unknown): void {
+  // 去库化 P1：博客读源 storageBlog = vault → 读写全走仓库 blog/*.md（与 sqlite DTO 对齐）
+  const isVault = (): boolean => getSettingValue?.('storageBlog') === 'vault'
   // 获取博文列表
   ipcMain.handle('db:getEntries', (_event, filter?: {
     date?: string
@@ -69,6 +75,7 @@ export function registerEntryHandlers(): void {
     limit?: number
     offset?: number
   }) => {
+    if (isVault()) return vaultListEntries(filter ?? {})
     let sql = `SELECT DISTINCT e.* FROM entries e`
     const params: unknown[] = []
     const conditions: string[] = []
@@ -136,6 +143,7 @@ export function registerEntryHandlers(): void {
 
   // 获取单篇博文
   ipcMain.handle('db:getEntryById', (_event, id: string) => {
+    if (isVault()) return vaultGetEntryById(id)
     const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
     if (rows.length === 0) return null
 
@@ -161,6 +169,12 @@ export function registerEntryHandlers(): void {
     tags?: string[]
     states?: string
   }) => {
+    if (isVault()) {
+      const e = vaultCreateEntry({ title: data.title, contentMd: data.contentMd, date: data.date, tags: data.tags, states: data.states })
+      // 字数联动打卡：去库化源表不在 sqlite，指标由上报方直接给出
+      recordActivity({ source: 'blog', date: e.date, refId: e.id, value: e.wordCount }, event.sender)
+      return e
+    }
     // Defensive: if an entry for this date already exists, return it instead of creating a duplicate
     const existing = queryAll<EntryRow>('SELECT * FROM entries WHERE date = ? ORDER BY created_at DESC LIMIT 1', [data.date])
     if (existing.length > 0) {
@@ -207,6 +221,7 @@ export function registerEntryHandlers(): void {
     tags?: string[]
     states?: string
   }) => {
+    if (isVault()) return vaultUpdateEntry(id, data).entry
     // 防重:每天一篇。改日期时若目标日期已有其他条目则拒绝(与 createEntry 的创建防重对齐;
     // 没有这道闸,快速切换博文时残留的自动保存会把日期写撞,出现同日双篇)
     if (data.date !== undefined) {
@@ -275,6 +290,18 @@ export function registerEntryHandlers(): void {
 
   // 删除博文（软删除 → 回收站）
   ipcMain.handle('db:deleteEntry', (_event, id: string) => {
+    // vault：删 md 文件，回收站载荷（全文 JSON）仍写入 sqlite recycle_bin（恢复时经 create/update vault 路径回写文件）
+    if (isVault()) {
+      const info = vaultDeleteEntry(id)
+      if (!info) return
+      const binId = randomUUID()
+      run(
+        `INSERT INTO recycle_bin (id, original_id, module, title, data)
+         VALUES (?, ?, 'blog', ?, ?)`,
+        [binId, id, info.title, info.data]
+      )
+      return
+    }
     // 读取完整条目
     const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
     if (rows.length === 0) return
@@ -319,6 +346,7 @@ export function registerEntryHandlers(): void {
 
   // 全文搜索（LIKE 方式，sql.js 不支持 FTS5）
   ipcMain.handle('db:searchEntries', (_event, query: string) => {
+    if (isVault()) return vaultSearchEntries(query)
     const like = `%${query}%`
     const rows = queryAll<EntryRow>(
       `SELECT * FROM entries
@@ -332,6 +360,11 @@ export function registerEntryHandlers(): void {
 
   // 切换博文收藏状态
   ipcMain.handle('db:toggleEntryStar', (_event, id: string) => {
+    if (isVault()) {
+      const e = vaultGetEntryById(id)
+      if (!e) return null
+      return vaultUpdateEntry(id, { isStarred: !e.isStarred }).entry
+    }
     const rows = queryAll<EntryRow>('SELECT * FROM entries WHERE id = ?', [id])
     if (rows.length === 0) return null
     const next = rows[0].is_starred === 0 ? 1 : 0

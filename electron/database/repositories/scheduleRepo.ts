@@ -47,18 +47,20 @@ function run(sql: string, params: unknown[] = []): void {
 export function registerScheduleHandlers(): void {
   // 按日期获取待办（排除子任务）
   ipcMain.handle('schedule:getTodos', (_e, date: string) => {
+    // 当日任务 + 未完成的计划类任务（plan 无截止日期，常驻显示直到完成）
     const rows = queryAll<TodoRow>(
-      'SELECT * FROM schedule_todos WHERE date = ? AND parent_id IS NULL ORDER BY sort_order, created_at',
+      "SELECT * FROM schedule_todos WHERE parent_id IS NULL AND (date = ? OR (task_type = 'plan' AND status = 'pending')) ORDER BY sort_order, created_at",
       [date]
     )
     return rows.map(rowToTodo)
   })
 
   // 获取全部逾期未完成的顶层任务（日期早于 today，不限月份；按日期升序）
+  // 计划类任务（plan）无截止时间、不逾期，排除在外
   ipcMain.handle('schedule:getOverdue', (_e, today: string) => {
     if (typeof today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return []
     const rows = queryAll<TodoRow>(
-      "SELECT * FROM schedule_todos WHERE date < ? AND status = 'pending' AND parent_id IS NULL ORDER BY date, sort_order, created_at",
+      "SELECT * FROM schedule_todos WHERE date < ? AND status = 'pending' AND parent_id IS NULL AND task_type != 'plan' ORDER BY date, sort_order, created_at",
       [today]
     )
     return rows.map(rowToTodo)
@@ -74,10 +76,11 @@ export function registerScheduleHandlers(): void {
   })
 
   // 获取某月全部待办（象限图用）— 自动清理 7 天前已完成任务 — 排除子任务
+  // 附加未完成的计划类任务（plan 无截止日期，跨月常驻显示直到完成）
   ipcMain.handle('schedule:getMonthTodos', (_e, yearMonth: string) => {
     run("DELETE FROM schedule_todos WHERE status = 'done' AND updated_at < datetime('now', '-7 days')")
     const rows = queryAll<TodoRow>(
-      "SELECT * FROM schedule_todos WHERE date LIKE ? AND parent_id IS NULL ORDER BY date, sort_order, created_at",
+      "SELECT * FROM schedule_todos WHERE parent_id IS NULL AND (date LIKE ? OR (task_type = 'plan' AND status = 'pending')) ORDER BY date, sort_order, created_at",
       [`${yearMonth}%`]
     )
     return rows.map(rowToTodo)

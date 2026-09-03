@@ -72,6 +72,9 @@ const api = {
   removeKnowledgeManualLink: (a: string, b: string) => ipcRenderer.invoke('knowledge:removeManualLink', a, b),
   updateKnowledgeLinks: (pageId: string, linkedTitles: string[]) => ipcRenderer.invoke('knowledge:updateLinks', pageId, linkedTitles),
   getKnowledgeTags: () => ipcRenderer.invoke('knowledge:getTags'),
+  getKnowledgeGraph: () => ipcRenderer.invoke('knowledge:getGraph'),
+  getGraphViewConfig: () => ipcRenderer.invoke('graphView:getConfig'),
+  updateGraphViewConfig: (patch: Record<string, unknown>) => ipcRenderer.invoke('graphView:updateConfig', patch),
   createKnowledgeTag: (n: string, c?: string) => ipcRenderer.invoke('knowledge:createTag', n, c),
   deleteKnowledgeTag: (id: string) => ipcRenderer.invoke('knowledge:deleteTag', id),
   toggleKnowledgeStar: (id: string) => ipcRenderer.invoke('knowledge:toggleStar', id),
@@ -140,6 +143,10 @@ const api = {
   // Skills
   aiToolsListSkills: () => ipcRenderer.invoke('aiTools:listSkills'),
   aiToolsCopySkillPrompt: (pluginId: string, skillId: string) => ipcRenderer.invoke('aiTools:copySkillPrompt', pluginId, skillId),
+  aiToolsInstallSkill: (data: Uint8Array, fileName?: string) => ipcRenderer.invoke('aiTools:installSkill', data, fileName),
+  aiToolsInstallSkillFromFile: () => ipcRenderer.invoke('aiTools:installSkillFromFile'),
+  aiToolsUninstallSkill: (id: string) => ipcRenderer.invoke('aiTools:uninstallSkill', id),
+  aiToolsToggleSkill: (registryName: string, enabled: boolean) => ipcRenderer.invoke('aiTools:toggleSkill', registryName, enabled),
   // Model gateway + agent
   llmListProviders: () => ipcRenderer.invoke('llm:listProviders'),
   llmSaveProvider: (draft: unknown) => ipcRenderer.invoke('llm:saveProvider', draft),
@@ -207,6 +214,14 @@ const api = {
     const handler = (_e: unknown, p: { pluginId: string; current: number; total: number; title: string }) => cb(p)
     ipcRenderer.on('knowledgePack:progress', handler)
     return () => { ipcRenderer.removeListener('knowledgePack:progress', handler) }
+  },
+  // 旧数据 → 当前仓库迁移（去库化 P0）
+  vaultLegacySummary: () => ipcRenderer.invoke('vault:legacySummary'),
+  vaultImportLegacy: (opts: unknown) => ipcRenderer.invoke('vault:importLegacy', opts),
+  onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => {
+    const handler = (_e: unknown, p: { phase: string; current: number; total: number; message?: string }) => cb(p)
+    ipcRenderer.on('vault:importProgress', handler)
+    return () => { ipcRenderer.removeListener('vault:importProgress', handler) }
   },
   showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
@@ -284,6 +299,11 @@ const api = {
   cleanupOrphanAttachments: () => ipcRenderer.invoke('attachment:cleanupOrphans'),
   exportBackupToZip: (zipPath: string, moduleIds?: string[]) => ipcRenderer.invoke('export:backupToZip', zipPath, moduleIds),
   importBackupPackage: (srcPath: string) => ipcRenderer.invoke('import:importBackupPackage', srcPath),
+  vaultBackupGetState: () => ipcRenderer.invoke('vaultBackup:getState'),
+  vaultBackupExportToZip: (zipPath: string) => ipcRenderer.invoke('vaultBackup:exportToZip', zipPath),
+  vaultBackupPickArchive: () => ipcRenderer.invoke('vaultBackup:pickArchive'),
+  vaultBackupRestoreArchive: (archivePath: string) => ipcRenderer.invoke('vaultBackup:restoreArchive', archivePath),
+  vaultBackupRestoreDb: () => ipcRenderer.invoke('vaultBackup:restoreDb'),
   // weight tracker
   getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
   getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),
@@ -447,6 +467,32 @@ const api = {
     ipcRenderer.on('pomodoro:state-broadcast', handler)
     return () => ipcRenderer.removeListener('pomodoro:state-broadcast', handler)
   },
+  // 设备传输（工具箱）：局域网短时双向互传
+  lanShareStart: (opts?: { port?: number; autoStopMinutes?: number }) => ipcRenderer.invoke('lanShare:start', opts),
+  lanShareStop: () => ipcRenderer.invoke('lanShare:stop'),
+  lanShareStatus: () => ipcRenderer.invoke('lanShare:status'),
+  lanShareLanAddresses: () => ipcRenderer.invoke('lanShare:lanAddresses'),
+  lanShareQr: (text: string) => ipcRenderer.invoke('lanShare:qr', text),
+  lanShareListInbox: () => ipcRenderer.invoke('lanShare:listInbox'),
+  lanShareListOutbox: () => ipcRenderer.invoke('lanShare:listOutbox'),
+  lanShareRemoveInbox: (name: string) => ipcRenderer.invoke('lanShare:removeInbox', name),
+  lanShareRemoveOutbox: (name: string) => ipcRenderer.invoke('lanShare:removeOutbox', name),
+  lanShareAddToOutbox: (data: { path: string }) => ipcRenderer.invoke('lanShare:addToOutbox', data),
+  lanShareClearOutbox: () => ipcRenderer.invoke('lanShare:clearOutbox'),
+  // 编辑器工作区（Vault 仓库）：文件服务
+  workspaceOpenDir: () => ipcRenderer.invoke('ws:openDir'),
+  workspaceListDir: (rootId: string, relPath?: string) => ipcRenderer.invoke('ws:listDir', rootId, relPath ?? ''),
+  workspaceReadFile: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:readFile', rootId, relPath),
+  workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => ipcRenderer.invoke('ws:writeFile', rootId, relPath, content, expectedMtimeMs),
+  workspaceCreateFile: (rootId: string, relPath: string, content?: string) => ipcRenderer.invoke("ws:createFile", rootId, relPath, content),
+  workspaceMkdir: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:mkdir', rootId, relPath),
+  workspaceRename: (rootId: string, oldRel: string, newRel: string) => ipcRenderer.invoke('ws:rename', rootId, oldRel, newRel),
+  workspaceTrash: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:trash', rootId, relPath),
+  workspaceStat: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:stat', rootId, relPath),
+  workspaceGetRecent: () => ipcRenderer.invoke('ws:getRecent'),
+  workspaceOpenById: (rootId: string) => ipcRenderer.invoke('ws:openById', rootId),
+  workspaceGetCurrent: () => ipcRenderer.invoke('ws:getCurrent'),
+  workspaceForget: (rootId: string) => ipcRenderer.invoke('ws:forget', rootId),
 }
 
 contextBridge.exposeInMainWorld('api', api)

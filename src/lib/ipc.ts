@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, QuizMigrateResult, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, QuizMigrateResult, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -87,6 +87,9 @@ export const addKnowledgeManualLink = (pageId: string, targetId: string) => a().
 export const removeKnowledgeManualLink = (pageIdA: string, pageIdB: string) => a().removeKnowledgeManualLink(pageIdA, pageIdB)
 export const updateKnowledgeLinks = (pageId: string, linkedTitles: string[]) => a().updateKnowledgeLinks(pageId, linkedTitles)
 export const getKnowledgeTags = () => a().getKnowledgeTags()
+export const getKnowledgeGraph = () => a().getKnowledgeGraph()
+export const getGraphViewConfig = () => a().getGraphViewConfig()
+export const updateGraphViewConfig = (patch: Partial<import('./graphTypes').GraphViewConfig>) => a().updateGraphViewConfig(patch)
 export const createKnowledgeTag = (n: string, c?: string) => a().createKnowledgeTag(n, c)
 export const deleteKnowledgeTag = (id: string) => a().deleteKnowledgeTag(id)
 export const toggleKnowledgeStar = (id: string) => a().toggleKnowledgeStar(id)
@@ -100,6 +103,12 @@ export const duplicateKnowledgeCategory = (data: { categoryId: string; targetPar
 // export
 export const showExportSaveDialog = (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => a().showExportSaveDialog(opts)
 export const writeExportTextFile = (filePath: string, content: string, encoding?: string): Promise<ExportFileResult> => a().writeExportTextFile(filePath, content, encoding)
+// 全仓导出/导入（去库化：db 快照入 .knowbase/backup + 整仓 zip）
+export const vaultBackupGetState = () => a().vaultBackupGetState()
+export const vaultBackupExportToZip = (zipPath: string) => a().vaultBackupExportToZip(zipPath)
+export const vaultBackupPickArchive = () => a().vaultBackupPickArchive()
+export const vaultBackupRestoreArchive = (archivePath: string) => a().vaultBackupRestoreArchive(archivePath)
+export const vaultBackupRestoreDb = () => a().vaultBackupRestoreDb()
 
 // import
 export const showImportOpenDialog = () => a().showImportOpenDialog()
@@ -208,6 +217,38 @@ export const setMomentsAlbumCover = (albumId: string, postId: string, index: num
 // attachments
 export const uploadAttachments = (data: { ownerType?: string; ownerId?: string; files: { name?: string; mime?: string; dataUrl?: string; base64?: string; thumbDataUrl?: string }[] }) => a().uploadAttachments(data)
 export const uploadAttachmentFromPath = (data: { ownerType?: string; ownerId?: string; filePath: string }) => a().uploadAttachmentFromPath(data)
+
+// ===== 设备传输 (lanShare，工具箱) =====
+export const lanShareStart = (opts?: { port?: number; autoStopMinutes?: number }) => a().lanShareStart(opts)
+export const lanShareStop = () => a().lanShareStop()
+export const lanShareStatus = () => a().lanShareStatus()
+export const lanShareLanAddresses = () => a().lanShareLanAddresses()
+export const lanShareQr = (text: string) => a().lanShareQr(text)
+export const lanShareListInbox = () => a().lanShareListInbox()
+export const lanShareListOutbox = () => a().lanShareListOutbox()
+export const lanShareRemoveInbox = (name: string) => a().lanShareRemoveInbox(name)
+export const lanShareRemoveOutbox = (name: string) => a().lanShareRemoveOutbox(name)
+export const lanShareAddToOutbox = (data: { path: string }) => a().lanShareAddToOutbox(data)
+export const lanShareClearOutbox = () => a().lanShareClearOutbox()
+
+// ===== 编辑器工作区（Vault 仓库）文件服务 =====
+export const workspaceOpenDir = () => a().workspaceOpenDir()
+export const workspaceListDir = (rootId: string, relPath?: string) => a().workspaceListDir(rootId, relPath)
+export const workspaceReadFile = (rootId: string, relPath: string) => a().workspaceReadFile(rootId, relPath)
+export const workspaceWriteFile = (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => a().workspaceWriteFile(rootId, relPath, content, expectedMtimeMs)
+export const workspaceCreateFile = (rootId: string, relPath: string, content?: string) => a().workspaceCreateFile(rootId, relPath, content)
+export const workspaceMkdir = (rootId: string, relPath: string) => a().workspaceMkdir(rootId, relPath)
+export const workspaceRename = (rootId: string, oldRel: string, newRel: string) => a().workspaceRename(rootId, oldRel, newRel)
+export const workspaceTrash = (rootId: string, relPath: string) => a().workspaceTrash(rootId, relPath)
+export const workspaceStat = (rootId: string, relPath: string) => a().workspaceStat(rootId, relPath)
+export const workspaceGetRecent = () => a().workspaceGetRecent()
+export const workspaceOpenById = (rootId: string) => a().workspaceOpenById(rootId)
+export const workspaceGetCurrent = () => a().workspaceGetCurrent()
+export const workspaceForget = (rootId: string) => a().workspaceForget(rootId)
+// 旧数据 → 当前仓库迁移（去库化 P0）
+export const vaultLegacySummary = () => a().vaultLegacySummary()
+export const vaultImportLegacy = (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => a().vaultImportLegacy(opts)
+export const onVaultImportProgress = (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => a().onVaultImportProgress(cb)
 export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promise<AttachmentMeta[]> => a().getAttachmentsByOwner(ownerType, ownerId)
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
@@ -333,6 +374,10 @@ export const mcpTestConnection = (draft: McpServerDraft): Promise<McpTestResult>
 // ===== Skills =====
 export const aiToolsListSkills = (): Promise<{ skills: SkillInfo[] }> => a().aiToolsListSkills()
 export const aiToolsCopySkillPrompt = (pluginId: string, skillId: string): Promise<boolean> => a().aiToolsCopySkillPrompt(pluginId, skillId)
+export const aiToolsInstallSkill = (data: Uint8Array, fileName?: string): Promise<SkillInstallResult> => a().aiToolsInstallSkill(data, fileName)
+export const aiToolsInstallSkillFromFile = (): Promise<SkillInstallResult> => a().aiToolsInstallSkillFromFile()
+export const aiToolsUninstallSkill = (id: string): Promise<SkillInstallResult> => a().aiToolsUninstallSkill(id)
+export const aiToolsToggleSkill = (registryName: string, enabled: boolean): Promise<SkillInstallResult & { disabled?: boolean }> => a().aiToolsToggleSkill(registryName, enabled)
 
 // ===== Model Gateway + AI 对话 =====
 export const llmListProviders = (): Promise<{ providers: LlmProviderInfo[]; defaultChatModel: string }> => a().llmListProviders()

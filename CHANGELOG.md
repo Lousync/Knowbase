@@ -2,6 +2,20 @@
 
 # 更新日志
 
+## v2.16.0（2026-09-01）
+
+### ✨ 新增功能
+
+- **AI Skill 独立安装**：Skill 不再只能随插件安装——「设置 → AI 工具 → Skill」页签支持**拖入 zip 包**或点击选择文件直接安装，独立安装的 Skill 可单独卸载、重装即覆盖更新
+  - 两种包格式：`SKILL.md`（YAML frontmatter + 正文提示词模板，Claude/WorkBuddy 生态通用）/ `skill.json`（与插件 `contributes.skills` 同构）
+  - 独立 Skill 落盘于数据目录 `skills/<id>/`，注册名 `skill.standalone.<id>`，与插件贡献（`skill.<pluginId>.<skillId>`）并存不冲突
+  - 安全校验：zip 解压防路径穿越、id 合法性校验、8MB / 200 文件上限；纯声明式提示词不执行代码
+- **AI 感知已配置 Skill 清单**：AgentRunner 构建 system prompt 时注入当前可用的 Skill 数量、名称与用途（描述截断防 token 膨胀），AI 明确知道自己配了多少个提示词能力包、何时该调用
+- **Skill 个别停用/启用**：Skill 配置页每个 Skill 卡片带启用开关——停用后 AI 工具列表与 system prompt 清单中即时消失（文件保留，可随时重新启用）；插件贡献与独立安装的 Skill 均支持个别停用，互不影响
+- **AI 联网搜索**：内置只读工具 `builtin.web.search`——零配置联网搜索（Bing 主源 + DuckDuckGo 备源，自动切换），AI 在对话中遇到时效性/本地库外信息时自动调用；结果精简为标题/链接/约 300 字摘要控制 token，计入月度用量与审计；跨模块通用能力不受模块权限限制
+- **帮助文档新增「AI Skill 技能」**：说明两种安装方式、SKILL.md / skill.json 包格式示例、卸载与更新规则
+- **插件市场新增 Skill 分类与标签**：带 `skills` 贡献的插件归入「Skill」分类（市场分类筛选新增 Skill 项），插件卡片与详情页显示 Skill 贡献标签；首发「Teach 教学助手」——源自社区 teach skill（MIT）的引导式教学提示词技能，让 AI 像优秀教师一样教人（评估水平→已知到未知→检查理解→实时调整→练习强化）
+
 ## v2.15.1（2026-09-01）
 
 ### 🐛 Bug 修复

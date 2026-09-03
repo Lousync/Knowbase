@@ -33,6 +33,7 @@ const CONTRIBUTION_LABELS: Record<string, string> = {
   tools: '工具卡片',
   automationRule: '自动化规则',
   knowledgePages: '知识内容',
+  skills: 'Skill',
 }
 
 const CONTRIBUTION_HINTS: Record<string, string> = {
@@ -45,6 +46,7 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
   tools: '工具箱「插件工具」区可见',
   automationRule: '自动化规则(Tier1 预留)',
   knowledgePages: '导入到知识库(创建空间/笔记本/章节/页面)',
+  skills: '提示词技能,设置 → AI 工具 → Skill 中查看、停用与独立安装',
 }
 
 const CAPABILITY_LABELS: Record<string, string> = {
@@ -940,7 +942,7 @@ export function PluginsModule() {
           </div>
         )}
 
-        {/* 分类筛选(市场):外观 / 工具 / 知识包 */}
+        {/* 分类筛选(市场):外观 / 工具 / 知识包 / 学习 / Skill */}
         {tab === 'market' && (
           <div className="px-2 pb-2 flex flex-wrap gap-1 shrink-0">
             <button
@@ -951,7 +953,7 @@ export function PluginsModule() {
             >
               全部分类
             </button>
-            {(['外观', '工具', '知识包', '学习'] as const).map(c => (
+            {(['外观', '工具', '知识包', '学习', 'Skill'] as const).map(c => (
               <button
                 key={c}
                 onClick={() => setCategoryFilter(categoryFilter === c ? '' : c)}

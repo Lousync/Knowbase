@@ -81,6 +81,23 @@ export interface PluginManifest {
   capabilities?: string[]
   activation?: string[]
   contributes?: Record<string, unknown>
+  /** v3（R7）契约字段：API 版本（1=旧行为 / 2=token 会话 + 新命名空间）；缺省 1 */
+  apiVersion?: number
+  /** v3（R7）契约字段：供应链签名（市场包必填；algo 目前仅 ed25519） */
+  signing?: { algo: string; keyId: string; sig: string }
+  /** v3（R7）契约字段：写操作收敛前缀（如 ["pages/"]）；缺省 = 全库（只读无此限制） */
+  vaultScope?: string[]
+}
+
+/** v3 包签名结构校验（V3-1 仅元数据门禁；密钥验证在 V3-4 与 keyring 落地） */
+export function validateSigningField(s: unknown): string | null {
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return 'signing 必须是对象'
+  const o = s as Record<string, unknown>
+  if (o.algo !== 'ed25519') return 'signing.algo 目前仅支持 ed25519'
+  if (typeof o.keyId !== 'string' || !o.keyId.trim() || o.keyId.length > 64) return 'signing.keyId 缺失或过长(≤64)'
+  if (typeof o.sig !== 'string' || o.sig.length === 0 || o.sig.length > 8192) return 'signing.sig 缺失或过长'
+  if (!/^[A-Za-z0-9+/=]+$/.test(o.sig)) return 'signing.sig 需为 base64'
+  return null
 }
 
 /** 删除动画皮肤（插件 contributes.deleteFx，纯数据 S 级） */
@@ -168,8 +185,28 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
   if (typeof raw.id !== 'string' || !ID_RE.test(raw.id)) return { error: '插件 id 缺失或格式非法(仅允许小写字母/数字/. _ -)' }
   if (typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 50) return { error: '插件 name 缺失或过长' }
   if (typeof raw.version !== 'string' || !VER_RE.test(raw.version)) return { error: '插件 version 缺失或格式非法(需 x.y.z)' }
-  if (raw.type === 'code') return { error: '暂不支持代码插件(type: code)' }
+  if (raw.type === 'code') {
+    // v3（R7）契约允许 type: code，但运行时（沙箱 Worker/iframe 通道）在 V3-2 才落地——
+    // 在此之前拒装，避免装上无法执行的半成品。报错信息指引到契约文档。
+    return { error: '代码插件(type: code)需要 v3 沙箱运行时，暂未开放安装（契约见 docs/plugin-api-v2-design.md §6.1）' }
+  }
   if (raw.type !== 'ui' && raw.type !== 'declarative') return { error: `未知的插件类型: ${String(raw.type)}` }
+  // v3 元数据字段（V3-1：仅门禁校验；消费在后续阶段）
+  if (raw.apiVersion !== undefined) {
+    if (raw.apiVersion !== 1 && raw.apiVersion !== 2) return { error: 'apiVersion 仅支持 1 / 2（缺省 1）' }
+  }
+  if (raw.signing !== undefined) {
+    const sigErr = validateSigningField(raw.signing)
+    if (sigErr) return { error: `signing 字段非法: ${sigErr}` }
+  }
+  if (raw.vaultScope !== undefined) {
+    const scopesRaw = raw.vaultScope
+    if (!Array.isArray(scopesRaw) || scopesRaw.length === 0 || scopesRaw.length > 20) return { error: 'vaultScope 需为 1-20 个路径前缀的数组' }
+    for (const p of scopesRaw) {
+      if (typeof p !== 'string' || !/^[\w][\w\-. /]{0,200}$/.test(p) || p.includes('..')) return { error: `vaultScope 前缀非法: ${String(p)}（相对路径、不含 ..）` }
+      if (p === '.' || p === '/') return { error: 'vaultScope 不能声明根目录（全库写需不声明该字段）' }
+    }
+  }
   if (raw.type === 'ui') {
     if (typeof raw.entry !== 'string' || !ENTRY_RE.test(raw.entry)) {
       return { error: 'UI 插件必须提供 entry(入口 HTML 文件名,如 index.html)' }
@@ -987,14 +1024,15 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     if (idx[pluginId] && !idx[pluginId].enabled) {
       return { ok: true, state: 'disabled', message: '插件已禁用,请先在插件页启用' }
     }
-    return getPackState(pluginId)
+    return getPackState(pluginId, pluginSettingReader('storageKnowledge') === 'vault')
   })
   ipcMain.handle('knowledgePack:importPack', (_e, pluginId: string, overwriteModified: boolean, forceExternalIds?: unknown) => {
     const idx = readIndex()
     if (idx[pluginId] && !idx[pluginId].enabled) {
       return { ok: false, message: '插件已禁用,请先启用后再导入' }
     }
-    const r = importPack(pluginId, Boolean(overwriteModified), Array.isArray(forceExternalIds) ? forceExternalIds.map(String) : undefined)
+    const vault = pluginSettingReader('storageKnowledge') === 'vault'
+    const r = importPack(pluginId, Boolean(overwriteModified), Array.isArray(forceExternalIds) ? forceExternalIds.map(String) : undefined, vault)
     return r
   })
 

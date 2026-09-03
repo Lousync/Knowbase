@@ -1,12 +1,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sparkles } from 'lucide-react'
 import type { TabName } from './types'
+
+/** 模块清单（打开命令 / 分屏副栏选择共用；devtools 为 dev-only 不列入口） */
+const MODULE_TABS: Array<{ id: TabName; label: string }> = [
+  { id: 'editor', label: '编辑器' },
+  { id: 'knowledge', label: '知识库' },
+  { id: 'blog', label: '博客' },
+  { id: 'schedule', label: '日程' },
+  { id: 'moments', label: '说说' },
+  { id: 'recycle', label: '回收站' },
+  { id: 'settings', label: '设置' },
+  { id: 'toolbox', label: '工具箱' },
+  { id: 'plugins', label: '插件' },
+  { id: 'help', label: '帮助' },
+  { id: 'user', label: '账户' },
+]
+const tabLabel = (t: TabName) => MODULE_TABS.find((m) => m.id === t)?.label ?? t
 import { TitleBar, ActivityBar } from './components/shared'
+import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
+import { GlobalSearchPanel } from './components/shared/GlobalSearchPanel'
+import { CommandPalette, type PaletteItem } from './components/shared/CommandPalette'
+import { SplitPaneBar } from './components/shared/SplitPaneBar'
 import { Toast } from './components/shared/Toast'
 import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
+import { getKnowledgePages } from './lib/ipc'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -17,7 +38,9 @@ import { HelpModule } from './modules/help'
 import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
 import { PluginsModule } from './modules/plugins'
+import { EditorModule } from './modules/editor'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
+import { WelcomeOverlay } from './components/shared/WelcomeOverlay'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
 import { Onboarding } from './components/shared/Onboarding'
@@ -45,9 +68,19 @@ export default function App() {
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  // 首次引导：无「当前仓库」时全屏选择页（对标 Obsidian 打开 vault）
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
+  const [welcomeChecked, setWelcomeChecked] = useState(false)
   // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
   const [dayPanelVisible, setDayPanelVisible] = useState(false)
   const [dayPanelDetached, setDayPanelDetached] = useState(false)
+  // Workbench 外壳（R1-W1）：全局侧栏容器节点（EditorModule 文件树 portal 目标），
+  // 以 state 持有保证 portal 目标出现后触发重渲染；非 workbench 布局保持 null。
+  // ref 回调用 useCallback 稳定引用：React 卸载节点时才以 null 调用，避免内联箭头每帧触发 setState
+  const [wbSidebarEl, setWbSidebarEl] = useState<HTMLElement | null>(null)
+  const wbSidebarRef = useCallback((node: HTMLDivElement | null) => {
+    setWbSidebarEl(node)
+  }, [])
   // 窗口宽度：任务栏最大宽度与窗口联动（窄窗口自动收窄，主体不被压扁）
   const [winWidth, setWinWidth] = useState(() => window.innerWidth)
   useEffect(() => {
@@ -57,9 +90,128 @@ export default function App() {
   }, [])
   const dayPanelMaxWidth = Math.max(300, Math.min(500, Math.floor(winWidth * 0.4)))
   const { s, update, ready: settingsReady } = useSettings()
+  const workbench = !!s.uiWorkbench
+
+  // R1-W2：命令面板 / 快速切换器（Ctrl+Shift+P / Ctrl+O），两布局均可用（docs/rework-workbench-design.md §3）
+  const [palette, setPalette] = useState<null | 'command' | 'file'>(null)
+  const [fileItems, setFileItems] = useState<PaletteItem[]>([])
+  const [fileLoading, setFileLoading] = useState(false)
+  // 底部面板（全局搜索 v1，仅 Workbench 布局，Ctrl+` 开合）
+  const [bottomPanel, setBottomPanel] = useState(false)
+  // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
+  const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
+  useEffect(() => {
+    if (!workbench) { setBottomPanel(false); return }
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === '`')) {
+        e.preventDefault()
+        setBottomPanel((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [workbench])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault()
+        setPalette((p) => (p === 'command' ? null : 'command'))
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault()
+        setPalette((p) => (p === 'file' ? null : 'file'))
+        return
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // 快速切换器数据源：知识页索引（默认 vault 读源带 path → 经 kb-open-in-editor 在编辑器组打开）
+  useEffect(() => {
+    if (palette !== 'file') return
+    let alive = true
+    setFileLoading(true)
+    getKnowledgePages()
+      .then((ps) => {
+        if (!alive) return
+        setFileItems(
+          (ps ?? [])
+            .filter((p) => !!p.path)
+            .map((p) => ({
+              id: p.id,
+              label: p.title || (p.path as string),
+              hint: p.path ?? undefined,
+              group: '知识页',
+              run: () => {
+                setPalette(null)
+                if (p.path) window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: p.path } }))
+              },
+            })),
+        )
+        setFileLoading(false)
+      })
+      .catch(() => { if (alive) setFileLoading(false) })
+    return () => { alive = false }
+  }, [palette])
+
+  const openTab = useCallback((tab: TabName) => {
+    setActiveTab(tab)
+    setSidebarOpen(true)
+    setPalette(null)
+  }, [])
+  const buildCommandItems = (): PaletteItem[] => {
+    const tabs: Array<{ id: TabName; label: string; hint?: string }> = [
+      { id: 'editor', label: '打开 编辑器', hint: 'Vault 文件' },
+      { id: 'knowledge', label: '打开 知识库', hint: '阅读 / 导航' },
+      { id: 'blog', label: '打开 博客' },
+      { id: 'schedule', label: '打开 日程' },
+      { id: 'moments', label: '打开 说说' },
+      { id: 'recycle', label: '打开 回收站' },
+      { id: 'settings', label: '打开 设置' },
+      { id: 'toolbox', label: '打开 工具箱' },
+      { id: 'plugins', label: '打开 插件' },
+      { id: 'help', label: '打开 帮助' },
+      { id: 'user', label: '打开 账户' },
+    ]
+    const items: PaletteItem[] = tabs.map((t) => ({
+      id: `open-${t.id}`,
+      label: t.label,
+      hint: t.hint,
+      group: '打开模块',
+      run: () => openTab(t.id),
+    }))
+    items.push(
+      { id: 'toggle-workbench', label: workbench ? '布局：切回 旧布局' : '布局：启用 Workbench 外壳（实验）', group: '界面设置', run: () => { update('uiWorkbench', !workbench); setPalette(null) } },
+      { id: 'toggle-readsrc', label: s.storageKnowledge === 'vault' ? '知识库数据：切换到 数据库 sqlite（过渡）' : '知识库数据：切换到 仓库文件 vault（默认）', group: '界面设置', run: () => { update('storageKnowledge', s.storageKnowledge === 'vault' ? 'sqlite' : 'vault'); setPalette(null) } },
+      { id: 'toggle-lineno', label: s.showLineNumbers ? '编辑器：隐藏行号' : '编辑器：显示行号', group: '界面设置', run: () => { update('showLineNumbers', !s.showLineNumbers); setPalette(null) } },
+    )
+    // W3 · 分屏命令（Editor Groups）：开/关副栏 + 选副栏模块（排除当前主栏，避免同模块双实例）
+    items.push(
+      { id: 'split-toggle', label: secondaryTab ? '分屏：关闭副栏' : '分屏：开启副栏', hint: '两栏独立选模块', group: '分屏', run: () => { setSecondaryTab(secondaryTab ? null : (activeTab === 'knowledge' ? 'editor' : 'knowledge')); setPalette(null) } },
+    )
+    MODULE_TABS.filter((m) => m.id !== activeTab).forEach((m) => {
+      items.push({ id: `split-${m.id}`, label: `分屏：在副栏打开 ${m.label}`, group: '分屏', run: () => { setSecondaryTab(m.id); setPalette(null) } })
+    })
+    return items
+  }
+
   useCheckinReminder()
   useHabitAutoCheckinToast()
   const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
+
+  // 启动检测当前仓库：无 → 引导页（在 loaded 后执行一次）
+  useEffect(() => {
+    if (!loaded || welcomeChecked) return
+    let alive = true
+    window.api?.workspaceGetCurrent?.()
+      .then((cur) => { if (alive) setWelcomeOpen(!cur) })
+      .catch(() => { if (alive) setWelcomeOpen(true) })
+      .finally(() => { if (alive) setWelcomeChecked(true) })
+    return () => { alive = false }
+  }, [loaded, welcomeChecked])
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
   useEffect(() => {
@@ -151,6 +303,20 @@ export default function App() {
     const handler = () => { setActiveTab('knowledge'); setSidebarOpen(true) }
     window.addEventListener('knowledge:open', handler)
     return () => window.removeEventListener('knowledge:open', handler)
+  }, [])
+
+  // 读写分工：知识库「在编辑器中打开」→ 切到编辑器 Tab（EditorModule 自行处理文件打开）
+  useEffect(() => {
+    const handler = () => setActiveTab('editor')
+    window.addEventListener('kb-open-in-editor', handler)
+    return () => window.removeEventListener('kb-open-in-editor', handler)
+  }, [])
+
+  // 读写分工反向通道：编辑器「在知识库中阅读」→ 切到知识库 Tab（KnowledgeModule 自行按 path 定位打开）
+  useEffect(() => {
+    const handler = () => { setActiveTab('knowledge'); setSidebarOpen(true) }
+    window.addEventListener('kb-open-in-knowledge', handler)
+    return () => window.removeEventListener('kb-open-in-knowledge', handler)
   }, [])
 
   // Listen for help:open — navigate to help tab(入口:设置弹出菜单/Toast 深链)
@@ -251,8 +417,17 @@ export default function App() {
   }, [])
 
   const handleTabChange = (tab: TabName) => {
-    if (tab === activeTab) setSidebarOpen(v => !v)
-    else { setActiveTab(tab); setSidebarOpen(true); window.dispatchEvent(new CustomEvent('tab-switched')) }
+    if (tab === activeTab) { setSidebarOpen(v => !v); return }
+    // 分屏冲突：目标已在副栏 → 主栏显示它、旧主栏进副栏（避免同模块双实例）
+    if (secondaryTab === tab) {
+      const old = activeTab
+      setActiveTab(tab)
+      setSecondaryTab(old)
+      setSidebarOpen(true)
+      window.dispatchEvent(new CustomEvent('tab-switched'))
+      return
+    }
+    setActiveTab(tab); setSidebarOpen(true); window.dispatchEvent(new CustomEvent('tab-switched'))
   }
 
   // 日程打卡侧边栏：标题栏按钮 + Ctrl+Alt+S 统一入口
@@ -301,49 +476,97 @@ export default function App() {
 
   if (!loaded) return null
 
-  function renderTab(name: TabName, children: React.ReactNode) {
-    if (activeTab === name) {
-      mountedTabs.current.add(name)
-      return <div key={name} className="flex-1 min-h-0">{children}</div>
+  /** 模块内容（主栏/副栏共用；on = 该模块当前在屏幕某栏激活） */
+  function renderModuleContent(name: TabName, on: boolean): React.ReactNode {
+    switch (name) {
+      case 'blog': return <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />
+      case 'schedule': return <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />
+      case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
+      case 'moments': return <MomentsModule />
+      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} />
+      case 'recycle': return <RecycleBinModule isActive={on} />
+      case 'settings': return <SettingsModule />
+      case 'toolbox': return <ToolboxModule />
+      case 'plugins': return <PluginsModule />
+      case 'help': return <HelpModule />
+      case 'devtools': return DevToolsModuleDynamic ? <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} /> : null
+      case 'user': return <UserModule />
+      default: return null
     }
-    if (mountedTabs.current.has(name)) {
-      return <div key={name} className="flex-1 min-h-0" style={{ display: 'none' }}>{children}</div>
-    }
-    return null
+  }
+  /** 槽位级保活挂载：首次出现在任意栏后常驻（display:none 保活），同一模块只在一个栏渲染 */
+  function renderMounted(name: TabName, on: boolean) {
+    if (on) mountedTabs.current.add(name)
+    if (!on && !mountedTabs.current.has(name)) return null
+    return <div key={name} className="flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>{renderModuleContent(name, on)}</div>
   }
 
   return (
     <div className="flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_76%,transparent)] overflow-hidden">
       <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} />
       <PomodoroProvider>
+        <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
 <main className="flex-1 flex overflow-hidden bg-[var(--bg-primary)] relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称 */}
             <div className="m-1.5 flex min-w-0 flex-1">
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
-              {renderTab('blog', <BlogModule showLineNumbers={s.showLineNumbers} sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-              {renderTab('schedule', <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-              {renderTab('knowledge', <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={activeTab === 'knowledge'} />)}
-{renderTab('moments', <MomentsModule />)}
-{renderTab('recycle', <RecycleBinModule isActive={activeTab === 'recycle'} />)}
-              {renderTab('settings', <SettingsModule />)}
-              {renderTab('toolbox', <ToolboxModule />)}
-              {renderTab('plugins', <PluginsModule />)}
-              {renderTab('help', <HelpModule />)}
-              {DevToolsModuleDynamic && renderTab('devtools', <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />)}
-              {renderTab('user', <UserModule />)}
-              {/* AI 助手入口：归属主体卡片，任务栏展开/收起不影响其相对位置 */}
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
-                title="AI 助手 (Ctrl+J)"
-                className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
-              >
-                <Sparkles size={19} />
-              </button>
-              {/* 番茄钟全屏面板：挂在内容卡片内（而非 main），只覆盖主内容区 ——
-                  否则会盖住右侧的任务栏（DayPanel），表现为「进入番茄钟任务栏被关闭/唤不出」 */}
-              <PomodoroPanel />
+              {/* Workbench（R1-W1）：全局侧栏槽（左）+ 编辑器组（右）。编辑器激活时文件树 portal 进侧栏；
+                  其余模块暂以整页形态驻留编辑器组（逐模块迁移中）。旧布局 = 无边栏直渲模块 */}
+              <div className="flex min-h-0 flex-1">
+                {workbench && (
+                  <div
+                    ref={wbSidebarRef}
+                    className={`flex shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)] transition-[width] duration-150 ${
+                      activeTab === 'editor' || secondaryTab === 'editor' ? 'w-[220px]' : 'w-0 overflow-hidden border-r-0'
+                    }`}
+                  />
+                )}
+                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                  {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同 */}
+                  <div className="flex min-h-0 min-w-0 flex-1">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      {renderMounted(activeTab, true)}
+                    </div>
+                    {secondaryTab && secondaryTab !== activeTab && (
+                      <ResizablePanel
+                        storageKey="kb.splitSecondaryWidth"
+                        side="right"
+                        defaultWidth={380}
+                        minWidth={300}
+                        maxWidth={Math.max(420, Math.floor(winWidth * 0.45))}
+                        visible
+                        showHandle
+                        onSnapClose={() => setSecondaryTab(null)}
+                      >
+                        <div className="flex h-full flex-col">
+                          <SplitPaneBar
+                            currentLabel={tabLabel(secondaryTab)}
+                            targets={MODULE_TABS.filter((m) => m.id !== activeTab && m.id !== secondaryTab)}
+                            onSwitch={(id) => setSecondaryTab(id as TabName)}
+                            onClose={() => setSecondaryTab(null)}
+                          />
+                          <div className="flex min-h-0 flex-1 flex-col">
+                            {renderMounted(secondaryTab, true)}
+                          </div>
+                        </div>
+                      </ResizablePanel>
+                    )}
+                  </div>
+                  {/* AI 助手入口：归属主体卡片，任务栏展开/收起不影响其相对位置 */}
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
+                    title="AI 助手 (Ctrl+J)"
+                    className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
+                  >
+                    <Sparkles size={19} />
+                  </button>
+                  {/* 番茄钟全屏面板：挂在内容卡片内（而非 main），只覆盖主内容区 ——
+                      否则会盖住右侧的任务栏（DayPanel），表现为「进入番茄钟任务栏被关闭/唤不出」 */}
+                  <PomodoroPanel />
+                </div>
+              </div>
               </div>
             </div>
             {dayPanelVisible && !dayPanelDetached && (
@@ -370,7 +593,28 @@ export default function App() {
       {/* 全局 AI 助手侧栏 */}
       <AssistantPanel />
         </div>
+      {workbench && bottomPanel && <GlobalSearchPanel onClose={() => setBottomPanel(false)} />}
+      {workbench && <WorkbenchStatusBar />}
+        </div>
       </PomodoroProvider>
+      {palette === 'command' && (
+        <CommandPalette
+          placeholder="输入命令…（如：打开编辑器 / 切换布局）"
+          items={buildCommandItems()}
+          footer="↑↓ 选择 · Enter 执行 · Esc 关闭"
+          onClose={() => setPalette(null)}
+        />
+      )}
+      {palette === 'file' && (
+        <CommandPalette
+          placeholder="搜索页面：标题 / 路径（如：虚拟存储器）"
+          items={fileItems}
+          loading={fileLoading}
+          emptyHint="仓库中暂无可打开的 .md 页面（需 vault 读源并已建索引）"
+          footer="基于知识页索引 · Enter 在编辑器打开 · 再按 Ctrl+O 关闭"
+          onClose={() => setPalette(null)}
+        />
+      )}
       <Toast />
       {onboardingOpen && (
         <Onboarding
@@ -379,6 +623,7 @@ export default function App() {
         />
       )}
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
+      {welcomeOpen && <WelcomeOverlay onDone={() => setWelcomeOpen(false)} />}
     </div>
   )
 }
