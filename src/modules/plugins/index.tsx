@@ -46,14 +46,6 @@ const CONTRIBUTION_HINTS: Record<string, string> = {
   knowledgePages: '导入到知识库(创建空间/笔记本/章节/页面)',
   skills: '提示词技能,设置 → AI 工具 → Skill 中查看、停用与独立安装',
 }
-
-
-/** 工具箱插件化样例（samples/ 平铺 zip）：已安装页顶部一键装入口 */
-const sampleBundles: Array<{ id: string; zip: string; name: string; desc: string; level: 'B' | 'C' }> = [
-  { id: 'kb.weight-tracker', zip: 'kb-weight-tracker-0.1.0.zip', name: '体重追踪', desc: 'B 级 · 零能力 · 记录与曲线（工具箱工具）', level: 'B' },
-  { id: 'kb.site-nav', zip: 'kb-site-nav-0.1.0.zip', name: '网址导航', desc: 'C 级 · navigation · 分类网址 + 宿主开链（工具箱工具）', level: 'C' },
-  { id: 'kb.habit-tracker', zip: 'kb-habit-tracker-0.1.0.zip', name: '习惯打卡', desc: 'B 级 · 零能力 · 打卡 + 反馈动画（工具箱工具）', level: 'B' },
-]
 const CAPABILITY_LABELS: Record<string, string> = {
   clipboard: '剪贴板写入',
   theme: '主题变量注入',
@@ -296,31 +288,6 @@ export function PluginsModule() {
       // 兜底：内置示例缺失（打包版或路径错）→ 走文件选择
       showToast({ type: 'warning', message: r.message || '内置示例不可用，改用文件选择' })
       await handleInstallFromFile()
-    }
-  }
-
-  /** 一键安装工具箱插件化样例（samples/*.zip，开发期产物）。
-   * 通用化：把 quizbook 那套「确保白名单 + 装载 + 进详情页授权」抽成参数化版本。
-   * 已装时一键按钮 disabled；加载失败时给到 fallback（用户走「安装本地 zip」按钮手选）。 */
-  const handleInstallBundledSample = async (zipName: string, expectedId: string, displayName: string, requiredLevel: 'B' | 'C') => {
-    if (installedIds[expectedId]) return
-    setBusy(true)
-    if (!allowedLevels.includes(requiredLevel)) {
-      const r = await pluginSetAllowedLevels(Array.from(new Set([...allowedLevels, requiredLevel])))
-      if (r.success) setAllowedLevels(prev => Array.from(new Set([...prev, requiredLevel])))
-    }
-    const r = await pluginInstallBundledSample(zipName)
-    setBusy(false)
-    if (r.success) {
-      showToast({ type: 'info', message: `${displayName}已安装，请在详情页启用 + 授权` })
-      window.dispatchEvent(new CustomEvent('plugins-changed'))
-      await refreshInstalled()
-      setTab('installed')
-      const list = await pluginListInstalled()
-      const just = list.find(p => p.id === expectedId)
-      if (just) setSelected({ kind: 'installed', plugin: just })
-    } else {
-      showToast({ type: 'warning', message: r.message || `${zipName}不可用，改用文件选择` })
     }
   }
 
@@ -1003,27 +970,6 @@ export function PluginsModule() {
         <div className="flex-1 overflow-y-auto">
           {tab === 'installed' ? (
             <div>
-              {/* 工具箱插件化样例（samples/*.zip，开发期产物）：未安装时始终显示在顶部，一键装载 */}
-              {(sampleBundles.length > 0) && (
-                <div className="px-3 pt-2 pb-0.5 text-[10.5px] text-[var(--text-disabled)] uppercase tracking-wider">工具箱样例 · 本地内置</div>
-              )}
-              {sampleBundles.map((s) => !installedIds[s.id] && (
-                <button
-                  key={s.id}
-                  onClick={() => void handleInstallBundledSample(s.zip, s.id, s.name, s.level)}
-                  className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left border-l-2 border-l-transparent hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <span className="shrink-0 mt-0.5 text-[var(--accent)]"><Package size={15} /></span>
-                  <span className="flex-1 min-w-0">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">{s.name}</span>
-                      <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v0.1</span>
-                    </span>
-                    <span className="block text-[11px] text-[var(--text-muted)] truncate mt-0.5">{s.desc}</span>
-                  </span>
-                  <span className="shrink-0 text-[var(--accent)] text-[11px]">一键安装 →</span>
-                </button>
-              ))}
               {/* 错题本官方推荐行式条目（未安装时显示，与其他已安装插件同款样式 + 右侧一键安装按钮） */}
               {!installed.some(x => x.id === 'knowbase.quizbook') && (
                 <button
