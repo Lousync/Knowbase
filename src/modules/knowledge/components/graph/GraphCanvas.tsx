@@ -268,7 +268,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         const w2 = ctx.measureText(t).width
         const ell = w2 > maxWorld ? `${t.slice(0, Math.max(1, Math.floor(maxWorld / 11) - 1))}…` : t
         const ns = md.births.get(n.id) ?? 1
+        // 两行 label：title（主） + 父级目录（副·小灰），让 kb-hdlc-2 这类英文短代码
+        // 可识别为「HDLC / kb-hdlc-2」（用户最直观的「这节点是什么」信号）
         ctx.fillText(ell, n.x! - ctx.measureText(ell).width / 2, n.y! + n.r * ns + 6 / s)
+        if (n.kind === 'page' && n.path) {
+          const parent = n.path.replace(/\.md$/i, '').split('/').slice(-2, -1)[0] || ''
+          if (parent && parent !== n.title) {
+            ctx.font = `${9 / s}px ${FONT}`
+            const subEll = ctx.measureText(parent).width > maxWorld ? `${parent.slice(0, Math.max(1, Math.floor(maxWorld / 9) - 1))}…` : parent
+            ctx.fillText(subEll, n.x! - ctx.measureText(subEll).width / 2, n.y! + n.r * ns + 17 / s)
+          }
+        }
       }
       ctx.globalAlpha = 1
     }
