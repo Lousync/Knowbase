@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Bot, Gauge, RefreshCw, ShieldCheck, Server, Plus, Plug, Trash2, AlertTriangle, Loader2, Sparkles, Store, Copy, Cpu, Upload } from 'lucide-react'
+import { Bot, Gauge, RefreshCw, ShieldCheck, Server, Plus, Plug, Trash2, AlertTriangle, Loader2, Sparkles, Store, Copy, Cpu, Upload, ChevronRight } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import {
@@ -175,6 +175,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
           count={tools.length}
           anchorId="aiTools.builtin"
           titleClassName="text-[16px] font-semibold text-[var(--text-primary)]"
+          defaultOpen={false}
           headerRight={
             <button onClick={() => { void refresh() }} title="刷新"
               className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
@@ -185,10 +186,11 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
           <p className="text-[12px] text-[var(--text-muted)] mb-3 max-w-md">
             官方提供的只读工具，未来 Agent 与外部客户端经由统一注册表调用。不可关闭以保证透明。
           </p>
-          <div className="space-y-2 max-w-md">
+          <div className="space-y-1.5 max-w-md">
           {tools.map(t => (
-            <div key={t.name} className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
-              <div className="flex items-center gap-2 flex-wrap">
+            <details key={t.name} className="group rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+              <summary className="flex items-center gap-2 flex-wrap px-3.5 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <ChevronRight size={12} className="text-[var(--text-muted)] transition-transform group-open:rotate-90 shrink-0" />
                 <Bot size={14} className="text-[var(--accent)] shrink-0" />
                 <code className="text-[12px] font-medium text-[var(--text-primary)]">{t.name}</code>
                 <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)]">{SOURCE_LABEL[t.source]}</span>
@@ -203,9 +205,9 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
                 {t.module && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)]">{t.module}</span>
                 )}
-              </div>
-              <p className="text-[12px] text-[var(--text-secondary)] mt-1.5 leading-relaxed">{t.description}</p>
-            </div>
+              </summary>
+              <p className="text-[12px] text-[var(--text-secondary)] px-3.5 pb-3 leading-relaxed">{t.description}</p>
+            </details>
           ))}
           {!loading && tools.length === 0 && <p className="text-[12px] text-[var(--text-muted)]">暂无已注册工具</p>}
           </div>
