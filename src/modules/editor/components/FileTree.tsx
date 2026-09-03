@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, FileText, FileCode2, Folder, FolderOpen, Image as ImageIcon } from 'lucide-react'
+import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
 import type { DirCache, TreeNode } from '../types'
+import { getFileIcon } from '../../../lib/fileIcons'
 
 interface Props {
   dirCache: DirCache
@@ -12,16 +13,20 @@ interface Props {
   onMove: (srcRel: string, targetDirRel: string) => void
 }
 
-const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'])
-const CODE_EXTS = new Set(['ts', 'tsx', 'js', 'jsx', 'json', 'py', 'cpp', 'c', 'h', 'java', 'rs', 'go', 'sh', 'bat', 'html', 'css', 'sql', 'yaml', 'yml', 'xml', 'toml', 'ini'])
 const DRAG_MIME = 'text/x-kb-rel'
 
 function FileIcon({ name }: { name: string }) {
+  // 复用 src/lib/fileIcons 知识库已建好的 vscode-icons 库（CC BY 4.0）；
+  // 按扩展名映射 27 种文件类型，未命中走 default.svg。无扩展名（新建知识页）默认 md。
   const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''
-  if (ext === 'md' || name.toLowerCase() === 'readme') return <FileText size={14} className="shrink-0 text-[var(--accent)]" />
-  if (IMAGE_EXTS.has(ext)) return <ImageIcon size={14} className="shrink-0 text-[var(--text-muted)]" />
-  if (CODE_EXTS.has(ext)) return <FileCode2 size={14} className="shrink-0 text-[var(--text-muted)]" />
-  return <FileText size={14} className="shrink-0 text-[var(--text-muted)]" />
+  const svg = getFileIcon(ext)
+  return (
+    <span
+      className="shrink-0 inline-flex items-center justify-center"
+      style={{ width: 14, height: 14 }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  )
 }
 
 /**

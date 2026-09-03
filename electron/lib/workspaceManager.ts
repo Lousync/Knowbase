@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
-import { basename, join, relative, resolve, sep, extname } from 'path'
+import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault } from './kbStore/vaultContext'
@@ -122,6 +122,22 @@ export function listDirEntries(absPath: string): WorkspaceEntry[] {
     return a.name.localeCompare(b.name, 'zh-Hans-CN')
   })
   return out
+}
+
+/**
+ * 给定候选名 baseName，若父目录已存在则自动加后缀返回首个不冲突名。
+ * 例："新建.md" 已存在 → "新建(1).md" / "新建(2).md" …；无扩展名同样加 (1)。
+ * 上限 10k 防意外死循环。纯逻辑（不依赖 electron），node 可冒烟。
+ */
+export function uniqueFileName(parentAbs: string, baseName: string): string {
+  if (!existsSync(join(parentAbs, baseName))) return baseName
+  const ext = extname(baseName)
+  const stem = baseName.slice(0, baseName.length - ext.length)
+  for (let i = 1; i < 10_000; i++) {
+    const next = `${stem}(${i})${ext}`
+    if (!existsSync(join(parentAbs, next))) return next
+  }
+  return baseName // 兜底（理论不可达）
 }
 
 export interface ReadFileResult {
@@ -443,27 +459,36 @@ export function registerWorkspaceHandlers(): void {
   // 新建文件（content 可选：编辑器「新建知识页」一步写入 frontmatter 模板）
   ipcMain.handle('ws:createFile', (_e, rootId: string, relPath: string, content?: string) => {
     try {
-      const abs = requireInside(rootId, relPath)
-      if (existsSync(abs)) throw new Error('文件已存在')
+      const requestedAbs = requireInside(rootId, relPath)
+      const dir = dirname(requestedAbs)
+      const requestedName = basename(requestedAbs)
+      // 重名自动加后缀（对标 VS Code/常见文件管理器）—— 不弹失败而是创建"新建.md(1).md"等
+      const finalName = uniqueFileName(dir, requestedName)
+      const finalAbs = join(dir, finalName)
       if (typeof content === 'string' && content.length > 0) {
-        writeWorkspaceFile(abs, content)
+        writeWorkspaceFile(finalAbs, content)
       } else {
-        writeFileSync(abs, '', 'utf-8')
+        writeFileSync(finalAbs, '', 'utf-8')
       }
-      if (relPath.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(rootId)
-      return { ok: true }
+      if (finalAbs.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(rootId)
+      const finalRel = finalName === requestedName ? relPath : relPath.replace(/[^\\/]+$/, finalName)
+      return { ok: true, relPath: finalRel, renamed: finalName !== requestedName }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
   })
 
-  // 新建目录
+  // 新建目录（重名自动加后缀）
   ipcMain.handle('ws:mkdir', (_e, rootId: string, relPath: string) => {
     try {
-      const abs = requireInside(rootId, relPath)
-      if (existsSync(abs)) throw new Error('目录已存在')
-      mkdirSync(abs, { recursive: false })
-      return { ok: true }
+      const requestedAbs = requireInside(rootId, relPath)
+      const dir = dirname(requestedAbs)
+      const requestedName = basename(requestedAbs)
+      const finalName = uniqueFileName(dir, requestedName)
+      const finalAbs = join(dir, finalName)
+      mkdirSync(finalAbs, { recursive: false })
+      const finalRel = finalName === requestedName ? relPath : relPath.replace(/[^\\/]+$/, finalName)
+      return { ok: true, relPath: finalRel, renamed: finalName !== requestedName }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

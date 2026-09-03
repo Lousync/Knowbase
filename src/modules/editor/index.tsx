@@ -398,10 +398,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     if (!root) return
     const res = type === 'file' ? await workspaceCreateFile(root, rel) : await workspaceMkdir(root, rel)
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
+    const actualRel = res.relPath ?? rel
+    if (res.renamed) showToast({ type: 'info', message: `「${baseName(rel)}」已存在，已创建为「${baseName(actualRel)}」` })
     setExpanded((prev) => new Set(prev).add(dirRel))
     await refreshDir(dirRel)
     if (type === 'file') {
-      await openFile({ name, type: 'file', size: 0, mtime: Date.now(), relPath: rel })
+      await openFile({ name: baseName(actualRel), type: 'file', size: 0, mtime: Date.now(), relPath: actualRel })
     }
   }, [refreshDir, openFile])
 
@@ -430,10 +432,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     const now = new Date().toISOString()
     const content = `---\nid: ${crypto.randomUUID()}\ntitle: ${title}\ntags: []\nstarred: false\ncreated: ${now}\nupdated: ${now}\n---\n\n`
     const res = await workspaceCreateFile(root, rel, content)
+    const actualRel = res.relPath ?? rel
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
+    if (res.renamed) showToast({ type: 'info', message: `已存在同名，已创建为「${baseName(actualRel)}」` })
     setExpanded((prev) => new Set(prev).add(dirRel))
     await refreshDir(dirRel)
-    await openFile({ name: `${stem}.md`, type: 'file', size: 0, mtime: Date.now(), relPath: rel })
+    await openFile({ name: baseName(actualRel), type: 'file', size: 0, mtime: Date.now(), relPath: actualRel })
   }, [refreshDir, openFile])
 
   /** 弹输入框：重命名 */
