@@ -2,13 +2,13 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
-  Pencil, Trash2, ChevronRight, FilePlus2, Braces, BookOpen, ListTree, Eye, PanelRightClose,
+  Pencil, Trash2, ChevronRight, FilePlus2, Braces, BookOpen, ListTree, Eye, PanelRightClose, Archive, FilePenLine,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
 import {
   workspaceOpenDir, workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
   workspaceCreateFile, workspaceMkdir, workspaceRename, workspaceTrash, workspaceGetRecent,
-  workspaceGetCurrent,
+  workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { FileTree } from './components/FileTree'
@@ -54,6 +54,10 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [inputValue, setInputValue] = useState('')
   /** VS Code 式内联创建意图（非空=文件树目标目录尾部显示命名行） */
   const [creating, setCreating] = useState<CreateIntent | null>(null)
+  /** 双态模型：已归档（published）知识页 path 集合——编辑器树隐藏它们（树只留目录+草稿/非知识文件） */
+  const [archivedPaths, setArchivedPaths] = useState<Set<string>>(new Set())
+  /** tab 右键（状态动作/关闭） */
+  const [tabCtx, setTabCtx] = useState<{ x: number; y: number; rel: string } | null>(null)
   const [closeTarget, setCloseTarget] = useState<string | null>(null)
   /** 保存冲突（磁盘被外部修改）：弹三选对话框 */
   const [conflictState, setConflictState] = useState<{ relPath: string; diskMtimeMs?: number; missing: boolean } | null>(null)
@@ -420,8 +424,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     }
     // 文件名净化（Windows 非法字符 → _），中文保留
     const cleaned = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || (type === 'dir' ? '新目录' : '新建文件.md')
-    // 用户拍板（2026-09-03）：知识仓库里新建 .md = 知识页 —— 自动注入 frontmatter id 模板，
-    // 否则无 id 文件被知识索引跳过（草稿），知识库/图谱看不到（历史困惑点）
+    // 双态模型：新建 .md = 草稿（id + status: draft）——知识库不可见，编辑器树可见，可右键归档
     if (type === 'file' && cleaned.toLowerCase().endsWith('.md')) {
       await doCreateKnowledgePage(dirRel, cleaned.slice(0, -3))
       return
@@ -438,7 +441,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     }
   }, [refreshDir, openFile])
 
-  /** 新建知识页：带 frontmatter id 模板（无 id 的 .md 是普通草稿，进不了知识库索引） */
+  /**
+   * 新建 .md（草稿态，双态模型 2026-09-03）：带 id + status: draft。
+   * 草稿 → 编辑器树可见、知识库正式列表/图谱正式节点不可见（publishedOnly 过滤）；
+   * 编辑器右键「归档」去掉 status: draft 后进知识库/图谱（含虚化引用锚——草稿保留 id）。
+   */
   const doCreateKnowledgePage = useCallback(async (dirRel: string, rawTitle: string) => {
     const title = rawTitle.trim()
     if (!title) return
@@ -448,7 +455,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     const stem = title.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || 'untitled'
     const rel = joinRel(dirRel, `${stem}.md`)
     const now = new Date().toISOString()
-    const content = `---\nid: ${crypto.randomUUID()}\ntitle: ${title}\ntags: []\nstarred: false\ncreated: ${now}\nupdated: ${now}\n---\n\n`
+    const content = `---\nid: ${crypto.randomUUID()}\ntitle: ${title}\ntags: []\nstarred: false\nstatus: draft\ncreated: ${now}\nupdated: ${now}\n---\n\n`
     const res = await workspaceCreateFile(root, rel, content)
     const actualRel = res.relPath ?? rel
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
@@ -493,6 +500,36 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     await refreshDir(parentRel(node.relPath))
     showToast({ type: 'info', message: '已重命名' })
   }, [refreshDir])
+
+  /** 双态模型：归档（published）path 集合刷新 —— 知识库正式页在编辑器树中隐藏 */
+  const refreshArchived = useCallback(async () => {
+    try {
+      const pages = await getKnowledgePages()
+      setArchivedPaths(new Set(pages.filter((p) => p.path).map((p) => p.path as string)))
+    } catch { /* 无仓库/失败：保持现状 */ }
+  }, [])
+
+  useEffect(() => {
+    if (!isActive) return
+    void refreshArchived()
+  }, [isActive, refreshArchived])
+
+  /** 归档(draft=false)/转草稿(draft=true)：主进程改 frontmatter status + 索引失效；本地重载 */
+  const togglePageStatus = useCallback(async (relPath: string, draft: boolean) => {
+    const root = rootIdRef.current
+    if (!root) return
+    const doc = openFilesRef.current[relPath]
+    if (doc && fullContent(doc) !== savedFullContent(doc)) {
+      showToast({ type: 'warning', message: '该文件有未保存修改，请先 Ctrl+S 保存' })
+      return
+    }
+    const res = await workspaceSetMdStatus(root, relPath, draft)
+    if (!res.ok) { showToast({ type: 'error', message: res.error || '操作失败' }); return }
+    showToast({ type: 'info', message: draft ? '已转为草稿：知识库暂不可见，编辑后可再次归档' : '已归档为知识页：可在知识库中阅读' })
+    if (openFilesRef.current[relPath]) closeTab(relPath)
+    await refreshDir(parentRel(relPath))
+    await refreshArchived()
+  }, [refreshDir, refreshArchived, closeTab])
 
   /** 拖拽移动：把 srcRel 移动到 targetDirRel 下（复用 ws:rename 跨目录移动） */
   const moveNode = useCallback(async (srcRel: string, targetDirRel: string) => {
@@ -686,6 +723,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 creating={creating}
                 onCommitCreate={(dirRel, type, raw) => void commitCreate(dirRel, type, raw)}
                 onCancelCreate={() => setCreating(null)}
+                hiddenRelPaths={archivedPaths}
                 onContextMenu={(e, n) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -713,6 +751,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                   <div
                     key={rel}
                     onClick={() => setActivePath(rel)}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setTabCtx({ x: e.clientX, y: e.clientY, rel })
+                    }}
                     className={`group flex max-w-[200px] cursor-pointer items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1.5 text-[12.5px] transition-colors ${
                       isActiveTab
                         ? 'border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]'
@@ -904,6 +947,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 <FileText size={13} className="text-[var(--text-muted)]" />打开
               </button>
             )}
+            {ctxMenu.node.type === 'file' && ctxMenu.node.relPath.toLowerCase().endsWith('.md') && !archivedPaths.has(ctxMenu.node.relPath) && (
+              <button onClick={() => { const rel = ctxMenu.node.relPath; setCtxMenu(null); void togglePageStatus(rel, false) }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                <Archive size={13} className="text-[var(--text-muted)]" />归档为知识页
+              </button>
+            )}
             {ctxMenu.node.type === 'file' && ctxMenu.node.relPath.toLowerCase().endsWith('.md') && (
               <button onClick={() => { const rel = ctxMenu.node.relPath; setCtxMenu(null); openInKnowledge(rel) }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
@@ -922,6 +971,38 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* tab 右键：状态动作（归档为知识页 / 转为草稿）+ 关闭 */}
+      {tabCtx && (
+        <div className="fixed inset-0 z-[70]" onClick={() => setTabCtx(null)} onContextMenu={(e) => { e.preventDefault(); setTabCtx(null) }}>
+          <div
+            className="absolute min-w-[160px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
+            style={{ left: Math.min(tabCtx.x, window.innerWidth - 180), top: Math.min(tabCtx.y, window.innerHeight - 120) }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {tabCtx.rel.toLowerCase().endsWith('.md') && (
+              <>
+                {archivedPaths.has(tabCtx.rel) ? (
+                  <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); void togglePageStatus(rel, true) }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                    <FilePenLine size={13} className="text-[var(--text-muted)]" />转为草稿（修改中）
+                  </button>
+                ) : (
+                  <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); void togglePageStatus(rel, false) }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                    <Archive size={13} className="text-[var(--text-muted)]" />归档为知识页
+                  </button>
+                )}
+                <div className="mx-2 my-0.5 border-t border-[var(--border-color)]" />
+              </>
+            )}
+            <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); requestCloseTab(rel) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />关闭
+            </button>
           </div>
         </div>
       )}

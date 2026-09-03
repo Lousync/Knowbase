@@ -12,6 +12,8 @@ export interface GraphNode {
   kind: 'page' | 'tag' | 'dangling'
   /** 无向关联数（页页边 + 页标签边）；dangling 为引用它的源页数 */
   degree: number
+  /** page 节点的页面状态：draft=草稿（图谱虚化「修改中」）；缺省/published=归档正式 */
+  status?: 'draft' | 'published'
 }
 
 /** 去重后的无向边（页-页 / 页-标签） */

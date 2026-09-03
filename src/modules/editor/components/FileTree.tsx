@@ -15,6 +15,8 @@ interface Props {
   creating?: CreateIntent | null
   onCommitCreate?: (dirRel: string, type: 'file' | 'dir' | 'knowledge', rawName: string) => void
   onCancelCreate?: () => void
+  /** 双态模型：已归档知识页的仓库相对路径集合——树中隐藏（编辑器只留目录骨架 + 草稿/非知识文件） */
+  hiddenRelPaths?: Set<string>
 }
 
 const DRAG_MIME = 'text/x-kb-rel'
@@ -38,7 +40,7 @@ function FileIcon({ name }: { name: string }) {
  * 拖拽：条目均可拖（mime: text/x-kb-rel）；目录与根容器是落点，
  * drop 时把源相对路径移动到目标目录下（主进程 ws:rename 跨目录移动）。
  */
-export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate }: Props) {
+export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths }: Props) {
   const [dragOver, setDragOver] = useState<string | null>(null)
 
   const startDrag = (e: React.DragEvent, relPath: string) => {
@@ -86,8 +88,10 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             <span className="truncate text-[12.5px] text-[var(--text-primary)]">{dirNode.name}</span>
           </div>
         )}
-        {isOpen && entries.map((e) =>
-          e.type === 'dir'
+        {isOpen && entries.map((e) => {
+          // 双态模型：已归档知识页在编辑器中隐藏（目录骨架/草稿/代码文件保留）
+          if (e.type === 'file' && hiddenRelPaths?.has(e.relPath)) return null
+          return e.type === 'dir'
             ? renderDir(e.relPath, depth + 1)
             : (
               <div
@@ -104,8 +108,8 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                 <FileIcon name={e.name} />
                 <span className={`truncate text-[12.5px] ${activePath === e.relPath ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{e.name}</span>
               </div>
-            ),
-        )}
+            )
+        })}
         {/* VS Code 式内联创建行：目标目录已展开时显示在条目末尾 */}
         {isOpen && creating && creating.dirRel === relPath && (
           <InlineCreateRow

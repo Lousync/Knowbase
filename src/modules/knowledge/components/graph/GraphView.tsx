@@ -118,7 +118,7 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
   const [data, setData] = useState<GraphIndexData | null>(null)
   const [error, setError] = useState('')
   const [cfg, setCfg] = useState<GraphViewConfig>(DEFAULT_GVC)
-  const [sel, setSel] = useState<Pick<GraphNode, 'id' | 'title' | 'path' | 'kind' | 'degree'> | null>(null)
+  const [sel, setSel] = useState<Pick<GraphNode, 'id' | 'title' | 'path' | 'kind' | 'degree' | 'status'> | null>(null)
   /** A7 本地图谱：中心页 id；null=全图 */
   const [centerId, setCenterId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -407,7 +407,12 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
           <div className="flex items-start gap-2">
             {sel.kind === 'tag' ? <Tag size={14} className="mt-0.5 shrink-0 text-[var(--text-muted)]" /> : <FileText size={14} className="mt-0.5 shrink-0 text-[var(--accent)]" />}
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-[var(--text-primary)] truncate">{sel.title}</div>
+              <div className="text-[13px] font-medium text-[var(--text-primary)] truncate flex items-center gap-1.5">
+                {sel.title}
+                {sel.status === 'draft' && (
+                  <span className="shrink-0 rounded bg-[var(--warning)]/15 px-1 py-px text-[9.5px] font-normal text-[var(--warning)]">草稿</span>
+                )}
+              </div>
               <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5 truncate">
                 {kindLabel(sel.kind)}{sel.kind === 'page' && sel.path ? ` · ${sel.path}` : ''}
               </div>

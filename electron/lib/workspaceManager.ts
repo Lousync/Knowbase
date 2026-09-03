@@ -6,6 +6,7 @@ import { getDatabase, saveToDisk } from '../database/connection'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
+import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
 
 /**
  * 编辑器工作区（Vault 仓库）文件服务。
@@ -489,6 +490,32 @@ export function registerWorkspaceHandlers(): void {
       mkdirSync(finalAbs, { recursive: false })
       const finalRel = finalName === requestedName ? relPath : relPath.replace(/[^\\/]+$/, finalName)
       return { ok: true, relPath: finalRel, renamed: finalName !== requestedName }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  // 双态模型：置/去 .md 的 frontmatter status: draft（draft=true=转草稿[保留 id 供虚化锚定]，false=归档为知识页）
+  ipcMain.handle('ws:setMdStatus', (_e, rootId: string, relPath: string, draft: unknown) => {
+    try {
+      const abs = requireInside(rootId, relPath)
+      const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
+      if (draft === true) {
+        doc.frontmatter.status = 'draft'
+      } else {
+        delete doc.frontmatter.status
+        // 归档时若尚无 id（纯 markdown 草稿/普通文件）→ 注入知识页 id 与 title，否则知识索引仍跳过
+        if (!doc.frontmatter.id || typeof doc.frontmatter.id !== 'string') {
+          doc.frontmatter.id = randomUUID()
+          if (!doc.frontmatter.title || typeof doc.frontmatter.title !== 'string') {
+            doc.frontmatter.title = basename(abs).replace(/\.md$/i, '')
+          }
+        }
+      }
+      writeWorkspaceFile(abs, serializeMarkdown(doc.frontmatter, doc.body))
+      invalidateIndexIfCurrentVault(rootId)
+      invalidateGraphIndex() // 图谱节点 status（draft 虚化）需重建缓存
+      return { ok: true }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

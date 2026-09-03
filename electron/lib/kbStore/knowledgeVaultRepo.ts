@@ -33,6 +33,13 @@ export interface VaultPage {
   path: string
   /** frontmatter attachments 数组：仓库内相对路径（如 .knowbase/_attachments/knowledge_page/<id>/<file>） */
   attachments: string[]
+  /** 页面状态（draft/published）：draft 不出现在知识库正式列表/阅读（编辑器草稿/修改中） */
+  status: 'draft' | 'published'
+}
+
+/** 正式页过滤（草稿隐藏）：知识库列表/阅读/搜索/星标/反链源只含 published */
+function publishedOnly(list: KnowledgePageIndexEntry[]): KnowledgePageIndexEntry[] {
+  return list.filter((e) => e.status !== 'draft')
 }
 
 function requireRoot(): string {
@@ -77,6 +84,7 @@ function entryToPage(entry: KnowledgePageIndexEntry, contentMd = '', attachments
     tags: tagsOf(entry),
     path: entry.path,
     attachments,
+    status: entry.status,
   }
 }
 
@@ -108,10 +116,10 @@ export function vaultGetCategories(): Array<{ id: string; name: string; parentId
   }))
 }
 
-/** 语义对齐 knowledge:getPages：truthy=按分类，null=未分类，undefined=全部 */
+/** 语义对齐 knowledge:getPages：truthy=按分类，null=未分类，undefined=全部（均只含正式 published 页） */
 export function vaultGetPages(categoryId?: string | null): VaultPage[] {
   const idx = getKnowledgeIndex()
-  let list = idx.pages
+  let list = publishedOnly(idx.pages)
   if (categoryId) list = list.filter((e) => e.categoryId === categoryId)
   else if (categoryId === null) list = list.filter((e) => e.categoryId === null)
   return list.map((e) => {
@@ -122,7 +130,7 @@ export function vaultGetPages(categoryId?: string | null): VaultPage[] {
 
 export function vaultGetPageById(id: string): VaultPage | null {
   const entry = getKnowledgeIndex().byId[id]
-  if (!entry) return null
+  if (!entry || entry.status === 'draft') return null // 草稿（修改中）不出现在知识库阅读
   const doc = readPageDoc(entry)
   return entryToPage(entry, doc.contentMd, doc.attachments)
 }
@@ -144,7 +152,7 @@ export function vaultToggleStar(id: string): VaultPage | null {
 }
 
 export function vaultGetStarredPages(): VaultPage[] {
-  return getKnowledgeIndex().pages
+  return publishedOnly(getKnowledgeIndex().pages)
     .filter((e) => e.starred)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .map((e) => entryToPage(e))
@@ -152,7 +160,7 @@ export function vaultGetStarredPages(): VaultPage[] {
 
 export function vaultGetTags(): VaultTag[] {
   const seen = new Map<string, VaultTag>()
-  for (const p of getKnowledgeIndex().pages) {
+  for (const p of publishedOnly(getKnowledgeIndex().pages)) {
     for (const name of p.tags) {
       if (!seen.has(name)) seen.set(name, { id: name, name, color: '#6b7280' })
     }
@@ -193,7 +201,7 @@ export function vaultSearchPages(q: string): Array<VaultPage & { excerpt: string
   const idx = getKnowledgeIndex()
   const root = requireRoot()
   const out: Array<VaultPage & { excerpt: string }> = []
-  for (const entry of idx.pages) {
+  for (const entry of publishedOnly(idx.pages)) {
     let body = ''
     try {
       body = parseMarkdown(readFileSync(join(root, entry.path), 'utf-8')).body
@@ -230,7 +238,7 @@ export function vaultGetBacklinks(pageId: string): VaultPage[] {
   const srcIds = getGraphIndex().incoming[pageId] || []
   const rows = srcIds
     .map((id) => idx.byId[id])
-    .filter((p): p is KnowledgePageIndexEntry => !!p && p.id !== pageId)
+    .filter((p): p is KnowledgePageIndexEntry => !!p && p.id !== pageId && p.status !== 'draft')
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   return rows.map((e) => entryToPage(e, ''))
 }
@@ -247,7 +255,7 @@ export function vaultGetBacklinkContext(pageId: string): VaultBacklinkContextIte
   const out: VaultBacklinkContextItem[] = []
   const sources = srcIds
     .map((id) => idx.byId[id])
-    .filter((p): p is KnowledgePageIndexEntry => !!p && p.id !== pageId)
+    .filter((p): p is KnowledgePageIndexEntry => !!p && p.id !== pageId && p.status !== 'draft')
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   for (const src of sources) {
     let excerpt = ''

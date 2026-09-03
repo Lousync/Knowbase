@@ -29,6 +29,8 @@ export interface KnowledgePageIndexEntry {
   createdAt: string
   updatedAt: string
   mtimeMs: number
+  /** 页面状态（草稿/归档双态）：draft=草稿（知识库正式列表隐藏、图谱虚化/双链仍可引用）；published=归档（默认） */
+  status: 'draft' | 'published'
   /** 正文 [[出链]] 标题集合（R2：反链面板据此反查，不必全文扫） */
   outgoingTitles: string[]
 }
@@ -184,6 +186,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
         attachmentId: asString(doc.frontmatter.attachmentId),
         createdAt: asString(doc.frontmatter.created),
         updatedAt: asString(doc.frontmatter.updated),
+        status: asString(doc.frontmatter.status).toLowerCase() === 'draft' ? 'draft' : 'published',
         mtimeMs: stat.mtimeMs,
         outgoingTitles: extractWikiOutlinks(doc.body),
       }
