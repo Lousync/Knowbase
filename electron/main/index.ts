@@ -13,7 +13,6 @@ import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
 import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRepo'
 import { registerVaultMigrationHandlers } from '../database/repositories/vaultMigrationRepo'
 import { registerExportHandlers } from '../database/repositories/exportRepo'
-import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
 import { registerUserHandlers } from '../database/repositories/userRepo'
 import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
@@ -502,6 +501,7 @@ app.whenReady().then(async () => {
       return false
     }
   })
+
   ipcMain.handle('app:openExternal', async (_e, target: string) => {
     if (typeof target !== 'string' || !target) return
     // 网页链接 → 系统浏览器(仅 http/https,拒绝 file:/自定义协议)
@@ -519,6 +519,22 @@ app.whenReady().then(async () => {
       console.warn('[Security] 拒绝打开数据目录外的路径:', target)
     }
   })
+
+  // 跨平台打开系统回收站：Win shell 协议 / mac 已知路径 / Linux GIO trash URI
+  // (去库化后应用层回收站模块删除 —— 文件删除一律走系统回收站 + 入口直达 OS)
+  ipcMain.handle('app:openRecycleBin', async () => {
+    let target = ''
+    if (process.platform === 'win32') target = 'shell:RecycleBinFolder'
+    else if (process.platform === 'darwin') target = require('os').homedir() + '/.Trash'
+    else target = 'trash:///'
+    try {
+      await shell.openPath(target)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
   await initDatabase()
   // 番茄钟状态跨窗口中转：主进程维护快照，渲染层上报 + 接收广播（让 popout 独立窗口也能显示番茄钟状态）
   registerPomodoroBroadcast()
@@ -543,7 +559,6 @@ app.whenReady().then(async () => {
   registerKnowledgeHandlers((key) => settingsCache[key])
   registerVaultMigrationHandlers()
   registerExportHandlers()
-  registerRecycleBinHandlers()
   registerImportHandlers((key) => settingsCache[key])
   registerUserHandlers()
   registerToolboxHandlers()

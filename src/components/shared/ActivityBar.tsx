@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import type { TabName } from '../../types'
-import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, LifeBuoy } from 'lucide-react'
+import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, LifeBuoy, Trash2 } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
+import { openRecycleBin } from '../../lib/ipc'
+import { showToast } from '../../lib/toast'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, RecycleIcon, UserIcon, SettingsIcon, PluginIcon, EditorIcon } from './ModuleIcons'
 
 /** All draggable module tabs (excluding user/settings; 帮助已在用户菜单内,侧边栏不再单列) */
@@ -253,6 +255,21 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
               <LifeBuoy size={15} className="text-[var(--text-muted)]" />
               帮助
+            </button>
+
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+
+            {/* 回收站：去库化后应用内回收站模块删除，此处直达系统回收站文件夹 */}
+            <button
+              onClick={async () => {
+                setMenuOpen(false)
+                const r = await openRecycleBin()
+                if (!r.success) showToast({ type: 'error', message: r.error || '打开回收站失败' })
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Trash2 size={15} className="text-[var(--text-muted)]" />
+              回收站
             </button>
 
             <div className="border-t border-[var(--border-color)] my-0.5" />

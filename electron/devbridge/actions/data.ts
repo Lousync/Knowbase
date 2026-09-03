@@ -26,7 +26,6 @@ const BUSINESS_TABLES = [
   'knowledge_tags',
   'knowledge_categories',
   'knowledge_pack_imports',
-  'recycle_bin',
   'toolbox_scripts',
   'toolbox_passwords',
   'toolbox_weight_records',

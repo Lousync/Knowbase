@@ -313,14 +313,7 @@ export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unk
       pages: directPages,
     })
 
-    // ---- 3) 存入回收站 ----
-    const binId = randomUUID()
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data)
-       VALUES (?, ?, 'knowledge_category', ?, ?)`,
-      [binId, id, cat.name, snapshot]
-    )
-
+    // (去库化后不再写 sqlite recycle_bin：直删)
     // ---- 4) 删除所有页面 ----
     for (const cid of allCatIds) {
       const pageIds = queryAll<{ id: string }>('SELECT id FROM knowledge_pages WHERE category_id = ?', [cid])
@@ -537,16 +530,9 @@ kHandle('knowledge:getPages', (_e, categoryId?: string | null) => {
       }
     }
 
-    // 插入回收站
-    const binId = randomUUID()
+    // 直删（去库化后不再写 sqlite recycle_bin）：附件文件一并 trash
     const inlineAttachmentIds = parseInlineAttachmentIds(page.content_md)
-    if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, binId)
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data)
-       VALUES (?, ?, 'knowledge', ?, ?)`,
-      [binId, id, page.title, data]
-    )
-
+    if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, '')
     // 从原表删除（CASCADE 自动清理 knowledge_links + knowledge_page_tags）
     run('DELETE FROM knowledge_pages WHERE id = ?', [id])
   })

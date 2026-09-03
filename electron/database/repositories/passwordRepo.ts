@@ -127,18 +127,7 @@ export function registerPasswordHandlers(): void {
   })
 
   ipcMain.handle('passwordVault:delete', (_e, id: string) => {
-    // Move to recycle bin instead of permanent delete
-    const rows = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords WHERE id = ?', [id])
-    if (rows.length === 0) return
-    const entry = rowToPassword(rows[0])
-    const binId = randomUUID()
-    // 快照中的密码加密存储,避免回收站快照成为明文扩散点(恢复时直接插回密文,读取端统一解密)
-    const snapshot = JSON.stringify({ ...entry, password: encryptPassword(entry.password) })
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [binId, id, 'passwordVault', entry.title || '未命名', snapshot, new Date().toISOString()]
-    )
+    // 直删（去库化后不再写 sqlite recycle_bin——原「移入回收站可恢复」语义废弃）
     run('DELETE FROM toolbox_passwords WHERE id = ?', [id])
   })
 

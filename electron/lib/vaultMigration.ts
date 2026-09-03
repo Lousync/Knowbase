@@ -487,7 +487,6 @@ export function runLegacyImport(opts: ImportOptions = {}, onProgress?: (p: Impor
   planTable('supervise_log', join(K, 'supervise', 'log.json'))
   planTable('agent_sessions', join(K, 'agent', 'sessions.json'))
   planTable('agent_messages', join(K, 'agent', 'messages.json'))
-  planTable('recycle_bin', join(K, 'recycle-bin.json'))
   if (tableExists('user_profile')) {
     try { planJson(join(K, 'user.json'), all('select id, username, avatar_path, created_at, updated_at from user_profile')) } catch { /* ignore */ }
   }

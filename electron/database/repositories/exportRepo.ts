@@ -23,7 +23,6 @@ interface MomentsRow { id: string; content_md: string; content_html: string | nu
 interface AlbumRow { id: string; name: string; cover_data_url: string | null; cover_post_id: string | null; cover_index: number | null; created_at: string; updated_at: string }
 interface ScriptRow { id: string; name: string; description: string; content: string; language: string; sort_order: number; created_at: string; updated_at: string }
 interface WeightRow { id: string; weight: number; date: string; series: string; note: string; created_at: string }
-interface RecycleRow { id: string; original_id: string; module: string; title: string; data: string; deleted_at: string }
 interface KnowledgePageTagRow { page_id: string; tag_id: string }
 interface HabitRow { id: string; name: string; color: string; icon: string; rule_type: string; rule_days: string; weekly_target: number; sort_order: number; archived: number; created_at: string; updated_at: string }
 interface BookmarkCategoryRow { id: string; name: string; color: string; sort_order: number; created_at: string }
@@ -160,7 +159,6 @@ export function buildAllData(moduleIds?: string[]) {
   // Toolbox + Recycle bin (app-level, always included)
   const scripts = queryAll<ScriptRow>('SELECT * FROM toolbox_scripts ORDER BY sort_order, created_at')
   const weightRecords = queryAll<WeightRow>('SELECT * FROM toolbox_weight_records ORDER BY date DESC, created_at DESC')
-  const recycleItems = queryAll<RecycleRow>('SELECT * FROM recycle_bin ORDER BY deleted_at DESC')
 
   // User profile (app-level, always included so a restore is complete)
   const userRow = queryAll<{ username: string; avatar_path: string; password_hash: string; created_at: string; updated_at: string }>(
@@ -205,9 +203,6 @@ export function buildAllData(moduleIds?: string[]) {
     toolbox: {
       scripts: scripts.map(s => ({ id: s.id, name: s.name, description: s.description, content: s.content, language: s.language, sortOrder: s.sort_order, createdAt: s.created_at, updatedAt: s.updated_at })),
       weightRecords: weightRecords.map(w => ({ id: w.id, weight: w.weight, date: w.date, series: w.series, note: w.note, createdAt: w.created_at }))
-    },
-    recycleBin: {
-      items: recycleItems.map(r => ({ id: r.id, originalId: r.original_id, module: r.module, title: r.title, data: r.data, deletedAt: r.deleted_at }))
     },
     // 内容型插件导入映射(换机恢复后「检查更新」不产生重复页面)
     knowledgePackImports: queryAll<{ plugin_id: string; external_id: string; page_id: string; content_hash: string; pack_version: string; space_id: string | null; imported_at: string }>(

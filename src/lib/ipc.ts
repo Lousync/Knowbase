@@ -120,6 +120,7 @@ export const importBinaryFile = (filePath: string, fileType: string) => a().impo
 export const showFolderDialog = () => a().showFolderDialog()
 export const importFolder = (folderPath: string, parentCategoryId: string | null) => a().importFolder(folderPath, parentCategoryId)
 export const openExternal = (filePath: string) => a().openExternal(filePath)
+export const openRecycleBin = () => a().openRecycleBin()
 export const getAppVersion = () => a().getAppVersion()
 export const checkForUpdate = () => a().checkForUpdate()
 export const downloadUpdate = (url: string, name: string, size?: number) => a().downloadUpdate(url, name, size)
@@ -165,16 +166,6 @@ export const readImportFile = (filePath: string) => a().readImportFile(filePath)
 export const executeImport = (data: object) => a().executeImport(data)
 export const importDb = (srcPath: string) => a().importDb(srcPath)
 export const previewUserFromDb = (filePath: string) => a().previewUserFromDb(filePath)
-
-// recycle bin
-export const getRecycleBinItems = () => a().getRecycleBinItems()
-export const restoreRecycleBinItem = (id: string) => a().restoreRecycleBinItem(id)
-export const restoreRecycleBinPartial = (id: string, path: string) => a().restoreRecycleBinPartial(id, path)
-export const trashRecycleBinItem = (id: string) => a().trashRecycleBinItem(id)
-export const trashAllRecycleBin = () => a().trashAllRecycleBin()
-export const trashRecycleBinPartial = (id: string, path: string) => a().trashRecycleBinPartial(id, path)
-export const emptyRecycleBin = () => a().emptyRecycleBin()
-export const purgeExpiredRecycleBinItems = () => a().purgeExpiredRecycleBinItems()
 
 // ===== User =====
 export const getUserProfile = (): Promise<UserProfile | null> => a().getUserProfile()
