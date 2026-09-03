@@ -22,6 +22,7 @@ import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
 import { GlobalSearchPanel } from './components/shared/GlobalSearchPanel'
 import { CommandPalette, type PaletteItem } from './components/shared/CommandPalette'
 import { SplitPaneBar } from './components/shared/SplitPaneBar'
+import { CodePluginHosts } from './components/shared/CodePluginHosts'
 import { Toast } from './components/shared/Toast'
 import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
@@ -503,6 +504,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_76%,transparent)] overflow-hidden">
+      <CodePluginHosts />
       <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} />
       <PomodoroProvider>
         <div className="flex flex-1 flex-col overflow-hidden">

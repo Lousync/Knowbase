@@ -663,6 +663,12 @@ function notifyPluginsChanged(): void {
   for (const cb of changeSubscribers) {
     try { cb() } catch (err) { console.error('[Plugins] 变更订阅回调失败:', err) }
   }
+  // V3-2d：通知所有渲染窗口（插件页/后台 code 宿主容器刷新）
+  try {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('plugin:installed-changed')
+    }
+  } catch { /* 窗口已销毁等忽略 */ }
 }
 
 // ---------- IPC ----------

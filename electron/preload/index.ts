@@ -113,6 +113,12 @@ const api = {
     ipcRenderer.on('plugin:download-progress', handler)
     return () => { ipcRenderer.removeListener('plugin:download-progress', handler) }
   },
+  /** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */
+  onPluginInstalledChanged: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('plugin:installed-changed', handler)
+    return () => { ipcRenderer.removeListener('plugin:installed-changed', handler) }
+  },
   pluginInstallFromFile: (grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installFromFile', grantedCapabilities),
   pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installBundledSample', filename, grantedCapabilities),
   pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),

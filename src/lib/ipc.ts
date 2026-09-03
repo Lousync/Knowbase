@@ -129,6 +129,8 @@ export const updateCancelDownload = () => a().updateCancelDownload()
 export const onUpdateDownloadProgress = (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => a().onUpdateDownloadProgress(cb)
 export const pluginFetchRegistry = () => a().pluginFetchRegistry()
 export const pluginInstall = (url: string, grantedCapabilities?: string[]) => a().pluginInstall(url, grantedCapabilities)
+/** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */
+export const onPluginInstalledChanged = (cb: () => void) => a().onPluginInstalledChanged(cb)
 export const pluginInstallFromFile = (grantedCapabilities?: string[]) => a().pluginInstallFromFile(grantedCapabilities)
 /** 一键安装内置示例插件（开发期从工作区 samples/ 读，prod 后续用 extraResources 预置） */
 export const pluginInstallBundledSample = (filename: string, grantedCapabilities?: string[]) => a().pluginInstallBundledSample(filename, grantedCapabilities)
