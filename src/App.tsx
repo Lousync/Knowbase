@@ -566,14 +566,17 @@ export default function App() {
                       </ResizablePanel>
                     )}
                   </div>
-                  {/* AI 助手入口：归属主体卡片，任务栏展开/收起不影响其相对位置 */}
-                  <button
-                    onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
-                    title="AI 助手 (Ctrl+J)"
-                    className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
-                  >
-                    <Sparkles size={19} />
-                  </button>
+                  {/* AI 助手入口：归属主体卡片，任务栏展开/收起不影响其相对位置。
+                      沉浸式 Agent 工作台（immersive）激活时隐藏——全屏 AI 界面不再需要右下浮钮 */}
+                  {activeTab !== 'immersive' && secondaryTab !== 'immersive' && (
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
+                      title="AI 助手 (Ctrl+J)"
+                      className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
+                    >
+                      <Sparkles size={19} />
+                    </button>
+                  )}
                   {/* 番茄钟全屏面板：挂在内容卡片内（而非 main），只覆盖主内容区 ——
                       否则会盖住右侧的任务栏（DayPanel），表现为「进入番茄钟任务栏被关闭/唤不出」 */}
                   <PomodoroPanel />
