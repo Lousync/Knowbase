@@ -6,6 +6,8 @@ import { getDatabase, saveToDisk, getAttachmentsDir } from '../database/connecti
 import { getPluginsRoot, auditWrite } from './pluginRegistry'
 import { safePathInside } from './pathGuard'
 import { importPackToVault, packStateVault } from './knowledgePackVault'
+import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
+import { invalidateGraphIndex } from './kbStore/graphIndex'
 
 /**
  * 内容型插件(knowledgePages)导入引擎。
@@ -307,7 +309,16 @@ export function importPack(pluginId: string, overwriteModified: boolean, forceEx
   const pack = mfParsed.pack
   const packVersion = mfParsed.version
   // vault 读源：批量写仓库 .md（见 knowledgePackVault），避免导入进 sqlite 而知识库读不到
-  if (isVault) return importPackToVault(pluginId, pack, packVersion, pluginDir, overwriteModified, forceExternalIds)
+  if (isVault) {
+    const r = importPackToVault(pluginId, pack, packVersion, pluginDir, overwriteModified, forceExternalIds)
+    // 写 .md 后必须双失效：knowledge 索引（页面列表）+ graph 缓存（图谱节点/边），
+    // 否则图谱读旧 graph.json —— 导入 408 空间后图谱为空的根因（2026-09-03 修复）
+    if (r.ok) {
+      invalidateKnowledgeIndex()
+      invalidateGraphIndex()
+    }
+    return r
+  }
 
   const db = getDatabase()
   const mapping = readMapping(pluginId)

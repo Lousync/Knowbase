@@ -1,4 +1,5 @@
-import { deleteFile, readJson, writeJson } from './jsonStore'
+import { statSync } from 'fs'
+import { kbModulePath, deleteFile, readJson, writeJson } from './jsonStore'
 import { getCurrentVault } from './vaultContext'
 import { getKnowledgeIndex, type KnowledgeIndex } from './knowledgeIndex'
 import type { GraphEdge, GraphIndexData, GraphNode, UnresolvedRef } from '../../../src/lib/graphTypes'
@@ -173,9 +174,24 @@ export function rebuildGraphIndex(): GraphIndexData {
   }
 }
 
-/** 读取缓存；不存在或 schema 不匹配时自动重建并落盘（与 knowledgeIndex 同模式） */
+/**
+ * graph.json 落后于 knowledge-index.json → 过期（兜底：任何漏 invalidateGraphIndex 的写路径，
+ * 如 2026-09-03 前知识包导入只刷知识索引不刷图谱，导致图谱读到旧缓存为空）
+ */
+function graphCacheStale(): boolean {
+  try {
+    const g = kbModulePath('cache', 'graph.json')
+    const k = kbModulePath('cache', 'knowledge-index.json')
+    if (!g || !k) return false
+    return statSync(k).mtimeMs > statSync(g).mtimeMs + 100
+  } catch {
+    return false
+  }
+}
+
+/** 读取缓存；不存在 / schema 不匹配 / 落后于知识索引时自动重建并落盘（与 knowledgeIndex 同模式） */
 export function getGraphIndex(forceRebuild = false): GraphIndexData {
-  if (!forceRebuild) {
+  if (!forceRebuild && !graphCacheStale()) {
     const cached = readJson<GraphIndexData | null>('cache', 'graph.json', null)
     if (cached && cached.schemaVersion === 1 && Array.isArray(cached.nodes) && Array.isArray(cached.edges)) return cached
   }
