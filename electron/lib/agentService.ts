@@ -18,6 +18,14 @@ import {
 
 const MAX_ITERATIONS = 8
 
+/** 单次请求内 vault 写工具次数上限（防失控循环刷盘；docs/agent-file-tools-design.md §5.5） */
+const MAX_SESSION_WRITES = 5
+/** vault 写工具集合（F2 write/edit；F3 rename/trash 预留同口径） */
+const VAULT_WRITE_TOOLS = new Set([
+  'builtin.vault.write', 'builtin.vault.edit',
+  'builtin.vault.rename', 'builtin.vault.trash',
+])
+
 /** 注册表名含点号，OpenAI function name 仅允许 [a-zA-Z0-9_-] —— 双向映射 */
 function toFnName(registryName: string): string {
   return registryName.replace(/\./g, '__')
@@ -188,6 +196,7 @@ async function runAgentLoop(
     { role: 'system', content: buildSystemPrompt(context) + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
+  let sessionWrites = 0
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // ---- LLM 轮 ----
@@ -214,6 +223,20 @@ async function runAgentLoop(
       const realName = nameMap.get(tc.name) ?? tc.name.replace(/__/g, '.')
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
+
+      // 会话写上限：单次请求内 vault 写工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）
+      if (VAULT_WRITE_TOOLS.has(realName)) {
+        if (sessionWrites >= MAX_SESSION_WRITES) {
+          trace.push({ kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写上限 ${MAX_SESSION_WRITES}` })
+          convo.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, error: `已达本次会话文件写入上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
+          })
+          continue
+        }
+        sessionWrites++
+      }
 
       const t1 = Date.now()
       const exec = await invokeToolInternal(realName, args)

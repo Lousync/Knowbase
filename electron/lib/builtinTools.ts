@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto'
-import { readdirSync, lstatSync, readFileSync, statSync } from 'fs'
-import { join, relative, extname, sep } from 'path'
+import { readdirSync, lstatSync, readFileSync, statSync, mkdirSync } from 'fs'
+import { join, relative, extname, sep, dirname } from 'path'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { registerTool, getSettingReader } from './aiTools'
 import { webSearch } from './webSearch'
-import { resolveSafe } from './workspaceManager'
+import { resolveSafe, detectConflict, writeWorkspaceFile } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
+import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
@@ -244,6 +245,44 @@ function walkAiFiles(root: string, dirAbs: string, out: string[], budget: { coun
     budget.count++
     out.push(full)
   }
+}
+
+/** 写白名单（B2）：普通可见区 .md/.txt；.knowbase 全面禁写（modules/*.json 只读、cache/config 等本就不可见） */
+function isAiWritableFile(root: string, abs: string): boolean {
+  const parts = vaultRelParts(root, abs)
+  if (parts.length === 0) return false
+  if (parts[0].startsWith('.')) return false // 含 .knowbase：任何写操作都拒
+  const ext = extname(abs).slice(1).toLowerCase()
+  return ext === 'md' || ext === 'txt'
+}
+
+/** 写前守卫：writable 判定 + 大小 + mtime 冲突（expectedMtimeMs 来自 vault.read 基线） */
+function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
+  if (!isAiWritableFile(root, abs)) {
+    throw new Error('该位置不可写：AI 仅可新建/修改仓库内普通 .md/.txt 文件（.knowbase 内部数据只读保护）')
+  }
+  let existing = false
+  let size = 0
+  try { const st = statSync(abs); existing = st.isFile(); size = st.size } catch { /* 新建 */ }
+  if (existing && size > MAX_VAULT_FILE) throw new Error(`文件过大（${size} 字节 > 10MB），拒绝写入: ${abs}`)
+  const expected = Number(expectedMtimeMs)
+  if (existing && Number.isFinite(expected) && expected > 0) {
+    const c = detectConflict(abs, expected)
+    if (c.conflict) {
+      throw new Error(`文件已被外部修改（磁盘 mtime ${Math.round(c.diskMtimeMs ?? 0)} 与基线不符）。请先 vault.read 重取最新内容再写入`)
+    }
+  }
+}
+
+/** 写入成功后广播「外部变更」（编辑器若正打开该文件会弹三选），沿用 plugin:installed-changed 模式 */
+function broadcastExternalWrite(relPath: string, mtimeMs?: number): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { BrowserWindow } = require('electron') as typeof import('electron')
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('ws:external-change', { relPath, mtimeMs })
+    }
+  } catch { /* 广播失败不影响写入结果 */ }
 }
 
 // ===== 六个内置工具 =====
@@ -899,5 +938,136 @@ export function registerBuiltinTools(): void {
       if (hits.length >= limit) break
     }
     return { query: q, total: hits.length, scannedFiles: budget.count, hits }
+  })
+
+  // ===== vault.* 写工具（B2/F2）：受 vaultFile=write 权限 + AgentRunner 会话写上限控制 =====
+
+  // 17. builtin.vault.write —— 新建/整文件覆写 .md/.txt
+  registerTool({
+    name: 'builtin.vault.write',
+    title: '写入仓库文件',
+    description: '新建或整文件覆写仓库内 .md/.txt（原子写）。覆写已有文件时需带 vault.read 返回的 expectedMtimeMs 防冲突。不可写 .knowbase 内部数据。建议优先用 vault.edit 做小改动',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对文件路径（父目录须已存在或为已读目录）' },
+        content: { type: 'string', description: '完整文件内容（Markdown）' },
+        expectedMtimeMs: { type: 'number', description: '覆写已存在文件时的 mtime 基线（来自 vault.read），省略则不做冲突校验' },
+      },
+      required: ['path', 'content'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    vaultFile: 'write',
+  }, args => {
+    const rel = str(args.path).trim()
+    const content = str(args.content)
+    if (!rel) throw new Error('缺少必填参数: path')
+    if (content.length > 2_000_000) throw new Error('内容过大（>2MB），拒绝写入')
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, rel)
+    if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
+    if (content.includes('\u0000')) throw new Error('内容含 NUL 字符，拒绝写入')
+    let existing = false
+    try { existing = statSync(abs).isFile() } catch { /* 新建 */ }
+    assertAiWritable(root, abs, existing ? args.expectedMtimeMs : null)
+    if (!existing) {
+      try { mkdirSync(dirname(abs), { recursive: true }) } catch { /* 目录已存在 */ }
+    }
+    writeWorkspaceFile(abs, content)
+    const st = statSync(abs)
+    broadcastExternalWrite(rel, st.mtimeMs)
+    return { ok: true, path: rel, created: !existing, size: st.size, mtimeMs: st.mtimeMs }
+  })
+
+  // 18. builtin.vault.edit —— 精确替换（oldText→newText，整文件最多 1 处/次，防全量重写大文件）
+  registerTool({
+    name: 'builtin.vault.edit',
+    title: '精确替换文件片段',
+    description: '在仓库内 .md/.txt 中做一次精确替换（oldText 必须在文中唯一命中）。改动局部内容请用本工具而非 vault.write。需带 vault.read 返回的 expectedMtimeMs 防冲突',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对文件路径' },
+        oldText: { type: 'string', description: '要被替换的原文片段（必须唯一命中）' },
+        newText: { type: 'string', description: '替换后的文本' },
+        expectedMtimeMs: { type: 'number', description: 'mtime 基线（来自 vault.read）' },
+      },
+      required: ['path', 'oldText', 'newText'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    vaultFile: 'write',
+  }, args => {
+    const rel = str(args.path).trim()
+    const oldText = str(args.oldText)
+    const newText = str(args.newText)
+    if (!rel || !oldText) throw new Error('缺少必填参数: path / oldText')
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, rel)
+    if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
+    let st: ReturnType<typeof statSync>
+    try { st = statSync(abs) } catch { throw new Error(`文件不存在: ${rel}`) }
+    if (!st.isFile()) throw new Error('vault.edit 只接受文件路径')
+    assertAiWritable(root, abs, args.expectedMtimeMs)
+    const text = readFileSync(abs, 'utf-8')
+    const first = text.indexOf(oldText)
+    if (first < 0) throw new Error(`未找到待替换片段（截取前 60 字符）: ${oldText.slice(0, 60)}… 可先 vault.read 确认当前内容`)
+    if (text.indexOf(oldText, first + oldText.length) >= 0) throw new Error('待替换片段在文件中出现多处，请提供更长更精确的 oldText（本工具一次只替换一处）')
+    const next = text.slice(0, first) + newText + text.slice(first + oldText.length)
+    writeWorkspaceFile(abs, next)
+    const after = statSync(abs)
+    broadcastExternalWrite(rel, after.mtimeMs)
+    return {
+      ok: true,
+      path: rel,
+      mtimeMs: after.mtimeMs,
+      oldChars: oldText.length,
+      newChars: newText.length,
+    }
+  })
+
+  // 19. builtin.vault.resolve-ref —— 校验知识页引用名（场景 A：AI 写 [[链接]] 前确认目标标题）
+  registerTool({
+    name: 'builtin.vault.resolve-ref',
+    title: '校验页面引用名',
+    description: '输入拟引用的标题（可带 [[ ]]），返回知识库中存在的页面标题/id 与是否精确命中。写 [[链接]] 前先调用本工具确认，避免死链',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', description: '拟引用标题，如 内存管理 或 [[内存管理]]' },
+      },
+      required: ['ref'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    vaultFile: 'read',
+  }, args => {
+    const raw = str(args.ref).trim()
+    if (!raw) throw new Error('缺少必填参数: ref')
+    const want = raw.replace(/^\[\[|\]\]$/g, '').split('|')[0].trim()
+    if (!want) throw new Error('引用名为空')
+    let pages: Array<{ id: string; title: string; path: string }> = []
+    try {
+      pages = getKnowledgeIndex().pages
+        .filter(p => p.status !== 'draft')
+        .map(p => ({ id: p.id, title: p.title, path: p.path }))
+    } catch { /* 索引未就绪时按空处理 */ }
+    const exact = pages.filter(p => p.title === want)
+    const fuzzy = pages.filter(p => p.title.includes(want)).slice(0, 10)
+    const matched = exact.length > 0 ? exact.slice(0, 5) : fuzzy
+    return {
+      ref: want,
+      exact: exact.length > 0,
+      totalPages: pages.length,
+      matches: matched,
+      hint: matched.length === 0 ? '未找到匹配页面标题；可用 vault.search 搜内容定位后用其标题作为引用' : undefined,
+    }
   })
 }

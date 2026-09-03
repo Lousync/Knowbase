@@ -848,6 +848,8 @@ export interface ElectronAPI {
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => () => void
   /** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */
   onPluginInstalledChanged: (cb: () => void) => () => void
+  /** AI vault 写工具落盘后的外部变更通知（payload {relPath, mtimeMs}） */
+  onWsExternalChange: (cb: (p: { relPath: string; mtimeMs?: number }) => void) => () => void
   pluginInstallFromFile: (grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   pluginListInstalled: () => Promise<PluginSummary[]>

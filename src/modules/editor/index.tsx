@@ -8,7 +8,7 @@ import type { WorkspaceRecent } from '../../types'
 import {
   workspaceOpenDir, workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
   workspaceCreateFile, workspaceMkdir, workspaceRename, workspaceTrash, workspaceGetRecent,
-  workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages,
+  workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages, onWsExternalChange,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { FileTree } from './components/FileTree'
@@ -190,6 +190,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       },
     }))
   }, [toggleDir])
+
+  // ---- AI 写入（vault 写工具）落盘后的外部变更通知：目标文件正被打开 → 复用保存冲突三选 ----
+  useEffect(() => {
+    return onWsExternalChange(({ relPath, mtimeMs }) => {
+      if (!relPath || !(relPath in openFilesRef.current)) return
+      setConflictState((cur) => (cur ? cur : { relPath, diskMtimeMs: mtimeMs, missing: false }))
+    })
+  }, [])
 
   // ---- R5 分栏预览 ----
   /** 切换预览并记忆到 localStorage（下次打开编辑器保持上次状态） */

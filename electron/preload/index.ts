@@ -119,6 +119,12 @@ const api = {
     ipcRenderer.on('plugin:installed-changed', handler)
     return () => { ipcRenderer.removeListener('plugin:installed-changed', handler) }
   },
+  /** AI vault 写工具落盘后的外部变更通知（编辑器正打开该文件时弹三选），payload {relPath, mtimeMs} */
+  onWsExternalChange: (cb: (p: { relPath: string; mtimeMs?: number }) => void) => {
+    const handler = (_e: unknown, p: { relPath: string; mtimeMs?: number }) => cb(p)
+    ipcRenderer.on('ws:external-change', handler)
+    return () => { ipcRenderer.removeListener('ws:external-change', handler) }
+  },
   pluginInstallFromFile: (grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installFromFile', grantedCapabilities),
   pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installBundledSample', filename, grantedCapabilities),
   pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),
