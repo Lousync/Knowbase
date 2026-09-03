@@ -7,6 +7,7 @@ import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { createGateway } from './pluginHostGateway'
+import { pluginStoreGet, pluginStoreSet, pluginStoreDelete, pluginStoreHas, pluginStoreUsage } from './kbStore/pluginStore'
 import { verifyPluginSignature, buildKeyring } from './pluginSigning'
 import { getPackState, importPack } from './knowledgePackImporter'
 import {
@@ -1234,6 +1235,52 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
             data: buf.toString('base64'),
           }
         },
+      },
+
+      // ---- kb.store.* 插件私有存储（plugin-api-v2-design §5.1）----
+      // 免授权（capability 空串）：私有目录（.knowbase/plugins/<id>/）+ key 穿越校验 + 单文件
+      // 10MB 配额 = 天然安全边界，无需额外授权（对齐 toast 语义）。pluginId 取 token 会话。
+      'kb.store.get': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { key?: string }
+          if (typeof p.key !== 'string') throw Object.assign(new Error('key 缺失'), { code: 'EPARAM' })
+          const r = pluginStoreGet(ctx.pluginId, p.key)
+          if (!r.ok) throw Object.assign(new Error(r.error), { code: 'EPARAM' })
+          return { value: r.value }
+        },
+      },
+      'kb.store.set': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { key?: string; value?: unknown }
+          if (typeof p.key !== 'string') throw Object.assign(new Error('key 缺失'), { code: 'EPARAM' })
+          const r = pluginStoreSet(ctx.pluginId, p.key, p.value)
+          if (!r.ok) throw Object.assign(new Error(r.error), { code: 'EPARAM' })
+          return { ok: true }
+        },
+      },
+      'kb.store.delete': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { key?: string }
+          if (typeof p.key !== 'string') throw Object.assign(new Error('key 缺失'), { code: 'EPARAM' })
+          const r = pluginStoreDelete(ctx.pluginId, p.key)
+          if (!r.ok) throw Object.assign(new Error(r.error), { code: 'EPARAM' })
+          return { ok: true }
+        },
+      },
+      'kb.store.has': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { key?: string }
+          if (typeof p.key !== 'string') throw Object.assign(new Error('key 缺失'), { code: 'EPARAM' })
+          return { exists: pluginStoreHas(ctx.pluginId, p.key) }
+        },
+      },
+      'kb.store.usage': {
+        capability: '',
+        run: (ctx) => pluginStoreUsage(ctx.pluginId),
       },
     },
   })

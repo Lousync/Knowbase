@@ -25,6 +25,8 @@ export function readJson<T>(module: string, key: string, fallback: T): T {
   const p = kbModulePath(module, key)
   if (!p || !existsSync(p)) return fallback
   try {
+    // 目录保护：key 命中目录（如读取前缀路径）→ 直接返回 fallback，绝不 rename 目录（防误伤子路径数据）
+    if (statSync(p).isDirectory()) return fallback
     return JSON.parse(readFileSync(p, 'utf-8')) as T
   } catch {
     try {
