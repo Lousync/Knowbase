@@ -77,4 +77,21 @@
 | Q3 | 题卷写入 | 草稿→人工点写入（随 M1 产物；默认采纳，落实施前可再确认） |
 | Q4 | 错题联动（U4） | 远期（需 quiz 通道），本期不做 |
 
+## 8. teach-skill 现状核查（2026-09-03 已读包）
+
+来源：市场 `knowbase.teach-skill` v1.0.0（S 级，`contributes.skills: [{id: teach}]`，zip 内即 plugin.json、prompt 内嵌，源自 pjt222/agent-almanac，MIT，已中文化）。解包实测仅 1 个 plugin.json（~2.4KB）。
+
+其流程（六步）：① 评估学习者（新手/进阶/高阶/误解四档讲法）② 从已知到未知搭桥（一次一个新概念）③ 讲解校准深度（一句话开场→阶梯→最小示例→观察困惑）④ 检查理解（应用型提问/复述/变式，非背诵）⑤ 按反馈调整（装懂/糊涂/反驳/沉默分诊）⑥ 练习强化（应用练习→连下一步→参考→总结）。铁律：逐条小步、一次一问、检查≠考试。variables：`concept`/`learnerContext`；tools：web.search。
+
+**缺口对照**（核查结论）：
+- ✅ 覆盖：教学编排主骨架、口语化检查与开放练习、水平适配——沉浸「跟我学」应**优先挂接此 skill**，不自造教学规则
+- ❌ 未覆盖：结构化题目（选择/填空/大题、```quiz 围栏、spoiler 答案规范）、自动出卷与批改讲解流程、资料内习题提取（U3）、题卷沉淀（L1）、难度/去重规则——即本设计核心
+
+**衔接候选（待拍板）**：
+- **A（推荐）**：新增独立「出题官」Skill（`quiz-generator`，variables：topic/资料/题型/题量/是否沉淀；tools：vault.read/docs.read-text/vault.write 等），与 teach **组合**：沉浸会话由 teach 负责讲与即时口头检查；进入测验（teach 第 4/6 步或用户点名）→ agent 调 quiz-generator 出结构化题并沉淀卷。职责单一、可独立进市场、不污染 teach
+- B：出题段落追加进 teach prompt（改市场包或复制为自有资产，与市场更新冲突，不推荐）
+- C：仅改沉浸「跟我学」模板 opening（零资产改动、最小可用，但只在沉浸 Tab 内）
+
+> 落实施前：应用内装 teach-skill → 确认沉浸教学模板注入可用（已配置 skill 由 AgentRunner 清单自动可见）→ 按 A 做 quiz-generator（可随 M1 产物机制一起做）。
+
 参考：`docs/agent-immersive-mode-design.md` §5（节奏）、§8（分期）；.AGENT/docs/knowledge-pack-answer-format.md；MarkdownPreview quiz/spoiler 渲染。
