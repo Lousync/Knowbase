@@ -1,7 +1,10 @@
 # AI 文件操控工具设计（Vault 内）
 
-> 归属：[rework-master-plan.md](./rework-master-plan.md) R2 编辑器与链接 / agent 模块深化。状态：设计讨论稿（2026-09-02），未实现。
+> 归属：[rework-master-plan.md](./rework-master-plan.md) R2 编辑器与链接 / agent 模块深化。
+> 状态：**设计 + 实施计划（2026-09-03 用户拍板：先做「AI 读写笔记文件」= F1–F3，并顺手修复 P0 旧账「内置知识工具写旧库」）**。原设计稿（2026-09-02）保留，本文第 9–11 节追加 P0 修复方案与批次实施计划。
 > 前置：workspaceManager（ws:* 通道 + resolveSafe + 冲突检测）已落地；AI ToolRegistry 双防线 + 审计 + 月度上限已有。
+
+> **大白话摘要**：目标是让 Ctrl+J AI 助手能真正翻看、搜索、修改用户的笔记文件（不是答非所问地聊天），安全规则照旧——能碰什么、不能碰什么都由权限把关、全程留痕。本文前半是这套能力的详细设计，第 9 节起是"先修一个旧毛病（AI 建的页面用户看不到）再分批实现"的执行计划。
 
 ## 1. 目标与边界
 
@@ -77,3 +80,125 @@
 | Q4 | 业务数据读法 | 双通道并存：结构化工具为主（统计/聚合）；JSON 只读为辅（用户点名「打卡记录可读」）；cache 永不直读 |
 
 原则落定：AI 能读打卡记录 JSON（回答事实类问题），但一切写行为被 .knowbase 写禁区 + vaultFile 域双保险拦死——「可读不可写」由两条独立防线保证，不是一条。剩余开放项：Q2 rename/trash 是否进 v1（建议 F3）、F1-F3 分期待启动排期。
+
+---
+
+## 9. P0 旧账修复：内置知识工具与「真相源」脱节（2026-09-03 定稿）
+
+### 9.1 问题精确定位（读码事实）
+
+`knowledgeRepo.ts` 已有 vault 分流：`VAULT_ALLOWED` 白名单在 `storageKnowledge='vault'` 时放行读通道（走 `knowledgeVaultRepo` 读磁盘 .md），create/update/delete 等写通道一律抛「友好拒绝」——但**这是 IPC 层拦截，只挡住渲染层调用**。
+
+内置 AI 工具（`electron/lib/builtinTools.ts`）在主进程内部用 `getDatabase().run/queryAll` **直接查 sqlite 表，完全绕过该分流**。后果（vault 默认读源下）：
+
+| 工具 | 现状行为 | 后果 |
+|---|---|---|
+| `builtin.knowledge.search/read` | 直查 sqlite `knowledge_pages` | 搜到的是停更旧表 → 与 UI 所见（vault .md）不一致甚至为空 |
+| `builtin.knowledge.create-page/append-page` | 直插 sqlite `knowledge_pages` | AI 建的页在 UI **不可见**；且绕过编辑器受控写通道，直接违反「防双源分叉」不变量 |
+
+**疑似同款（同模式直连 sqlite、模块已文件化，需一并核验）**：`builtin.blog.create-entry`（博客已 .md 化）、`builtin.bookmarks.search`（书签已 JSON 化）。仍在 sqlite 的模块（日程/打卡/番茄钟/quiz/wordbook 等）不受影响，保持原样。
+
+### 9.2 修复原则（一次覆盖全部）
+
+> **AI 工具按模块走「该模块当前的真相源」**：读工具调用该模块的 vault/文件读层（如 `knowledgeVaultRepo`）或 JSON 读口；写工具一律走受控文件通道（编辑器同款：frontmatter .md + 原子写 + 索引失效钩子）。**不允许任何主进程内部工具绕过模块分流直连 sqlite。**
+
+### 9.3 动作清单
+
+1. `builtin.knowledge.search/read`：按 `storageKnowledge` 分流——vault 模式改调 `knowledgeVaultRepo.vaultSearchPages/vaultGetPageById`（输出格式保持：id/title/excerpt/mtime 基线）；sqlite 模式保留原实现。
+2. `builtin.knowledge.create-page/append-page`：vault 模式下**停用并返回明确指引**（"知识库内容现由文件管理，请用 vault 写工具或编辑器"，待 F2 落地后由 `builtin.vault.write` 语义取代）；sqlite 模式保留。删除危险：绝不静默写旧库。
+3. `builtin.blog.create-entry` / `builtin.bookmarks.search`：核实各自文件化读层后同样分流（同 9.2 原则）。
+4. 加一条 ToolRegistry 层面的**防御性注释/约定**：builtin 写工具注册须声明其数据归属（sqlite 表名或 vault 路径），vault 模式巡检时据此拦截。
+
+### 9.4 验收（冒烟脚本 `tmp/smoke/`）
+
+- vault 模式：AI `knowledge.search` 能命中磁盘 .md 页并返回摘要；`create-page` 返回明确错误提示（含引导文案），**且 sqlite `knowledge_pages` 行数不变**。
+- sqlite 模式（灰度开关切回）：原 13 工具行为回归不变。
+
+---
+
+## 10. 实施计划总览（批次表）
+
+> 依赖已全部就绪（workspaceManager ✅ / knowledgeIndex ✅ / ToolRegistry ✅），B0+B1 **可开工**；建议与图谱 A8 真机验收并行推进，落地在 `fix/optimize-v2.15.1` 分支。
+
+| 批 | 内容 | 大白话目标 | 改动范围 | 依赖 | 验收要点 |
+|---|---|---|---|---|---|
+| **B0** | P0 旧账修复（第 9 节） | AI 查得到、建得出你能看到的页 | `builtinTools.ts`（+核验 blog/bookmark） | 无 | 9.4 冒烟全过 |
+| **B1** | F1：`vault.list/read/search` 只读三件 + `vaultFile` 权限域 + 禁区 | AI 能安全地翻看你的笔记 | `builtinTools.ts` + `aiTools.ts`(新权限域) + 设置页 `AiPermissionsTab` | workspaceManager | 只读全通；越界/二进制/.knowbase 拒绝矩阵冒烟 |
+| **B2** | F2：`vault.write/edit` + mtime 冲突 + 会话写上限(≤5) + 写后编辑器三选弹窗 | AI 能改你的笔记，且不会悄悄改坏 | 复用 detectConflict + 既有冲突弹窗 + AgentRunner 会话计数 | B1 + 编辑器冲突弹窗 | 编辑器打开的页被 AI 改写 → 弹三选；mtime 冲突拒绝；写超限停 |
+| **B3** | F3：`vault.rename/trash` + 可视化 diff（审计面板扩展） | AI 能整理移动笔记，全程可查可撤 | ws:rename/trash 复用 | B2 | 高危操作全流程可审 |
+
+**远期（已拍板缓做，不入本期）**：软件状态层 `builtin.app.*`（命令表暴露/execute-command/open-file）、外部 agent 接入（本地 MCP server）。
+
+---
+
+## 11. 拍板记录（追加 2026-09-03）
+
+| # | 问题 | 结论 |
+|---|---|---|
+| Q5 | 「AI 操控软件」本期做到哪层 | **只做内容文件层（F1–F3）+ 顺手修 P0**；状态层/外部接入列为远期 |
+| Q6 | P0 修复方式 | vault 模式：读工具切 vault 读层、写工具停用给指引；不静默写旧库（9.3） |
+| Q7 | rename/trash 是否本期 | 归入 F3 末批（沿用原 Q2 建议） |
+
+**遗留待办**：① blog/bookmark 工具疑似同款脱节 → B0 顺带核验；② B0+B1 排期与当前主线（图谱 A8 验收 / schedule-sidebar 合并）的先后由用户开工时定。
+
+---
+
+## 12. 典型目标场景与配套工具缺口（2026-09-03 用户补充）
+
+> 用户原话诉求（大白话）：① 让 AI 添加页面文件之间的链接；② 给 AI 提供资料网站/文章，让它教知识、给学习方案，并落成笔记。已拍板：资料形态 = **直接丢网址/文章给 AI**（Q8）。
+
+### 场景 A：AI 维护双链（知识织网）
+
+- 用法："把我讲 XX 的几篇笔记互相关联""读近两周笔记，把同主题的挑出来互链并建汇总页"
+- 机制：B1 读+搜 → B2 精确插入 `[[标题]]` → GraphIndex/反链自动识别
+- **引用正确性设计点（进 B1）**：给 AI「查页面标题/正确引用名」的能力（如 `builtin.vault.list-titles` 或 read 返回引用名），避免死链；B2 验收加一条：「AI 给两篇相关笔记互相加链 → 图谱出现连线、无死链」
+
+### 场景 B：AI 私人导师（吃资料 → 教学 → 方案落库）
+
+- 用法："读这 5 个网址，按内存→进程→文件系统排两周学习方案，每步标资料"；"把这篇讲明白、标重点、出题"；"学完整理成一页笔记链上资料"
+- 闭环：吃资料（新工具 `builtin.web.read`）→ 消化教学（LLM + 可选 Teach Skill 编排）→ 产出落库（vault 写 + 加链，即 B2 能力 + 场景 A）
+- **新增工具缺口：`builtin.web.read`（读指定网页正文）**——现有 `web.search` 只回标题/摘要，无法通读全文。设计要点：仅 https + host 白名单（沿用 webSearch 约定）、正文提取转纯文本、长度截断（默认 ~8k 字符，防 token 失控）、超时与失败降级；只读工具，不设 module（跨模块通用，同 web.search）
+- 产出落地约定（v1 不做特殊结构）：资料 = 剪藏/普通笔记（沿用现有 Vault）；方案 = AI 新建 .md + frontmatter（type/tags）+ 双链指向资料来源——正好复用场景 A 的织网能力
+- 验收（并入 B2/B3）：AI 基于给定网址输出学习方案并落成一页带链接的笔记；人工核对 frontmatter 与链接可跳转
+
+### 拍板记录（追加）
+
+| # | 问题 | 结论 |
+|---|---|---|
+| Q8 | 学习资料怎么交给 AI | **直接丢网址/文章给 AI** → 补 `builtin.web.read` 读网页全文能力（仅 https+白名单）；不依赖先剪藏 |
+
+> 说明：本节是目标场景与需求记录，不改 B0–B3 主计划本身。`web.read` 是独立小工具（不动 vault 链），可单独先做或随 B 批顺带，排期由用户定。
+
+---
+
+## 13. 多格式资料读取（PDF / PPT，v1 范围，2026-09-03 拍板）
+
+> 用户诉求：让 AI 不仅能读 .md，还能读 PDF/PPT 等来总结、做学习复习资料。已拍板（Q9/Q10）：**文件必须放进仓库（vault 内）**；**首批只做 PDF + PPT，零新依赖**（PDF 复用现有 pdfjs-dist，PPT 用现有 zip 能力手写 XML 提取）。扫描版 PDF / 纯图片内容需 OCR，v1 明确不支持，命中时如实告知。
+
+### 13.1 工具设计：`builtin.docs.read-text`（新增，只读）
+
+- 入参：vault 内 relPath（沿用 resolveSafe 防穿越）；可选手页码/截断上限
+- 按扩展名分流：
+  - `.md/.txt` → 直读文本（等同 vault.read 语义）
+  - `.pdf` → 主进程 pdfjs-dist 提取文本（与 PDF 阅读插件同源解析内核，无重复依赖）；返回文本 + 页数 + 截断标记
+  - `.pptx` → 复用现有 zip 解压 → 解析 `ppt/slides/slide*.xml` 的 `<a:t>` 文本按页拼接 → 返回文本 + 页数
+  - 其余/二进制 → 拒绝并说明支持范围
+- 输出：结构化短文本（截断默认 8k 字符，上限 ~50k，防 token 失控）；不做 NUL 启发式（PDF 属二进制但头部为 ASCII，vault.read 的 NUL 探测只用于纯文本工具，二者按扩展名白名单区分）
+- 权限与禁区：归 `vaultFile` 权限域只读面（不新增域）；只读仓库内文件，`.knowbase/cache/plugins` 等禁区沿用（资料一般放仓库根或用户建的资料夹）
+
+### 13.2 与既有设计的关系
+
+- B1 的 `builtin.vault.read` 保持「纯文本文件」限定（NUL 探测语义不破坏）；二进制文档读取收敛到 `docs.read-text` 单一入口，职责清晰
+- 场景 B（私人导师）闭环补全：喂 PDF/PPT → `docs.read-text` 提取 → LLM 总结/出复习资料 → `vault.write`（B2）落成 .md 复习笔记 + 双链资料来源
+- PDF 阅读插件（plugin-pdf-reader-design.md，人读 UI）与 AI 提取共享 pdfjs-dist 内核，后续实现时注意主进程加载 pdfjs 的 worker 配置（Node 侧用 legacy build / fake worker）
+
+### 13.3 验收（并入 B2 批）
+
+仓库内放一份本地 PDF + 一份 PPTX → 让 AI 分别总结出要点 → AI 落成一页复习 .md（frontmatter + 链接资料）→ 人工核对：要点与原文对应、无乱码、无死链。
+
+### 拍板记录（追加）
+
+| # | 问题 | 结论 |
+|---|---|---|
+| Q9 | AI 要读的 PDF/PPT 放哪里 | **放进仓库（vault 内）**；仓库外任意路径读取（对话框授权）后置 |
+| Q10 | 首批支持格式 | **PDF + PPT，零新依赖**；Word/Excel 后续如需再评估 officeparser；扫描件需 OCR，v1 不支持 |
