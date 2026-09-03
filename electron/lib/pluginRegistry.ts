@@ -6,6 +6,7 @@ import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { getDatabase, saveToDisk } from '../database/connection'
+import { createGateway } from './pluginHostGateway'
 import { getPackState, importPack } from './knowledgePackImporter'
 import {
   validateTableDef, ensurePluginTables, dropPluginTables,
@@ -1092,4 +1093,90 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
   } catch (err) {
     console.error('[Plugins] 内置插件落位失败:', err)
   }
+
+  // ========== v2 协议：Plugin Host Gateway（V3-2，裁决点单一化到主进程）==========
+  // 渲染层 PluginFrame 不再做 grantedRef.includes 判断；一切 v2 请求经 host:rpc 在此裁决。
+  // 复用函数内已定义的 assertDataAccess / readIndex / readManifestAt（同一作用域）。
+  const gateway = createGateway({
+    sessionState(pluginId: string): { enabled: boolean; capabilities: string[] } | null {
+      if (typeof pluginId !== 'string' || !ID_RE.test(pluginId)) return null
+      const idx = readIndex()
+      const entry = idx[pluginId]
+      if (!entry) return null
+      return { enabled: entry.enabled, capabilities: entry.grantedCapabilities ?? [] }
+    },
+    audit: (pluginId, action, detail) => auditWrite(pluginId, action, detail),
+    methods: {
+      // data 表 CRUD（v2 通道；执行复用 v1 逻辑但 pluginId 取自 token 会话，不信任调用方）
+      'kb.data.query': {
+        capability: 'data',
+        run: (_ctx, params) => {
+          const acc = assertDataAccess(_ctx.pluginId)
+          if (!acc.ok) throw Object.assign(new Error(acc.error), { code: 'ECAPABILITY' })
+          const p = (params ?? {}) as { table?: string; where?: unknown; orderBy?: string; desc?: boolean; limit?: number }
+          if (typeof p.table !== 'string' || !p.table) throw Object.assign(new Error('table 缺失'), { code: 'EPARAM' })
+          return pluginQuery(_ctx.pluginId, acc.tables, p.table, {
+            where: p.where as WhereCond[], orderBy: p.orderBy, desc: p.desc, limit: p.limit,
+          })
+        },
+      },
+      'kb.data.insert': {
+        capability: 'data',
+        run: (_ctx, params) => {
+          const acc = assertDataAccess(_ctx.pluginId)
+          if (!acc.ok) throw Object.assign(new Error(acc.error), { code: 'ECAPABILITY' })
+          const p = (params ?? {}) as { table?: string; row?: Record<string, unknown> }
+          if (typeof p.table !== 'string' || !p.row) throw Object.assign(new Error('table/row 缺失'), { code: 'EPARAM' })
+          return pluginInsert(_ctx.pluginId, acc.tables, p.table, p.row)
+        },
+      },
+      'kb.data.update': {
+        capability: 'data',
+        run: (_ctx, params) => {
+          const acc = assertDataAccess(_ctx.pluginId)
+          if (!acc.ok) throw Object.assign(new Error(acc.error), { code: 'ECAPABILITY' })
+          const p = (params ?? {}) as { table?: string; rowId?: string | number; patch?: Record<string, unknown> }
+          if (typeof p.table !== 'string' || p.rowId === undefined || !p.patch) throw Object.assign(new Error('参数缺失'), { code: 'EPARAM' })
+          return pluginUpdate(_ctx.pluginId, acc.tables, p.table, p.rowId, p.patch)
+        },
+      },
+      'kb.data.delete': {
+        capability: 'data',
+        run: (_ctx, params) => {
+          const acc = assertDataAccess(_ctx.pluginId)
+          if (!acc.ok) throw Object.assign(new Error(acc.error), { code: 'ECAPABILITY' })
+          const p = (params ?? {}) as { table?: string; rowId?: string | number }
+          if (typeof p.table !== 'string' || p.rowId === undefined) throw Object.assign(new Error('参数缺失'), { code: 'EPARAM' })
+          return pluginDelete(_ctx.pluginId, acc.tables, p.table, p.rowId)
+        },
+      },
+
+      // ---- 渲染层本地能力（v2 语义）：主进程只做能力裁决，回 { local } 标记，
+      // PluginFrame 收到后执行真正的渲染层动作（toast/clipboard/theme 只能渲染层做）。
+      // toast 免授权（对齐 v1：capability 空串）；clipboard/theme/hostReview 按 v1 同能力名裁决。
+      'kb.ui.toast': { capability: '', run: () => ({ local: 'toast' }) },
+      'kb.ui.clipboard.write': { capability: 'clipboard', run: () => ({ local: 'clipboard' }) },
+      'kb.ui.theme.apply': { capability: 'theme', run: () => ({ local: 'theme' }) },
+      'kb.ui.hostReview': { capability: 'knowledge', run: () => ({ local: 'host.review' }) },
+    },
+  })
+
+  // token 会话生命周期由 PluginFrame 管理：挂载 open、卸载 close、宿主退出全清。
+  // 注意：sessionState 读的是磁盘 index——enable/disable 变更后新 open 立即反映。
+  ipcMain.handle('host:bridge-open', (_e, pluginId: unknown) => {
+    const r = gateway.open(typeof pluginId === 'string' ? pluginId : '')
+    if (!r.ok) return r
+    return { ok: true, token: r.token, hostVersion: app.getVersion() }
+  })
+  ipcMain.handle('host:bridge-close', (_e, token: unknown) => {
+    if (typeof token === 'string') gateway.close(token)
+    return { ok: true }
+  })
+  ipcMain.handle('host:rpc', async (_e, msg: unknown) => {
+    const m = (msg ?? {}) as { token?: unknown; id?: unknown; method?: unknown; params?: unknown }
+    const res = gateway.rpc(m.token, m.method, m.params)
+    // async handler 需 await；统一返回 { id, ...结果 } 供渲染层按 id 配对
+    const settled = res instanceof Promise ? await res : res
+    return { id: m.id, ...settled }
+  })
 }

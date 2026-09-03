@@ -843,6 +843,10 @@ export interface ElectronAPI {
   pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>
   pluginDataDelete: (pluginId: string, table: string, rowId: string | number) => Promise<{ ok: boolean; error?: string }>
   pluginListDeleteFxSkins: () => Promise<DeleteFxSkin[]>
+  // v2 协议: Plugin Host Gateway（token 会话 + 主进程单点裁决）
+  hostBridgeOpen: (pluginId: string) => Promise<{ ok: boolean; token?: string; hostVersion?: string; code?: string; message?: string }>
+  hostBridgeClose: (token: string) => Promise<{ ok: boolean }>
+  hostRpc: (msg: { token: string; id: string; method: string; params?: unknown }) => Promise<{ id?: string; ok: boolean; result?: unknown; code?: string; message?: string }>
   pluginSetGranted: (id: string, caps: string[]) => Promise<{ success: boolean; message?: string }>
   pluginAuditList: (id?: string) => Promise<PluginAuditEntry[]>
   pluginAuditClear: (id?: string) => Promise<{ success: boolean }>

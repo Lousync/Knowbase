@@ -126,6 +126,10 @@ const api = {
   pluginDataInsert: (pluginId: string, table: string, row: unknown) => ipcRenderer.invoke('pluginData:insert', pluginId, table, row),
   pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: unknown) => ipcRenderer.invoke('pluginData:update', pluginId, table, rowId, patch),
   pluginDataDelete: (pluginId: string, table: string, rowId: string | number) => ipcRenderer.invoke('pluginData:delete', pluginId, table, rowId),
+  // v2 协议: Plugin Host Gateway（token 会话 + 主进程单点裁决；PluginFrame 转发）
+  hostBridgeOpen: (pluginId: string) => ipcRenderer.invoke('host:bridge-open', pluginId),
+  hostBridgeClose: (token: string) => ipcRenderer.invoke('host:bridge-close', token),
+  hostRpc: (msg: { token: string; id: string; method: string; params?: unknown }) => ipcRenderer.invoke('host:rpc', msg),
   // AI tools (ToolRegistry)
   aiToolsList: () => ipcRenderer.invoke('aiTools:list'),
   aiToolsInvoke: (name: string, args?: unknown) => ipcRenderer.invoke('aiTools:invoke', name, args),

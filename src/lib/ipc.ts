@@ -144,6 +144,10 @@ export const pluginDataInsert = (pluginId: string, table: string, row: Record<st
 export const pluginDataUpdate = (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> => a().pluginDataUpdate(pluginId, table, rowId, patch)
 export const pluginDataDelete = (pluginId: string, table: string, rowId: string | number): Promise<{ ok: boolean; error?: string }> => a().pluginDataDelete(pluginId, table, rowId)
 export const pluginListDeleteFxSkins = () => a().pluginListDeleteFxSkins()
+// v2 协议: Plugin Host Gateway（token 会话 + 主进程单点裁决）
+export const hostBridgeOpen = (pluginId: string) => a().hostBridgeOpen(pluginId)
+export const hostBridgeClose = (token: string) => a().hostBridgeClose(token)
+export const hostRpc = (msg: { token: string; id: string; method: string; params?: unknown }) => a().hostRpc(msg)
 export const pluginSetGranted = (id: string, caps: string[]) => a().pluginSetGranted(id, caps)
 export const pluginAuditList = (id?: string) => a().pluginAuditList(id)
 export const pluginAuditClear = (id?: string) => a().pluginAuditClear(id)
