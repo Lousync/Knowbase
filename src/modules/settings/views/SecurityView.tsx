@@ -11,32 +11,36 @@ export function SecurityView() {
       <p className="text-[12px] text-[var(--text-muted)] mb-6">锁屏、误删防护与插件安全策略</p>
 
       {/* 锁屏 */}
-      <div className="mb-8 space-y-3 max-w-md" data-setting-anchor="security.lock">
+      <div className="mb-8 space-y-3 max-w-md">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">锁屏</h3>
-        <label className="flex items-start gap-2.5 cursor-pointer">
+        <div data-setting-anchor="security.lockStartup">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!s.lockOnStartup}
+              onChange={(e) => update('lockOnStartup', e.target.checked)}
+              className="mt-0.5 accent-[var(--accent)]"
+            />
+            <span className="flex items-center gap-1.5 text-[13px] text-[var(--text-primary)]">
+              <Lock size={13} className="text-[var(--text-muted)]" />
+              启动应用后自动锁屏
+            </span>
+          </label>
+        </div>
+        <div data-setting-anchor="security.lockPassword">
+          <label className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
+            <KeyRound size={13} className="text-[var(--text-muted)] shrink-0" />
+            锁屏密码
+          </label>
           <input
-            type="checkbox"
-            checked={!!s.lockOnStartup}
-            onChange={(e) => update('lockOnStartup', e.target.checked)}
-            className="mt-0.5 accent-[var(--accent)]"
+            type="password"
+            value={s.lockPassword ?? ''}
+            onChange={(e) => update('lockPassword', e.target.value)}
+            placeholder="留空 = 点击即可解锁"
+            spellCheck={false}
+            className="w-full px-2.5 py-1.5 text-[12px] bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
           />
-          <span className="flex items-center gap-1.5 text-[13px] text-[var(--text-primary)]">
-            <Lock size={13} className="text-[var(--text-muted)]" />
-            启动应用后自动锁屏
-          </span>
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
-          <KeyRound size={13} className="text-[var(--text-muted)] shrink-0" />
-          锁屏密码
-        </label>
-        <input
-          type="password"
-          value={s.lockPassword ?? ''}
-          onChange={(e) => update('lockPassword', e.target.value)}
-          placeholder="留空 = 点击即可解锁"
-          spellCheck={false}
-          className="w-full px-2.5 py-1.5 text-[12px] bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-        />
+        </div>
         <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
           设置密码后，锁屏界面需输入密码才能进入；忘记密码可前往数据目录的 settings.json 清空该字段。
         </p>
@@ -77,9 +81,9 @@ export function SecurityView() {
       </div>
 
       {/* 插件安全 */}
-      <div className="space-y-3 max-w-md" data-setting-anchor="security.plugin">
+      <div className="space-y-3 max-w-md">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">插件安全</h3>
-        <div>
+        <div data-setting-anchor="security.pluginLevels">
           <label className="block text-[12px] text-[var(--text-secondary)] mb-1">允许的插件安全等级</label>
           <input
             value={s.pluginAllowedLevels ?? 'S,A,B'}
@@ -89,13 +93,15 @@ export function SecurityView() {
           />
           <p className="text-[11px] text-[var(--text-muted)] mt-1">逗号分隔（S/A/B）；C 级能力插件需逐项授权</p>
         </div>
-        <label className="flex items-center justify-between cursor-pointer">
-          <span className="text-[13px] text-[var(--text-primary)]">市场插件强制签名校验</span>
-          <input type="checkbox" checked={!!s.pluginRequireSignature}
-            onChange={(e) => update('pluginRequireSignature', e.target.checked)}
-            className="accent-[var(--accent)]" />
-        </label>
-        <div>
+        <div data-setting-anchor="security.pluginSignature">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-[13px] text-[var(--text-primary)]">市场插件强制签名校验</span>
+            <input type="checkbox" checked={!!s.pluginRequireSignature}
+              onChange={(e) => update('pluginRequireSignature', e.target.checked)}
+              className="accent-[var(--accent)]" />
+          </label>
+        </div>
+        <div data-setting-anchor="security.pluginKeys">
           <label className="block text-[12px] text-[var(--text-secondary)] mb-1">受信公钥 keyring</label>
           <textarea
             value={s.pluginTrustedKeys ?? ''}
