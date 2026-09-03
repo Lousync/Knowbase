@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, agentAbort, onAgentStep,
+  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult } from '../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo } from '../../types'
 
 /**
  * 沉浸式 Agent 模式（docs/agent-immersive-mode-design.md，M0 骨架）
@@ -76,6 +76,7 @@ interface UiMsg {
 
 function nowLocal(): string { return new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 function fmtTime(iso: string): string { try { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return '' } }
+function fmtTok(n: number): string { return n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n) }
 
 export function ImModule({ isActive }: { isActive?: boolean }) {
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([])
@@ -183,6 +184,26 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
   const assistantMsgs = messages.filter(m => m.role === 'assistant')
   const docMsg = assistantMsgs[assistantMsgs.length - 1]
 
+  // ---- Token 消耗统计（来自消息轨迹 llm.tokens 与实时步骤；月度走 llm:getUsage）----
+  const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
+  const [defaultModel, setDefaultModel] = useState('')
+  const [tokenOpen, setTokenOpen] = useState(false)
+  useEffect(() => {
+    void llmGetUsage().then(setUsage).catch(() => null)
+    void getSettingRaw('defaultChatModel').then(v => setDefaultModel(String(v ?? ''))).catch(() => {})
+  }, [])
+  const tokenStats = useMemo(() => {
+    const all: AgentTraceStep[] = [...messages.flatMap(m => m.trace ?? []), ...liveSteps]
+    let llmTokens = 0, llmRounds = 0, toolCalls = 0, durationMs = 0
+    for (const s of all) {
+      durationMs += s.durationMs || 0
+      if (s.kind === 'llm') { llmRounds++; llmTokens += s.tokens ?? 0 } else { toolCalls++ }
+    }
+    return { llmTokens, llmRounds, toolCalls, durationMs }
+  }, [messages, liveSteps])
+  const monthTokens = usage?.monthTokens ?? 0
+  const budget = usage?.budget ?? 0
+
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--bg-primary)]">
       {/* 顶栏：任务标题/模板 + 视图切换 */}
@@ -191,6 +212,59 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
         <span className="text-[13px] font-medium truncate">{activeTitle || '沉浸式 Agent'}</span>
         <span className="text-[11px] text-[var(--text-muted)] px-2 py-0.5 rounded-full bg-[var(--bg-hover)] truncate">{template.label}</span>
         <div className="flex-1" />
+
+        {/* Token 消耗指示（默认收起；展开看本会话/月度明细） */}
+        <div className="relative shrink-0">
+          <button onClick={() => setTokenOpen(v => !v)}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] transition-colors ${tokenOpen ? 'bg-[var(--bg-primary)] text-[var(--accent)] border border-[var(--border-color)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'}`}
+            title="Token 消耗明细">
+            <Gauge size={12} />
+            <span className="tabular-nums">≈ {fmtTok(tokenStats.llmTokens)}</span>
+          </button>
+          {tokenOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-[300px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                <span className="text-[11.5px] font-medium text-[var(--text-primary)]">Token 明细</span>
+                <button onClick={() => setTokenOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={12} /></button>
+              </div>
+              <div className="p-3 space-y-2.5 text-[11.5px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted)]">模型</span>
+                  <span className="text-[var(--text-primary)] truncate max-w-[190px]">{defaultModel || '（默认配置）'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted)]">本会话 LLM tokens</span>
+                  <span className="tabular-nums font-medium text-[var(--text-primary)]">{fmtTok(tokenStats.llmTokens)}{tokenStats.llmTokens >= 1000 ? `（${Math.round(tokenStats.llmTokens)}）` : ''}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  {[['模型轮次', String(tokenStats.llmRounds)], ['工具调用', String(tokenStats.toolCalls)], ['耗时', `${Math.round(tokenStats.durationMs / 1000)}s`]].map(([k, v]) => (
+                    <div key={k} className="rounded-lg bg-[var(--bg-secondary)] py-1.5">
+                      <div className="text-[10.5px] text-[var(--text-muted)]">{k}</div>
+                      <div className="tabular-nums text-[12px] font-medium">{v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-[var(--border-color)] pt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[var(--text-muted)]">本月 LLM tokens</span>
+                    <span className="tabular-nums">{fmtTok(monthTokens)}{budget > 0 && <span className="text-[var(--text-muted)]"> / {fmtTok(budget)}</span>}</span>
+                  </div>
+                  {budget > 0 ? (
+                    <div className="h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, (monthTokens / budget) * 100)}%`, background: monthTokens / budget > 0.85 ? '#a32d2d' : '#185fa5' }} />
+                    </div>
+                  ) : (
+                    <div className="text-[10.5px] text-[var(--text-muted)]">未设月度预算（设置 → AI 工具 可配置上限）</div>
+                  )}
+                </div>
+                <div className="text-[10px] leading-relaxed text-[var(--text-muted)] border-t border-[var(--border-color)] pt-2">
+                  tokens 取自每轮模型调用的 usage 与消息轨迹；上下文占用随轮次累积（模型容量条 M1 随模型规格元数据接入）。
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-0.5 text-[12px]">
           {(['timeline', 'doc'] as const).map(v => (
             <button key={v} onClick={() => setView(v)}

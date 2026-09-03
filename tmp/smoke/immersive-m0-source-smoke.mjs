@@ -44,5 +44,17 @@ ok('文档视图（最近一条助手回复整篇 MarkdownPreview + setView 切�
 ok('素材/产物区 M1 占位说明（真实写入链路标注已就绪）',
   IM.includes('素材管理 M1 开放') && IM.includes('产物提取 M1 开放'))
 
+console.log('沉浸 Token 面板断言')
+ok('Token 面板：收起 chip（Gauge ≈ tokens）+ 展开明细',
+  IM.includes('<Gauge size={12} />') && IM.includes('tokenOpen') && IM.includes('fmtTok(tokenStats.llmTokens)'))
+ok('统计：从轨迹聚合 tokens/轮次/工具/耗时（llm steps tokens + tool 步）',
+  IM.includes('s.kind === \'llm\'') && IM.includes('llmTokens += s.tokens') && IM.includes('tokenStats = useMemo'))
+ok('月度：llmGetUsage(monthTokens/budget) + 预算进度条（超 85% 转红）',
+  IM.includes('llmGetUsage()') && IM.includes('monthTokens / budget > 0.85'))
+ok('模型名（defaultChatModel 设置）',
+  IM.includes("getSettingRaw('defaultChatModel')"))
+ok('上下文容量标注 M1（不展示虚假容量数字）',
+  IM.includes('模型容量条 M1'))
+
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)
