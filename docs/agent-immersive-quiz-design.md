@@ -88,10 +88,10 @@
 - ❌ 未覆盖：结构化题目（选择/填空/大题、```quiz 围栏、spoiler 答案规范）、自动出卷与批改讲解流程、资料内习题提取（U3）、题卷沉淀（L1）、难度/去重规则——即本设计核心
 
 **衔接候选（待拍板）**：
-- **A（推荐）**：新增独立「出题官」Skill（`quiz-generator`，variables：topic/资料/题型/题量/是否沉淀；tools：vault.read/docs.read-text/vault.write 等），与 teach **组合**：沉浸会话由 teach 负责讲与即时口头检查；进入测验（teach 第 4/6 步或用户点名）→ agent 调 quiz-generator 出结构化题并沉淀卷。职责单一、可独立进市场、不污染 teach
-- B：出题段落追加进 teach prompt（改市场包或复制为自有资产，与市场更新冲突，不推荐）
-- C：仅改沉浸「跟我学」模板 opening（零资产改动、最小可用，但只在沉浸 Tab 内）
+- **A（已拍板 2026-09-03）**：新增独立「出题官」Skill（`quiz-generator`，variables：topic/资料/题型/题量/是否沉淀；tools：vault.read/docs.read-text/vault.write 等），与 teach **组合**：沉浸会话由 teach 负责讲与即时口头检查；进入测验（teach 第 4/6 步或用户点名）→ agent 调 quiz-generator 出结构化题并沉淀卷。职责单一、可独立进市场、不污染 teach
+- ~~B：出题段落追加进 teach prompt（改市场包或复制为自有资产，与市场更新冲突，不推荐）~~
+- ~~C：仅改沉浸「跟我学」模板 opening（零资产改动、最小可用，但只在沉浸 Tab 内）~~
 
-> 落实施前：应用内装 teach-skill → 确认沉浸教学模板注入可用（已配置 skill 由 AgentRunner 清单自动可见）→ 按 A 做 quiz-generator（可随 M1 产物机制一起做）。
+> 落实施前：应用内装 teach-skill → 确认沉浸教学模板注入可用（已配置 skill 由 AgentRunner 清单自动可见）→ 按 A 做 quiz-generator（对话出题不依赖 M1 可先做；题卷沉淀随 M1 产物机制）。
 
 参考：`docs/agent-immersive-mode-design.md` §5（节奏）、§8（分期）；.AGENT/docs/knowledge-pack-answer-format.md；MarkdownPreview quiz/spoiler 渲染。
