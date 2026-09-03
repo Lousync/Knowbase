@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
-import type { DirCache, TreeNode } from '../types'
+import type { DirCache, TreeNode, CreateIntent } from '../types'
 import { getFileIcon } from '../../../lib/fileIcons'
 
 interface Props {
@@ -11,6 +11,10 @@ interface Props {
   onOpenFile: (node: TreeNode) => void
   onContextMenu: (e: React.MouseEvent, node: TreeNode) => void
   onMove: (srcRel: string, targetDirRel: string) => void
+  /** VS Code 式内联创建：非空表示在目标目录的条目末尾显示待命名行 */
+  creating?: CreateIntent | null
+  onCommitCreate?: (dirRel: string, type: 'file' | 'dir' | 'knowledge', rawName: string) => void
+  onCancelCreate?: () => void
 }
 
 const DRAG_MIME = 'text/x-kb-rel'
@@ -34,7 +38,7 @@ function FileIcon({ name }: { name: string }) {
  * 拖拽：条目均可拖（mime: text/x-kb-rel）；目录与根容器是落点，
  * drop 时把源相对路径移动到目标目录下（主进程 ws:rename 跨目录移动）。
  */
-export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove }: Props) {
+export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate }: Props) {
   const [dragOver, setDragOver] = useState<string | null>(null)
 
   const startDrag = (e: React.DragEvent, relPath: string) => {
@@ -102,6 +106,17 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
               </div>
             ),
         )}
+        {/* VS Code 式内联创建行：目标目录已展开时显示在条目末尾 */}
+        {isOpen && creating && creating.dirRel === relPath && (
+          <InlineCreateRow
+            key={`__create__${creating.type}`}
+            depth={depth + 1}
+            type={creating.type}
+            initial={creating.initial}
+            onCommit={(rawName) => onCommitCreate?.(creating.dirRel, creating.type, rawName)}
+            onCancel={onCancelCreate ?? (() => {})}
+          />
+        )}
       </div>
     )
   }
@@ -120,6 +135,59 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
       }}
     >
       {renderDir('', 0)}
+    </div>
+  )
+}
+
+/** VS Code 式内联创建行：条目末尾的可编辑输入框。Enter 提交、Esc 取消、失焦取消 */
+function InlineCreateRow({ depth, type, initial, onCommit, onCancel }: {
+  depth: number
+  type: 'file' | 'dir' | 'knowledge'
+  initial?: string
+  onCommit: (rawName: string) => void
+  onCancel: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committedRef = useRef(false)
+  // 默认名：file→"新建文件.md"（保持扩选态方便直接输入主名）; dir→"新目录"; knowledge→空
+  const def = type === 'file' ? (initial ?? '新建文件.md') : type === 'dir' ? (initial ?? '新目录') : (initial ?? '')
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.focus()
+    if (def) { el.value = def; requestAnimationFrame(() => el.select()) }
+  }, [def])
+  const commit = () => {
+    if (committedRef.current) return
+    committedRef.current = true
+    onCommit(inputRef.current?.value ?? '')
+  }
+  const cancel = () => {
+    if (committedRef.current) return
+    committedRef.current = true
+    onCancel()
+  }
+  return (
+    <div
+      className="flex items-center gap-1 rounded-md px-1.5 py-[3px]"
+      style={{ paddingLeft: 6 + depth * 12 }}
+    >
+      <span className="w-[12px] shrink-0" />
+      {type === 'dir'
+        ? <Folder size={14} className="shrink-0 text-[var(--text-muted)]" />
+        : <FileIcon name={def || '新建文件.md'} />}
+      <input
+        ref={inputRef}
+        spellCheck={false}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          else if (e.key === 'Escape') cancel()
+          e.stopPropagation()
+        }}
+        onBlur={() => cancel()}
+        placeholder={type === 'knowledge' ? '页面标题…' : '名称…'}
+        className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg-primary)] px-1 py-[1px] text-[12.5px] text-[var(--text-primary)] outline-none"
+      />
     </div>
   )
 }

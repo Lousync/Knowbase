@@ -15,7 +15,7 @@ import { FileTree } from './components/FileTree'
 import { MonacoPane, type MonacoPaneHandle } from './components/MonacoPane'
 import { PdfReaderView } from './components/PdfReaderView'
 import { extractOutline } from '../../lib/markdownOutline'
-import type { EditorDoc, DirCache, TreeNode } from './types'
+import type { EditorDoc, DirCache, TreeNode, CreateIntent } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -52,6 +52,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [trashTarget, setTrashTarget] = useState<TreeNode | null>(null)
   const [inputBox, setInputBox] = useState<InputBoxState | null>(null)
   const [inputValue, setInputValue] = useState('')
+  /** VS Code 式内联创建意图（非空=文件树目标目录尾部显示命名行） */
+  const [creating, setCreating] = useState<CreateIntent | null>(null)
   const [closeTarget, setCloseTarget] = useState<string | null>(null)
   /** 保存冲突（磁盘被外部修改）：弹三选对话框 */
   const [conflictState, setConflictState] = useState<{ relPath: string; diskMtimeMs?: number; missing: boolean } | null>(null)
@@ -376,26 +378,32 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     closeTab(relPath)
   }, [closeTab])
 
-  /** 弹输入框：新建文件/文件夹 */
+  /** VS Code 式内联创建：在目标目录的树内条目末尾显示命名行（不再居中弹输入框） */
   const askCreateNode = useCallback((dirRel: string, type: 'file' | 'dir') => {
-    setInputBox({
-      title: type === 'file' ? '新建文件' : '新建文件夹',
-      placeholder: type === 'file' ? '如 note.md' : '文件夹名',
-      initial: '',
-      submitLabel: '创建',
-      onSubmit: (name) => {
-        setInputBox(null)
-        void doCreate(dirRel, type, name)
-      },
-    })
+    setCreating({ dirRel, type })
+    setExpanded((prev) => new Set(prev).add(dirRel))
   }, [])
 
-  const doCreate = useCallback(async (dirRel: string, type: 'file' | 'dir', rawName: string) => {
-    const name = rawName.trim()
-    if (!name) return
-    const rel = joinRel(dirRel, name)
+  /** 新建知识页：同样走内联行（frontmatter id 模板由 commitCreate 生成） */
+  const askCreateKnowledgePage = useCallback((dirRel: string) => {
+    setCreating({ dirRel, type: 'knowledge' })
+    setExpanded((prev) => new Set(prev).add(dirRel))
+  }, [])
+
+  /** 内联提交：按类型清洗并执行创建（文件/目录直接建；知识页带 frontmatter 模板） */
+  const commitCreate = useCallback(async (dirRel: string, type: 'file' | 'dir' | 'knowledge', rawName: string) => {
+    setCreating(null)
     const root = rootIdRef.current
     if (!root) return
+    const name = rawName.trim()
+    if (!name) return
+    if (type === 'knowledge') {
+      await doCreateKnowledgePage(dirRel, name)
+      return
+    }
+    // 文件名净化（Windows 非法字符 → _），中文保留；无扩展名文件补 .md? 不补——用户给什么是什么
+    const cleaned = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || (type === 'dir' ? '新目录' : '新建文件.md')
+    const rel = joinRel(dirRel, cleaned)
     const res = type === 'file' ? await workspaceCreateFile(root, rel) : await workspaceMkdir(root, rel)
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
     const actualRel = res.relPath ?? rel
@@ -408,19 +416,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   }, [refreshDir, openFile])
 
   /** 新建知识页：带 frontmatter id 模板（无 id 的 .md 是普通草稿，进不了知识库索引） */
-  const askCreateKnowledgePage = useCallback((dirRel: string) => {
-    setInputBox({
-      title: '新建知识页',
-      placeholder: '页面标题，如：数据结构基本概念',
-      initial: '',
-      submitLabel: '创建',
-      onSubmit: (rawTitle) => {
-        setInputBox(null)
-        void doCreateKnowledgePage(dirRel, rawTitle)
-      },
-    })
-  }, [])
-
   const doCreateKnowledgePage = useCallback(async (dirRel: string, rawTitle: string) => {
     const title = rawTitle.trim()
     if (!title) return
@@ -665,6 +660,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 onToggleDir={(p) => void toggleDir(p)}
                 onOpenFile={(n) => void openFile(n)}
                 onMove={(src, dst) => void moveNode(src, dst)}
+                creating={creating}
+                onCommitCreate={(dirRel, type, raw) => void commitCreate(dirRel, type, raw)}
+                onCancelCreate={() => setCreating(null)}
                 onContextMenu={(e, n) => {
                   e.preventDefault()
                   e.stopPropagation()
