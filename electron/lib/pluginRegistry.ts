@@ -1,6 +1,6 @@
 import { app, ipcMain, net, dialog, BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync } from 'fs'
-import { join, resolve, sep } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync } from 'fs'
+import { join, resolve, sep, extname, basename } from 'path'
 import { randomUUID } from 'crypto'
 import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
@@ -49,6 +49,7 @@ const TRUSTED_HOSTS = new Set([
 const MAX_PACKAGE_BYTES = 20 * 1024 * 1024   // 单个插件包上限
 const MAX_FILE_COUNT = 500                    // 单插件文件数上限
 const MAX_MANIFEST_BYTES = 256 * 1024         // manifest 上限
+const FILE_PICK_MAX_BYTES = 30 * 1024 * 1024  // kb.files.pick 单文件上限（IPC base64 传输防内存打爆）
 const ID_RE = /^[a-z0-9][a-z0-9._-]*$/
 const VER_RE = /^\d+\.\d+\.\d+/
 const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
@@ -68,7 +69,7 @@ const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'k
 // 内容级贡献键(仅含这些为 S 级)
 const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons', 'deleteFx']
 // UI 插件能力白名单:theme/clipboard 为一期放行;data/knowledge/navigation 为 C 级模块插件(需显式授权)
-const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation']
+const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files']
 
 export interface PluginManifest {
   id: string
@@ -393,7 +394,7 @@ function computeRiskLevel(m: PluginManifest): RiskLevel {
     const caps = Array.isArray(m.capabilities) ? m.capabilities : []
     const keys = Object.keys(m.contributes || {})
     // 声明自有数据表并申请 data / knowledge / navigation 能力 = 模块级插件
-    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation')) return 'C'
+    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files')) return 'C'
     return 'B'
   }
   const keys = Object.keys(m.contributes || {})
@@ -1187,6 +1188,53 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       'kb.ui.clipboard.write': { capability: 'clipboard', run: () => ({ local: 'clipboard' }) },
       'kb.ui.theme.apply': { capability: 'theme', run: () => ({ local: 'theme' }) },
       'kb.ui.hostReview': { capability: 'knowledge', run: () => ({ local: 'host.review' }) },
+
+      // ---- 文件读取（files 能力）----
+      // 语义：插件无法直接触达磁盘，只能「弹系统对话框由用户显式挑文件」，
+      // 主进程读盘后把内容以 base64 回传（v1 简单可靠，避免给插件任何路径能力）。
+      // 安全约束：①仅对话框授权路径 ②扩展名白名单 ③体积上限（防 IPC 打爆内存）
+      'kb.files.pick': {
+        capability: 'files',
+        run: async (ctx, params) => {
+          const p = (params ?? {}) as { accept?: string; maxBytes?: number }
+          const accept = (p.accept ?? 'pdf').toLowerCase()
+          const maxBytes = Math.min(Math.max(Number(p.maxBytes) || FILE_PICK_MAX_BYTES, 1), FILE_PICK_MAX_BYTES)
+          const extList = accept.split(',').map((s) => s.trim().replace(/^\./, '')).filter(Boolean)
+          if (extList.length === 0 || extList.some((e) => !/^[a-z0-9]{1,8}$/.test(e))) {
+            throw Object.assign(new Error('accept 需为逗号分隔的扩展名(不含点)'), { code: 'EPARAM' })
+          }
+          const win = BrowserWindow.getFocusedWindow()
+          const opts: Electron.OpenDialogOptions = {
+            title: '选择文件',
+            properties: ['openFile'],
+            filters: [{ name: '允许的文件', extensions: extList }],
+          }
+          const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+          if (res.canceled || res.filePaths.length === 0) return { canceled: true }
+          const filePath = res.filePaths[0]
+          // 二次校验：对话框 filters 可被绕过（用户手输路径），落盘前再判一次扩展名与体积
+          const ext = extname(filePath).slice(1).toLowerCase()
+          if (!extList.includes(ext)) {
+            throw Object.assign(new Error(`文件类型不允许: .${ext}`), { code: 'EPARAM' })
+          }
+          const stat = statSync(filePath)
+          if (stat.size > maxBytes) {
+            throw Object.assign(
+              new Error(`文件过大: ${(stat.size / 1024 / 1024).toFixed(1)}MB（上限 ${(maxBytes / 1024 / 1024).toFixed(0)}MB）`),
+              { code: 'EPARAM' },
+            )
+          }
+          const buf = readFileSync(filePath)
+          auditWrite(ctx.pluginId, 'files.pick', { size: stat.size, ext, name: basename(filePath) })
+          return {
+            canceled: false,
+            name: basename(filePath),
+            size: stat.size,
+            ext,
+            data: buf.toString('base64'),
+          }
+        },
+      },
     },
   })
 

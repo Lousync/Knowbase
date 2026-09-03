@@ -55,6 +55,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   data: '自有数据表读写',
   knowledge: '知识库访问与重刷',
   navigation: '导航跳转',
+  files: '本地文件读取',
 }
 
 const CAPABILITY_DESCS: Record<string, string> = {
@@ -63,6 +64,7 @@ const CAPABILITY_DESCS: Record<string, string> = {
   data: '允许插件读写它自己的数据表(plugin_<id>_*，无法访问其他插件或宿主库表)',
   knowledge: '允许插件打开宿主刷题器等知识功能(判题写入插件自己的数据表)',
   navigation: '允许插件请求跳转到指定页面',
+  files: '允许插件弹系统对话框挑文件并读取其内容(每次经你手动确认,不会静默访问磁盘)',
 }
 
 const DATA_TARGETS: Record<string, string> = {
