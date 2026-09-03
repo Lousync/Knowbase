@@ -204,3 +204,18 @@
 |---|---|---|
 | Q9 | AI 要读的 PDF/PPT 放哪里 | **放进仓库（vault 内）**；仓库外任意路径读取（对话框授权）后置 |
 | Q10 | 首批支持格式 | **PDF + PPT，零新依赖**；Word/Excel 后续如需再评估 officeparser；扫描件需 OCR，v1 不支持 |
+
+---
+
+## 14. 真机验收台账（批次开发自驱用）
+
+> 约定（2026-09-03）：用户不逐批验收；每批代码完成后，本台账登记行为级验收点，标记代码状态；后续批次自驱推进，验收积压到用户统一真机时按台账逐条勾验。
+
+| 批 | 行为验收点（真机，dev 起后人工核对） | 代码状态 |
+|---|---|---|
+| **B0** | ① vault 读源下 AI `knowledge.search` 命中磁盘 .md 页并返回摘要 ② `knowledge.read(id)` 能读全文 ③ `create-page`/`append-page` 被拒且返回引导文案，sqlite `knowledge_pages` 行数不变 ④ 设置切回 sqlite 读源后原工具回归正常 ⑤ blog/bookmark 灰度开关切 vault 后对应工具行为正确 | ✅ 52c533b 待真机 |
+| **B1** | ① AI 能 `vault.list` 列仓库目录 ② `vault.read` 读 .md/.txt 与 `.knowbase/modules/*.json`（只读），返回 mtimeMs ③ `vault.search` 仓库内文本命中 ④ 禁区拒绝：`.knowbase/cache|config|plugins`、二进制、>10MB、越界路径 ⑤ 设置页 vaultFile 三档开关生效（off 时工具全部拒绝） | ⬜ 待开发 |
+| **B2** | ① `vault.write/edit` 真实落盘且 mtime 冲突拒绝 ② 单会话写 ≤5 次后停止 ③ 编辑器打开的页被 AI 改写 → 弹「重新加载/覆盖磁盘/暂不处理」三选 ④ 场景 A：AI 给两篇相关笔记互加 `[[链接]]` → 图谱出连线、无死链 ⑤ 场景 B：AI 基于仓库内 PDF/PPT 输出总结落成一页带链接复习 .md | ⬜ 待开发 |
+| **B3** | ① `vault.rename/trash` 可移动/移回收站（trash 非删除） ② 审计面板可见 relPath + 改动摘要 ③ 高危操作全流程可查可撤 | ⬜ 待开发 |
+| **web.read** | AI 给一个 https 网址能通读正文返回摘要；非白名单/超时给明确失败；截断告知 | ⬜ 待开发 |
+| **docs.read-text** | 仓库内放 .pdf 与 .pptx，AI 能提取文本总结；Word/扫描件明确拒绝并说明范围 | ⬜ 待开发（依赖 B1/B2 基础设施） |
