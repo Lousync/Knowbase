@@ -312,6 +312,8 @@ export interface KnowledgePage {
   excerpt?: string
   /** vault 读源模式：仓库内相对路径（「在编辑器中打开」跳转用，仅 vault 模式携带） */
   path?: string
+  /** frontmatter attachments：仓库内相对路径数组（附件面板/路由阅读器用） */
+  attachments?: string[]
 }
 /** 反链条目（带引用上下文摘录） */
 export interface KnowledgeBacklinkItem {
@@ -729,6 +731,8 @@ export interface WorkspaceReadResult {
   truncated: boolean
   /** 磁盘 mtime（保存冲突检测基线） */
   mtimeMs: number
+  /** 探测到 PDF 头（%PDF-）——按二进制处理不返回内容，阅读器走 ws:readRange */
+  pdf?: boolean
 }
 /** 二进制范围读取结果（PDF 阅读器懒加载；data 为 base64 段） */
 export interface WorkspaceRangeResult {

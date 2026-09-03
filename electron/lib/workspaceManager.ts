@@ -132,17 +132,24 @@ export interface ReadFileResult {
   truncated: boolean
   /** 磁盘 mtime（毫秒）：作为保存冲突检测的基线 */
   mtimeMs: number
+  /** 探测到 PDF 头（%PDF-）：即使 NUL 检测不敏感也要按二进制处理，避免全量文本过 IPC */
+  pdf?: boolean
 }
 
-/** 读文件：大小门槛 + 二进制检测（二进制不返回内容，避免乱码跨 IPC） */
+/** %PDF- 头探测（PDF 前 5 字节为 ASCII，NUL 检测不敏感会误判成文本） */
+function isPdfHeader(buf: Buffer): boolean {
+  return buf.length >= 5 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46 && buf[4] === 0x2d
+}
+
+/** 读文件：大小门槛 + 二进制/PDF 检测（不返回内容，避免乱码/大文件全量跨 IPC） */
 export function readWorkspaceFile(absPath: string): ReadFileResult {
   const st = statSync(absPath)
   if (st.size > MAX_OPEN_SIZE) {
     return { content: '', binary: false, size: st.size, editable: false, truncated: true, mtimeMs: st.mtimeMs }
   }
   const buf = readFileSync(absPath)
-  if (detectBinary(buf)) {
-    return { content: '', binary: true, size: buf.length, editable: false, truncated: false, mtimeMs: st.mtimeMs }
+  if (detectBinary(buf) || isPdfHeader(buf)) {
+    return { content: '', binary: true, size: buf.length, editable: false, truncated: false, mtimeMs: st.mtimeMs, pdf: isPdfHeader(buf) }
   }
   return {
     content: buf.toString('utf-8'),
@@ -177,7 +184,18 @@ export interface ReadRangeResult {
 export function readWorkspaceRange(absPath: string, offset: unknown, length: unknown): ReadRangeResult | { error: string } {
   try {
     const ext = extname(absPath).slice(1).toLowerCase()
-    if (!RANGE_EXT_WHITELIST.includes(ext)) return { error: `文件类型不支持范围读取: .${ext}` }
+    // 白名单扩展名；无扩展名文件按 %PDF- 头探测放行（知识库旧附件丢扩展名的 PDF）
+    if (!RANGE_EXT_WHITELIST.includes(ext)) {
+      if (ext !== '') return { error: `文件类型不支持范围读取: .${ext}` }
+      const fd0 = openSync(absPath, 'r')
+      let pdfByHeader = false
+      try {
+        const head = Buffer.alloc(8)
+        const n = readSync(fd0, head, 0, 8, 0)
+        pdfByHeader = n >= 5 && head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46 && head[4] === 0x2d
+      } finally { closeSync(fd0) }
+      if (!pdfByHeader) return { error: '未知文件类型，无法范围读取' }
+    }
     const st = statSync(absPath)
     const start = Math.max(0, Math.floor(Number(offset) || 0))
     const want = Math.max(0, Math.floor(Number(length) || 0))

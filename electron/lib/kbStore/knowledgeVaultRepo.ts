@@ -31,6 +31,8 @@ export interface VaultPage {
   tags: VaultTag[]
   /** 仓库内相对路径（渲染层跳转编辑器用，绝不含绝对路径） */
   path: string
+  /** frontmatter attachments 数组：仓库内相对路径（如 .knowbase/_attachments/knowledge_page/<id>/<file>） */
+  attachments: string[]
 }
 
 function requireRoot(): string {
@@ -43,7 +45,22 @@ function tagsOf(entry: KnowledgePageIndexEntry): VaultTag[] {
   return entry.tags.map((name) => ({ id: name, name, color: '' }))
 }
 
-function entryToPage(entry: KnowledgePageIndexEntry, contentMd = ''): VaultPage {
+/** 读页面文件：单次读盘同时给出正文与 frontmatter attachments（避免双读） */
+function readPageDoc(entry: KnowledgePageIndexEntry): { contentMd: string; attachments: string[] } {
+  try {
+    const abs = join(requireRoot(), entry.path)
+    const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
+    const a = doc.frontmatter.attachments
+    return {
+      contentMd: doc.body,
+      attachments: Array.isArray(a) ? a.filter((x): x is string => typeof x === 'string') : [],
+    }
+  } catch {
+    return { contentMd: '', attachments: [] }
+  }
+}
+
+function entryToPage(entry: KnowledgePageIndexEntry, contentMd = '', attachments: string[] = []): VaultPage {
   return {
     id: entry.id,
     title: entry.title,
@@ -59,15 +76,7 @@ function entryToPage(entry: KnowledgePageIndexEntry, contentMd = ''): VaultPage 
     updatedAt: entry.updatedAt,
     tags: tagsOf(entry),
     path: entry.path,
-  }
-}
-
-function readBody(entry: KnowledgePageIndexEntry): string {
-  try {
-    const abs = join(requireRoot(), entry.path)
-    return parseMarkdown(readFileSync(abs, 'utf-8')).body
-  } catch {
-    return ''
+    attachments,
   }
 }
 
@@ -105,13 +114,17 @@ export function vaultGetPages(categoryId?: string | null): VaultPage[] {
   let list = idx.pages
   if (categoryId) list = list.filter((e) => e.categoryId === categoryId)
   else if (categoryId === null) list = list.filter((e) => e.categoryId === null)
-  return list.map((e) => entryToPage(e, readBody(e)))
+  return list.map((e) => {
+    const doc = readPageDoc(e)
+    return entryToPage(e, doc.contentMd, doc.attachments)
+  })
 }
 
 export function vaultGetPageById(id: string): VaultPage | null {
   const entry = getKnowledgeIndex().byId[id]
   if (!entry) return null
-  return entryToPage(entry, readBody(entry))
+  const doc = readPageDoc(entry)
+  return entryToPage(entry, doc.contentMd, doc.attachments)
 }
 
 /** 星标小编辑（读写分工拍板的例外）：frontmatter 重写、正文不动 */

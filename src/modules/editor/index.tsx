@@ -162,8 +162,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     if (res.error) { showToast({ type: 'error', message: res.error }); return }
     const language = languageFor(node.name)
     // PDF 文档类型（P1）：不按文本读——内容置空、binary 标记、路由 PdfReaderView 懒加载渲染。
-    // 注：readFile 的 NUL 探测对 PDF 头部不敏感（%PDF 头是 ASCII），必须显式按扩展名判定。
-    const isPdf = /\.pdf$/i.test(node.name)
+    // 判定用主进程 %PDF- 头探测（res.pdf）而非仅扩展名：知识库旧附件是无扩展名的 PDF
+    const isPdf = res.pdf === true || /\.pdf$/i.test(node.name)
     // frontmatter 隐藏：markdown 文档拆分前缀，Monaco 只见正文（保存时拼回，roundtrip 无损）
     const fm = !isPdf && res.editable && language === 'markdown' && !res.binary ? splitFrontmatter(res.content) : null
     setOpenFiles((prev) => ({

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2 } from 'lucide-react'
+import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { registerAssistantContext } from '../../lib/assistantContext'
@@ -416,6 +416,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const p = await getKnowledgePageById(pageId)
       if (p) setReadingPage(p)
     } catch (e) { console.error(e) }
+  }, [])
+
+  /** P1 附件路由：PDF/文档附件 → 编辑器 PdfReaderView（App 收到 kb-open-in-editor 会切编辑器 Tab） */
+  const openAttachmentInEditor = useCallback((relPath: string) => {
+    if (!relPath) { showToast({ type: 'warning', message: '附件路径为空' }); return }
+    window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath } }))
   }, [])
 
   // --- tab management (VS Code preview mode) ---
@@ -1103,6 +1109,37 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             <div className="h-full overflow-y-auto">
               <div className="max-w-[720px] mx-auto px-10 py-14" style={{ fontSize: '15px', lineHeight: 1.9 }}>
                 <h1 className="text-[26px] font-bold leading-snug mb-6">{readingPage?.title || '无标题'}</h1>
+                {/* P1 附件条：PDF/无扩展名附件 → 在阅读器中打开（kb-open-in-editor → 编辑器 PdfReaderView）；图片灰显 */}
+                {readingPage?.attachments && readingPage.attachments.length > 0 && (
+                  <div className="mb-6 flex flex-wrap gap-1.5">
+                    {readingPage.attachments.map((att) => {
+                      const fn = att.split('/').pop() || att
+                      const ext = fn.includes('.') ? fn.split('.').pop()!.toLowerCase() : ''
+                      const isImg = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)
+                      if (isImg) {
+                        return (
+                          <span key={att} title={att}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2.5 py-1 text-[12px] text-[var(--text-tertiary)]">
+                            <ImageIcon size={13} />{fn}
+                          </span>
+                        )
+                      }
+                      const openable = ext === 'pdf' || ext === ''
+                      return openable ? (
+                        <button key={att} onClick={() => openAttachmentInEditor(att)} title={`在阅读器中打开：${att}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2.5 py-1 text-[12px] text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">
+                          <FileText size={13} className="text-[var(--accent)]" />{fn}
+                          <span className="text-[10px] text-[var(--text-tertiary)]">阅读</span>
+                        </button>
+                      ) : (
+                        <span key={att} title={att}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2.5 py-1 text-[12px] text-[var(--text-tertiary)]">
+                          <FileText size={13} />{fn}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
                 {readingPage && (
                   <MarkdownPreview
                     content={readingPage.contentMd}
