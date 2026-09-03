@@ -294,6 +294,31 @@ export function PluginsModule() {
     }
   }
 
+  /** 一键安装工具箱插件化样例（samples/*.zip，开发期产物）。
+   * 通用化：把 quizbook 那套「确保白名单 + 装载 + 进详情页授权」抽成参数化版本。
+   * 已装时一键按钮 disabled；加载失败时给到 fallback（用户走「安装本地 zip」按钮手选）。 */
+  const handleInstallBundledSample = async (zipName: string, expectedId: string, displayName: string, requiredLevel: 'B' | 'C') => {
+    if (installedIds[expectedId]) return
+    setBusy(true)
+    if (!allowedLevels.includes(requiredLevel)) {
+      const r = await pluginSetAllowedLevels(Array.from(new Set([...allowedLevels, requiredLevel])))
+      if (r.success) setAllowedLevels(prev => Array.from(new Set([...prev, requiredLevel])))
+    }
+    const r = await pluginInstallBundledSample(zipName)
+    setBusy(false)
+    if (r.success) {
+      showToast({ type: 'info', message: `${displayName}已安装，请在详情页启用 + 授权` })
+      window.dispatchEvent(new CustomEvent('plugins-changed'))
+      await refreshInstalled()
+      setTab('installed')
+      const list = await pluginListInstalled()
+      const just = list.find(p => p.id === expectedId)
+      if (just) setSelected({ kind: 'installed', plugin: just })
+    } else {
+      showToast({ type: 'warning', message: r.message || `${zipName}不可用，改用文件选择` })
+    }
+  }
+
   const handleToggle = async (p: PluginSummary) => {
     // A/B 级禁用后重新启用 = 沿用既有授权,即时生效(授权在安装时已确认)
     setBusy(true)
@@ -997,10 +1022,35 @@ export function PluginsModule() {
                 </button>
               )}
               {filteredInstalled.length === 0 ? (
-                <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <div className="px-4 py-6 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
                   {q ? '没有匹配的插件' : (
-                    <>还没有安装插件<br />
-                      <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-1">去市场逛逛 →</button>
+                    <>
+                      还没有安装插件
+                      <div className="mt-4 space-y-2 text-left">
+                        <div className="text-[11px] text-[var(--text-disabled)] uppercase tracking-wider px-1">开发者示例（samples/）</div>
+                        <button
+                          onClick={() => void handleInstallBundledSample('weight-tracker-0.1.0.zip', 'kb.weight-tracker', '体重追踪插件', 'B')}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors text-[12.5px] text-[var(--text-primary)]"
+                        >
+                          <span>体重追踪 <span className="text-[var(--text-muted)] text-[11px] ml-1">B · 零能力 · 工具箱工具</span></span>
+                          <span className="text-[var(--accent)] text-[11px]">一键安装 →</span>
+                        </button>
+                        <button
+                          onClick={() => void handleInstallBundledSample('site-nav-0.1.0.zip', 'kb.site-nav', '网址导航插件', 'C')}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors text-[12.5px] text-[var(--text-primary)]"
+                        >
+                          <span>网址导航 <span className="text-[var(--text-muted)] text-[11px] ml-1">C · navigation · 工具箱工具</span></span>
+                          <span className="text-[var(--accent)] text-[11px]">一键安装 →</span>
+                        </button>
+                        <button
+                          onClick={() => void handleInstallBundledSample('habit-tracker-0.1.0.zip', 'kb.habit-tracker', '习惯打卡插件', 'B')}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors text-[12.5px] text-[var(--text-primary)]"
+                        >
+                          <span>习惯打卡 <span className="text-[var(--text-muted)] text-[11px] ml-1">B · 零能力 · 工具箱工具</span></span>
+                          <span className="text-[var(--accent)] text-[11px]">一键安装 →</span>
+                        </button>
+                      </div>
+                      <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-4 inline-block">去市场逛逛 →</button>
                     </>
                   )}
                 </div>
