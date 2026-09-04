@@ -951,6 +951,7 @@ export interface ElectronAPI {
   workspaceOpenDir: () => Promise<({ rootId: string; name: string; path: string } & { error?: string }) | null>
   workspaceListDir: (rootId: string, relPath?: string) => Promise<{ entries?: WorkspaceEntry[]; error?: string }>
   workspaceReadFile: (rootId: string, relPath: string) => Promise<WorkspaceReadResult & { error?: string }>
+  workspaceReadImage: (rootId: string, relPath: string) => Promise<{ dataUrl?: string; error?: string }>
   workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => Promise<WorkspaceRangeResult & { error?: string }>
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => Promise<WorkspaceWriteResult>
   workspaceSetMdStatus: (rootId: string, relPath: string, draft: boolean) => Promise<{ ok: boolean; error?: string }>

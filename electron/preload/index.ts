@@ -494,6 +494,7 @@ const api = {
   workspaceOpenDir: () => ipcRenderer.invoke('ws:openDir'),
   workspaceListDir: (rootId: string, relPath?: string) => ipcRenderer.invoke('ws:listDir', rootId, relPath ?? ''),
   workspaceReadFile: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:readFile', rootId, relPath),
+  workspaceReadImage: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:readImage', rootId, relPath),
   workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => ipcRenderer.invoke('ws:readRange', rootId, relPath, offset, length),
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => ipcRenderer.invoke('ws:writeFile', rootId, relPath, content, expectedMtimeMs),
   workspaceSetMdStatus: (rootId: string, relPath: string, draft: boolean) => ipcRenderer.invoke('ws:setMdStatus', rootId, relPath, draft),

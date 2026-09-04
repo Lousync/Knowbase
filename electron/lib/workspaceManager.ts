@@ -428,6 +428,29 @@ export function registerWorkspaceHandlers(): void {
     }
   })
 
+  // 二进制读图（vault 附件相对路径解析 → data:URI；限制 .knowbase/_attachments 白名单防越界）
+  ipcMain.handle('ws:readImage', (_e, rootId: string, relPath: string) => {
+    try {
+      const abs = requireInside(rootId, relPath)
+      // 白名单：vault 内 .knowbase/_attachments 目录 + 二进制扩展
+      if (!abs.toLowerCase().includes(`${sep}.knowbase${sep}_attachments${sep}`)) {
+        return { error: '路径不在附件白名单' }
+      }
+      const buf = readFileSync(abs)
+      const ext = abs.toLowerCase().split('.').pop() || ''
+      const mime =
+        ext === 'svg' ? 'image/svg+xml' :
+        ext === 'png' ? 'image/png' :
+        ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+        ext === 'gif' ? 'image/gif' :
+        ext === 'webp' ? 'image/webp' :
+        'application/octet-stream'
+      return { dataUrl: `data:${mime};base64,${buf.toString('base64')}` }
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
+  })
+
   // 二进制范围读取（PDF 阅读器懒加载）：白名单扩展名 + 精确读段，复用 resolveSafe 防穿越
   ipcMain.handle('ws:readRange', (_e, rootId: string, relPath: string, offset: unknown, length: unknown) => {
     try {
