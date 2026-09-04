@@ -220,6 +220,7 @@ const api = {
   agentNewSession: (title?: string) => ipcRenderer.invoke('agent:newSession', title),
   agentMessages: (sessionId: string) => ipcRenderer.invoke('agent:messages', sessionId),
   agentRenameSession: (id: string, title: string) => ipcRenderer.invoke('agent:renameSession', id, title),
+  agentSetSessionInstructions: (id: string, instructions: string) => ipcRenderer.invoke('agent:setSessionInstructions', id, instructions),
   agentDeleteSession: (id: string) => ipcRenderer.invoke('agent:deleteSession', id),
   llmCcSwitchList: () => ipcRenderer.invoke('llm:ccswitch:list'),
   llmCcSwitchImport: (ids: string[]) => ipcRenderer.invoke('llm:ccswitch:import', ids),

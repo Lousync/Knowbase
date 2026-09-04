@@ -440,6 +440,8 @@ export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, c
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
 export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
 export const agentAbort = (chatId: string): Promise<boolean> => a().agentAbort(chatId)
+/** 保存/清除会话级全局要求（仅该会话后续轮次生效，空串=清除） */
+export const agentSetSessionInstructions = (id: string, instructions: string): Promise<{ ok: boolean; error?: string }> => a().agentSetSessionInstructions(id, instructions)
 /** AgentRunner 实时过程步骤（chatId 过滤用；渲染层据此驱动活动气泡） */
 export const onAgentStep = (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => a().onAgentStep(cb)
 export const agentSessions = (): Promise<AgentSessionInfo[]> => a().agentSessions()

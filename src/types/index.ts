@@ -670,6 +670,8 @@ export interface AgentContextInfo {
 export interface AgentSessionInfo {
   id: string
   title: string
+  /** 会话级全局要求（仅本会话生效；空串/缺省=无） */
+  instructions?: string
   createdAt: string
   updatedAt: string
 }
@@ -1176,6 +1178,7 @@ export interface ElectronAPI {
   agentNewSession: (title?: string) => Promise<AgentSessionInfo>
   agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>
   agentRenameSession: (id: string, title: string) => Promise<boolean>
+  agentSetSessionInstructions: (id: string, instructions: string) => Promise<{ ok: boolean; error?: string }>
   agentDeleteSession: (id: string) => Promise<boolean>
   llmCcSwitchList: () => Promise<CcSwitchScanResult>
   llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>

@@ -54,6 +54,7 @@ import { m052QuizMasteryMigration } from './052_quiz_mastery'
 import { m053QuizTagsMigration } from './053_quiz_tags'
 import { m054WordbookGroupsMigration } from './054_wordbook_groups'
 import { m055VaultsMigration } from './055_vaults'
+import { m056AgentSessionInstructionsMigration } from './056_agent_session_instructions'
 
 /**
  * 迁移执行顺序表 —— 顺序即语义，只允许追加，不允许重排或改名。
@@ -121,4 +122,5 @@ export const MIGRATIONS: Migration[] = [
   m053QuizTagsMigration,
   m054WordbookGroupsMigration,
   m055VaultsMigration,
+  m056AgentSessionInstructionsMigration,
 ]

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw,
+  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -101,13 +101,15 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
     const list = await agentSessions().catch(() => [])
     setSessions(list)
     if (list.length > 0) {
-      if (!activeIdRef.current || !list.some(s => s.id === activeIdRef.current)) {
-        const first = list[0]
-        setActiveId(first.id)
-        setActiveTitle(first.title)
-      }
+      const cur = activeIdRef.current ? list.find(s => s.id === activeIdRef.current) : undefined
+      const first = cur ?? list[0]
+      setActiveId(first.id)
+      setActiveTitle(first.title)
+      setActiveInstr(first.instructions ?? '')
+      setInstrDismiss(false)
     } else {
       setActiveId(null)
+      setActiveInstr('')
     }
   }, [])
 
@@ -133,8 +135,11 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
   // 切换会话
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
+    const row = sessions.find(s => s.id === sid)
+    setActiveInstr(row?.instructions ?? '')
+    setInstrDismiss(false)
     await refreshMessages(sid)
-  }, [refreshMessages])
+  }, [refreshMessages, sessions])
 
   const sendText = useCallback(async (raw: string, cid: string): Promise<AgentChatResult | null> => {
     setPending(true); setLiveSteps([])
@@ -165,12 +170,27 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
-    setMessages([]); setLastChanges(null); setShowNewMenu(false)
+    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrDismiss(false)
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     void sendText(tpl.opening, cid)
     void refreshSessions()
   }, [sendText, refreshSessions])
+
+  /** 保存/清除当前会话的全局要求（仅本会话后续轮次生效） */
+  const saveInstr = async (): Promise<void> => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    const text = instrDraft.trim().slice(0, 800)
+    const r = await agentSetSessionInstructions(sid, text).catch(() => null)
+    if (r && r.ok) {
+      setActiveInstr(text); setInstrDismiss(false); setInstrOpen(false)
+      setSessions(prev => prev.map(s => (s.id === sid ? { ...s, instructions: text } : s)))
+      showToast({ type: 'info', message: text ? '已设置本会话要求（仅本会话生效）' : '已清除本会话要求' })
+    } else {
+      showToast({ type: 'error', message: '保存失败，请重试' })
+    }
+  }
 
   const delSession = useCallback(async (e: React.MouseEvent, sid: string) => {
     e.stopPropagation()
@@ -188,6 +208,11 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
   const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
   const [defaultModel, setDefaultModel] = useState('')
   const [tokenOpen, setTokenOpen] = useState(false)
+  // 会话级全局要求（仅本会话；056 迁移 + agent:setSessionInstructions）
+  const [activeInstr, setActiveInstr] = useState('')
+  const [instrOpen, setInstrOpen] = useState(false)
+  const [instrDraft, setInstrDraft] = useState('')
+  const [instrDismiss, setInstrDismiss] = useState(false)
   useEffect(() => {
     void llmGetUsage().then(setUsage).catch(() => null)
     void getSettingRaw('defaultChatModel').then(v => setDefaultModel(String(v ?? ''))).catch(() => {})
@@ -212,6 +237,46 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
         <span className="text-[13px] font-medium truncate">{activeTitle || '沉浸式 Agent'}</span>
         <span className="text-[11px] text-[var(--text-muted)] px-2 py-0.5 rounded-full bg-[var(--bg-hover)] truncate">{template.label}</span>
         <div className="flex-1" />
+
+        {/* 会话要求（仅本会话生效的全局约束） */}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => { setInstrDraft(activeInstr); setInstrOpen(v => !v) }}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] transition-colors ${activeInstr ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'} ${instrOpen ? 'bg-[var(--bg-primary)] border border-[var(--border-color)]' : ''}`}
+            title="本会话要求：给这个对话挂一条只对它生效的全局要求（如：只用中文 / 只聊这个主题 / 先结论后理由）">
+            <PenLine size={12} />
+            <span className="max-w-[120px] truncate">{activeInstr ? '会话要求' : '会话要求'}</span>
+            {activeInstr && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
+          </button>
+          {instrOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-[340px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                <span className="text-[11.5px] font-medium text-[var(--text-primary)]">本会话要求</span>
+                <button onClick={() => setInstrOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={12} /></button>
+              </div>
+              <div className="p-3 space-y-2">
+                <textarea
+                  value={instrDraft}
+                  onChange={e => setInstrDraft(e.target.value)}
+                  rows={4} maxLength={800}
+                  placeholder={'例如：\n· 只用中文回答\n· 这个对话只聊 Linux 内核\n· 每次先给结论再展开\n（留空保存 = 清除）'}
+                  className="w-full px-2.5 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] resize-none outline-none focus:border-[var(--accent)]"
+                />
+                <div className="text-[10.5px] leading-relaxed text-[var(--text-muted)]">仅对本会话生效：后续问答与「重新生成」都会遵守；切换会话互不影响。</div>
+                <div className="flex gap-2 justify-end">
+                  {activeInstr && (
+                    <button onClick={() => { setInstrDraft(''); void saveInstr() }}
+                      className="px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors text-[12px]">
+                      清除
+                    </button>
+                  )}
+                  <button onClick={() => { void saveInstr() }}
+                    className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity">保存</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Token 消耗指示（默认收起；展开看本会话/月度明细） */}
         <div className="relative shrink-0">
@@ -342,6 +407,14 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
         <section className="flex-1 flex flex-col min-w-0 min-h-0">
           {view === 'timeline' ? (
             <>
+              {activeInstr && !instrDismiss && (
+                <div className="shrink-0 flex items-center gap-2 mx-4 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-secondary)]">
+                  <PenLine size={11} className="shrink-0 text-[var(--accent)]" />
+                  <span className="flex-1 min-w-0 truncate" title={activeInstr}><b className="font-medium text-[var(--text-primary)]">本会话要求：</b>{activeInstr}</span>
+                  <button onClick={() => { setInstrOpen(true); setInstrDraft(activeInstr) }} className="shrink-0 text-[var(--accent)] hover:underline">编辑</button>
+                  <button onClick={() => setInstrDismiss(true)} title="隐藏（不删除）" className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={11} /></button>
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
                 {messages.length === 0 && !pending && (
                   <div className="h-full flex flex-col items-center justify-center text-center gap-1.5">

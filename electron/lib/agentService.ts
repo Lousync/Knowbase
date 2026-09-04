@@ -7,6 +7,7 @@ import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
   getMessageById, updateMessageContent, deleteMessage, deleteMessagesAfter,
+  getAgentSession, updateAgentSessionInstructions,
 } from './agentSessionRepo'
 
 /**
@@ -222,8 +223,13 @@ async function runAgentLoop(
       skills.map(s => `- ${s.title}（${s.registryName}）：${s.description.slice(0, 120)}`).join('\n') +
       '\nSkill 是声明式提示词资产。当用户请求恰好对应某个 Skill 的能力时，调用该 skill 工具获取提示词并遵循执行；不确定时优先用通用内置工具。'
     : ''
+  // 会话级全局要求（056）：本会话附加的持久约束，注入最靠前的 system 位置、贯穿全部轮次
+  const sessionInst = getAgentSession(sessionId)?.instructions?.trim()
+  const instHint = sessionInst
+    ? `\n\n【本会话全局要求】（用户为此对话单独设定，最高优先级，必须严格遵守；与用户冲突时以本要求为准）\n${sessionInst}`
+    : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + instHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0
@@ -386,6 +392,12 @@ export function registerAgentHandlers(): void {
   ipcMain.handle('agent:renameSession', (_e, id: string, title: string) => {
     if (typeof id === 'string' && typeof title === 'string' && title.trim()) renameAgentSession(id, title.trim())
     return true
+  })
+  ipcMain.handle('agent:setSessionInstructions', (_e, id: string, instructions: string) => {
+    if (typeof id !== 'string' || !id) return { ok: false, error: '会话 id 非法' }
+    if (typeof instructions !== 'string') return { ok: false, error: '内容非法' }
+    updateAgentSessionInstructions(id, instructions)
+    return { ok: true }
   })
   ipcMain.handle('agent:deleteSession', (_e, id: string) => {
     deleteAgentSession(String(id ?? ''))

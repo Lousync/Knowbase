@@ -6,6 +6,8 @@ import { getDatabase, saveToDisk } from '../database/connection'
 export interface AgentSessionRow {
   id: string
   title: string
+  /** 会话级全局要求（056 迁移；空串=无） */
+  instructions?: string
   created_at: string
   updated_at: string
 }
@@ -45,6 +47,16 @@ export function listAgentSessions(): AgentSessionRow[] {
 
 export function renameAgentSession(id: string, title: string): void {
   run("UPDATE agent_sessions SET title = ?, updated_at = datetime('now','localtime') WHERE id = ?", [title, id])
+}
+
+/** 会话级全局要求（≤800 字；空串=清除）：只在本会话的后续轮次注入 system */
+export function updateAgentSessionInstructions(id: string, instructions: string): void {
+  const text = String(instructions ?? '').trim().slice(0, 800)
+  run("UPDATE agent_sessions SET instructions = ?, updated_at = datetime('now','localtime') WHERE id = ?", [text, id])
+}
+
+export function getAgentSession(id: string): AgentSessionRow | undefined {
+  return queryAll<AgentSessionRow>('SELECT * FROM agent_sessions WHERE id = ?', [id])[0]
 }
 
 export function deleteAgentSession(id: string): void {
