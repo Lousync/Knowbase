@@ -119,6 +119,12 @@ const api = {
     ipcRenderer.on('plugin:installed-changed', handler)
     return () => { ipcRenderer.removeListener('plugin:installed-changed', handler) }
   },
+  /** AI vault 写工具落盘后的外部变更通知（编辑器正打开该文件时弹三选），payload {relPath, mtimeMs} */
+  onWsExternalChange: (cb: (p: { relPath: string; mtimeMs?: number }) => void) => {
+    const handler = (_e: unknown, p: { relPath: string; mtimeMs?: number }) => cb(p)
+    ipcRenderer.on('ws:external-change', handler)
+    return () => { ipcRenderer.removeListener('ws:external-change', handler) }
+  },
   pluginInstallFromFile: (grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installFromFile', grantedCapabilities),
   pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:installBundledSample', filename, grantedCapabilities),
   pluginListInstalled: () => ipcRenderer.invoke('plugin:listInstalled'),
@@ -199,15 +205,23 @@ const api = {
   pdfMerge: (files: Array<{ name: string; data: Uint8Array }>) => ipcRenderer.invoke('pdf:merge', files),
   pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => ipcRenderer.invoke('pdf:organize', payload),
   pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => ipcRenderer.invoke('pdf:export', payload),
+  docsPptxPages: (relPath: string) => ipcRenderer.invoke('docs:pptxPages', relPath),
   agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:chat', req),
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),
   agentDeleteMessage: (messageId: string) => ipcRenderer.invoke('agent:deleteMessage', messageId),
   agentAbort: (chatId: string) => ipcRenderer.invoke('agent:abort', chatId),
+  /** AgentRunner 实时过程步骤（chatId 过滤后驱动前端活动气泡） */
+  onAgentStep: (cb: (p: { chatId: string; step: unknown }) => void) => {
+    const handler = (_e: unknown, p: { chatId: string; step: unknown }) => cb(p)
+    ipcRenderer.on('agent:step', handler)
+    return () => { ipcRenderer.removeListener('agent:step', handler) }
+  },
   agentSessions: () => ipcRenderer.invoke('agent:sessions'),
   agentNewSession: (title?: string) => ipcRenderer.invoke('agent:newSession', title),
   agentMessages: (sessionId: string) => ipcRenderer.invoke('agent:messages', sessionId),
   agentRenameSession: (id: string, title: string) => ipcRenderer.invoke('agent:renameSession', id, title),
+  agentSetSessionInstructions: (id: string, instructions: string) => ipcRenderer.invoke('agent:setSessionInstructions', id, instructions),
   agentDeleteSession: (id: string) => ipcRenderer.invoke('agent:deleteSession', id),
   llmCcSwitchList: () => ipcRenderer.invoke('llm:ccswitch:list'),
   llmCcSwitchImport: (ids: string[]) => ipcRenderer.invoke('llm:ccswitch:import', ids),

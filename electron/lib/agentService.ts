@@ -1,12 +1,13 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { listTools, invokeToolInternal, getSettingReader, checkModulePermission } from './aiTools'
+import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
 import type { ToolDescription } from './aiTools'
 import { invokeLlmInternal } from './llmService'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
   getMessageById, updateMessageContent, deleteMessage, deleteMessagesAfter,
+  getAgentSession, updateAgentSessionInstructions,
 } from './agentSessionRepo'
 
 /**
@@ -17,6 +18,14 @@ import {
  */
 
 const MAX_ITERATIONS = 8
+
+/** 单次请求内 vault 写工具次数上限（防失控循环刷盘；docs/agent-file-tools-design.md §5.5） */
+const MAX_SESSION_WRITES = 5
+/** vault 写工具集合（F2 write/edit；F3 rename/trash 预留同口径） */
+const VAULT_WRITE_TOOLS = new Set([
+  'builtin.vault.write', 'builtin.vault.edit',
+  'builtin.vault.rename', 'builtin.vault.trash',
+])
 
 /** 注册表名含点号，OpenAI function name 仅允许 [a-zA-Z0-9_-] —— 双向映射 */
 function toFnName(registryName: string): string {
@@ -60,6 +69,18 @@ export interface AgentChatRequest {
   chatId?: string
 }
 
+/** 单次请求对用户数据的写改动（供 UI 列出「本次改了哪些文件/条目」） */
+export interface AgentChange {
+  /** 工具注册名（builtin.vault.edit 等） */
+  tool: string
+  /** 人类可读动作（编辑/新建/删除/打卡…） */
+  action: string
+  /** 目标：文件 relPath / 标题 / 日期等（取写工具关键入参） */
+  target: string
+  /** 可点击直达编辑器的仓库内文件 relPath（仅 vault 文件写类工具；trash 后文件已移走不设） */
+  file?: string
+}
+
 export interface AgentChatResult {
   ok: boolean
   sessionId?: string
@@ -67,16 +88,36 @@ export interface AgentChatResult {
   error?: string
   code?: string
   trace: AgentTraceStep[]
+  /** 本次执行真实发生的写改动（成功写入/创建类工具），供 UI 渲染改动清单 */
+  changes?: AgentChange[]
 }
 
 /** 进行中的对话 → 中断控制器（用户点击停止时触发） */
 const activeChats = new Map<string, AbortController>()
+
+/** signal → 步骤事件推送器（withAbort 注入发起窗口 sender，仅目标窗口收流） */
+const stepEmitters = new WeakMap<AbortSignal, (step: AgentTraceStep) => void>()
+
+/** 写改动识别：工具 → 人类动作标签（成功执行后收集 target=path/title/date/name） */
+const CHANGE_LABELS: Record<string, string> = {
+  'builtin.vault.write': '写入文件',
+  'builtin.vault.edit': '修改文件',
+  'builtin.vault.rename': '重命名文件',
+  'builtin.vault.trash': '移入回收站',
+  'builtin.knowledge.create-page': '新建知识页',
+  'builtin.knowledge.append-page': '追加知识页',
+  'builtin.blog.create-entry': '新建日记',
+  'builtin.schedule.create-todo': '创建待办',
+  'builtin.checkin.check-habit': '习惯打卡',
+}
 
 function buildToolsPayload(): {
   payload: unknown[]
   nameMap: Map<string, string>
   /** 因模块权限被过滤掉的工具所属模块（用于 system prompt 给出可操作指引） */
   deniedModules: Set<string>
+  /** 是否有 vault.* 工具被 vaultFile 文件域权限拦截（指引文案用） */
+  deniedVaultFile: boolean
   /** 权限过滤后仍可用的 skill 清单（注入 system prompt，让 AI 感知已配置的能力包） */
   skills: Array<{ registryName: string; title: string; description: string }>
 } {
@@ -84,9 +125,14 @@ function buildToolsPayload(): {
   // 按模块权限预过滤：AI 无权使用的操作不进入其视野（invoke 处另有硬校验兜底）
   const all = listTools().filter(t => t.enabled)
   const deniedModules = new Set<string>()
+  let deniedVaultFile = false
   const tools: ToolDescription[] = all.filter(t => {
     const denied = checkModulePermission(t, reader)
     if (denied && t.module) deniedModules.add(t.module)
+    if (!denied && t.vaultFile && checkVaultFilePermission(t, reader)) {
+      deniedVaultFile = true
+      return false
+    }
     return !denied
   })
   const payload = tools.map(t => ({
@@ -106,7 +152,7 @@ function buildToolsPayload(): {
       title: t.title,
       description: t.description.replace(/^\[Skill\]\s*/, ''),
     }))
-  return { payload, nameMap, deniedModules, skills }
+  return { payload, nameMap, deniedModules, deniedVaultFile, skills }
 }
 
 const SYSTEM_PROMPT_BASE = [
@@ -167,9 +213,12 @@ async function runAgentLoop(
     return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
   }
 
-  const { payload: toolPayload, nameMap, deniedModules, skills } = buildToolsPayload()
+  const { payload: toolPayload, nameMap, deniedModules, deniedVaultFile, skills } = buildToolsPayload()
   const deniedHint = deniedModules.size > 0
     ? `\n\n【权限提示】以下模块用户尚未授权 AI 操作：${[...deniedModules].join('、')}。若用户请求这些模块的操作，请如实说明当前未授权，并提示可在 设置 → AI 工具 → 权限 中开启后重试。`
+    : ''
+  const vaultFileHint = deniedVaultFile
+    ? '\n\n【权限提示】仓库文件读写（vault.* 工具）当前被权限限制。若用户请求操作仓库内笔记文件（列目录/读文件/搜内容），请如实说明需在 设置 → AI 工具 → 权限 → 仓库文件 中开启后重试。'
     : ''
   // 注入 skill 清单：让 AI 明确知道自己配置了多少个提示词能力包及其用途（描述截断防 token 膨胀）
   const skillHint = skills.length > 0
@@ -177,29 +226,43 @@ async function runAgentLoop(
       skills.map(s => `- ${s.title}（${s.registryName}）：${s.description.slice(0, 120)}`).join('\n') +
       '\nSkill 是声明式提示词资产。当用户请求恰好对应某个 Skill 的能力时，调用该 skill 工具获取提示词并遵循执行；不确定时优先用通用内置工具。'
     : ''
+  // 会话级全局要求（056）：本会话附加的持久约束，注入最靠前的 system 位置、贯穿全部轮次
+  const sessionInst = getAgentSession(sessionId)?.instructions?.trim()
+  const instHint = sessionInst
+    ? `\n\n【本会话全局要求】（用户为此对话单独设定，最高优先级，必须严格遵守；与用户冲突时以本要求为准）\n${sessionInst}`
+    : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + deniedHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + instHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
+  let sessionWrites = 0
+  const changes: AgentChange[] = []
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // ---- LLM 轮 ----
     if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
     const t0 = Date.now()
     const r = await invokeLlmInternal({ messages: convo, tools: toolPayload, signal })
-    trace.push({
+    const llmStep: AgentTraceStep = {
       kind: 'llm',
       ok: r.ok,
       durationMs: Date.now() - t0,
       tokens: r.ok ? r.tokens : undefined,
       promptTokens: r.ok ? r.promptTokens : undefined,
       completionTokens: r.ok ? r.completionTokens : undefined,
-    })
+    }
+    trace.push(llmStep)
+    stepEmitters.get(signal)?.(llmStep) // 实时过程：渲染层活动气泡
     if (!r.ok) return { ok: false, sessionId, error: r.error, code: r.code, trace }
 
     if (!r.toolCalls || r.toolCalls.length === 0) {
-      appendAgentMessage(sessionId, 'assistant', r.content, trace)
-      return { ok: true, sessionId, reply: r.content, trace }
+      // 完成：把真实改动清单附在回复末尾（落库可见），并结构化返回给 UI
+      const changesText = changes.length > 0
+        ? '\n\n——\n本次改动：\n' + changes.map((c, idx) => `${idx + 1}. ${c.action}「${c.target}」`).join('\n')
+        : ''
+      const reply = r.content + changesText
+      appendAgentMessage(sessionId, 'assistant', reply, trace)
+      return { ok: true, sessionId, reply, changes, trace }
     }
 
     // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----
@@ -210,16 +273,50 @@ async function runAgentLoop(
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
 
+      // 会话写上限：单次请求内 vault 写工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）
+      if (VAULT_WRITE_TOOLS.has(realName)) {
+        if (sessionWrites >= MAX_SESSION_WRITES) {
+          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写上限 ${MAX_SESSION_WRITES}` }
+          trace.push(denyStep)
+          stepEmitters.get(signal)?.(denyStep)
+          convo.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, error: `已达本次会话文件写入上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
+          })
+          continue
+        }
+        sessionWrites++
+      }
+
       const t1 = Date.now()
       const exec = await invokeToolInternal(realName, args)
       const durationMs = Date.now() - t1
-      trace.push({
+      const toolStep: AgentTraceStep = {
         kind: 'tool',
         name: realName,
         ok: exec.ok,
         durationMs,
         summary: exec.ok ? undefined : String(exec.message).slice(0, 200),
-      })
+      }
+      trace.push(toolStep)
+      stepEmitters.get(signal)?.(toolStep) // 实时过程：渲染层活动气泡
+      if (exec.ok) {
+        // 收集真实写改动 → 完成时列为「本次改动」清单
+        const label = CHANGE_LABELS[realName]
+        if (label) {
+          const data = (typeof exec.data === 'object' && exec.data !== null)
+            ? exec.data as Record<string, unknown>
+            : {}
+          // vault 文件写类工具：目标=真实落盘路径（rename 取目标路径 to）；trash 后文件已移走不可跳转
+          const vaultPath = realName.startsWith('builtin.vault.')
+            ? String(data?.to ?? data?.path ?? data?.trashed ?? '').trim()
+            : ''
+          const file = realName !== 'builtin.vault.trash' && vaultPath ? vaultPath : undefined
+          const target = vaultPath || String(args?.title ?? args?.date ?? args?.name ?? '').trim().slice(0, 120)
+          if (target) changes.push({ tool: realName, action: label, target, ...(file ? { file } : {}) })
+        }
+      }
       convo.push({
         role: 'tool',
         tool_call_id: tc.id,
@@ -259,21 +356,32 @@ async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, 
 }
 
 export function registerAgentHandlers(): void {
-  const withAbort = async (chatId: string, fn: (signal: AbortSignal) => Promise<AgentChatResult>) => {
+  // 仅向发起窗口推送 agent:step 过程事件（chatId 过滤由渲染层做），复用 activeChats 生命周期
+  const withAbort = async (
+    chatId: string,
+    sender: Electron.WebContents | undefined,
+    fn: (signal: AbortSignal) => Promise<AgentChatResult>
+  ) => {
     const ctrl = new AbortController()
     activeChats.set(chatId, ctrl)
+    if (sender && !sender.isDestroyed()) {
+      stepEmitters.set(ctrl.signal, (step) => {
+        if (!sender.isDestroyed()) sender.send('agent:step', { chatId, step })
+      })
+    }
     try {
       return await fn(ctrl.signal)
     } finally {
       activeChats.delete(chatId)
+      stepEmitters.delete(ctrl.signal)
     }
   }
-  ipcMain.handle('agent:chat', async (_e, req: AgentChatRequest) =>
-    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentChat(req, signal, String(req?.chatId ?? ''))))
-  ipcMain.handle('agent:regenerate', async (_e, req: AgentChatRequest) =>
-    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentRegenerate(req, signal)))
-  ipcMain.handle('agent:editMessage', async (_e, req: AgentChatRequest & { messageId: string }) =>
-    withAbort(String(req?.chatId ?? '') || randomUUID(), signal => agentEditAndRegen(req, signal)))
+  ipcMain.handle('agent:chat', (e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentChat(req, signal, String(req?.chatId ?? ''))))
+  ipcMain.handle('agent:regenerate', (e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentRegenerate(req, signal)))
+  ipcMain.handle('agent:editMessage', (e, req: AgentChatRequest & { messageId: string }) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentEditAndRegen(req, signal)))
   ipcMain.handle('agent:deleteMessage', (_e, messageId: string) => {
     deleteMessage(String(messageId ?? ''))
     return true
@@ -289,6 +397,12 @@ export function registerAgentHandlers(): void {
   ipcMain.handle('agent:renameSession', (_e, id: string, title: string) => {
     if (typeof id === 'string' && typeof title === 'string' && title.trim()) renameAgentSession(id, title.trim())
     return true
+  })
+  ipcMain.handle('agent:setSessionInstructions', (_e, id: string, instructions: string) => {
+    if (typeof id !== 'string' || !id) return { ok: false, error: '会话 id 非法' }
+    if (typeof instructions !== 'string') return { ok: false, error: '内容非法' }
+    updateAgentSessionInstructions(id, instructions)
+    return { ok: true }
   })
   ipcMain.handle('agent:deleteSession', (_e, id: string) => {
     deleteAgentSession(String(id ?? ''))

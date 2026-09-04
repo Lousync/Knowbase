@@ -36,6 +36,8 @@ export interface AgentTool {
   module?: string
   /** 调用本工具所需的最低权限（默认 read；写工具为 write） */
   requires?: 'read' | 'write'
+  /** vaultFile 文件域级别（vault.* 文件工具用）：缺省=不受文件域约束（业务模块工具） */
+  vaultFile?: 'read' | 'write'
 }
 
 export type ToolHandler = (args: Record<string, unknown>) => unknown | Promise<unknown>
@@ -57,6 +59,10 @@ export type AiToolErrorCode =
   | 'INVALID_ARGS'
   | 'LIMIT_EXCEEDED'
   | 'EXEC_ERROR'
+  | 'MODULE_FORBIDDEN'
+  | 'MODULE_READONLY'
+  | 'VAULTFILE_FORBIDDEN'
+  | 'VAULTFILE_READONLY'
 
 export type AiToolInvokeResult = {
   ok: true
@@ -170,6 +176,31 @@ export function checkModulePermission(
     : (required === 'write' && granted !== 'off' ? 'MODULE_READONLY' : 'MODULE_FORBIDDEN')
 }
 
+// ===== vaultFile 文件域（vault.* 工具）：settings aiVaultFilePerm 三档，独立于业务模块 =====
+
+export type VaultFilePerm = 'off' | 'read' | 'write'
+
+const VAULT_FILE_LEVEL: Record<VaultFilePerm, number> = { off: 0, read: 1, write: 2 }
+
+/** 解析 aiVaultFilePerm 设置；非法/缺省 → read（保守可读、不可写） */
+export function parseVaultFilePerm(raw: unknown): VaultFilePerm {
+  return raw === 'off' || raw === 'read' || raw === 'write' ? raw : 'read'
+}
+
+/**
+ * vaultFile 域硬校验：工具所需文件域级别 > 用户授权级别 → 拒绝。
+ * 返回 null 放行，否则为错误码（agent 预过滤 + invoke 硬校验双防线复用）。
+ */
+export function checkVaultFilePermission(
+  tool: Pick<AgentTool, 'vaultFile'>,
+  getSettingValue: (key: string) => unknown
+): 'VAULTFILE_FORBIDDEN' | 'VAULTFILE_READONLY' | null {
+  if (!tool.vaultFile) return null
+  const granted = parseVaultFilePerm(getSettingValue('aiVaultFilePerm'))
+  return VAULT_FILE_LEVEL[granted] >= VAULT_FILE_LEVEL[tool.vaultFile] ? null
+    : (tool.vaultFile === 'write' && granted !== 'off' ? 'VAULTFILE_READONLY' : 'VAULTFILE_FORBIDDEN')
+}
+
 // ===== 月度调用上限 =====
 
 function readMonthlyLimit(getSettingValue: (key: string) => unknown): number {
@@ -213,6 +244,21 @@ async function invokeTool(
       message: permErr === 'MODULE_READONLY'
         ? `模块「${moduleName}」对 AI 授权为只读，本操作被拒绝。可在 设置 → AI 工具 → AI 权限 中调整`
         : `模块「${moduleName}」已对 AI 关闭，本操作被拒绝。可在 设置 → AI 工具 → AI 权限 中调整`,
+    }
+  }
+
+  // vaultFile 文件域硬校验（vault.* 工具；独立于业务模块，双防线同 checkModulePermission）
+  if (tool.vaultFile) {
+    const fileErr = checkVaultFilePermission(tool, getSettingValue)
+    if (fileErr) {
+      appendAudit(callerPluginId, auditActionFor(name) + '.denied', { tool: name, reason: fileErr })
+      return {
+        ok: false,
+        code: fileErr,
+        message: fileErr === 'VAULTFILE_READONLY'
+          ? '仓库文件对 AI 仅开放只读，写入类操作被拒绝。可在 设置 → AI 工具 → 权限 → 仓库文件 中调整为读写'
+          : '仓库文件已对 AI 关闭，本操作被拒绝。可在 设置 → AI 工具 → 权限 → 仓库文件 中调整',
+      }
     }
   }
 

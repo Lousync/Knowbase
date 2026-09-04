@@ -17,7 +17,7 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor' | 'immersive'
 
 // toolbox
 export interface ToolboxScript {
@@ -672,6 +672,8 @@ export interface AgentContextInfo {
 export interface AgentSessionInfo {
   id: string
   title: string
+  /** 会话级全局要求（仅本会话生效；空串/缺省=无） */
+  instructions?: string
   createdAt: string
   updatedAt: string
 }
@@ -686,6 +688,17 @@ export interface AgentStoredMessage {
   createdAt: string
 }
 
+/** 单次请求对用户数据的写改动（UI 改动清单用） */
+export interface AgentChange {
+  tool: string
+  /** 人类可读动作（修改文件/新建知识页…） */
+  action: string
+  /** 目标：relPath / 标题 / 日期 */
+  target: string
+  /** 可点击直达编辑器的仓库内文件 relPath（仅 vault 文件写类工具） */
+  file?: string
+}
+
 export interface AgentChatResult {
   ok: boolean
   sessionId?: string
@@ -693,6 +706,8 @@ export interface AgentChatResult {
   error?: string
   code?: string
   trace: AgentTraceStep[]
+  /** 本次真实发生的写改动 */
+  changes?: AgentChange[]
 }
 
 // ===== PDF 工具箱 =====
@@ -850,6 +865,8 @@ export interface ElectronAPI {
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => () => void
   /** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */
   onPluginInstalledChanged: (cb: () => void) => () => void
+  /** AI vault 写工具落盘后的外部变更通知（payload {relPath, mtimeMs}） */
+  onWsExternalChange: (cb: (p: { relPath: string; mtimeMs?: number }) => void) => () => void
   pluginInstallFromFile: (grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   pluginInstallBundledSample: (filename: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   pluginListInstalled: () => Promise<PluginSummary[]>
@@ -1154,15 +1171,20 @@ export interface ElectronAPI {
   pdfMerge: (files: Array<{ name: string; data: Uint8Array }>) => Promise<PdfOpResult>
   pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => Promise<PdfOpResult>
   pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => Promise<PdfExportResult>
+  /** 界面逐页阅读：当前仓库内 .pptx → [{n,text}] */
+  docsPptxPages: (relPath: string) => Promise<{ ok: boolean; pages?: Array<{ n: number; text: string }>; total?: number; error?: string }>
   agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentDeleteMessage: (messageId: string) => Promise<boolean>
   agentAbort: (chatId: string) => Promise<boolean>
+  /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
+  onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void
   agentSessions: () => Promise<AgentSessionInfo[]>
   agentNewSession: (title?: string) => Promise<AgentSessionInfo>
   agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>
   agentRenameSession: (id: string, title: string) => Promise<boolean>
+  agentSetSessionInstructions: (id: string, instructions: string) => Promise<{ ok: boolean; error?: string }>
   agentDeleteSession: (id: string) => Promise<boolean>
   llmCcSwitchList: () => Promise<CcSwitchScanResult>
   llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>

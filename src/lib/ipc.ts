@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, QuizMigrateResult, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, AgentTraceStep, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, QuizMigrateResult, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -131,6 +131,8 @@ export const pluginFetchRegistry = () => a().pluginFetchRegistry()
 export const pluginInstall = (url: string, grantedCapabilities?: string[]) => a().pluginInstall(url, grantedCapabilities)
 /** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */
 export const onPluginInstalledChanged = (cb: () => void) => a().onPluginInstalledChanged(cb)
+/** AI vault 写工具落盘后的外部变更通知 */
+export const onWsExternalChange = (cb: (p: { relPath: string; mtimeMs?: number }) => void) => a().onWsExternalChange(cb)
 export const pluginInstallFromFile = (grantedCapabilities?: string[]) => a().pluginInstallFromFile(grantedCapabilities)
 /** 一键安装内置示例插件（开发期从工作区 samples/ 读，prod 后续用 extraResources 预置） */
 export const pluginInstallBundledSample = (filename: string, grantedCapabilities?: string[]) => a().pluginInstallBundledSample(filename, grantedCapabilities)
@@ -434,12 +436,18 @@ export const wordbookCustomQueue = (label: string, words: string[]): Promise<Wor
 export const pdfMerge = (files: Array<{ name: string; data: Uint8Array }>): Promise<PdfOpResult> => a().pdfMerge(files)
 export const pdfOrganize = (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }): Promise<PdfOpResult> => a().pdfOrganize(payload)
 export const pdfExport = (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }): Promise<PdfExportResult> => a().pdfExport(payload)
+/** 界面逐页阅读：当前仓库内 .pptx → [{n,text}] */
+export const docsPptxPages = (relPath: string): Promise<{ ok: boolean; pages?: Array<{ n: number; text: string }>; total?: number; error?: string }> => a().docsPptxPages(relPath)
 
 export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
 export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
 export const agentAbort = (chatId: string): Promise<boolean> => a().agentAbort(chatId)
+/** 保存/清除会话级全局要求（仅该会话后续轮次生效，空串=清除） */
+export const agentSetSessionInstructions = (id: string, instructions: string): Promise<{ ok: boolean; error?: string }> => a().agentSetSessionInstructions(id, instructions)
+/** AgentRunner 实时过程步骤（chatId 过滤用；渲染层据此驱动活动气泡） */
+export const onAgentStep = (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => a().onAgentStep(cb)
 export const agentSessions = (): Promise<AgentSessionInfo[]> => a().agentSessions()
 export const agentNewSession = (title?: string): Promise<AgentSessionInfo> => a().agentNewSession(title)
 export const agentMessages = (sessionId: string): Promise<AgentStoredMessage[]> => a().agentMessages(sessionId)

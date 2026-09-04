@@ -164,6 +164,7 @@ export const SETTINGS = {
   pluginRequireSignature: { default: false, type: 'toggle', label: '插件强制签名', group: '插件安全', desc: '市场插件强制签名校验', keywords: ['插件', '签名', '校验', 'signature'], section: 'security', ui: true, scope: 'global', level: 'danger', affects: 'live' , anchor: 'security.pluginSignature' },
   pluginTrustedKeys: { default: '', type: 'text', label: '受信公钥 keyring', group: '插件安全', desc: '受信签名公钥 keyring（JSON 或 keyId=公钥）', keywords: ['插件', '公钥', 'keyring', '签名', '信任'], section: 'security', ui: true, scope: 'global', level: 'danger', affects: 'live' , anchor: 'security.pluginKeys' },
   updateMirror: { default: 'https://gh-proxy.com', type: 'text', label: '下载镜像', group: '更新', desc: 'GitHub 加速代理前缀，留空直连', keywords: ['镜像', '加速', '代理', 'github', 'proxy', '下载', 'cdn'], section: 'about', ui: true, scope: 'global', level: 'normal', affects: 'reload', anchor: 'advanced.mirror' },
+  aiVaultFilePerm: { default: 'read', type: 'select', label: 'AI vault 文件权限', group: '权限', desc: 'AI vault.* 工具访问仓库文件：off=禁止 read=只读 write=预留', keywords: ['vault', '文件', '权限', '仓库', 'ai', '读写'], section: 'aiTools', ui: false, scope: 'global', level: 'danger', affects: 'live', aiTab: 'perms' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====

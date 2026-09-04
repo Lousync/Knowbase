@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>沉浸式 Agent 工作台 · 界面原型（Knowbase）</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --line:rgba(0,0,0,.12); --line2:rgba(0,0,0,.2);
+    --t1:#1f2328; --t2:#57606a; --t3:#8b949e;
+    --blue:#185fa5; --bluebg:#e6f1fb; --blue700:#0c447c;
+    --green:#639922; --greenD:#3b6d11; --red:#a32d2d;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--t1);font-size:13px;line-height:1.55;padding:18px}
+  .app{max-width:1180px;margin:0 auto;border:.5px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card)}
+  .bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:.5px solid var(--line);background:var(--card)}
+  .muted{color:var(--t2)} .tiny{font-size:11px;color:var(--t3)}
+  .chip{background:var(--bluebg);color:var(--blue);font-size:11px;padding:1px 10px;border-radius:999px;white-space:nowrap}
+  .btn{border:.5px solid var(--line2);border-radius:8px;padding:3px 12px;font-size:12px;color:var(--t2);cursor:pointer;background:#fff;transition:.12s}
+  .btn:hover{border-color:var(--blue);color:var(--blue)}
+  .btn.pri{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .btn.pri:hover{background:var(--blue700)}
+  .btn.sm{padding:1px 8px;font-size:11px;border-radius:7px}
+  .main{display:grid;grid-template-columns:168px minmax(0,1fr) 216px;min-height:480px}
+  .colL{border-right:.5px solid var(--line);background:#fafbfc;padding:12px}
+  .colR{border-left:.5px solid var(--line);background:#fafbfc;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .sec-title{font-size:11px;color:var(--t2);margin-bottom:7px}
+  .step{display:flex;align-items:center;gap:7px;padding:4px 7px;border-radius:8px;cursor:pointer;font-size:12px}
+  .step:hover{background:rgba(0,0,0,.04)}
+  .step.active{background:var(--bluebg)}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .goalbox{margin-top:12px;font-size:11px;color:var(--blue700);background:var(--bluebg);border-radius:8px;padding:7px 9px;line-height:1.5}
+  .tabs{display:flex;gap:4px;margin-bottom:8px}
+  .tab{padding:2px 10px;font-size:12px;border-radius:7px;cursor:pointer;color:var(--t2);border:.5px solid transparent}
+  .tab.active{background:var(--card);border-color:var(--line);color:var(--t1)}
+  .canvas{padding:12px;display:flex;flex-direction:column;gap:9px;min-width:0}
+  .card{border:.5px solid var(--line);border-radius:var(--radius);padding:9px 12px;background:var(--card)}
+  .card.gray{background:#f6f7f9}
+  .actrow{display:flex;align-items:center;gap:8px;color:var(--t2)}
+  .card h4{font-size:13px;font-weight:500;margin-bottom:3px}
+  .card p{font-size:12.5px}
+  .inputbox{display:flex;gap:8px;align-items:center;border:.5px solid var(--line2);border-radius:10px;padding:7px 10px;background:#fafbfc}
+  .inputbox .ph{flex:1;color:var(--t3);font-size:12px}
+  .src{display:flex;align-items:center;gap:7px;background:#fff;border:.5px solid var(--line);border-radius:8px;padding:4px 8px;margin-top:4px;font-size:12px}
+  .src .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .foot{display:flex;align-items:center;gap:16px;padding:6px 14px;border-top:.5px solid var(--line);background:#f6f7f9;font-size:11px;color:var(--t2)}
+  .scene-switch{display:flex;gap:6px;align-items:center;margin-left:auto}
+  .hide{display:none!important}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1f2328;color:#fff;font-size:12px;padding:7px 16px;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+  #toast.show{opacity:1}
+  .prod-done{color:var(--greenD)!important}
+  kbd{background:#eef1f4;border:.5px solid var(--line);border-bottom-width:1.5px;border-radius:4px;padding:0 4px;font-size:10px;color:var(--t2)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="bar">
+    <span style="cursor:pointer;color:var(--t2)">‹ 轻问答</span>
+    <span style="width:1px;height:14px;background:var(--line)"></span>
+    <b id="appTitle" style="font-weight:500">AI 导师 · 操作系统跟我学</b>
+    <span id="stageChip" class="chip">阶段 3/5 · 分章精讲</span>
+    <div class="scene-switch">
+      <span class="tiny">场景模板：</span>
+      <button class="btn sm pri" data-scene="teach">教学</button>
+      <button class="btn sm" data-scene="research">深度研读</button>
+      <button class="btn sm" data-scene="review">周复盘</button>
+    </div>
+    <span style="flex:1"></span>
+    <span style="cursor:pointer;color:var(--t2)">+ 素材</span>
+    <span style="cursor:pointer;color:var(--t2)">保存</span>
+    <span style="cursor:pointer;color:var(--t2)">⋯</span>
+  </div>
+
+  <div class="main">
+    <div class="colL">
+      <div class="sec-title">任务步骤 <span id="stepCount" class="tiny"></span></div>
+      <div id="steps"></div>
+      <div class="sec-title" style="margin-top:14px">本会话目标（可改）</div>
+      <div class="goalbox" id="goalBox"></div>
+    </div>
+
+    <div class="canvas">
+      <div class="tabs">
+        <span class="tab active" data-view="timeline">时间线</span>
+        <span class="tab" data-view="doc">文档视图</span>
+        <span class="tab" data-view="diff">对比(diff)</span>
+      </div>
+
+      <div id="viewTimeline">
+        <div id="liveActivity" class="card gray actrow"></div>
+        <div id="msgCards"></div>
+        <div class="inputbox">
+          <span class="ph" id="inputPh">问细节 · 或说“出 3 道题”· 或要求暂停</span>
+          <span class="btn pri" style="padding:1px 14px">发送</span>
+        </div>
+      </div>
+
+      <div id="viewDoc" class="hide">
+        <div class="card" style="min-height:300px">
+          <h4>两周学习计划（草稿预览）</h4>
+          <p class="muted" style="margin:6px 0 10px">第 1 周 · 基础：内存管理 → 第 2 周 · 进阶：文件系统与 I/O。每章配 1 页笔记 + 5 道小测，产出复习卡并链入资料页。</p>
+          <p style="font-size:12px;color:var(--t2);border-top:.5px solid var(--line);padding-top:8px">这里承载长文/方案整篇预览（S3 写作、S4 建议清单共用文档视图）。</p>
+        </div>
+      </div>
+      <div id="viewDiff" class="hide">
+        <div class="card" style="min-height:300px">
+          <h4>产物对比</h4>
+          <p class="muted" style="margin-top:6px">写入前对比：左=草稿，右=知识库现有内容；支持逐段接受/拒绝（演示占位）。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="colR">
+      <div>
+        <div class="sec-title">资料来源 <span id="srcCount" class="tiny"></span></div>
+        <div id="srcList"></div>
+        <div style="color:var(--blue);font-size:11px;margin-top:6px;cursor:pointer">拖入文件 / 贴网址 / 选仓库笔记</div>
+      </div>
+      <div class="card" style="padding:8px 10px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-weight:500">产物</b><span id="prodCount" class="tiny"></span></div>
+        <div id="prodList" style="font-size:12px"></div>
+      </div>
+      <div class="card" style="padding:8px 10px;font-size:12px">
+        <div class="tiny" style="margin-bottom:3px">本次改动 <span id="chgCount"></span></div>
+        <div id="chgList"></div>
+      </div>
+      <div style="flex:1"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span id="fSources">素材 3</span>
+    <span id="fProgress">进度 3/5</span>
+    <span>改动（点击跳编辑器）</span>
+    <span style="flex:1"></span>
+    <span style="cursor:pointer;color:var(--red);border:.5px solid var(--line2);padding:1px 12px;border-radius:8px">停止</span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SCENES = {
+  teach: {
+    appTitle: 'AI 导师 · 操作系统跟我学', stageChip: '阶段 3/5 · 分章精讲',
+    goal: '先带我学完虚拟内存，再做 8 道题验收',
+    steps: [['通读资料','done'],['学习大纲','done'],['分章精讲','active'],['随堂测验','todo'],['复习卡沉淀','todo']],
+    live: '正在调用 <b>docs.read-text</b>「资料/OS 教程.pdf」… <span class="muted">提取 40 页文本 · 第 2 次工具调用</span>',
+    cards: [
+      {t:'第 2 章 · 虚拟内存精讲', sub:'卡片可折叠', p:'虚拟内存 = 让进程以为独占整块地址空间，实际由 OS 在内存与磁盘间搬移页…（接续资料第 8–17 页与你的《内存管理》笔记）'},
+      {t:'学习大纲', sub:'待你确认', p:'两周计划 · 内存→进程→文件系统；每章配 1 页笔记 + 小测', actions:'confirm'}
+    ],
+    input: '问细节 · 或说“出 3 道题”· 或要求暂停',
+    sources: [['OS 教程.pdf · 40 页','done'],['网址 · linux-vm 教程','done'],['笔记 · 内存管理.md','done']],
+    prods: [['两周计划.md','draft']],
+    chgs: [['新建知识页','两周计划 ›']],
+    docT: '两周学习计划（草稿预览）', docP:'第 1 周 · 基础：内存管理 → 第 2 周 · 进阶：文件系统与 I/O。每章配 1 页笔记 + 5 道小测，产出复习卡并链入资料页。'
+  },
+  research: {
+    appTitle: '深度研读 · 虚拟内存专题', stageChip: '阶段 2/4 · 综合梳理',
+    goal: '仓库里讲“虚拟内存”的都找出来读一遍，讲给我听，整理成专题页并链接所有来源',
+    steps: [['定位相关笔记','done'],['批量通读','done'],['综合梳理讲解','active'],['生成专题页','todo']],
+    live: '正在调用 <b>vault.search</b>「虚拟内存」… <span class="muted">命中 6 篇 · 第 4 次工具调用</span>',
+    cards: [
+      {t:'综合讲解 · 虚拟内存全景', sub:'接续 6 篇笔记', p:'分页表→TLB→缺页中断→换页策略，串起你仓库里《内存管理》《OS 实验三》等 6 篇内容…'},
+      {t:'专题页草稿', sub:'待确认写入', p:'虚拟内存专题.md：正文 + 自动带上对 6 个来源页的 [[双链]]', actions:'confirm2'}
+    ],
+    input: '追问细节 · 或说“先只写分页表部分”',
+    sources: [['笔记 · 内存管理.md','done'],['笔记 · OS 实验三.md','done'],['笔记 · 换页策略.md','done'],['笔记 · TLB 笔记.md','done']],
+    prods: [['虚拟内存专题.md','draft']],
+    chgs: [],
+    docT: '虚拟内存专题（草稿预览）', docP:'预计 2.6k 字；含 6 个 [[双链]] 来源与 1 张 mermaid 分页流程图。写入后图谱新增 7 条边。'
+  },
+  review: {
+    appTitle: '周复盘 · 我的 9 月第 1 周', stageChip: '阶段 2/3 · 草稿待确认',
+    goal: '总结我这一周：日程/日记/打卡/番茄钟 → 生成周报草稿',
+    steps: [['读取本周数据','done'],['生成周报草稿','active'],['写入每周总结','todo']],
+    live: '正在汇总 <b>habits.stats</b> 与番茄钟… <span class="muted">打卡 5/7 · 专注 12h</span>',
+    cards: [
+      {t:'周报草稿', sub:'待你确认', p:'成就：番茄专注 12h（+20%）；习惯打卡 5/7；回落：日程逾期 2 项。下周建议见下…', actions:'confirm'},
+      {t:'数据依据', sub:'可展开', p:'本周完成 14 个待办 · 写了 6 篇日记 · 最长连续打卡 4 天'}
+    ],
+    input: '追问某天的细节 · 或说“把下周建议去掉”',
+    sources: [['模块数据 · 日程/日记/打卡','auto']],
+    prods: [['每周总结/2026-09-06.md','draft']],
+    chgs: [],
+    docT: '周报草稿（预览）', docP:'成就/回落/下周建议三段式；建议接入“每周总结”现有模板后写入。'
+  }
+};
+
+const $ = s => document.querySelector(s);
+let scene = 'teach';
+const col = { done:'#639922', active:'#378add', todo:'#b4b2a9', auto:'#b4b2a9' };
+const stepLabel = { done:'✓', active:'进行', todo:'○', auto:'自动' };
+
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),1800); }
+
+function render(){
+  const sc = SCENES[scene];
+  $('#appTitle').textContent = sc.appTitle;
+  $('#stageChip').textContent = sc.stageChip;
+  $('#goalBox').textContent = sc.goal;
+  const doneN = sc.steps.filter(s=>s[1]==='done').length;
+  $('#stepCount').textContent = `(${doneN}/${sc.steps.length} 完成)`;
+  $('#steps').innerHTML = sc.steps.map(([n,st])=>`
+    <div class="step ${st==='active'?'active':''}">
+      <span class="dot" style="background:${col[st]}"></span><span style="${st==='todo'?'color:var(--t2)':''}">${n}</span>
+      <span style="margin-left:auto;color:${st==='active'?'var(--blue)':'var(--t3)'};font-size:11px">${stepLabel[st]}</span>
+    </div>`).join('');
+  $('#liveActivity').innerHTML = `<span class="dot" style="background:#378add"></span><span>${sc.live}</span>`;
+  $('#msgCards').innerHTML = sc.cards.map(c=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;color:var(--blue)"><span style="font-weight:500;color:var(--t1)">${c.t}</span><span class="tiny">${c.sub}</span></div>
+      <p style="color:var(--t2)">${c.p}</p>
+      ${c.actions ? `<div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn pri" data-confirm="${c.t}">确认，${scene==='teach'?'开始精讲':'继续'}</button>
+        <button class="btn" data-feedback>修改建议</button></div>` : ''}
+    </div>`).join('');
+  $('#inputPh').textContent = sc.input;
+  $('#srcCount').textContent = `(${sc.sources.length})`;
+  $('#srcList').innerHTML = sc.sources.map(([n,st])=>`
+    <div class="src"><span class="dot" style="background:${col[st]};width:6px;height:6px"></span><span class="nm">${n}</span>${st==='done'?'<span style="color:#3b6d11;margin-left:auto">✓</span>':''}</div>`).join('');
+  $('#prodCount').textContent = `(${sc.prods.length})`;
+  $('#prodList').innerHTML = sc.prods.map(([n,st])=>`
+    <div style="margin-top:6px">${n}<br><span class="tiny" style="${st==='written'?'color:var(--greenD)':'color:var(--t2)'}">${st==='draft'?'草稿 · 未写入':st==='written'?'已写入知识库 ✓':'—'}</span></div>
+    <div style="display:flex;gap:6px;margin-top:5px">
+      <button class="btn sm" data-prev>预览</button>
+      <button class="btn sm pri" data-write data-target="${n}">${st==='draft'?'写入知识库':'已写入'}</button>
+    </div>`).join('');
+  $('#chgCount').textContent = sc.chgs.length;
+  $('#chgList').innerHTML = sc.chgs.length ? sc.chgs.map(([a,t])=>`
+    <div style="display:flex;gap:6px;align-items:center;color:var(--blue)">${a}<span style="color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="跳编辑器">${t}</span></div>`).join('') : '<div class="tiny">本轮暂无写入改动</div>';
+  $('#fSources').textContent = `素材 ${sc.sources.length}`;
+  const prog = sc.steps.filter(s=>s[1]!=='todo').length + '/' + sc.steps.length;
+  $('#fProgress').textContent = `进度 ${prog}`;
+  $('#viewDoc h4').textContent = sc.docT;
+  $('#viewDoc p:first-of-type').textContent = sc.docP;
+  document.querySelectorAll('[data-scene]').forEach(b=>b.classList.toggle('pri', b.dataset.scene===scene));
+}
+
+document.addEventListener('click', e=>{
+  const sv = e.target.closest('[data-scene]');
+  if(sv){ scene=sv.dataset.scene; render(); return; }
+  const tv = e.target.closest('[data-view]');
+  if(tv){ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t===tv));
+    ['timeline','doc','diff'].forEach(v=>$('#view'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('hide', v!==tv.dataset.view)); return; }
+  if(e.target.closest('[data-confirm]')){ toast('已确认 — 下一步已加入队列（演示）'); const bt=e.target.closest('[data-confirm]'); bt.closest('.card').querySelector('span.tiny').textContent='已确认'; bt.remove(); return; }
+  if(e.target.closest('[data-feedback]')){ toast('请描述修改意见（演示）'); return; }
+  if(e.target.closest('[data-write]')){ const b=e.target.closest('[data-write]'); b.textContent='已写入'; b.classList.remove('pri'); toast('已写入知识库并通知编辑器（演示）'); return; }
+  if(e.target.closest('[data-prev]')){ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view==='doc')); ['timeline','doc','diff'].forEach(v=>$('#view'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('hide', v!=='doc')); return; }
+});
+
+render();
+</script>
+</body>
+</html>

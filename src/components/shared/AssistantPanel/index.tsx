@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check, Square,
-  Pencil, RefreshCw, Languages,
+  Pencil, RefreshCw, Languages, ArrowUpRight,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext } from '../../../lib/assistantContext'
@@ -11,9 +11,9 @@ import { TranslateCard } from '../TranslateCard'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentRegenerate, agentEditMessage, agentDeleteMessage,
-  llmListProviders, copyText, agentAbort,
+  llmListProviders, copyText, agentAbort, onAgentStep,
 } from '../../../lib/ipc'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo } from '../../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo, AgentChange } from '../../../types'
 
 /**
  * 全局 AI 助手侧栏（方案 B）：任意界面 Ctrl+J / 右下角按钮唤起，
@@ -118,6 +118,16 @@ export function AssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ctxVersionRef = useRef(0)
+  /** 实时过程步骤（agent:step，仅当前 chatId）：驱动「正在思考/调用工具」气泡 */
+  const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
+  /** 本次请求的真实改动清单（agentChat 返回 changes）→ 完成后卡片 */
+  const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
+  useEffect(() => {
+    return onAgentStep(({ chatId, step }) => {
+      if (chatId !== chatIdRef.current) return
+      setLiveSteps(prev => [...prev.slice(-19), step])
+    })
+  }, [])
   /** 当前会话 id 的实时镜像：回复返回时判断用户是否已切换会话 */
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
@@ -324,6 +334,8 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     setMessages(prev => [...prev, { role: 'user', content: text, createdAt: nowLocal() }])
     setInput('')
     setPending(true)
+    setLiveSteps([])
+    setLastChanges(null)
     ctxVersionRef.current++
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
@@ -335,6 +347,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
         return
       }
       if (r.ok && r.reply !== undefined) {
+        setLastChanges(r.changes && r.changes.length > 0 ? r.changes : null)
         if (selCtx) setSelCtx(null) // 选中上下文一次性消费
       } else if (r.code === 'ABORTED') {
         showToast({ type: 'info', message: '已停止生成' })
@@ -355,12 +368,15 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     if (!sid || pending) return
     if (messages.length === 0 || messages[messages.length - 1].role !== 'assistant') return
     setPending(true)
+    setLiveSteps([])
+    setLastChanges(null)
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     try {
       const r = await agentRegenerate(sid, getAssistantContext() ?? undefined, cid)
       if (r.code === 'ABORTED') showToast({ type: 'info', message: '已停止生成' })
       else if (!r.ok) showToastSafe(`重新生成失败：${r.error ?? '未知错误'}`)
+      else if (r.changes && r.changes.length > 0) setLastChanges(r.changes)
       await refreshMessages(sid)
     } finally {
       setPending(false)
@@ -374,12 +390,15 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     if (!sid || pending) return
     setEditing(null)
     setPending(true)
+    setLiveSteps([])
+    setLastChanges(null)
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     try {
       const r = await agentEditMessage(sid, messageId, content, getAssistantContext() ?? undefined, cid)
       if (r.code === 'ABORTED') showToast({ type: 'info', message: '已停止生成' })
       else if (!r.ok) showToastSafe(`修改失败：${r.error ?? '未知错误'}`)
+      else if (r.changes && r.changes.length > 0) setLastChanges(r.changes)
       await refreshMessages(sid)
     } finally {
       setPending(false)
@@ -586,8 +605,8 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                     ))}
                     {pending && (
                       <div className="mr-6 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
-                        <Loader2 size={13} className="animate-spin" />
-                        <span className="flex-1">思考与调用工具中…</span>
+                        <Loader2 size={13} className="animate-spin shrink-0" />
+                        <span className="flex-1 min-w-0"><AgentLiveSteps steps={liveSteps} /></span>
                         <button
                           onClick={() => { void agentAbort(chatIdRef.current) }}
                           className="flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors shrink-0"
@@ -599,6 +618,50 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                     <div ref={bottomRef} />
                     </div>
                   </div>
+
+                  {/* 本次改动卡片（AI 执行完成的写操作清单，可一键关闭） */}
+                  {lastChanges && lastChanges.length > 0 && (
+                    <div className="px-3 pb-1 shrink-0">
+                      <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-secondary)] border-b border-[var(--border-color)]">
+                          <Wrench size={10} className="text-[var(--accent)]" />
+                          <span className="flex-1">本次已改动 {lastChanges.length} 项</span>
+                          <button onClick={() => setLastChanges(null)} title="关闭"
+                            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                            <X size={11} />
+                          </button>
+                        </div>
+                        <ul className="py-1 max-h-32 overflow-y-auto">
+                          {lastChanges.map((c, i) => {
+                            const canOpen = Boolean(c.file)
+                            const row = (
+                              <>
+                                <FileText size={10} className={`shrink-0 ${canOpen ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
+                                <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
+                                <span className="truncate">{c.target}</span>
+                                {canOpen && <ArrowUpRight size={11} className="ml-auto shrink-0 text-[var(--text-muted)] group-hover/item:text-[var(--accent)]" />}
+                              </>
+                            )
+                            return (
+                              <li key={i}>
+                                {canOpen ? (
+                                  <button
+                                    onClick={() => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file } }))}
+                                    title="在编辑器中打开该文件"
+                                    className="w-full flex items-center gap-1.5 px-2.5 py-1 text-left text-[11.5px] text-[var(--text-primary)] group/item transition-colors hover:bg-[var(--bg-hover)]"
+                                  >
+                                    {row}
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-[var(--text-primary)]">{row}</div>
+                                )}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
 
                   {/* 上下文徽章（选中文本优先，可清除） */}
                   {(selCtx || ctx) && (
@@ -714,6 +777,24 @@ function SendIcon() {
       <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
     </svg>
   )
+}
+
+/** 工具名可读化：builtin.vault.read → vault.read */
+function toolShortName(name?: string): string {
+  const s = String(name ?? '')
+  return s.startsWith('builtin.') ? s.slice(8) : s || '工具'
+}
+
+/** 实时状态行（agent:step 驱动）：无步骤=思考中；最新为工具=正在调用；失败则显示重试中 */
+function AgentLiveSteps({ steps }: { steps: AgentTraceStep[] }) {
+  const last = steps[steps.length - 1]
+  if (!last) return <>正在思考…</>
+  const toolCount = steps.filter(s => s.kind === 'tool').length
+  if (last.kind === 'tool') {
+    if (!last.ok) return <>执行 {toolShortName(last.name)} 失败，正在调整策略…</>
+    return <>正在调用 <span className="text-[var(--accent)]">{toolShortName(last.name)}</span>（第 {toolCount} 次工具调用）</>
+  }
+  return <>思考中…（已调用 {toolCount} 次工具）</>
 }
 
 function showToastSafe(message: string, type: 'error' | 'info' = 'error'): void {

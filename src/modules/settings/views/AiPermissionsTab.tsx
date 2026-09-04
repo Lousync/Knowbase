@@ -1,4 +1,4 @@
-import { ShieldCheck, AlertTriangle, Wrench } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, Wrench, FileText } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 
@@ -37,16 +37,22 @@ function parsePerms(raw: string): Record<string, Perm> {
   } catch { return {} }
 }
 
-/** 设置 → AI 工具 → 权限：按模块控制 AI 能动什么 */
+/** 设置 → AI 工具 → 权限：按模块 + 仓库文件域控制 AI 能动什么 */
 export function AiPermissionsTab() {
   const { s, update } = useSettings()
   const perms = parsePerms(s.aiModulePermissions ?? '{}')
   const anyWrite = MODULES.some(m => perms[m.id] === 'write')
+  const vaultPerm: Perm = s.aiVaultFilePerm === 'off' || s.aiVaultFilePerm === 'read' || s.aiVaultFilePerm === 'write' ? s.aiVaultFilePerm : 'read'
 
   const setPerm = (moduleId: string, perm: Perm) => {
     const next = { ...perms, [moduleId]: perm }
     void update('aiModulePermissions', JSON.stringify(next))
     showToast({ type: 'info', message: `已将「${MODULES.find(m => m.id === moduleId)?.label}」对 AI 设为${PERM_LABEL[perm]}` })
+  }
+
+  const setVaultPerm = (perm: Perm) => {
+    void update('aiVaultFilePerm', perm)
+    showToast({ type: 'info', message: `已将「仓库文件」对 AI 设为${PERM_LABEL[perm]}` })
   }
 
   return (
@@ -69,6 +75,22 @@ export function AiPermissionsTab() {
       </div>
 
       <div className="space-y-2 max-w-md">
+        <div className="flex items-center gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+          <FileText size={14} className={vaultPerm === 'off' ? 'text-[var(--text-disabled)] shrink-0' : 'text-[var(--accent)] shrink-0'} />
+          <span className="min-w-0 flex-1">
+            <span className={`block text-[13px] ${vaultPerm === 'off' ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>仓库文件</span>
+            <span className="block text-[11px] text-[var(--text-muted)] truncate">
+              {vaultPerm === 'write' ? '列目录 / 读写仓库内 .md 等文本（写入能力随 vault 写工具上线生效）' : '列目录与阅读仓库内文本文件（vault.* 只读工具）'}
+            </span>
+          </span>
+          <select value={vaultPerm} onChange={e => setVaultPerm(e.target.value as Perm)}
+            className="px-2 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] outline-none focus:border-[var(--accent)] shrink-0">
+            <option value="off">禁止</option>
+            <option value="read">只读</option>
+            <option value="write">读写</option>
+          </select>
+        </div>
+
         {MODULES.map(m => {
           const cur: Perm = perms[m.id] ?? 'read'
           return (

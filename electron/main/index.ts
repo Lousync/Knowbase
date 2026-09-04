@@ -46,6 +46,7 @@ import { registerAgentHandlers } from '../lib/agentService'
 import { registerTranslateHandlers } from '../lib/translateService'
 import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
+import { registerDocsReadHandlers } from '../lib/docsIpc'
 import { registerLanShareHandlers } from '../lib/lanShare'
 import { registerWorkspaceHandlers } from '../lib/workspaceManager'
 import { getCurrentVault, setCurrentVault } from '../lib/kbStore/vaultContext'
@@ -632,6 +633,8 @@ app.whenReady().then(async () => {
     registerWordbookHandlers({ getSettingValue: (key) => settingsCache[key], setSettingValue })
     // PDF 工具箱:合并/页面重组/导出
     registerPdfHandlers()
+    // 文档读取（界面阅读 PPT 等）
+    registerDocsReadHandlers()
   }
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
