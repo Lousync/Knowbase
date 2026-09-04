@@ -621,6 +621,8 @@ export interface LlmModelTestResultInfo {
 
 export interface LlmUsageInfo {
   monthTokens: number
+  /** 月度预算上限（已随 faf1b0f 移除限额概念；可选保留兼容沉浸面板） */
+  budget?: number
 }
 
 // ===== CC Switch 一键导入 =====

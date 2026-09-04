@@ -152,9 +152,9 @@ const ENTRY_ITEMS: SettingItem[] = [
     desc: '密码填充弹窗（可配置键位）', keywords: ['密码', '密码填充', '填充弹窗', 'ctrl alt p', 'password', 'fill'] },
 
   // ===== 提醒 =====
-  { id: 'reminder.enable', section: 'reminder', group: '打卡提醒', label: '启用打卡提醒',
+    { id: 'reminder.enable', section: 'modules', group: '打卡提醒', label: '启用打卡提醒',
     desc: '到点提醒当天未打卡的习惯', keywords: ['打卡', '提醒', '启用', '开关', 'checkin', '通知'] },
-  { id: 'reminder.time', section: 'reminder', group: '打卡提醒', label: '提醒时间',
+    { id: 'reminder.time', section: 'modules', group: '打卡提醒', label: '提醒时间',
     desc: '每天触发打卡提醒的时间点', keywords: ['时间', '提醒时间', '几点', '打卡时间', '20:00'] },
 ]
 
