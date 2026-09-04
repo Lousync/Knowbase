@@ -29,7 +29,9 @@ interface GraphViewProps {
 
 const DEFAULT_GVC: GraphViewConfig = {
   linkDistance: 130, chargeStrength: -320,
-  showTags: true, showOrphans: true, colorBySpace: false, clusterForce: false, labelThreshold: 0.6,
+  // ISS-2026-09-04-05：图谱 tag 节点（408 知识包密集）单行英文短代码用户读不懂，
+  // 默认 off → 用户主动开启（密度大但带副线/学科前缀）才显示
+  showTags: false, showOrphans: true, colorBySpace: false, clusterForce: false, labelThreshold: 0.6,
 }
 
 /**

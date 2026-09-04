@@ -219,7 +219,10 @@ function installWikiCompletion(monaco: typeof Monaco): void {
         endLineNumber: position.lineNumber,
         endColumn: position.column,
       })
-      const lastOpen = linePrefix.lastIndexOf('[')
+      // 注意：必须匹配整段 '[[' 的起点，而不是单个 '['。
+      // lastIndexOf('[') 对 "[[你" 返回第二个 '[' 的位置（1），
+      // 导致下方 slice(lastOpen + 2) 吃掉 query 首字符 → 过滤退化（ISS-2026-09-04-01）。
+      const lastOpen = linePrefix.lastIndexOf('[[')
       const lastClose = linePrefix.lastIndexOf(']]')
       if (lastOpen === -1 || lastClose > lastOpen) return { suggestions: [] }
 
@@ -228,6 +231,8 @@ function installWikiCompletion(monaco: typeof Monaco): void {
       const lower = query.toLowerCase()
       const matches = pages
         .filter((p) => !lower || p.title.toLowerCase().includes(lower))
+        // 显式按最近更新排序，保证候选顺序稳定可预期（不依赖索引内部顺序）
+        .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
         .slice(0, 10)
 
       return {

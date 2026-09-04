@@ -310,6 +310,8 @@ export default function App() {
   useEffect(() => {
     const handler = (e: Event) => {
       const relPath = (e as CustomEvent).detail?.relPath as string | undefined
+      // DIAG(2026-09-04): 定位「知识库→编辑器不打开文件」——App 层 handler 是否收到
+      console.log('[App:diag] kb-open-in-editor 收到 relPath =', relPath)
       if (typeof relPath === 'string' && relPath) {
         // 事件丢失竞态修复：EditorModule 首次挂载前派发的事件无监听者 →
         // App 层（始终活着）把最近一次待打开路径暂存到 window，EditorModule 首挂后消费
@@ -537,7 +539,13 @@ export default function App() {
                   {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同 */}
                   <div className="flex min-h-0 min-w-0 flex-1">
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      {/* 主栏：activeTab 可见；其余已访问模块 display:none 常驻保活（切 Tab 不卸载 → 状态保留）。
+                          ISS-2026-09-04-02：原实现只渲染 activeTab，切走即卸载（知识库页签/树状态全丢）。
+                          保活顺序 = mountedTabs 访问序 + activeTab 兜底首访（on=true 时 add 到集合） */}
                       {renderMounted(activeTab, true)}
+                      {Array.from(mountedTabs.current)
+                        .filter((t) => t !== activeTab && t !== secondaryTab)
+                        .map((t) => renderMounted(t, false))}
                     </div>
                     {secondaryTab && secondaryTab !== activeTab && (
                       <ResizablePanel

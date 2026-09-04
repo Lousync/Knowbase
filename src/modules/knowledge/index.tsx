@@ -615,6 +615,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleOpenInEditor = async (pageId: string) => {
     try {
       const p = await getKnowledgePageById(pageId)
+      // DIAG(2026-09-04): 定位「知识库→编辑器不打开文件」——dispatch 前 path 是否有值
+      console.log('[Knowledge:diag] handleOpenInEditor pageId =', pageId, '| p?.path =', p?.path)
       if (!p?.path) {
         showToast({ type: 'warning', message: '该页面不在仓库读源中（设置 → 通用 → 知识库读源 开启 vault）' })
         return

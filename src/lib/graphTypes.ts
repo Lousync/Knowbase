@@ -14,6 +14,12 @@ export interface GraphNode {
   degree: number
   /** page 节点的页面状态：draft=草稿（图谱虚化「修改中」）；缺省/published=归档正式 */
   status?: 'draft' | 'published'
+  /**
+   * tag 节点的「父目录」副线（学科/章节级），用关联度最高的 page 的 path 倒数第二段
+   * 99d8871 修复仅覆盖 page 节点 → tag 节点在 GraphCanvas 单行显示英文短代码（kb-ds-8-7-3-1）用户读不懂
+   * ISS-2026-09-04-05 数据层补：让 tag 节点在开启 showTags 时也能显示「学科/章节」副线
+   */
+  parentCtx?: string
 }
 
 /** 去重后的无向边（页-页 / 页-标签） */

@@ -147,6 +147,16 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
           },
           // Images: add a hover "copy to clipboard" affordance
           img({ src, alt, ...props }) {
+            // 包内容缺陷降级：源 md 把图引用写死成 `图片资源缺失:undefined` 等占位（408 包 5 处，
+            // 见 docs/verification-issues-20260904.md ISS-2026-09-04-03）→ 不渲染破图，改为显式占位
+            if (typeof src === 'string' && /图片资源缺失|undefined|null/i.test(src)) {
+              return (
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-muted)]">
+                  <span>📷</span>
+                  <span>图片缺失{alt ? `：${alt}` : ''}</span>
+                </span>
+              )
+            }
             return (
               <span className="inline-block relative max-w-full align-bottom group/img">
                 <img src={src} alt={alt} {...props} />

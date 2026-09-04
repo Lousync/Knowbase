@@ -163,6 +163,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const openFile = useCallback(async (node: TreeNode) => {
     if (node.type === 'dir') { void toggleDir(node.relPath); return }
     const root = rootIdRef.current
+    // DIAG(2026-09-04): 定位「跳转不打开文件」——openFile 是否被调、root 是否就绪
+    console.log('[Editor:diag] openFile 调用 node =', JSON.stringify(node), '| root =', root)
     if (!root) return
     setActivePath(node.relPath)
     if (openFilesRef.current[node.relPath]) return
@@ -226,6 +228,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
 
   // 跨模块跳转：知识库「在编辑器中打开」→ 打开同一文件（读写分工协议，见 .AGENT/docs/读写分工设计.md）
   const openRelFromJump = useCallback(async (relPath: string) => {
+    // DIAG(2026-09-04): 定位跳转不打开——openRelFromJump 入口
+    console.log('[Editor:diag] openRelFromJump 入口 relPath =', relPath, '| rootIdRef.current =', rootIdRef.current)
     // 已消费即清暂存（防模块重挂载时误开旧文件）
     delete (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
     if (!rootIdRef.current) {
@@ -240,6 +244,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   useEffect(() => {
     const handler = async (e: Event) => {
       const relPath = (e as CustomEvent).detail?.relPath as string
+      // DIAG(2026-09-04): 定位「知识库→编辑器不打开文件」——事件是否到达 editor listener
+      console.log('[Editor:diag] kb-open-in-editor 收到 relPath =', relPath, '| rootIdRef =', rootIdRef.current, '| mounted =', !!(window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor)
       if (!relPath || typeof relPath !== 'string') return
       await openRelFromJump(relPath)
     }

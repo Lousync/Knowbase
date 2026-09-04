@@ -138,12 +138,30 @@ export function rebuildGraphIndex(): GraphIndexData {
     })
   }
   for (const [tagName, pages] of tagPages) {
+    // ISS-2026-09-04-05：给 tag 节点注入 parentCtx（关联 page 中出现最多的父目录段），
+    // 渲染层副线逻辑（GraphCanvas.tsx:274）据此复用同一段绘制代码
+    const parentCounts = new Map<string, number>()
+    for (const pid of pages) {
+      const p = idx.byId[pid]?.path ?? ''
+      // page path 形如 "408 学习空间/数据结构/绪论/kb-ds-1-1-1.md"，
+      // 取倒数第二段作为「学科/章节」副线；缺时退到首段（最顶目录）
+      const segs = p.replace(/\.md$/i, '').split('/').filter(Boolean)
+      const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '')
+      if (!parent) continue
+      parentCounts.set(parent, (parentCounts.get(parent) ?? 0) + 1)
+    }
+    let parentCtx = ''
+    let bestN = 0
+    for (const [name, n] of parentCounts) {
+      if (n > bestN) { parentCtx = name; bestN = n }
+    }
     nodes.push({
       id: `tag:${tagName}`,
       title: tagName,
       path: '',
       kind: 'tag',
       degree: pages.size,
+      parentCtx,
     })
   }
 
