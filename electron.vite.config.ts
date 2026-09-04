@@ -1,7 +1,14 @@
-import { resolve } from 'path'
+import { dirname, resolve } from 'path'
+import { realpathSync } from 'node:fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
+// worktree 场景：node_modules 是指向主工程 node_modules 的 junction（realpath 在 worktree 之外），
+// Vite dev server 按真实路径判定后拒绝服务（monaco 等静态资源 403 → 黑屏）。
+// 因此把「主工程根」一并加入 renderer 的 fs 白名单；普通 checkout 下 realpath 不变，此值无副作用。
+const nodeModulesReal = realpathSync(resolve(__dirname, 'node_modules'))
+const mainProjectRoot = dirname(nodeModulesReal)
 
 export default defineConfig({
   main: {
@@ -41,7 +48,10 @@ export default defineConfig({
     server: {
       host: '127.0.0.1',
       port: 7173,          // 6173 会落入 Windows Hyper-V/winnat 排除端口段导致 EACCES
-      strictPort: false
+      strictPort: false,
+      fs: {
+        allow: [resolve(__dirname), mainProjectRoot]
+      }
     },
     build: {
       outDir: 'out/renderer',

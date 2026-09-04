@@ -102,6 +102,10 @@ export default function App() {
   const [bottomPanel, setBottomPanel] = useState(false)
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
+
+  // 编辑器文件树槽（workbench）：可见性跟随 activeTab + 全局 sidebarOpen（Ctrl+B 统一开合，与各模块侧栏一致）
+  const editorSlotVisible = workbench && (activeTab === 'editor' || secondaryTab === 'editor')
+
   useEffect(() => {
     if (!workbench) { setBottomPanel(false); return }
     const onKey = (e: KeyboardEvent) => {
@@ -220,7 +224,7 @@ export default function App() {
     if (!settingsReady || !loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
-      const all = ['blog','schedule','knowledge','moments','toolbox','plugins','recycle','help'] as const
+      const all = ['blog','schedule','knowledge','editor','moments','toolbox','plugins','recycle','help'] as const
       if (all.includes(s.startupTab as any) && !hidden.includes(s.startupTab)) {
         setActiveTab(s.startupTab as TabName)
         return
@@ -530,12 +534,19 @@ export default function App() {
                   其余模块暂以整页形态驻留编辑器组（逐模块迁移中）。旧布局 = 无边栏直渲模块 */}
               <div className="flex min-h-0 flex-1">
                 {workbench && (
-                  <div
-                    ref={wbSidebarRef}
-                    className={`flex shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)] transition-[width] duration-150 ${
-                      activeTab === 'editor' || secondaryTab === 'editor' ? 'w-[220px]' : 'w-0 overflow-hidden border-r-0'
-                    }`}
-                  />
+                  <ResizablePanel
+                    storageKey="kb.editorSidebarWidth"
+                    defaultWidth={220}
+                    minWidth={180}
+                    maxWidth={Math.max(320, Math.floor(winWidth * 0.4))}
+                    visible={editorSlotVisible && sidebarOpen}
+                    showHandle
+                    collapsedWidth={0}
+                    onSnapClose={() => setSidebarOpen(false)}
+                    onSnapOpen={() => setSidebarOpen(true)}
+                  >
+                    <div ref={wbSidebarRef} className="flex h-full w-full flex-col overflow-hidden bg-[var(--bg-secondary)]" />
+                  </ResizablePanel>
                 )}
                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                   {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同 */}
@@ -601,6 +612,7 @@ export default function App() {
                 side="right"
                 visible
                 showHandle
+                growWindow
               >
                 {/* 内嵌面板的"子窗口"外壳：留白 + 圆角 + 阴影，让它在主窗口内像独立浮窗（微信会议窗同款） */}
                 <div className="m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">

@@ -31,7 +31,7 @@ export function EntryList({ entries, loading, onEntryClick, onToggleStar, onNewE
 
   return (
     <div className="flex-1 overflow-y-auto bg-[var(--bg-primary)]">
-      <div className="max-w-3xl mx-auto px-6 py-6">
+      <div className="flex h-full flex-col max-w-3xl mx-auto px-6 py-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
             文章归档 {sorted.length > 0 ? `(${sorted.length})` : ''}
@@ -44,7 +44,7 @@ export function EntryList({ entries, loading, onEntryClick, onToggleStar, onNewE
         </div>
 
         {sorted.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
+          <div className="flex flex-1 flex-col items-center justify-center text-[var(--text-muted)]">
             <FileText size={48} className="mb-4 text-[var(--input-bg)]" />
             <p className="text-base mb-1">还没有文章</p>
             <p className="text-sm mb-5">点击下方按钮，记录今天的日记</p>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check } from 'lucide-react'
+import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check, CalendarDays } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import {
@@ -394,15 +394,24 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
       <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
-        <CalendarView
-          year={year} month={month} selectedDate={selectedDate}
-          dotDates={dotDates} deadlineCounts={deadlineCounts}
-          viewMode={viewMode}
-          onSelectDate={setSelectedDate}
-          onPrevMonth={goToPrevMonth} onNextMonth={goToNextMonth}
-          onToday={goToToday} onViewModeChange={handleViewModeChange}
-          onQuadrantChart={openQuadrantChart}
-        />
+        <div className="h-full flex flex-col">
+          {/* 头部：与编辑器「资源管理器」同款紧凑标题行 */}
+          <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+            <CalendarDays size={12} />
+            日程
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <CalendarView
+              year={year} month={month} selectedDate={selectedDate}
+              dotDates={dotDates} deadlineCounts={deadlineCounts}
+              viewMode={viewMode}
+              onSelectDate={setSelectedDate}
+              onPrevMonth={goToPrevMonth} onNextMonth={goToNextMonth}
+              onToday={goToToday} onViewModeChange={handleViewModeChange}
+              onQuadrantChart={openQuadrantChart}
+            />
+          </div>
+        </div>
       </ResizablePanel>
 
       <div className="flex-1 flex flex-col overflow-hidden">

@@ -121,7 +121,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
                 </QuickRow>
                 <QuickRow label="启动时打开">
                   <ChoiceGroup
-                    options={[{ id: 'blog', label: '博客' }, { id: 'schedule', label: '任务' }, { id: 'knowledge', label: '知识库' }, { id: 'moments', label: '说说' }]}
+                    options={[{ id: 'blog', label: '博客' }, { id: 'schedule', label: '任务' }, { id: 'knowledge', label: '知识库' }, { id: 'editor', label: '编辑区' }, { id: 'moments', label: '说说' }]}
                     value={s.startupTab}
                     onChange={v => { update('startupTab', v); onSwitchTab(v as TabName) }}
                   />

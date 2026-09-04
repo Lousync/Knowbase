@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getSettingRaw, setSettingRaw } from '../../lib/ipc'
+import { getSettingRaw, setSettingRaw, resizeForSidebar } from '../../lib/ipc'
 
 interface Props {
   storageKey: string
@@ -21,9 +21,11 @@ interface Props {
   side?: 'left' | 'right'
   /** 折叠后保留的边条宽度 px。贴窗口边缘的面板建议 ≥12 以避开系统原生缩放热区 */
   collapsedWidth?: number
+  /** 抽屉式窗口外扩：visible 翻转时窗口宽度同步 ±当前面板宽度，主内容不被挤压（最大化/全屏时主进程自动跳过） */
+  growWindow?: boolean
 }
 
-export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose, onSnapOpen, side = 'left', collapsedWidth = 4 }: Props) {
+export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose, onSnapOpen, side = 'left', collapsedWidth = 4, growWindow = false }: Props) {
   const [width, setWidth] = useState(initialWidth ?? defaultWidth)
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -52,6 +54,19 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       setWidth(next)
     }
   }, [minWidth, maxWidth])
+
+  // 抽屉式窗口外扩（绝对宽度协议）：上报面板期望宽度，0 = 收回。
+  // 主进程以「打开时刻基准宽」为锚点计算，重复/乱序消息不会累积漂移。
+  // 拖拽调宽实时跟随 → 抽屉被拉宽时窗口同步变宽；卸载时收回（日程面板以卸载方式隐藏）。
+  useEffect(() => {
+    if (!growWindow) return
+    void resizeForSidebar(visible ? widthRef.current : 0)
+  }, [growWindow, visible, width])
+  useEffect(() => {
+    return () => {
+      if (growWindow) void resizeForSidebar(0)
+    }
+  }, [growWindow])
 
   // mousedown on handle
   const onHandleMouseDown = useCallback((e: React.MouseEvent) => {

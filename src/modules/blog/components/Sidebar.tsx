@@ -262,31 +262,27 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
 
   return (
     <aside className="w-full bg-[var(--bg-secondary)] flex flex-col h-full shrink-0 overflow-x-hidden">
-      <div className="px-4 py-4 border-b border-[var(--border-color)]">
-        <h1 className="text-sm font-semibold text-[var(--text-primary)] select-none">📝 博客</h1>
-      </div>
-
-      {/* 今日按钮 */}
-      <div className="px-3 py-3 space-y-1.5">
+      {/* 头部：与编辑器「资源管理器」同款紧凑标题行，右侧为常用动作（新建今日 / 全部文章） */}
+      <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+        <FileText size={12} />
+        博客
+        <div className="flex-1" />
         <button
           onClick={onNewEntry}
-          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-white text-[13px] rounded hover:bg-[var(--accent-hover)] transition-colors"
+          title={hasToday ? '继续编写今日文章' : '新建今日文章'}
+          className="rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
         >
-          <Edit3 size={15} />
-          {hasToday ? '继续编写' : '今日文章编写'}
+          <Edit3 size={13} />
         </button>
-        {/* 全部文章入口 */}
         {onShowAll && (
           <button
             onClick={onShowAll}
-            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1 text-[13px] rounded border transition-colors ${
-              !selectedDate
-                ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
+            title="全部文章"
+            className={`rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${
+              !selectedDate ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
             }`}
           >
             <List size={13} />
-            全部文章
           </button>
         )}
       </div>

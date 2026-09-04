@@ -53,9 +53,9 @@ export function DevToolsModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         onSnapOpen={onSnapOpenSidebar}
       >
         <div className="w-full h-full bg-[var(--bg-secondary)] py-4 flex flex-col overflow-y-auto">
-          <div className="flex items-center gap-2 px-4 mb-3">
-            <FlaskConical size={14} className="text-[var(--accent)]" />
-            <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">开发者工具</span>
+          <div className="flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] text-[11.5px] text-[var(--text-muted)] select-none">
+            <FlaskConical size={12} />
+            <span>开发者工具</span>
             <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)] font-mono font-semibold">DEV</span>
           </div>
           {TOOLS.map(t => {

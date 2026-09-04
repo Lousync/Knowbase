@@ -17,6 +17,7 @@ const api = {
   maximize: () => ipcRenderer.invoke('window:maximize'),
   close: () => ipcRenderer.invoke('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  resizeForSidebar: (delta: number) => ipcRenderer.invoke('window:resizeForSidebar', delta),
   onMaximizeChange: (cb: (v: boolean) => void) => {
     ipcRenderer.on('window:maximizeChange', (_e, v) => cb(v))
   },

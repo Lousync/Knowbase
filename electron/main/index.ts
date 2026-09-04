@@ -1,6 +1,6 @@
 // 必须最先引入：IPC 注册幂等包装（dev 下 repo 模块被打包两份时避免重复注册崩溃）
 import './ipcSafe'
-import { app, BrowserWindow, dialog, ipcMain, shell, protocol, clipboard, nativeImage, Menu, net, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, screen, shell, protocol, clipboard, nativeImage, Menu, net, Tray } from 'electron'
 import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
@@ -309,6 +309,42 @@ function registerWindowHandlers(): void {
   })
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+
+  // 抽屉式日程面板：renderer 发送「面板期望宽度」（0 = 收回），主进程以抽屉打开时刻的
+  // 基准宽度为锚点计算窗口宽度。绝对值协议 —— 重复/乱序/HMR 重挂载的消息不会累积漂移。
+  // 最大化/全屏时窗口由系统管理，自动跳过；右缘越界则整体左移夹回工作区。
+  let drawerBaseWidth = 0 // 0 = 抽屉未开
+  ipcMain.handle('window:resizeForSidebar', (_e, width: number) => {
+    const win = mainWindow
+    if (!win || win.isDestroyed() || typeof width !== 'number' || !Number.isFinite(width)) {
+      return { applied: false }
+    }
+    if (win.isMaximized() || win.isFullScreen()) return { applied: false, reason: 'maximized' }
+    const b = win.getBounds()
+    const { workArea } = screen.getDisplayMatching(b)
+
+    // 收回：回到打开时刻的基准宽度
+    if (width <= 0) {
+      if (drawerBaseWidth === 0) return { applied: false }
+      const base = drawerBaseWidth
+      drawerBaseWidth = 0
+      const w = Math.max(900, Math.min(workArea.width, base))
+      if (w === b.width) return { applied: false }
+      win.setBounds({ x: b.x, y: b.y, width: w, height: b.height })
+      return { applied: true, width: w }
+    }
+
+    // 打开/拖拽：基准 + 面板宽（首次打开时锁定基准，并夹回工作区防膨胀）
+    if (drawerBaseWidth === 0) drawerBaseWidth = Math.min(b.width, workArea.width)
+    const w = Math.max(900, Math.min(workArea.width, drawerBaseWidth + Math.round(width)))
+    if (w === b.width) return { applied: true, width: w }
+    let x = b.x
+    if (w > b.width && x + w > workArea.x + workArea.width) {
+      x = Math.max(workArea.x, workArea.x + workArea.width - w)
+    }
+    win.setBounds({ x, y: b.y, width: w, height: b.height })
+    return { applied: true, width: w }
+  })
 
   // 窗口置顶（锁定）
   ipcMain.handle('window:setAlwaysOnTop', (_e, onTop: boolean) => {

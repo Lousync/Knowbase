@@ -1202,13 +1202,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={!graphMode && panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
-            {/* vault 数据形态说明条：知识库只读导航，写收口编辑器（R0 读写分工） */}
-            {vaultReadonly && (
-              <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-                <span className="shrink-0 px-1 py-0.5 rounded text-[10px] font-medium bg-[var(--info)]/15 text-[var(--info)]">仓库文件</span>
-                <span className="text-[10.5px] text-[var(--text-muted)] leading-snug">页面以 .md 文件存放 · 新建/编辑请用编辑器模块</span>
-              </div>
-            )}
             {/* 空间沉浸视图顶部：返回栏（仅空间内显示） */}
             {selectedSpaceId && selectedSpace && (
               <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={vaultReadonly ? undefined : handleRenameNotebook} />
@@ -1232,10 +1225,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               </div>
             )}
 
-            {/* 空间列表层：顶部居中「工作区」标题 — 字号跟随知识库侧边栏设置（与下方条目节奏一致） */}
+            {/* 空间列表层：顶部「知识库」标题 — 与日程/博客等模块侧栏标题行完全同款 */}
             {!selectedSpaceId && (
-              <div className="flex items-center justify-center px-2 py-[var(--kb-row-py-lg)] border-b border-[var(--border-color)] shrink-0">
-                <span className="font-medium text-[var(--text-secondary)] text-center text-[var(--kb-row-fs)]">工作区</span>
+              <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+                <BookMarked size={12} />
+                知识库
               </div>
             )}
 
@@ -1432,8 +1426,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
-              <FileText size={48} className="mb-4 opacity-25" />
-              <p className="text-sm">{vaultReadonly ? '从左侧选择页面开始阅读（页面存于仓库 .md 文件）' : '选择或创建一个页面开始'}</p>
+              <FileText size={48} className="opacity-25" />
             </div>
           )}
           </>

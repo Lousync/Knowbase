@@ -11,6 +11,8 @@ Thumbs.db
 .env*
 *.log
 .claude/
+.agents/
+.trae/
 .workbuddy/
 .mcp.json
 运行指令

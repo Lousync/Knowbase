@@ -789,6 +789,7 @@ export interface ElectronAPI {
   maximize: () => Promise<void>
   close: () => Promise<void>
   isMaximized: () => Promise<boolean>
+  resizeForSidebar: (delta: number) => Promise<{ applied: boolean; reason?: string }>
   onMaximizeChange: (cb: (v: boolean) => void) => void
   setAlwaysOnTop: (onTop: boolean) => Promise<boolean>
   isAlwaysOnTop: () => Promise<boolean>
