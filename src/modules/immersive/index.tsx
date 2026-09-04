@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions,
+  workspaceGetCurrent, workspaceListDir, docsPptxPages,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -90,6 +91,25 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
   const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
   const [view, setView] = useState<'timeline' | 'doc'>('timeline')
   const [showNewMenu, setShowNewMenu] = useState(false)
+  // ---- Token 消耗统计（月度走 llm:getUsage）----
+  const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
+  const [defaultModel, setDefaultModel] = useState('')
+  const [tokenOpen, setTokenOpen] = useState(false)
+  useEffect(() => {
+    void llmGetUsage().then(setUsage).catch(() => null)
+    void getSettingRaw('defaultChatModel').then(v => setDefaultModel(String(v ?? ''))).catch(() => {})
+  }, [])
+  // 会话级全局要求（仅本会话；056 迁移 + agent:setSessionInstructions）
+  const [activeInstr, setActiveInstr] = useState('')
+  const [instrOpen, setInstrOpen] = useState(false)
+  const [instrDraft, setInstrDraft] = useState('')
+  const [instrDismiss, setInstrDismiss] = useState(false)
+  // PPT 素材与逐页阅读（docs:pptxPages）
+  const [sources, setSources] = useState<Array<{ rel: string; name: string }>>([])
+  const [pickOpen, setPickOpen] = useState(false)
+  const [pickList, setPickList] = useState<Array<{ rel: string; name: string }>>([])
+  const [pickLoading, setPickLoading] = useState(false)
+  const [reader, setReader] = useState<{ rel: string; name: string; pages: Array<{ n: number; text: string }>; cur: number } | null>(null)
   const [activeIdRef, chatIdRef] = [useRef<string | null>(null), useRef('')]
   const bottomRef = useRef<HTMLDivElement>(null)
   const liveRef = useRef(liveSteps)
@@ -192,6 +212,72 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
     }
   }
 
+  // ---- PPT 素材：从当前仓库选取 .pptx 并逐页阅读（docs:pptxPages）----
+  const refreshPptxList = useCallback(async () => {
+    setPickLoading(true)
+    setPickList([])
+    try {
+      const cur = await workspaceGetCurrent().catch(() => null)
+      const rootId = (cur as { rootId?: string } | null)?.rootId
+      if (!rootId) return
+      const found: Array<{ rel: string; name: string }> = []
+      const walk = async (dir: string, depth: number) => {
+        if (depth > 3 || found.length > 200) return
+        const res = await workspaceListDir(rootId, dir).catch(() => null)
+        for (const e of res?.entries ?? []) {
+          const rel = dir ? `${dir}/${e.name}` : e.name
+          if (e.type === 'dir') await walk(rel, depth + 1)
+          else if (e.name.toLowerCase().endsWith('.pptx')) found.push({ rel, name: e.name })
+        }
+      }
+      await walk('', 1)
+      setPickList(found)
+    } finally {
+      setPickLoading(false)
+    }
+  }, [])
+
+  const openPptxReader = useCallback(async (rel: string, name: string) => {
+    const r = await docsPptxPages(rel).catch(() => null)
+    if (!r?.ok || !r.pages || r.pages.length === 0) {
+      showToast({ type: 'error', message: (r as { error?: string } | null)?.error || '读取失败（暂仅支持 .pptx）' })
+      return
+    }
+    setReader({ rel, name, pages: r.pages, cur: 0 })
+    setView('doc')
+    setPickOpen(false)
+  }, [])
+
+  const addSourceFromPick = useCallback(async (rel: string, name: string) => {
+    setSources(prev => (prev.some(s => s.rel === rel) ? prev : [...prev, { rel, name }]))
+    void openPptxReader(rel, name)
+  }, [openPptxReader])
+
+  const goPage = useCallback((delta: number) => {
+    setReader(r => {
+      if (!r) return r
+      const next = Math.min(Math.max(r.cur + delta, 0), r.pages.length - 1)
+      return next === r.cur ? r : { ...r, cur: next }
+    })
+  }, [])
+
+  /** 让 AI 讲解当前页（把该页文字发进对话） */
+  const talkCurrentPage = useCallback(async () => {
+    if (!reader || pending) return
+    const page = reader.pages[reader.cur]
+    if (!page) return
+    setView('timeline')
+    const cid = crypto.randomUUID()
+    chatIdRef.current = cid
+    const text = `我在逐页阅读 PPT《${reader.name}》第 ${reader.cur + 1} 页。请基于这一页讲清楚要点，讲完停一下等我的问题：\n\n${page.text.slice(0, 2200)}`
+    void sendText(text, cid)
+  }, [reader, pending, sendText])
+
+  const removeSource = useCallback((rel: string) => {
+    setSources(prev => prev.filter(s => s.rel !== rel))
+    setReader(r => (r && r.rel === rel ? null : r))
+  }, [])
+
   const delSession = useCallback(async (e: React.MouseEvent, sid: string) => {
     e.stopPropagation()
     await agentDeleteSession(sid).catch(() => null)
@@ -203,20 +289,6 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
   const lastStep = liveSteps[liveSteps.length - 1]
   const assistantMsgs = messages.filter(m => m.role === 'assistant')
   const docMsg = assistantMsgs[assistantMsgs.length - 1]
-
-  // ---- Token 消耗统计（来自消息轨迹 llm.tokens 与实时步骤；月度走 llm:getUsage）----
-  const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
-  const [defaultModel, setDefaultModel] = useState('')
-  const [tokenOpen, setTokenOpen] = useState(false)
-  // 会话级全局要求（仅本会话；056 迁移 + agent:setSessionInstructions）
-  const [activeInstr, setActiveInstr] = useState('')
-  const [instrOpen, setInstrOpen] = useState(false)
-  const [instrDraft, setInstrDraft] = useState('')
-  const [instrDismiss, setInstrDismiss] = useState(false)
-  useEffect(() => {
-    void llmGetUsage().then(setUsage).catch(() => null)
-    void getSettingRaw('defaultChatModel').then(v => setDefaultModel(String(v ?? ''))).catch(() => {})
-  }, [])
   const tokenStats = useMemo(() => {
     const all: AgentTraceStep[] = [...messages.flatMap(m => m.trace ?? []), ...liveSteps]
     let llmTokens = 0, llmRounds = 0, toolCalls = 0, durationMs = 0
@@ -492,6 +564,60 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
                 </div>
               </div>
             </>
+          ) : reader ? (
+            /* 幻灯片逐页阅读（素材 .pptx） */
+            <div className="flex flex-col min-h-0">
+              <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-[var(--border-color)] text-[12px]">
+                <Presentation size={13} className="text-[var(--accent)] shrink-0" />
+                <span className="font-medium truncate">{reader.name}</span>
+                <span className="text-[var(--text-muted)] shrink-0">素材阅读</span>
+                <span className="flex-1" />
+                <span className="text-[var(--text-muted)] tabular-nums shrink-0">第 {reader.cur + 1} / {reader.pages.length} 页</span>
+                <button onClick={() => goPage(-1)} disabled={reader.cur === 0}
+                  className="p-1 rounded-md hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-colors" title="上一页">
+                  <ChevronLeft size={14} />
+                </button>
+                <button onClick={() => goPage(1)} disabled={reader.cur >= reader.pages.length - 1}
+                  className="p-1 rounded-md hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-colors" title="下一页">
+                  <ChevronRight size={14} />
+                </button>
+                <button onClick={() => { void talkCurrentPage() }}
+                  className="px-2.5 py-1 rounded-lg bg-[var(--accent)] text-white text-[11.5px] hover:opacity-90 transition-opacity shrink-0">
+                  讲解此页
+                </button>
+                <button onClick={() => setReader(null)} className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0" title="关闭">
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="max-w-[860px] mx-auto py-4 px-5">
+                  <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-5 py-4 min-h-[260px]">
+                    <div className="inline-flex items-center gap-1 text-[10.5px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] mb-3">
+                      第 {reader.cur + 1} 页 · 原文编号 {reader.pages[reader.cur]?.n}
+                    </div>
+                    {reader.pages[reader.cur]?.text?.trim() ? (
+                      <pre className="whitespace-pre-wrap break-words font-[var(--font-sans)] text-[13px] leading-relaxed">{reader.pages[reader.cur]?.text}</pre>
+                    ) : (
+                      <div className="text-[12px] text-[var(--text-muted)]">（本页无文字内容——多为图表演示页）</div>
+                    )}
+                  </div>
+                  <div className="flex justify-between mt-3">
+                    <button onClick={() => goPage(-1)} disabled={reader.cur === 0}
+                      className="text-[11.5px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors">
+                      ← 上一页
+                    </button>
+                    <button onClick={() => { void talkCurrentPage() }}
+                      className="text-[11.5px] px-2.5 py-1 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
+                      让 AI 讲这一页
+                    </button>
+                    <button onClick={() => goPage(1)} disabled={reader.cur >= reader.pages.length - 1}
+                      className="text-[11.5px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors">
+                      下一页 →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="flex-1 overflow-y-auto min-h-0">
               {docMsg ? (
@@ -511,10 +637,62 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
         {/* 右栏：资料 / 产物 / 改动 */}
         <aside className="w-[280px] shrink-0 border-l border-[var(--border-color)] flex flex-col gap-2.5 p-2.5 overflow-y-auto bg-[var(--bg-secondary)]">
           <div>
-            <div className="text-[11px] text-[var(--text-muted)] mb-1">资料来源</div>
-            <div className="rounded-lg border border-dashed border-[var(--border-color)] px-2.5 py-3 text-center text-[11px] text-[var(--text-muted)]">
-              会话中贴的网址 / 仓库文件将在此汇总并标记读取状态<br />（素材管理 M1 开放）
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] text-[var(--text-muted)]">资料来源 {sources.length > 0 ? `（${sources.length}）` : ''}</span>
+              <span className="relative">
+                <button onClick={() => { if (!pickOpen) void refreshPptxList(); setPickOpen(v => !v) }}
+                  className="flex items-center gap-0.5 text-[10.5px] text-[var(--accent)] px-1 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors">
+                  <Plus size={10} /> PPT 素材
+                </button>
+                {pickOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-60 z-30 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
+                    <div className="px-2.5 py-1.5 border-b border-[var(--border-color)] text-[10.5px] text-[var(--text-muted)]">从当前仓库选 .pptx（自动收起）</div>
+                    <div className="max-h-52 overflow-y-auto py-1">
+                      {pickLoading ? (
+                        <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)] flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> 扫描仓库…</div>
+                      ) : pickList.length === 0 ? (
+                        <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)]">仓库里没找到 .pptx（或未打开仓库）</div>
+                      ) : (
+                        pickList.map(p => (
+                          <button key={p.rel} onClick={() => { void addSourceFromPick(p.rel, p.name) }}
+                            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors">
+                            <Presentation size={11} className="shrink-0 text-[var(--accent)]" />
+                            <span className="truncate">{p.rel}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </span>
             </div>
+            {sources.length > 0 ? (
+              <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden">
+                {sources.map(s => {
+                  const active = reader?.rel === s.rel
+                  return (
+                    <div key={s.rel} className={`flex items-center gap-1.5 px-2 py-1 text-[11.5px] ${active ? 'bg-[var(--bg-hover)]' : ''}`}>
+                      <button onClick={() => { void openPptxReader(s.rel, s.name) }} title="逐页阅读"
+                        className={`flex-1 min-w-0 flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity ${active ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                        <Presentation size={11} className="shrink-0 text-[var(--accent)]" />
+                        <span className="truncate">{s.name}</span>
+                        {active && <span className="text-[10px] text-[var(--text-muted)] shrink-0">阅读中 {reader!.cur + 1}/{reader!.pages.length}</span>}
+                      </button>
+                      {active && !pending && (
+                        <button onClick={() => { void talkCurrentPage() }} title="让 AI 讲当前页"
+                          className="shrink-0 text-[10.5px] text-[var(--accent)] px-1 py-0.5 rounded hover:bg-[var(--bg-hover)]">讲解</button>
+                      )}
+                      <button onClick={() => removeSource(s.rel)} title="移除"
+                        className="shrink-0 text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={11} /></button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-[var(--border-color)] px-2.5 py-3 text-center text-[11px] text-[var(--text-muted)]">
+                点「PPT 素材」从当前仓库选 .pptx → 文档视图逐页阅读，随时让 AI 讲解
+              </div>
+            )}
           </div>
           <div>
             <div className="text-[11px] text-[var(--text-muted)] mb-1">产物</div>

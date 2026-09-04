@@ -205,6 +205,7 @@ const api = {
   pdfMerge: (files: Array<{ name: string; data: Uint8Array }>) => ipcRenderer.invoke('pdf:merge', files),
   pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => ipcRenderer.invoke('pdf:organize', payload),
   pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => ipcRenderer.invoke('pdf:export', payload),
+  docsPptxPages: (relPath: string) => ipcRenderer.invoke('docs:pptxPages', relPath),
   agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:chat', req),
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),

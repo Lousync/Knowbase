@@ -92,19 +92,27 @@ function slideNumOf(name: string): number {
   return m ? parseInt(m[1], 10) : 0
 }
 
-function extractPptx(absPath: string): { text: string; pages: number } {
+function extractPptxRaw(absPath: string): { n: number; text: string }[] {
   const map = unzipBuffer(readFileSync(absPath))
   const slideNames = [...map.keys()]
     .filter(k => /^ppt\/slides\/slide\d+\.xml$/i.test(k))
     .sort((a, b) => slideNumOf(a) - slideNumOf(b))
-  const pages = slideNames.length
-  const lines = slideNames.map(name => {
+  return slideNames.map(name => {
     const xml = map.get(name)!.toString('utf-8')
     const parts: string[] = []
     for (const m of xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g)) parts.push(decodeXml(m[1]))
-    return parts.join(' ')
+    return { n: slideNumOf(name), text: parts.join(' ') }
   })
-  return { text: lines.join('\n'), pages }
+}
+
+function extractPptx(absPath: string): { text: string; pages: number } {
+  const pages = extractPptxRaw(absPath)
+  return { text: pages.map(p => p.text).join('\n'), pages: pages.length }
+}
+
+/** 按页返回 PPT 文本（界面逐页阅读用；页号取文件内 slideN 编号） */
+export function extractPptxPages(absPath: string): { n: number; text: string }[] {
+  return extractPptxRaw(absPath)
 }
 
 // ===== 入口 =====

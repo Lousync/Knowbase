@@ -434,6 +434,8 @@ export const wordbookCustomQueue = (label: string, words: string[]): Promise<Wor
 export const pdfMerge = (files: Array<{ name: string; data: Uint8Array }>): Promise<PdfOpResult> => a().pdfMerge(files)
 export const pdfOrganize = (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }): Promise<PdfOpResult> => a().pdfOrganize(payload)
 export const pdfExport = (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }): Promise<PdfExportResult> => a().pdfExport(payload)
+/** 界面逐页阅读：当前仓库内 .pptx → [{n,text}] */
+export const docsPptxPages = (relPath: string): Promise<{ ok: boolean; pages?: Array<{ n: number; text: string }>; total?: number; error?: string }> => a().docsPptxPages(relPath)
 
 export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })
