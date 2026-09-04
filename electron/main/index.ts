@@ -460,6 +460,27 @@ app.whenReady().then(async () => {
   protocol.handle('attachment', async (request) => {
     try {
       const url = new URL(request.url)
+      // vault 分支：attachment://vault/<pageId>/<file> —— 页面/仓库移动均不断链
+      // （主进程每次按「当前仓库」动态定位 .knowbase/_attachments/knowledge_page/<pageId>/<file>）
+      if (url.hostname === 'vault') {
+        const { getCurrentVault } = await import('../lib/kbStore/vaultContext')
+        const cur = getCurrentVault()
+        if (!cur) return new Response('Not Found', { status: 404 })
+        const segs = url.pathname.split('/').filter(Boolean)
+        if (segs.length !== 2) return new Response('Not Found', { status: 404 })
+        const [pageId, rawFile] = segs
+        const file = decodeURIComponent(rawFile)
+        // 严格白名单防路径穿越：pageId=UUID；file=文件名（无分隔符、无 ..）
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pageId)) return new Response('Not Found', { status: 404 })
+        if (!/^[A-Za-z0-9._\u4e00-\u9fa5-]{1,160}$/.test(file)) return new Response('Not Found', { status: 404 })
+        const p = join(cur.rootPath, '.knowbase', '_attachments', 'knowledge_page', pageId, file)
+        if (!existsSync(p)) return new Response('Not Found', { status: 404 })
+        const ext = (file.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+        const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml', ico: 'image/x-icon', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
+        return new Response(Readable.toWeb(createReadStream(p)) as unknown as BodyInit, {
+          headers: { 'Content-Type': mimeMap[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' },
+        })
+      }
       const id = url.hostname
       const thumb = url.searchParams.get('thumb') === '1'
       const p = getAttachmentFilePath(id, thumb)

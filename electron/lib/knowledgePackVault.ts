@@ -61,6 +61,7 @@ function sanitizeTitle(t: string): string {
   return s || 'untitled'
 }
 /** 从 page md 所在目录到仓库根 .knowbase 的相对路径（图片改写用） */
+// 已废弃（改为 attachment://vault 协议引用）：保留仅防历史调用编译错，新导入不再使用
 function relToAttachments(fileDir: string, root: string, tail: string): string {
   const kbAtt = join(root, KB_ATTACHMENTS_DIR)
   const p = relative(fileDir, join(kbAtt, tail)).replace(/\\/g, '/')
@@ -121,7 +122,8 @@ function stageImages(body: string, pluginDir: string, pageFile: string, pageId: 
     // copy 而非 move：插件包源文件必须保留（可重复导入）
     if (!existsSync(dst)) { copyFileSync(src, dst) }
     staged.push(dst)
-    out = out.split(ref).join(relToAttachments(fileDir, root, `${attTail}/${base}`))
+    // 协议引用（非相对路径）：attachment://vault/<pageId>/<file> —— 页面/仓库移动不断链
+    out = out.split(ref).join(`attachment://vault/${pageId}/${base}`)
   }
   return out
 }

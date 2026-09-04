@@ -58,8 +58,14 @@ function readPageDoc(entry: KnowledgePageIndexEntry): { contentMd: string; attac
     const abs = join(requireRoot(), entry.path)
     const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
     const a = doc.frontmatter.attachments
+    // 存量兼容：旧相对引用（../.knowbase/_attachments/knowledge_page/<id>/<file>）
+    // → 协议引用 attachment://vault/<id>/<file>（页面/仓库移动不断链）
+    const body = (doc.body || '').replace(
+      /(?:\.\.\/|\.\/)*\.knowbase\/_attachments\/knowledge_page\/([0-9a-f-]{36})\/([^\s)\]"']+)/gi,
+      (_all, pid: string, file: string) => `attachment://vault/${pid}/${decodeURIComponent(file)}`
+    )
     return {
-      contentMd: doc.body,
+      contentMd: body,
       attachments: Array.isArray(a) ? a.filter((x): x is string => typeof x === 'string') : [],
     }
   } catch {
