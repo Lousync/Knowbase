@@ -1,17 +1,41 @@
-import { Palette, Type, FileDown, Wrench, Keyboard, PencilLine, BellRing, Bot } from 'lucide-react'
+import { Palette, Type, SlidersHorizontal, Database, ShieldCheck, Bot, Keyboard, Boxes, Info } from 'lucide-react'
+import { SETTINGS } from '../../lib/settings'
+import type { AiTab, SettingsSection } from '../../lib/settings'
 
 /**
- * 设置模块的大项 / 小项定义与搜索索引。
- * 搜索不再只匹配左侧大项，而是深入到每一个具体设置项（小项），
- * 命中后可直接跳转到该项所在位置并高亮。
+ * 设置模块的大项 / 小项定义与搜索索引（S1 起 schema 单源化）。
+ * - key 类小项（有 default 的存储设置）：由 src/lib/settings.ts 的 SETTINGS 元数据自动生成，
+ *   新增设置只改 schema 一处，索引自动覆盖（消灭手写双源）。
+ * - 功能页入口（模板管理 / MCP / Skill / 快捷键组等无存储 key 的页面直达）：
+ *   保留少量手写 ENTRY_ITEMS，锚点直达对应视图区块。
+ * 搜索逻辑（打分/分词/锚点广播）沿用原实现。
  */
 
-export type SettingsSection =
-  | 'appearance' | 'editor' | 'blog' | 'export'
-  | 'aiTools' | 'advanced' | 'shortcuts' | 'reminder'
+export type { AiTab, SettingsSection }
 
-/** AI 工具大项内部的页签 */
-export type AiTab = 'builtin' | 'mcp' | 'skill' | 'models' | 'perms'
+/** Schema 中某项的元数据类型（settings.ts 内联） */
+export interface SchemaItemMeta {
+  type: string
+  label: string
+  group: string
+  desc: string
+  keywords: string[]
+  section: SettingsSection
+  ui: boolean
+  scope: string
+  level: string
+  affects: string
+  anchor?: string
+  aiTab?: AiTab
+}
+
+/** 读取 schema 某项（SETTINGS 为异构字面量，经统一接口访问） */
+function metaOf(key: string): SchemaItemMeta {
+  const raw = SETTINGS as unknown as Record<string, SchemaItemMeta & { default: unknown }>
+  const m = raw[key]
+  if (!m) throw new Error(`[settings] 未知设置 key: ${key}`)
+  return m
+}
 
 export interface SectionDef {
   id: SettingsSection
@@ -22,7 +46,7 @@ export interface SectionDef {
 }
 
 export interface SettingItem {
-  /** 唯一 id，同时作为 DOM 锚点 data-setting-anchor 的值 */
+  /** 唯一 id，同时作为 DOM 锚点 data-setting-anchor 的值（schema 项=anchor；入口项=自身 id） */
   id: string
   section: SettingsSection
   /** 所属分组小标题，用于面包屑显示 */
@@ -38,62 +62,54 @@ export interface SettingItem {
 }
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'appearance', label: '外观',   icon: <Palette size={16} />,     keywords: ['外观', '主题', 'theme', '界面', '样式', '皮肤', '布局'] },
-  { id: 'editor',     label: '编辑器', icon: <Type size={16} />,        keywords: ['编辑器', 'editor', '编写', '输入'] },
-  { id: 'blog',       label: '博客',   icon: <PencilLine size={16} />,  keywords: ['博客', 'blog', '日记', '总结', '周报', '月报'] },
-  { id: 'export',     label: '导出',   icon: <FileDown size={16} />,    keywords: ['导出', 'export', '保存', '文件'] },
-  { id: 'aiTools',    label: 'AI 工具', icon: <Bot size={16} />,        keywords: ['AI', '工具', 'agent', '智能体', 'ai', '助手'] },
-  { id: 'advanced',   label: '高级',   icon: <Wrench size={16} />,      keywords: ['高级', 'advanced', '偏好', '其它', '其他'] },
-  { id: 'shortcuts',  label: '快捷键', icon: <Keyboard size={16} />,    keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', '按键'] },
-  { id: 'reminder',   label: '提醒',   icon: <BellRing size={16} />,    keywords: ['提醒', '打卡', '通知', 'remind', '提醒时间'] },
+  { id: 'appearance', label: '外观',   icon: <Palette size={16} />,            keywords: ['外观', '主题', 'theme', '界面', '样式', '皮肤', '布局', '图标', '密度', '删除动画'] },
+  { id: 'editor',     label: '编辑器与阅读', icon: <Type size={16} />,         keywords: ['编辑器', 'editor', '阅读', 'pdf', '编写', '输入', '字体', '行号', '自动保存'] },
+  { id: 'general',    label: '通用与行为', icon: <SlidersHorizontal size={16} />, keywords: ['通用', '行为', '启动', '缩放', 'zoom', '外壳', 'workbench', '界面'] },
+  { id: 'data',       label: '数据与仓库', icon: <Database size={16} />,       keywords: ['数据', '仓库', '存储', '迁移', '备份', '导出', '回收站', 'vault', 'sqlite', '去库化'] },
+  { id: 'security',   label: '安全与隐私', icon: <ShieldCheck size={16} />,   keywords: ['安全', '隐私', '锁屏', '密码', '删除确认', '插件安全', '签名', '密钥'] },
+  { id: 'aiTools',    label: 'AI 工具',   icon: <Bot size={16} />,            keywords: ['AI', '工具', 'agent', '智能体', 'ai', '助手', '模型', 'mcp', 'skill'] },
+  { id: 'shortcuts',  label: '快捷键',    icon: <Keyboard size={16} />,       keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', '按键'] },
+  { id: 'modules',    label: '模块设置',  icon: <Boxes size={16} />,          keywords: ['模块', '博客', 'blog', '日程', '提醒', '打卡', '导出', '单词本', '词书', '错题', '高级'] },
+  { id: 'about',      label: '关于',      icon: <Info size={16} />,           keywords: ['关于', '更新', '版本', '升级', '镜像', '引导', 'about', 'update'] },
 ]
 
 export const SECTION_MAP: Record<SettingsSection, SectionDef> =
   SECTIONS.reduce((acc, s) => { acc[s.id] = s; return acc }, {} as Record<SettingsSection, SectionDef>)
 
-/** 所有可搜索的小项 */
-export const SETTING_ITEMS: SettingItem[] = [
-  // ===== 外观 =====
-  { id: 'appearance.theme', section: 'appearance', group: '主题', label: '应用主题',
-    desc: '深色 / 浅色配色，以及插件提供的主题包', keywords: ['主题', 'theme', '深色', '浅色', 'dark', 'light', '夜间', '配色'] },
-  { id: 'appearance.deleteFx', section: 'appearance', group: '删除动画皮肤', label: '删除动画皮肤',
-    desc: '知识库删除条目时的吞噬特效外观', keywords: ['删除动画', '删除特效', '吞噬', '火焰', '进度条', '皮肤', 'fx', 'delete'] },
-  { id: 'appearance.sidebarIcons', section: 'appearance', group: '侧边栏图标', label: '侧边栏图标风格',
-    desc: '活动栏模块图标风格（含插件图标包）', keywords: ['侧边栏图标', '图标包', '图标', '活动栏', 'icon', 'sidebar'] },
-  { id: 'appearance.startupTab', section: 'appearance', group: '启动时默认显示', label: '启动时默认显示',
-    desc: '打开应用后自动进入的模块', keywords: ['启动', '默认模块', '首页', 'startup', '默认显示', '初始模块'] },
-  { id: 'appearance.blogCardSize', section: 'appearance', group: '博客卡片大小', label: '博客卡片大小',
-    desc: '博客列表卡片的尺寸密度', keywords: ['卡片大小', '博客卡片', '卡片', '密度', 'card', '布局'] },
-  { id: 'appearance.knowledgeSidebarItemSize', section: 'appearance', group: '知识库侧边栏条目', label: '知识库侧边栏条目大小',
-    desc: '侧边栏树形条目（空间/笔记本/章节/页面）的行高与字号', keywords: ['侧边栏条目', '行高', '条目大小', '树形', '紧凑', '宽松'] },
+/**
+ * 从 schema 生成"有设置页落点"的 key 项（ui:true 且声明了 anchor）。
+ * 无 anchor / ui:false 的 key（含功能页内 UI、模块内 UI、约束类）暂不进设置页搜索，
+ * S2/S4 按域重排与自动表单逐批显形。
+ */
+function schemaKeyItems(): SettingItem[] {
+  const out: SettingItem[] = []
+  for (const key of Object.keys(SETTINGS)) {
+    const m = metaOf(key)
+    if (!m.ui || !m.anchor) continue
+    out.push({
+      id: m.anchor,
+      section: m.section,
+      group: m.group,
+      label: m.label,
+      desc: m.desc,
+      keywords: m.keywords,
+      aiTab: m.aiTab,
+    })
+  }
+  return out
+}
 
-  // ===== 编辑器 =====
-  { id: 'editor.font', section: 'editor', group: '字体样式', label: '字体样式',
-    desc: '编辑器正文使用的字体', keywords: ['字体', 'font', '字体样式', '字型', 'typeface'] },
-  { id: 'editor.fontSize', section: 'editor', group: '字号', label: '字号',
-    desc: '编辑器正文字号大小', keywords: ['字号', '字体大小', '大小', 'fontsize', 'font size'] },
-  { id: 'editor.lineNumbers', section: 'editor', group: '显示', label: '显示行号',
-    desc: '编辑器左侧是否显示行号', keywords: ['行号', '显示行号', 'linenumber', 'line numbers', 'gutter'] },
-
+/**
+ * 功能页入口（无存储 key，直达管理界面/区块），维持原手写清单。
+ * S2 按域重排时随视图迁移归属。
+ */
+const ENTRY_ITEMS: SettingItem[] = [
   // ===== 博客 =====
-  { id: 'blog.summaryWeeklyDay', section: 'blog', group: '周期总结', label: '周总结日',
-    desc: '每周在哪一天生成周总结', keywords: ['周总结', '总结日', '每周', '星期', '周几', 'weekly', '周报'] },
-  { id: 'blog.summaryMonthlyMode', section: 'blog', group: '周期总结', label: '月总结日',
-    desc: '每月总结规则：第一天 / 最后一天 / 固定日', keywords: ['月总结', '总结日', '每月', '月末', '月初', 'monthly', '月报'] },
-  { id: 'blog.summaryMonthlyFixedDay', section: 'blog', group: '周期总结', label: '固定日期',
-    desc: '固定日模式下，每月哪一天为月总结日', keywords: ['固定日期', '固定日', '几号', '月总结'] },
-  { id: 'blog.templates', section: 'blog', group: '博客模板', label: '博客模板',
+  { id: 'blog.templates', section: 'modules', group: '博客模板', label: '博客模板',
     desc: '写日记时一键套用的 Markdown 模板', keywords: ['模板', '博客模板', '新建模板', 'template', '套用', 'markdown'] },
-
-  // ===== 导出 =====
-  { id: 'export.encoding', section: 'export', group: '默认编码', label: '默认编码',
-    desc: '导出文件的默认字符编码', keywords: ['编码', 'encoding', 'utf', 'utf8', 'utf-8', 'gbk', 'gb2312', 'bom', '乱码'] },
-
   // ===== AI 工具 =====
   { id: 'aiTools.usage', section: 'aiTools', group: '工具调用量', label: '工具调用量',
     desc: '本自然月 AI 工具累计调用次数', keywords: ['用量', '调用量', '额度', '统计', 'usage', '次数', '本月'] },
-  { id: 'aiTools.monthlyLimit', section: 'aiTools', group: '月度调用上限', label: '月度调用上限', aiTab: 'builtin',
-    desc: '每月最多调用次数，0 表示不限制', keywords: ['上限', '限制', '每月', '调用上限', 'limit', '额度', '配额'] },
   { id: 'aiTools.builtin', section: 'aiTools', group: '内置工具', label: '内置工具清单', aiTab: 'builtin',
     desc: '官方内置只读工具，不可关闭', keywords: ['内置工具', '工具', 'tool', '注册表', '只读'] },
   { id: 'aiTools.audit', section: 'aiTools', group: '最近调用', label: '最近调用记录', aiTab: 'builtin',
@@ -106,25 +122,15 @@ export const SETTING_ITEMS: SettingItem[] = [
     desc: 'AI 模型与 API 密钥配置', keywords: ['模型', 'model', 'api', 'key', '密钥', '大模型', 'llm', '配置模型'] },
   { id: 'aiTools.perms', section: 'aiTools', group: '权限', label: '调用权限', aiTab: 'perms',
     desc: 'AI 工具调用的权限控制', keywords: ['权限', 'permission', '授权', '允许', '拒绝', '安全'] },
-
   // ===== 高级 =====
-  { id: 'advanced.update', section: 'advanced', group: '关于与更新', label: '检查更新',
+  { id: 'advanced.update', section: 'about', group: '关于与更新', label: '检查更新',
     desc: '当前版本号与在线更新', keywords: ['更新', '升级', '版本', '检查更新', 'update', 'version', '新版本'] },
-  { id: 'advanced.mirror', section: 'advanced', group: '关于与更新', label: '下载镜像',
-    desc: 'GitHub 加速代理前缀，留空直连', keywords: ['镜像', '加速', '代理', 'github', 'proxy', '下载', 'cdn'] },
-  { id: 'advanced.zoom', section: 'advanced', group: '缩放', label: '界面缩放',
-    desc: '整体界面缩放比例与重置', keywords: ['缩放', 'zoom', '放大', '缩小', '重置', '比例', '界面大小'] },
-  { id: 'advanced.deleteConfirm', section: 'advanced', group: '删除确认', label: '删除确认',
+  { id: 'advanced.deleteConfirm', section: 'security', group: '删除确认', label: '删除确认',
     desc: '博客 / 知识库 / 目录 / 章节删除时是否弹确认框', keywords: ['删除确认', '确认', '对话框', '弹窗', '跳过', 'confirm'] },
-  { id: 'advanced.onboarding', section: 'advanced', group: '新手引导', label: '新手引导',
+  { id: 'advanced.onboarding', section: 'about', group: '新手引导', label: '新手引导',
     desc: '重新查看新手引导', keywords: ['引导', '新手', '教程', 'onboarding', '向导', '引导页'] },
-  { id: 'advanced.autosave', section: 'advanced', group: '自动保存', label: '自动保存',
-    desc: '停止输入后自动保存的延迟时间', keywords: ['自动保存', '保存', '防抖', 'autosave', '延迟', 'debounce'] },
-  { id: 'advanced.storage', section: 'advanced', group: '存储与迁移', label: '知识库读源',
+  { id: 'advanced.storage', section: 'data', group: '存储与迁移', label: '知识库读源',
     desc: 'sqlite 数据库 / vault 仓库文件（实验）；以及旧数据导入入口', keywords: ['读源', '仓库', 'vault', 'sqlite', '去库化', '迁移', '导入旧数据', 'storage', '存储'] },
-  { id: 'advanced.workbench', section: 'advanced', group: '外壳布局', label: 'Workbench 布局',
-    desc: '实验性 VS Code 外壳（活动栏/侧栏/编辑器组/状态栏）；开启后编辑器模块文件树移到全局侧栏', keywords: ['workbench', '外壳', '布局', '侧栏', '编辑器组', '状态栏', 'vscode', '活动栏', 'shell', 'layout'] },
-
   // ===== 快捷键 =====
   { id: 'shortcuts.global', section: 'shortcuts', group: '全局', label: '全局快捷键',
     desc: '侧栏折叠、命令面板、快速打开、缩放、AI 助手、全局搜索等', keywords: ['全局', '侧栏', '折叠', 'escape', 'esc', '关闭弹窗', 'ctrl b', '命令面板', 'ctrl shift p', '快速打开', 'ctrl o', '缩放', 'ctrl j', 'ai 助手', '全局搜索'] },
@@ -151,6 +157,9 @@ export const SETTING_ITEMS: SettingItem[] = [
   { id: 'reminder.time', section: 'reminder', group: '打卡提醒', label: '提醒时间',
     desc: '每天触发打卡提醒的时间点', keywords: ['时间', '提醒时间', '几点', '打卡时间', '20:00'] },
 ]
+
+/** 搜索/推荐使用的小项全集：schema 生成（20 key 项，顺序=文件序）+ 功能入口（18） */
+export const SETTING_ITEMS: SettingItem[] = [...schemaKeyItems(), ...ENTRY_ITEMS]
 
 /** 空查询时展示的热门推荐项 */
 export const RECOMMENDED_IDS = [

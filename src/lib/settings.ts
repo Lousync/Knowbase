@@ -99,132 +99,71 @@ export const FONT_SIZE_OPTIONS = [
 // ===== 设置定义 =====
 
 export const SETTINGS = {
-  // ---- 外观 ----
-  theme:             { default: 'dark',       desc: '界面主题' },
-  editorFont:        { default: 'system',     desc: '编辑器字体' },
-  deleteFxSkin:      { default: 'builtin',    desc: '删除动画皮肤' },
-
-  // ---- 编辑器 ----
-  showLineNumbers:   { default: true,         desc: '编辑器显示行号' },
-  editorFontSize:    { default: 13,           desc: '编辑器字号' },
-  zoom:              { default: 1.0,          desc: '界面缩放比例' },
-  markdownDim:       { default: true,         desc: 'Markdown 标记淡化（弱化版所见即所得，光标行保留原始标记）' },
-
-  // ---- 导出 ----
-  exportEncoding:    { default: 'utf-8',      desc: '导出文件编码' },
-
-  // ---- 删除确认 ----
-  skipDeleteConfirm_blog:                { default: false, desc: '跳过博客删除确认' },
-  skipDeleteConfirm_knowledge:           { default: false, desc: '跳过知识库页面删除确认' },
-  skipDeleteConfirm_knowledgeCategory:   { default: false, desc: '跳过目录/笔记本删除确认' },
-  skipDeleteConfirm_chapter:             { default: false, desc: '跳过章节删除确认' },
-
-  // ---- 回收站 ----
-  trashExportDir:           { default: '',   desc: '回收站文件导出目录' },
-  recycleBinRetentionDays:  { default: 30,   desc: '回收站保留天数' },
-
-  // ---- PDF 阅读 ----
-  pdfReaderMode:   { default: 'builtin',     desc: 'PDF 阅读方式: builtin=内置阅读器, external=本地工具打开' },
-
-  // ---- 日程 ----
-  scheduleIconSize:  { default: 'm',         desc: '日程图标大小' },
-
-  // ---- 博客 ----
-  blogCardSize:       { default: 'm',         desc: '博客卡片大小' },
-
-  // ---- 知识库 ----
-  knowledgeSidebarItemSize: { default: 'm',  desc: '知识库侧边栏条目大小（s=紧凑 / m=标准 / l=宽松）' },
-
-  // ---- 边栏宽度 ----
-  sidebarWidth_blog:             { default: 240, desc: '博客边栏宽度' },
-  sidebarWidth_schedule:         { default: 240, desc: '日程边栏宽度' },
-  sidebarWidth_knowledgeCat:     { default: 240, desc: '知识库分类栏宽度' },
-  sidebarWidth_knowledgePages:   { default: 240, desc: '知识库页面栏宽度' },
-  sidebarWidth_knowledgeChapters:{ default: 240, desc: '知识库章节栏宽度' },
-  sidebarWidth_devtools:         { default: 176, desc: '开发者工具边栏宽度' },
-  sidebarWidth_devtoolsDocs:     { default: 208, desc: '开发者工具帮助文档列表栏宽度' },
-
-  // ---- 行为参数 ----
-  autoSaveDebounceMs:     { default: 2000, desc: '编辑器自动保存防抖(ms)' },
-  exportStatusClearMs:    { default: 5000, desc: '导出成功提示停留(ms)' },
-
-  // ---- 工具箱 ----
-  skipDeleteConfirm_toolboxScript: { default: false, desc: '跳过工具箱脚本删除确认' },
-
-  // ---- 安全 ----
-  lockPassword:  { default: '',    desc: '锁屏密码（留空则点击即可解锁）' },
-  lockOnStartup: { default: false, desc: '启动时自动锁屏' },
-
-  // ---- 缩放约束 ----
-  zoomMin:   { default: 0.85, desc: '缩放下限' },
-  zoomMax:   { default: 1.5,  desc: '缩放上限' },
-  zoomStep:  { default: 0.05, desc: '缩放步进' },
-
-  // ---- 活动栏 ----
-  activityBarOrder:  { default: '["blog","schedule","knowledge","moments","toolbox","plugins","export","recycle"]', desc: '活动栏图标顺序 (JSON)' },
-  activityBarHidden: { default: '[]', desc: '活动栏隐藏的模块 (JSON)' },
-  startupTab:        { default: 'blog', desc: '启动时默认显示的模块' },
-
-  // ---- 周期总结（每日博客） ----
-  summaryWeeklyDay:      { default: 0, desc: '周总结日（0=周日 … 6=周六）' },
-  summaryMonthlyMode:    { default: 'last', desc: '月总结日模式：first=每月第一天 / last=每月最后一天 / fixed=固定日' },
-  summaryMonthlyFixedDay: { default: 1, desc: '固定月总结日的日期（1-28）' },
-  sidebarIconStyle:      { default: 'default', desc: '侧边栏图标风格（default=手绘 / classic140=1.4.0 细线 / plugin:<插件id>:<包id>）' },
-
-  // ---- 打卡提醒 ----
-  checkinReminderEnabled: { default: true,   desc: '启用打卡提醒' },
-  checkinReminderTime:    { default: '20:00', desc: '打卡提醒时间（HH:mm）' },
-
-  // ---- 新手引导 ----
-  lanShareAutoStopMinutes: { default: 15, desc: '设备传输自动关闭分钟数（无连接超时）' },
-  onboardingDone: { default: false, desc: '已完成新手引导' },
-
-  // ---- 彩蛋 ----
-  badgeEggActivated: { default: false, desc: '彩蛋：标题栏角标变为 YHAz（外观页底部无标注输入框输入 YHAz 激活）' },
-
-  // ---- AI 工具 ----
-  aiToolMonthlyLimit: { default: 0, desc: 'AI 工具月度调用上限（0=不限）' },
-  aiSkillDisabled: { default: '[]', desc: '停用的 Skill 注册名列表(JSON 数组,设置 → AI 工具 → Skill 页切换)' },
-
-  // ---- 模型网关 ----
-  modelProviders:      { default: '',   desc: 'LLM 供应商列表（加密 JSON 容器，渲染层不可解）' },
-  defaultChatModel:    { default: '',   desc: '默认对话模型（格式 providerId:modelId）' },
-  monthlyTokenBudget:  { default: 0,    desc: '月度 token 预算（0=不限）' },
-  llmMaxTokens:        { default: 4096, desc: '单次调用 maxTokens 上限' },
-
-  // ---- AI 模块权限 ----
-  aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","bookmarks":"read","pomodoro":"read"}', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写(JSON)' },
-
-  // ---- AI 助手侧栏 ----
-  assistantWidth: { default: 380, desc: 'AI 助手侧栏宽度(px)' },
-
-  // ---- 日程打卡小窗 ----
-  dayPanelState: { default: '', desc: '日程打卡小窗状态(JSON: x/y/width/height/docked，主进程直写)' },
-
-  // ---- 单词本 ----
-  wordbookActiveBook: { default: '',  desc: '当前学习的词书(\'\'=未选 cet4|cet6|ky)' },
-  wordbookNewPerDay:  { default: 10,  desc: '每日建议新学词数' },
-
-  // ---- 错题本形态 ----
-  quizbookMode: { default: 'plugin', desc: '错题本形态:plugin 插件版(默认,C 级模块插件) / builtin 内置版(回退)' },
-
-  // ---- 存储（去库化：文件为主存储，sqlite 仅过渡索引） ----
-  storageKnowledge: { default: 'vault', desc: '知识库数据形态: vault=仓库文件(默认,页面.md+索引.json,只读导航+编辑器编辑) / sqlite=数据库(过渡期,待迁后删除)' },
-  storageBlog: { default: 'sqlite', desc: '博客数据形态: sqlite=数据库(默认,当前形态) / vault=仓库文件(blog/*.md+frontmatter,灰度验证中)' },
-  storageData: { default: 'sqlite', desc: '结构化模块数据（书签/打卡/体重/习惯等）: sqlite=数据库(默认) / vault=.knowbase/modules/*.json(灰度验证中)' },
-
-  // ---- 外壳（Workbench 灰度，R1-W1） ----
-  uiWorkbench: { default: false, desc: '启用 Workbench 布局（实验：活动栏/侧栏/编辑器组/状态栏，对标 VS Code；默认旧布局）' },
-
-  // ---- 模型标记 ----
-  aiFreeModelIds: { default: '[]', desc: '手动标记为免费的模型 ID 列表(JSON 数组)' },
-  // ---- 插件安全分级 ----
-  pluginAllowedLevels: { default: 'S,A,B', desc: '允许安装/启用的插件安全等级(S/A/B 逗号分隔)' },
-  pluginRequireSignature: { default: false, desc: '市场插件强制签名校验(开启后未签名/验签失败的市场包拒装;本地安装与内置示例不受限)' },
-  pluginTrustedKeys: { default: '', desc: '受信签名公钥 keyring(JSON {"keyId":"公钥"} 或 keyId=公钥 逗号分隔;作者公钥发布后在此登记)' },
-
-  // ---- 更新下载 ----
-  updateMirror: { default: 'https://gh-proxy.com', desc: '更新下载镜像(GitHub 加速代理前缀,留空直连 GitHub;失效可随时替换)' },
+  theme: { default: 'dark', type: 'select', label: '应用主题', group: '主题', desc: '深色 / 浅色配色，以及插件提供的主题包', keywords: ['主题', 'theme', '深色', '浅色', 'dark', 'light', '夜间', '配色'], section: 'appearance', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.theme' },
+  editorFont: { default: 'system', type: 'select', label: '字体样式', group: '字体', desc: '编辑器正文使用的字体', keywords: ['字体', 'font', '字体样式', '字型', 'typeface'], section: 'editor', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'editor.font' },
+  deleteFxSkin: { default: 'builtin', type: 'select', label: '删除动画皮肤', group: '主题与皮肤', desc: '知识库删除条目时的吞噬特效外观；插件可贡献自定义皮肤', keywords: ['删除动画', '删除特效', '吞噬', '火焰', '进度条', '皮肤', 'fx', 'delete'], section: 'appearance', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.deleteFx' },
+  showLineNumbers: { default: true, type: 'toggle', label: '显示行号', group: '显示', desc: '编辑器左侧是否显示行号', keywords: ['行号', '显示行号', 'linenumber', 'line numbers', 'gutter'], section: 'editor', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'editor.lineNumbers' },
+  editorFontSize: { default: 13, type: 'number', label: '字号', group: '字号', desc: '编辑器正文字号（可直接输入数字）', keywords: ['字号', '字体大小', '大小', 'fontsize', 'font size'], section: 'editor', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'editor.fontSize', min: 10, max: 40, step: 1, unit: 'px' },
+  zoom: { default: 1.0, type: 'number', label: '界面缩放', group: '缩放', desc: '整体界面缩放比例（可直接输入百分比）', keywords: ['缩放', 'zoom', '放大', '缩小', '重置', '比例', '界面大小'], section: 'general', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'advanced.zoom', min: 85, max: 150, step: 5, unit: '%' },
+  markdownDim: { default: true, type: 'toggle', label: 'Markdown 标记淡化', group: '显示', desc: '弱化版所见即所得：编辑时淡化 Markdown 标记，光标行保留原始标记', keywords: ['markdown', '淡化', '标记', 'md', 'dim', '弱化'], section: 'editor', ui: true, scope: 'global', level: 'normal', affects: 'live' , anchor: 'editor.markdownDim' },
+  exportEncoding: { default: 'utf-8', type: 'select', label: '默认编码', group: '导出', desc: '导出文件的默认字符编码', keywords: ['编码', 'encoding', 'utf', 'utf8', 'utf-8', 'gbk', 'gb2312', 'bom', '乱码'], section: 'data', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'export.encoding' },
+  skipDeleteConfirm_blog: { default: false, type: 'toggle', label: '博客删除确认', group: '删除确认', desc: '跳过博客文章删除确认', keywords: ['删除确认', '博客', '跳过', 'confirm'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  skipDeleteConfirm_knowledge: { default: false, type: 'toggle', label: '知识库页面删除确认', group: '删除确认', desc: '跳过知识库页面删除确认', keywords: ['删除确认', '页面', '知识库', '跳过', 'confirm'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  skipDeleteConfirm_knowledgeCategory: { default: false, type: 'toggle', label: '目录/笔记本删除确认', group: '删除确认', desc: '跳过目录/笔记本删除确认', keywords: ['删除确认', '目录', '笔记本', '跳过', 'confirm'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  skipDeleteConfirm_chapter: { default: false, type: 'toggle', label: '章节删除确认', group: '删除确认', desc: '跳过章节删除确认', keywords: ['删除确认', '章节', '跳过', 'confirm'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  trashExportDir: { default: '', type: 'text', label: '回收站导出目录', group: '回收站', desc: '回收站文件导出的目标目录', keywords: ['回收站', '导出', '目录', 'trash', 'export'], section: 'data', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  recycleBinRetentionDays: { default: 30, type: 'number', label: '回收站保留天数', group: '回收站', desc: '回收站内文件保留的天数，过期自动清除', keywords: ['回收站', '保留', '天数', 'retention', '清理'], section: 'data', ui: true, scope: 'global', level: 'normal', affects: 'live', min: 1, max: 3650, step: 1, unit: '天', anchor: 'data.recycleDays' },
+  pdfReaderMode: { default: 'builtin', type: 'select', label: 'PDF 阅读方式', group: 'PDF 阅读', desc: 'builtin=内置阅读器，external=本地工具打开', keywords: ['pdf', '阅读', '阅读器', 'external', '内置'], section: 'editor', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  scheduleIconSize: { default: 'm', type: 'segmented', label: '日程图标大小', group: '密度与尺寸', desc: '日程模块图标大小（小/中/大）', keywords: ['日程', '图标', '大小', 'schedule', 'icon'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  blogCardSize: { default: 'm', type: 'segmented', label: '博客卡片大小', group: '密度与尺寸', desc: '博客列表卡片的尺寸密度（可直接输入像素）', keywords: ['卡片大小', '博客卡片', '卡片', '密度', 'card', '布局'], section: 'appearance', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.blogCardSize' },
+  knowledgeSidebarItemSize: { default: 'm', type: 'segmented', label: '知识库侧边栏条目大小', group: '密度与尺寸', desc: '侧边栏树形条目的行高与字号（可直接输入像素）', keywords: ['侧边栏条目', '行高', '条目大小', '树形', '紧凑', '宽松'], section: 'appearance', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.knowledgeSidebarItemSize' },
+  sidebarWidth_blog: { default: 240, type: 'number', label: '博客边栏宽度', group: '边栏宽度', desc: '博客模块侧边栏宽度', keywords: ['边栏', '宽度', 'sidebar', 'width', '博客'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  sidebarWidth_schedule: { default: 240, type: 'number', label: '日程边栏宽度', group: '边栏宽度', desc: '日程模块侧边栏宽度', keywords: ['边栏', '宽度', 'sidebar', 'width', '日程'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  sidebarWidth_knowledgeCat: { default: 240, type: 'number', label: '知识库分类栏宽度', group: '边栏宽度', desc: '知识库分类栏宽度', keywords: ['边栏', '宽度', '分类栏', 'sidebar', 'width', '知识库'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  sidebarWidth_knowledgePages: { default: 240, type: 'number', label: '知识库页面栏宽度', group: '边栏宽度', desc: '知识库页面栏宽度', keywords: ['边栏', '宽度', '页面栏', 'sidebar', 'width', '知识库'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  sidebarWidth_knowledgeChapters: { default: 240, type: 'number', label: '知识库章节栏宽度', group: '边栏宽度', desc: '知识库章节栏宽度', keywords: ['边栏', '宽度', '章节栏', 'sidebar', 'width', '知识库'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  sidebarWidth_devtools: { default: 176, type: 'number', label: '开发者工具边栏宽度', group: '边栏宽度', desc: '开发者工具模块边栏宽度', keywords: ['边栏', '宽度', 'devtools', 'sidebar', 'width'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  sidebarWidth_devtoolsDocs: { default: 208, type: 'number', label: '帮助文档列表栏宽度', group: '边栏宽度', desc: '开发者工具帮助文档列表栏宽度', keywords: ['边栏', '宽度', '帮助文档', 'sidebar', 'width'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  autoSaveDebounceMs: { default: 2000, type: 'number', label: '自动保存延迟', group: '保存', desc: '停止输入后自动保存的延迟时间（可直接输入毫秒）', keywords: ['自动保存', '保存', '防抖', 'autosave', '延迟', 'debounce'], section: 'general', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'advanced.autosave', min: 100, max: 30000, step: 100, unit: 'ms' },
+  exportStatusClearMs: { default: 5000, type: 'number', label: '导出成功提示时长', group: '导出', desc: '导出成功提示停留时间', keywords: ['导出', '提示', '停留', 'status', '毫秒'], section: 'data', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'ms' },
+  skipDeleteConfirm_toolboxScript: { default: false, type: 'toggle', label: '工具箱脚本删除确认', group: '删除确认', desc: '跳过工具箱脚本删除确认', keywords: ['删除确认', '工具箱', '脚本', '跳过'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  lockPassword: { default: '', type: 'password', label: '锁屏密码', group: '锁屏', desc: '锁屏密码（留空则点击即可解锁）', keywords: ['锁屏', '密码', 'lock', 'password', '解锁'], section: 'security', ui: true, scope: 'global', level: 'normal', affects: 'live' , anchor: 'security.lockPassword' },
+  lockOnStartup: { default: false, type: 'toggle', label: '启动自动锁屏', group: '锁屏', desc: '启动应用后自动进入锁屏', keywords: ['锁屏', '启动', '自动', 'lock'], section: 'security', ui: true, scope: 'global', level: 'normal', affects: 'live' , anchor: 'security.lockStartup' },
+  zoomMin: { default: 0.85, type: 'number', label: '缩放下限', group: '缩放', desc: '界面缩放下限（约束，勿手改）', keywords: ['缩放', '下限', 'zoom'], section: 'general', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  zoomMax: { default: 1.5, type: 'number', label: '缩放上限', group: '缩放', desc: '界面缩放上限（约束，勿手改）', keywords: ['缩放', '上限', 'zoom'], section: 'general', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  zoomStep: { default: 0.05, type: 'number', label: '缩放步进', group: '缩放', desc: '界面缩放步进（约束，勿手改）', keywords: ['缩放', '步进', 'zoom'], section: 'general', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  activityBarOrder: { default: '["blog","schedule","knowledge","moments","toolbox","plugins","export","recycle"]', type: 'json', label: '活动栏图标顺序', group: '活动栏', desc: '活动栏模块图标顺序（JSON）', keywords: ['活动栏', '顺序', '图标', 'activitybar', 'order'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  activityBarHidden: { default: '[]', type: 'json', label: '活动栏隐藏模块', group: '活动栏', desc: '活动栏隐藏的模块（JSON）', keywords: ['活动栏', '隐藏', '模块', 'activitybar', 'hidden'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  startupTab: { default: 'blog', type: 'select', label: '启动时默认显示', group: '启动', desc: '每次打开应用时自动进入的模块', keywords: ['启动', '默认模块', '首页', 'startup', '默认显示', '初始模块'], section: 'general', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.startupTab' },
+  summaryWeeklyDay: { default: 0, type: 'select', label: '周总结日', group: '周期总结', desc: '每周在哪一天生成周总结', keywords: ['周总结', '总结日', '每周', '星期', '周几', 'weekly', '周报'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'blog.summaryWeeklyDay' },
+  summaryMonthlyMode: { default: 'last', type: 'select', label: '月总结规则', group: '周期总结', desc: '每月总结规则：第一天 / 最后一天 / 固定日', keywords: ['月总结', '总结日', '每月', '月末', '月初', 'monthly', '月报'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'blog.summaryMonthlyMode' },
+  summaryMonthlyFixedDay: { default: 1, type: 'number', label: '固定日期', group: '周期总结', desc: '固定日模式下，每月哪一天为月总结日', keywords: ['固定日期', '固定日', '几号', '月总结'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'blog.summaryMonthlyFixedDay', min: 1, max: 28, step: 1 },
+  sidebarIconStyle: { default: 'default', type: 'select', label: '侧边栏图标风格', group: '图标', desc: '活动栏模块图标风格；安装带图标包的插件后自动追加', keywords: ['侧边栏图标', '图标包', '图标', '活动栏', 'icon', 'sidebar'], section: 'appearance', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.sidebarIcons' },
+  checkinReminderEnabled: { default: true, type: 'toggle', label: '启用打卡提醒', group: '打卡提醒', desc: '到点提醒当天未打卡的习惯', keywords: ['打卡', '提醒', '启用', '开关', 'checkin', '通知'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.enable' },
+  checkinReminderTime: { default: '20:00', type: 'time', label: '提醒时间', group: '打卡提醒', desc: '每天触发打卡提醒的时间点', keywords: ['时间', '提醒时间', '几点', '打卡时间', '20:00'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.time' },
+  lanShareAutoStopMinutes: { default: 15, type: 'number', label: '设备传输自动关闭', group: '设备互联', desc: '设备传输无连接自动关闭分钟数', keywords: ['设备传输', '传输', '自动关闭', '超时', 'lanshare'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: '分钟' },
+  onboardingDone: { default: false, type: 'toggle', label: '新手引导完成', group: '引导', desc: '是否已完成新手引导（由引导流程维护）', keywords: ['引导', '新手', 'onboarding'], section: 'about', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  badgeEggActivated: { default: false, type: 'toggle', label: '角标彩蛋', group: '彩蛋', desc: '彩蛋：标题栏角标变为 YHAz（外观页输入 YHAz 激活）', keywords: ['彩蛋', '角标', 'YHAz', 'badge'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  aiToolMonthlyLimit: { default: 0, type: 'number', label: '月度调用上限', group: '工具调用', desc: '每月最多调用次数，0 表示不限制', keywords: ['上限', '限制', '每月', '调用上限', 'limit', '额度', '配额'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.monthlyLimit', aiTab: 'builtin', min: 0, max: 1000000, step: 10 },
+  aiSkillDisabled: { default: '[]', type: 'json', label: '停用 Skill', group: 'Skill', desc: '停用的 Skill 注册名列表（JSON）', keywords: ['skill', '停用', '禁用', '技能'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'skill' },
+  modelProviders: { default: '', type: 'json', label: '模型供应商', group: '模型', desc: 'LLM 供应商列表（加密存储，渲染层不可解）', keywords: ['模型', '供应商', 'provider', 'llm'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models' },
+  defaultChatModel: { default: '', type: 'text', label: '默认对话模型', group: '模型', desc: '默认对话模型（格式 providerId:modelId）', keywords: ['模型', '默认', 'chat', 'model'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models' },
+  llmMaxTokens: { default: 4096, type: 'number', label: '单次 maxTokens 上限', group: '模型', desc: '单次调用 maxTokens 上限', keywords: ['token', 'maxTokens', '上限', '输出长度'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models', min: 128, max: 131072, step: 256 },
+  aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","bookmarks":"read","pomodoro":"read"}', type: 'json', label: 'AI 模块权限', group: '权限', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写（JSON）', keywords: ['权限', 'permission', '授权', '模块'], section: 'aiTools', ui: false, scope: 'global', level: 'danger', affects: 'live', aiTab: 'perms' },
+  assistantWidth: { default: 380, type: 'number', label: 'AI 助手侧栏宽度', group: 'AI 助手', desc: 'AI 助手侧栏宽度', keywords: ['助手', '侧栏', '宽度', 'assistant'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
+  dayPanelState: { default: '', type: 'json', label: '日程打卡小窗状态', group: '小窗', desc: '日程打卡小窗位置大小（主进程直写）', keywords: ['小窗', '打卡', 'daypanel', '悬浮'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  wordbookActiveBook: { default: '', type: 'text', label: '当前词书', group: '单词本', desc: '当前学习的词书（空=未选）', keywords: ['词书', '单词', 'wordbook', '背单词'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  wordbookNewPerDay: { default: 10, type: 'number', label: '每日新词数', group: '单词本', desc: '每日建议新学词数', keywords: ['新词', '每日', '单词', 'wordbook'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live', min: 1, max: 100, step: 1 },
+  quizbookMode: { default: 'plugin', type: 'select', label: '错题本形态', group: '错题本', desc: '错题本形态：plugin=插件版（默认）/ builtin=内置版（回退）', keywords: ['错题本', '形态', 'quiz', 'plugin', '内置'], section: 'modules', ui: false, scope: 'global', level: 'experimental', affects: 'reload' },
+  storageKnowledge: { default: 'vault', type: 'select', label: '知识库读源', group: '存储', desc: '知识库数据形态：vault=仓库文件（默认）/ sqlite=数据库（过渡期）', keywords: ['读源', '仓库', 'vault', 'sqlite', '去库化', '存储'], section: 'data', ui: false, scope: 'global', level: 'experimental', affects: 'reload' },
+  storageBlog: { default: 'sqlite', type: 'select', label: '博客数据形态', group: '存储', desc: '博客数据形态：sqlite=数据库（默认）/ vault=仓库文件（灰度验证中）', keywords: ['博客', '存储', 'vault', 'sqlite', '灰度'], section: 'data', ui: false, scope: 'global', level: 'experimental', affects: 'reload' },
+  storageData: { default: 'sqlite', type: 'select', label: '模块数据形态', group: '存储', desc: '结构化模块数据：sqlite=数据库（默认）/ vault=.knowbase JSON（灰度验证中）', keywords: ['模块', '存储', 'vault', 'sqlite', '灰度'], section: 'data', ui: false, scope: 'global', level: 'experimental', affects: 'reload' },
+  uiWorkbench: { default: false, type: 'toggle', label: 'Workbench 布局', group: '外壳', desc: '实验性 VS Code 外壳；开启后编辑器文件树移到全局侧栏', keywords: ['workbench', '外壳', '布局', '侧栏', '编辑器组', '状态栏', 'vscode', '活动栏', 'shell', 'layout'], section: 'general', ui: true, scope: 'global', level: 'experimental', affects: 'live', anchor: 'advanced.workbench' },
+  aiFreeModelIds: { default: '[]', type: 'json', label: '免费模型标记', group: '模型', desc: '手动标记为免费的模型 ID 列表（JSON）', keywords: ['免费', '模型', '标记', 'free'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models' },
+  pluginAllowedLevels: { default: 'S,A,B', type: 'text', label: '插件安全等级', group: '插件安全', desc: '允许安装/启用的插件安全等级（S/A/B 逗号分隔）', keywords: ['插件', '安全', '等级', 'plugin', 'S', 'A', 'B'], section: 'security', ui: true, scope: 'global', level: 'normal', affects: 'live' , anchor: 'security.pluginLevels' },
+  pluginRequireSignature: { default: false, type: 'toggle', label: '插件强制签名', group: '插件安全', desc: '市场插件强制签名校验', keywords: ['插件', '签名', '校验', 'signature'], section: 'security', ui: true, scope: 'global', level: 'danger', affects: 'live' , anchor: 'security.pluginSignature' },
+  pluginTrustedKeys: { default: '', type: 'text', label: '受信公钥 keyring', group: '插件安全', desc: '受信签名公钥 keyring（JSON 或 keyId=公钥）', keywords: ['插件', '公钥', 'keyring', '签名', '信任'], section: 'security', ui: true, scope: 'global', level: 'danger', affects: 'live' , anchor: 'security.pluginKeys' },
+  updateMirror: { default: 'https://gh-proxy.com', type: 'text', label: '下载镜像', group: '更新', desc: 'GitHub 加速代理前缀，留空直连', keywords: ['镜像', '加速', '代理', 'github', 'proxy', '下载', 'cdn'], section: 'about', ui: true, scope: 'global', level: 'normal', affects: 'reload', anchor: 'advanced.mirror' },
 }
 
 // ===== 边栏面板约束（组件 default/min/max，非用户可改，集中引用） =====
@@ -240,6 +179,14 @@ export const PANEL_CONSTRAINTS = {
 } as const
 
 // ===== 类型工具 =====
+
+/** 设置页左栏能力域（S2 起：按能力域分组，业务模块并入 modules 待 S4 自动表单细化） */
+export type SettingsSection =
+  | 'appearance' | 'editor' | 'general' | 'data' | 'security'
+  | 'aiTools' | 'shortcuts' | 'modules' | 'about'
+
+/** AI 工具大项内部的页签 */
+export type AiTab = 'builtin' | 'mcp' | 'skill' | 'models' | 'perms'
 
 /** 所有设置 key 的联合类型 */
 export type SettingsKey = keyof typeof SETTINGS

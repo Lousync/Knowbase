@@ -82,7 +82,7 @@ export type TranslateInvokeResult = {
   ok: false
   mode?: TranslateMode
   error: string
-  code?: 'NO_DEFAULT_MODEL' | 'PROVIDER_NOT_FOUND' | 'PROVIDER_DISABLED' | 'BUDGET_EXCEEDED' | 'EMPTY_TEXT' | 'TOO_LONG' | 'LLM_ERROR'
+  code?: 'NO_DEFAULT_MODEL' | 'PROVIDER_NOT_FOUND' | 'PROVIDER_DISABLED' | 'EMPTY_TEXT' | 'TOO_LONG' | 'LLM_ERROR'
   /** word 模式即使 LLM 失败也会带回词典结果 */
   dict?: DictLookupResult
 }

@@ -3,12 +3,13 @@ import { Info } from 'lucide-react'
 import { getAppVersion } from '../../lib/ipc'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
-import { ExportSettingsView } from './views/ExportSettingsView'
-import { AdvancedView } from './views/AdvancedView'
-import { ShortcutsView } from './views/ShortcutsView'
-import { BlogView } from './views/BlogView'
-import { ReminderView } from './views/ReminderView'
+import { GeneralView } from './views/GeneralView'
+import { DataView } from './views/DataView'
+import { SecurityView } from './views/SecurityView'
 import { AiToolsView } from './views/AiToolsView'
+import { ShortcutsView } from './views/ShortcutsView'
+import { ModulesView } from './views/ModulesView'
+import { AboutView } from './views/AboutView'
 import { SearchResultsView } from './views/SearchResultsView'
 import { SettingsSearchBox } from './components/SettingsSearchBox'
 import {
@@ -208,17 +209,18 @@ export function SettingsModule() {
               <>
                 {section === 'appearance' && <AppearanceView />}
                 {section === 'editor' && <EditorView />}
-                {section === 'blog' && <BlogView />}
-                {section === 'export' && <ExportSettingsView />}
+                {section === 'general' && <GeneralView />}
+                {section === 'data' && <DataView />}
+                {section === 'security' && <SecurityView />}
                 {section === 'aiTools' && (
                   <AiToolsView
                     key={`${aiTabOverride ?? 'builtin'}-${jumpSeq}`}
                     initialTab={aiTabOverride}
                   />
                 )}
-                {section === 'advanced' && <AdvancedView />}
                 {section === 'shortcuts' && <ShortcutsView />}
-                {section === 'reminder' && <ReminderView />}
+                {section === 'modules' && <ModulesView />}
+                {section === 'about' && <AboutView />}
               </>
             )}
           </div>

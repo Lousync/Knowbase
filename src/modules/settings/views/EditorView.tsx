@@ -1,6 +1,7 @@
 import { useSettings } from '../../../lib/SettingsContext'
-import { FONT_OPTIONS, FONT_CSS_MAP, FONT_SIZE_OPTIONS } from '../../../lib/settings'
+import { FONT_OPTIONS, FONT_CSS_MAP } from '../../../lib/settings'
 import { SettingSelect } from '../components/SettingSelect'
+import { NumberField } from '../components/fields/NumberField'
 
 export function EditorView() {
   const { s, update } = useSettings()
@@ -34,21 +35,19 @@ export function EditorView() {
 
       <div className="mb-8" data-setting-anchor="editor.fontSize">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">字号</h3>
-        <div className="flex gap-1.5 max-w-xs">
-          {FONT_SIZE_OPTIONS.map(fs => (
-            <button
-              key={fs.id}
-              onClick={() => update('editorFontSize', fs.id)}
-              className={`flex-1 px-2 py-2 rounded text-[12px] border transition-colors ${
-                s.editorFontSize === fs.id
-                  ? 'border-[var(--accent)] bg-[var(--bg-selected)] text-[var(--text-primary)]'
-                  : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              {fs.label}
-            </button>
-          ))}
-        </div>
+        <NumberField
+          value={s.editorFontSize}
+          onCommit={(v) => update('editorFontSize', v)}
+          min={10}
+          max={40}
+          step={1}
+          unit="px"
+          presets={[12, 13, 14, 15, 16, 18, 20]}
+          defaultValue={13}
+        />
+        <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+          可直接输入任意字号（10-40px），或点预设档位；输入越界会提示且不生效。
+        </p>
       </div>
 
       <div data-setting-anchor="editor.lineNumbers">
@@ -59,12 +58,14 @@ export function EditorView() {
             className="accent-[var(--accent)]" />
           <span className="text-[13px] text-[var(--text-primary)]">显示行号</span>
         </label>
-        <label className="flex items-center gap-3 cursor-pointer mt-2.5">
-          <input type="checkbox" checked={s.markdownDim}
-            onChange={() => update('markdownDim', !s.markdownDim)}
-            className="accent-[var(--accent)]" />
-          <span className="text-[13px] text-[var(--text-primary)]">Markdown 标记淡化（光标行保留原始标记）</span>
-        </label>
+        <div data-setting-anchor="editor.markdownDim" className="mt-2.5">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={s.markdownDim}
+              onChange={() => update('markdownDim', !s.markdownDim)}
+              className="accent-[var(--accent)]" />
+            <span className="text-[13px] text-[var(--text-primary)]">Markdown 标记淡化（光标行保留原始标记）</span>
+          </label>
+        </div>
         <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
           编辑 .md 时光标所在行之外的格式标记（**、#、链接、[[双链]] 等）会淡化显示，
           被包裹的内容以加粗/斜体/链接色呈现——写作时更接近阅读效果。
