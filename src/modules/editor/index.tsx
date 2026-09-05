@@ -749,9 +749,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         <FileText size={12} className="text-[var(--text-muted)]" />
         <span className="text-[11.5px] font-medium text-[var(--text-muted)]">编辑区</span>
         <div className="ml-auto flex items-center gap-0.5">
-          {/* 禅模式入口：点击循环切档（off→Z1→Z2→off） */}
+          {/* 禅模式入口：点击循环切档（off→Z1→Z2→off）；无文件时提示先打开（§5 进入条件） */}
           <button
-            onClick={() => changeZen(nextZenLevel(zenLevel, { hasModal: false, hasDocument: !!activePath }))}
+            onClick={() => {
+              if (!activePath) { showToast({ type: 'warning', message: '请先打开一个文件，再进入禅模式' }); return }
+              changeZen(nextZenLevel(zenLevel, { hasModal: false, hasDocument: true }))
+            }}
             title={zenLevel === 0 ? '禅模式 · 进入专注' : `禅模式 Z${zenLevel} · 点击切档`}
             className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
               zenLevel >= 1
