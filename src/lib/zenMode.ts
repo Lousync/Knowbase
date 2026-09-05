@@ -9,9 +9,6 @@ export type ZenLevel = 0 | 1 | 2 | 3
 /** V1 循环上限：Z3 打字机为 V2 范围，落地后改为 3 */
 export const ZEN_MAX_LEVEL = 2
 
-/** 切换快捷键：Alt+Z（单键，Monaco 默认未绑定；window 捕获阶段监听，焦点在编辑器内也生效） */
-export const ZEN_TOGGLE_KEY_CODE = 'KeyZ'
-
 export interface ZenCycleOpts {
   /** 编辑器存在任一弹窗（inputBox/closeTarget/fmDraft/ctxMenu/createMenu/conflictState） */
   hasModal: boolean
