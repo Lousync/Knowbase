@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
+  FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText, Feather,
   Pencil, Trash2, ChevronRight, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
@@ -13,7 +13,7 @@ import {
 import { showToast } from '../../lib/toast'
 import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
-import { nextZenLevel, shouldExitZen, isChordAlive } from '../../lib/zenMode'
+import { nextZenLevel, shouldExitZen, ZEN_TOGGLE_KEY_CODE } from '../../lib/zenMode'
 import { FileTree } from './components/FileTree'
 import { MonacoPane, type MonacoPaneHandle } from './components/MonacoPane'
 import { PdfReaderView } from './components/PdfReaderView'
@@ -85,8 +85,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [zenSavedAt, setZenSavedAt] = useState<string | null>(null)
   /** 悬浮信息条 30s 无操作淡出（§4；transition-opacity + 定时器，不依赖 transitionend，§7-5） */
   const [zenInfoVisible, setZenInfoVisible] = useState(true)
-  /** Ctrl+K 序列锚点（ms 时间戳，0=未按） */
-  const zenKAtRef = useRef(0)
   /** 切档统一入口：更新 App 真相源 + 持久化档位（§5：写入 settings，仅记录不自动禅） */
   const changeZen = useCallback((n: number) => {
     zenUpdate('zenLevel', n)
@@ -614,29 +612,27 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   }, [createMenu])
 
   // ---- 禅模式状态机（§5/§6-2）----
-  // ① Ctrl+K Z 循环切档（序列 800ms 超时）；Esc 弹窗优先（合并判定，避免多 listener 竞态 §7-2）
+  // ① Alt+Z 循环切档（单键；window 捕获阶段监听——Monaco 会吞掉冒泡阶段的键，捕获先于编辑器处理，§7-2）；
+  //    Esc 弹窗优先（有弹窗时不拦截，交给各弹窗自己的 Esc 逻辑）
   const zenModalOpen = !!(inputBox || closeTarget || fmDraft || ctxMenu || createMenu || conflictState || tabCtx)
   useEffect(() => {
     if (!isActive) return
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
-        zenKAtRef.current = Date.now()
-        return
-      }
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z'
-        && isChordAlive(zenKAtRef.current, Date.now())) {
-        zenKAtRef.current = 0
+      // Alt+Z 切档：capture 阶段拦截，焦点在 Monaco/输入框内均生效
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === ZEN_TOGGLE_KEY_CODE) {
         e.preventDefault()
+        e.stopPropagation()
         changeZen(nextZenLevel(zenLevel, { hasModal: zenModalOpen, hasDocument: !!activePath }))
         return
       }
       if (e.key === 'Escape' && zenLevel > 0 && shouldExitZen(zenModalOpen)) {
         e.preventDefault()
+        e.stopPropagation()
         changeZen(0)
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [zenLevel, zenModalOpen, activePath, isActive, changeZen])
 
   // ② 切 Tab 自动退出（保活架构组件不卸载，必须监听 isActive，§7-3）
@@ -761,6 +757,19 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         <FileText size={12} className="text-[var(--text-muted)]" />
         <span className="text-[11.5px] font-medium text-[var(--text-muted)]">编辑区</span>
         <div className="ml-auto flex items-center gap-0.5">
+          {/* 禅模式入口：点击循环切档（off→Z1→Z2→off），与 Alt+Z 等效 */}
+          <button
+            onClick={() => changeZen(nextZenLevel(zenLevel, { hasModal: false, hasDocument: !!activePath }))}
+            title={zenLevel === 0 ? '禅模式 · 进入专注 (Alt+Z)' : `禅模式 Z${zenLevel} · 点击切档 (Alt+Z)`}
+            className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
+              zenLevel >= 1
+                ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Feather size={12} />
+            {zenLevel === 0 ? '禅模式' : zenLevel === 1 ? '专注中' : '禅'}
+          </button>
           <button
             onClick={() => void handleOpenDir()}
             title="切换仓库"

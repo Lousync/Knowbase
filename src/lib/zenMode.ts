@@ -9,8 +9,8 @@ export type ZenLevel = 0 | 1 | 2 | 3
 /** V1 循环上限：Z3 打字机为 V2 范围，落地后改为 3 */
 export const ZEN_MAX_LEVEL = 2
 
-/** 序列键第二键超时（Ctrl+K 后 800ms 内按 Z，超时作废） */
-export const ZEN_CHORD_TIMEOUT_MS = 800
+/** 切换快捷键：Alt+Z（单键，Monaco 默认未绑定；window 捕获阶段监听，焦点在编辑器内也生效） */
+export const ZEN_TOGGLE_KEY_CODE = 'KeyZ'
 
 export interface ZenCycleOpts {
   /** 编辑器存在任一弹窗（inputBox/closeTarget/fmDraft/ctxMenu/createMenu/conflictState） */
@@ -30,9 +30,4 @@ export function nextZenLevel(current: number, opts: ZenCycleOpts): number {
 /** Esc 是否应退出禅模式（弹窗存在时让位） */
 export function shouldExitZen(hasModal: boolean): boolean {
   return !hasModal
-}
-
-/** 序列键第二键是否仍在时限内 */
-export function isChordAlive(chordAt: number, now: number): boolean {
-  return chordAt > 0 && now - chordAt < ZEN_CHORD_TIMEOUT_MS
 }
