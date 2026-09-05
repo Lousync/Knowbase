@@ -1,12 +1,11 @@
 import { useMemo } from 'react'
-import { Lock, KeyRound } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 
 /**  插件安全等级（固定顺序，UI toggle 写入时也按此序拼接） */
 const LEVEL_ORDER = ['S', 'A', 'B', 'C'] as const
 type LevelKey = typeof LEVEL_ORDER[number]
 
-/** 设置 → 安全与隐私：锁屏 / 删除确认 / 插件安全 */
+/** 设置 → 安全与隐私：删除确认 / 插件安全 */
 export function SecurityView() {
   const { s, update } = useSettings()
 
@@ -25,43 +24,7 @@ export function SecurityView() {
   return (
     <div>
       <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">安全与隐私</h2>
-      <p className="text-[12px] text-[var(--text-muted)] mb-6">锁屏、误删防护与插件安全策略</p>
-
-      {/* 锁屏 */}
-      <div className="mb-8 space-y-3 max-w-md">
-        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">锁屏</h3>
-        <div data-setting-anchor="security.lockStartup">
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!s.lockOnStartup}
-              onChange={(e) => update('lockOnStartup', e.target.checked)}
-              className="mt-0.5 accent-[var(--accent)]"
-            />
-            <span className="flex items-center gap-1.5 text-[13px] text-[var(--text-primary)]">
-              <Lock size={13} className="text-[var(--text-muted)]" />
-              启动应用后自动锁屏
-            </span>
-          </label>
-        </div>
-        <div data-setting-anchor="security.lockPassword">
-          <label className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
-            <KeyRound size={13} className="text-[var(--text-muted)] shrink-0" />
-            锁屏密码
-          </label>
-          <input
-            type="password"
-            value={s.lockPassword ?? ''}
-            onChange={(e) => update('lockPassword', e.target.value)}
-            placeholder="留空 = 点击即可解锁"
-            spellCheck={false}
-            className="w-full px-2.5 py-1.5 text-[12px] bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-          />
-        </div>
-        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-          设置密码后，锁屏界面需输入密码才能进入；忘记密码可前往数据目录的 settings.json 清空该字段。
-        </p>
-      </div>
+      <p className="text-[12px] text-[var(--text-muted)] mb-6">误删防护与插件安全策略</p>
 
       {/* 删除确认 */}
       <div className="mb-8" data-setting-anchor="advanced.deleteConfirm">

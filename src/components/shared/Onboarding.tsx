@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Archive, ArrowLeft, ArrowRight, BellRing, Bot, BookOpen, CalendarDays, Check,
-  Database, Keyboard, Lock, MessageCircle, Moon, Network, Puzzle, ShieldCheck,
+  Database, Keyboard, MessageCircle, Moon, Network, Puzzle, ShieldCheck,
   Sparkles, Sun, Wrench,
 } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
@@ -146,8 +146,6 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
                   desc="所有内容保存在本机数据库中，不经过任何服务器" />
                 <InfoRow icon={<Archive size={14} />} title="定期备份"
                   desc="「导出」模块一键备份全部数据为 ZIP；将备份包拖入窗口即可恢复" />
-                <InfoRow icon={<Lock size={14} />} title="可选锁屏"
-                  desc="设置 → 安全 中可设置锁屏密码与启动自动锁屏" />
               </div>
             </div>
           )}
