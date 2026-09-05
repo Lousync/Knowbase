@@ -3,6 +3,7 @@ import { getDatabase } from '../database/connection'
 import { query, schema, migrations, assertReadOnly } from './db'
 import { logRing } from './capture'
 import { BRIDGE_BOOT_AT } from './response'
+import { dumpUiTree, takeScreenshot } from './ui'
 
 /**
  * 自检套件 —— 给 AI 一个「我有没有搞坏东西」的明确信号。
@@ -219,6 +220,36 @@ function checkNoSelftestResidue(): CheckResult {
   }
 }
 
+/** UI 桥自检：渲染层可交互元素可枚举（页面已绘制且 UI 桥可用） */
+async function checkUiTreeAccessible(): Promise<CheckResult> {
+  try {
+    const tree = await dumpUiTree()
+    const ok = tree.count > 0
+    return {
+      name: 'ui.treeAccessible',
+      ok,
+      message: ok ? undefined : '未发现任何可交互元素（页面未就绪或渲染异常）',
+    }
+  } catch (e) {
+    return { name: 'ui.treeAccessible', ok: false, message: String(e instanceof Error ? e.message : e) }
+  }
+}
+
+/** UI 桥自检：能截到非空画面（窗口绘制管线正常，截图文件落盘成功） */
+async function checkUiScreenshot(): Promise<CheckResult> {
+  try {
+    const shot = await takeScreenshot()
+    const ok = shot.sizeBytes > 1000
+    return {
+      name: 'ui.screenshot',
+      ok,
+      message: ok ? undefined : `截图过小（${shot.sizeBytes}B），窗口可能未绘制`,
+    }
+  } catch (e) {
+    return { name: 'ui.screenshot', ok: false, message: String(e instanceof Error ? e.message : e) }
+  }
+}
+
 registerCheck('db.openable', checkDbOpenable)
 registerCheck('db.tableCount', checkTableCount)
 registerCheck('db.migrationCount', checkMigrations)
@@ -227,6 +258,8 @@ registerCheck('logs.noErrors', checkNoRecentErrors)
 registerCheck('flow.blogRoundTrip', checkBlogRoundTrip)
 registerCheck('flow.habitCheckIdempotent', checkHabitIdempotent)
 registerCheck('cleanup.noSelftestResidue', checkNoSelftestResidue)
+registerCheck('ui.treeAccessible', checkUiTreeAccessible)
+registerCheck('ui.screenshot', checkUiScreenshot)
 
 export interface SelfTestReport {
   total: number

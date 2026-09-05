@@ -387,6 +387,9 @@ export function renameWorkspacePath(rootId: string, oldRel: string, newRel: stri
   const to = requireInside(rootId, newRel)
   if (!existsSync(from)) throw new Error('源文件不存在')
   if (existsSync(to)) throw new Error('目标已存在')
+  // 目标父目录缺失时自动补建父链（renameSync 不建父目录）——移动语义的 mkdir -p，
+  // 与「新建目录」的 ws:mkdir（重名自动加后缀）严格区分，绝不产生 (1) 镜像目录
+  mkdirSync(dirname(to), { recursive: true })
   renameSync(from, to)
   invalidateIndexIfCurrentVault(rootId)
 }

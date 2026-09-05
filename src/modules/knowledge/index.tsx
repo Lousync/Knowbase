@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon } from 'lucide-react'
+import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon, ArrowUp } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { registerAssistantContext } from '../../lib/assistantContext'
@@ -13,7 +13,8 @@ import {
   showFolderDialog, importFolder,
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
-  getKnowledgeTags, pluginListViews, getKnowledgeGraph
+  getKnowledgeTags, pluginListViews, getKnowledgeGraph,
+  workspaceRename, workspaceGetCurrent
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { NotebookList } from './components/NotebookList'
@@ -89,6 +90,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // ---- 剪贴板 ----
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
+
+  /** 工作区标题下「移出当前目录」drop 区激活态（拖页面到此返回上一级/零散） */
+  const [ejectOn, setEjectOn] = useState(false)
 
   // ---- 预览标签页（VS Code 风格） ----
   const [dirtyPageIds, setDirtyPageIds] = useState<Set<string>>(new Set())
@@ -213,12 +217,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   useEffect(() => { refreshChapterPages() }, [refreshChapterPages])
 
-  // --- notebook CRUD ---
-  const handleCreateNotebook = async (name: string, categoryType: 'folder' | 'notebook' | 'space', parentId: string | null) => {
-    if (writeBlocked('新建文件夹/笔记本/空间')) return
-    await createKnowledgeCategory({ name, parentId, categoryType })
-    refreshCategories()
-  }
+  // --- notebook CRUD（创建收口到编辑器模块：本模块仅保留重命名/删除等导航维护）---
   const handleRenameNotebook = async (id: string, name: string) => {
     if (writeBlocked('重命名文件夹/笔记本')) return
     await updateKnowledgeCategory(id, { name })
@@ -268,15 +267,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     })
   }
 
-  // --- chapter CRUD ---
-  const handleCreateChapter = async (name: string) => {
-    if (writeBlocked('新建章节')) return
-    if (!selectedCategoryId) return
-    const selected = categories.find(c => c.id === selectedCategoryId)
-    if (selected?.categoryType !== 'notebook') return
-    await createKnowledgeCategory({ name, parentId: selectedCategoryId, categoryType: 'folder' })
-    refreshCategories()
-  }
+  // --- chapter CRUD（创建收口到编辑器模块）---
   const handleRenameChapter = async (id: string, name: string) => {
     if (writeBlocked('重命名章节')) return
     await updateKnowledgeCategory(id, { name })
@@ -287,28 +278,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       await deleteKnowledgeCategory(id)
       if (selectedChapterId === id) setSelectedChapterId(null)
     })
-  }
-
-  // --- page CRUD ---
-  const handleCreatePageNamed = async (categoryId: string | null, title: string) => {
-    if (writeBlocked('新建页面')) return
-    try {
-      const p = await createKnowledgePage({ title, categoryId })
-      handleOpenPage(p.id)
-      await refreshAllPages()
-      if (selectedChapterId === categoryId) refreshChapterPages()
-    } catch (e) { console.error(e) }
-  }
-
-  const handleCreateChapterUnderNotebook = async (notebookId: string) => {
-    if (writeBlocked('新建章节')) return
-    const newChapter = await createKnowledgeCategory({ name: '新章节', parentId: notebookId, categoryType: 'folder' })
-    await refreshCategories()
-    // Auto-select notebook + new chapter so user sees it highlighted in ChapterPanel
-    setSelectedCategoryId(notebookId)
-    setSelectedChapterId(newChapter.id)
-    setFocusChapterId(null)
-    setShowChapterPanel(true)
   }
 
   const handleImportFolder = async () => {
@@ -481,32 +450,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     setActivePageId(pageId)
   }, [allLoosePages, chapterPages, starredPages])
 
-  // 读写分工反向通道：编辑器「在知识库中阅读」→ 按仓库相对路径定位并打开同一页面。
-  // 本地 allPages 优先（vault 读源携带 path）；未命中（如编辑器刚新建的知识页）则重新拉取一次。
-  // 需在 handleOpenPage 声明之后注册（useCallback 存在 TDZ）。
-  const allPagesRef = useRef(allPages)
-  allPagesRef.current = allPages
-  useEffect(() => {
-    const handler = async (e: Event): Promise<void> => {
-      const relPath = (e as CustomEvent<{ relPath?: string }>).detail?.relPath
-      if (!relPath) return
-      let page = allPagesRef.current.find((p) => p.path === relPath)
-      if (!page) {
-        try {
-          const pages = await getKnowledgePages()
-          page = pages.find((p) => p.path === relPath)
-        } catch { /* 忽略：回落到下方提示 */ }
-      }
-      if (!page) {
-        showToast({ type: 'warning', message: '该页不在知识库索引中（需带 frontmatter id）' })
-        return
-      }
-      void handleOpenPage(page.id)
-    }
-    window.addEventListener('kb-open-in-knowledge', handler)
-    return () => window.removeEventListener('kb-open-in-knowledge', handler)
-  }, [handleOpenPage])
-
   const handleCloseTab = useCallback((pageId: string) => {
     // Check unsaved changes
     const dirty = dirtyPageIdsRef.current
@@ -615,8 +558,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const handleOpenInEditor = async (pageId: string) => {
     try {
       const p = await getKnowledgePageById(pageId)
-      // DIAG(2026-09-04): 定位「知识库→编辑器不打开文件」——dispatch 前 path 是否有值
-      console.log('[Knowledge:diag] handleOpenInEditor pageId =', pageId, '| p?.path =', p?.path)
       if (!p?.path) {
         showToast({ type: 'warning', message: '该页面不在仓库读源中（设置 → 通用 → 知识库读源 开启 vault）' })
         return
@@ -732,54 +673,96 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [allPages])
 
   // --- drag & drop move ---
+  /** 仓库内移动文件/目录（目录即分类：知识库拖拽 = 移动磁盘文件，编辑器是唯一写入方；ws:rename 已触发索引失效） */
+  const moveVaultPath = useCallback(async (srcRel: string, dstDirRel: string, label: string): Promise<boolean> => {
+    try {
+      const cur = await workspaceGetCurrent()
+      if (!cur?.rootId) { showToast({ type: 'error', message: '未打开仓库' }); return false }
+      const base = srcRel.split('/').pop() || srcRel
+      const dstRel = dstDirRel ? `${dstDirRel}/${base}` : base
+      if (dstRel === srcRel) return true
+      // 注意：不在此处 workspaceMkdir「确保目标目录存在」——ws:mkdir 是「新建」语义（重名自动加 (1) 后缀），
+      // 对已存在目录调用会造出镜像空目录。目标父目录由 ws:rename 主进程侧在缺失时自动补建（mkdir -p）。
+      const res = await workspaceRename(cur.rootId, srcRel, dstRel)
+      if (!res.ok) { showToast({ type: 'error', message: res.error || '移动失败' }); return false }
+      window.dispatchEvent(new CustomEvent('kb-file-moved', { detail: { srcRel, dstRel } })) // 通知编辑器刷新树
+      showToast({ type: 'info', message: `已移动 ${label} → ${dstDirRel || '仓库根目录'}` })
+      return true
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : '移动失败' })
+      return false
+    }
+  }, [])
+
+  /** 分类 → 仓库相对目录：null（未分类）→ 收件箱；无 path 的历史逻辑分类不可作为移动目标 */
+  const targetDirOfCategory = useCallback((categoryId: string | null): string | null => {
+    if (categoryId === null) return '.knowbase/_inbox'
+    const cat = categories.find((c) => c.id === categoryId)
+    if (!cat?.path) { showToast({ type: 'warning', message: '该目录未绑定仓库文件夹，无法作为移动目标' }); return null }
+    return cat.path
+  }, [categories])
+
+  /** vault 模式：页面文件移动到目标目录；sqlite 模式回落到改归属（不可用路径时提示编辑器移动） */
+  const movePageToCategory = useCallback(async (pageId: string, targetCategoryId: string | null): Promise<boolean> => {
+    const p = allPages.find((x) => x.id === pageId)
+    if (!p?.path) { showToast({ type: 'warning', message: '该页面暂无仓库文件路径，请在编辑器模块中移动' }); return false }
+    if (!vaultReadonly) { // sqlite 过渡期：沿用改分类归属
+      try { await updateKnowledgePage(pageId, { categoryId: targetCategoryId }); return true }
+      catch { showToast({ type: 'error', message: '移动失败' }); return false }
+    }
+    const dir = targetDirOfCategory(targetCategoryId)
+    if (dir === null) return false
+    return moveVaultPath(p.path, dir, `页面「${p.title}」`)
+  }, [allPages, vaultReadonly, targetDirOfCategory, moveVaultPath])
+
   const handleDropOnNotebook = async (pageId: string, notebookId: string) => {
-    if (writeBlocked('移动页面')) return
-    const freshCats = await getKnowledgeCategories()
-    const notebookChapters = freshCats.filter(c => c.parentId === notebookId)
-    let targetChapterId: string | null = null
-    if (notebookChapters.length > 0) {
-      targetChapterId = notebookChapters[0].id
-    } else {
-      const ch = await createKnowledgeCategory({ name: '默认章节', parentId: notebookId, categoryType: 'folder' })
-      await refreshCategories()
-      targetChapterId = (await getKnowledgeCategories()).find(c => c.name === '默认章节' && c.parentId === notebookId)?.id || null
-    }
-    if (targetChapterId) {
-      await updateKnowledgePage(pageId, { categoryId: targetChapterId })
-      refreshAllPages(); refreshChapterPages()
-    }
+    await movePageToCategory(pageId, notebookId)
+    refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnLooseArea = async (pageId: string) => {
-    if (writeBlocked('移动页面')) return
-    await updateKnowledgePage(pageId, { categoryId: null })
+    await movePageToCategory(pageId, null)
     refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnCategory = async (pageId: string, categoryId: string) => {
-    if (writeBlocked('移动页面')) return
-    await updateKnowledgePage(pageId, { categoryId })
+    await movePageToCategory(pageId, categoryId)
     refreshAllPages(); refreshChapterPages()
   }
 
   const handleDropOnChapter = async (pageId: string, chapterId: string) => {
-    if (writeBlocked('移动页面')) return
-    await updateKnowledgePage(pageId, { categoryId: chapterId })
+    await movePageToCategory(pageId, chapterId)
     refreshAllPages(); refreshChapterPages()
   }
 
-  // --- category move (drag & drop) ---
+  // --- category move (drag & drop)：vault 模式 = 移动整个目录 ---
   const handleMoveCategory = async (categoryId: string, newParentId: string | null) => {
-    if (writeBlocked('移动文件夹')) return
-    const catName = categories.find(c => c.id === categoryId)?.name ?? categoryId
-    const targetName = newParentId ? categories.find(c => c.id === newParentId)?.name ?? newParentId : 'root'
-    console.log(`[handleMoveCategory] moving "${catName}" (${categoryId}) → parent="${targetName}" (${newParentId})`)
-    try {
-      const result = await updateKnowledgeCategory(categoryId, { parentId: newParentId })
-      console.log(`[handleMoveCategory] DB updated OK:`, result)
-      refreshCategories()
-    } catch (e) { console.error('handleMoveCategory failed:', e) }
+    const src = categories.find((c) => c.id === categoryId)
+    if (!src?.path) { showToast({ type: 'warning', message: '该目录未绑定仓库文件夹，请在编辑器模块中移动' }); return }
+    if (src.categoryType === 'space') { showToast({ type: 'warning', message: '空间为仓库顶层目录，不能移动' }); return }
+    const dir = newParentId === null ? '' : targetDirOfCategory(newParentId)
+    if (dir === null) return
+    const ok = await moveVaultPath(src.path, dir, `目录「${src.name}」`)
+    if (ok) refreshCategories()
   }
+
+  /** 复制条目路径（vault：页面/目录均为仓库内文件；abs=含仓库根的绝对路径） */
+  const handleCopyPath = useCallback(async (type: 'category' | 'page', id: string, mode: 'abs' | 'rel') => {
+    const rel = type === 'page'
+      ? (allPages.find((x) => x.id === id)?.path ?? '')
+      : (categories.find((x) => x.id === id)?.path ?? '')
+    if (!rel) { showToast({ type: 'warning', message: '该条目暂无仓库文件路径（历史数据）' }); return }
+    try {
+      let text = rel
+      if (mode === 'abs') {
+        const cur = await workspaceGetCurrent()
+        if (!cur?.path) { showToast({ type: 'error', message: '未打开仓库' }); return }
+        text = `${cur.path.replace(/\\/g, '/')}/${rel}`
+      }
+      await navigator.clipboard.writeText(text)
+      showToast({ type: 'info', message: mode === 'abs' ? '已复制完整路径' : '已复制仓库相对路径' })
+    } catch { showToast({ type: 'error', message: '复制失败' }) }
+  }, [allPages, categories])
 
   // --- sort (up/down reorder) ---
   const handleSortCategory = async (id: string, direction: 'up' | 'down') => {
@@ -865,13 +848,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
         e.preventDefault()
         void enterReading()
-        return
-      }
-
-      // Ctrl+N — create new loose page（通知列表组件打开内联命名输入框）
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault()
-        window.dispatchEvent(new CustomEvent('knowledge:start-create-page'))
         return
       }
 
@@ -1253,6 +1229,38 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               <>
                 {/* File tab: tree stays mounted so its expand/collapse state survives drill-in navigation */}
                 <div className={`flex flex-col flex-1 min-h-0 ${showChapterPanel && selectedCategory?.categoryType === 'notebook' ? 'hidden' : ''}`}>
+                  {/* 树模式顶部「移出当前目录」drop 区（顶层/空间内常驻；拖页面进入展开，推下树不覆盖） */}
+                  <div
+                    data-eject-zone
+                    onDragOver={e => {
+                      const types = e.dataTransfer.types || []
+                      if (!types.includes('application/x-kb-page')) return
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (!ejectOn) setEjectOn(true)
+                    }}
+                    onDragLeave={e => {
+                      if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setEjectOn(false)
+                    }}
+                    onDrop={e => {
+                      const types = e.dataTransfer.types || []
+                      if (!types.includes('application/x-kb-page')) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setEjectOn(false)
+                      try {
+                        const raw = e.dataTransfer.getData('text/plain')
+                        const v = JSON.parse(raw)
+                        if (v?.type === 'page' && typeof v.id === 'string') void handleDropOnLooseArea(v.id)
+                      } catch {}
+                    }}
+                    className={`overflow-hidden transition-all duration-150 ${ejectOn ? 'h-9 opacity-100' : 'h-0 opacity-0'}`}
+                  >
+                    <div className="mx-2 my-1 flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--accent)] bg-[var(--bg-secondary)] px-2 py-1 text-[11px] font-medium text-[var(--accent)] animate-pulse">
+                      <ArrowUp size={12} className="shrink-0" />
+                      松手：将页面移出当前目录（返回上一级 / 零散）
+                    </div>
+                  </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <NotebookList
                       categories={categories}
@@ -1266,13 +1274,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onSelectSpace={handleSelectSpace}
                       onSelectCategory={handleSelectCategory}
                       onSelectCategoryChapter={handleSelectCategoryChapter}
-                      onCreateNotebook={handleCreateNotebook}
                       onRenameNotebook={handleRenameNotebook}
                       onDeleteNotebook={handleDeleteNotebook}
                       deletingMap={deletingMap}
                       onOpenPage={handleOpenPage}
-  onCreatePageNamed={handleCreatePageNamed}
-                      onCreateChapterUnderNotebook={handleCreateChapterUnderNotebook}
                       onImport={handleDialogImport}
                       onImportFolder={handleImportFolder}
                       onDropOnNotebook={handleDropOnNotebook}
@@ -1283,12 +1288,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onSortPage={handleSortPage}
                       locatePageId={locatePageId}
                       locateCategoryId={locateCategoryId}
-                      onCopy={handleCopy}
-                      onCut={handleCut}
-                      onPaste={handlePaste}
+                      // vault（仓库文件）模式：移动由拖拽承担，复制副本暂不支持 → 隐藏复制/剪切/粘贴，避免点到报错
+                      onCopy={vaultReadonly ? undefined : handleCopy}
+                      onCut={vaultReadonly ? undefined : handleCut}
+                      onPaste={vaultReadonly ? undefined : handlePaste}
                       onExportPage={handleExportPage}
                       onDeletePage={handlePageDeleted}
                       onRenamePage={handleRenamePage}
+                      onCopyPath={handleCopyPath}
                       clipboard={clipboard}
                       cutItemIds={cutItemIds}
                     />
@@ -1303,13 +1310,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       selectedChapterId={selectedChapterId}
                       focusChapterId={focusChapterId}
                       onSelectChapter={(id) => { setSelectedChapterId(id === selectedChapterId ? null : id); setFocusChapterId(null) }}
-                      onCreateChapter={handleCreateChapter}
                       onRenameChapter={handleRenameChapter}
                       onDeleteChapter={handleDeleteChapter}
                       pages={chapterPages}
                       activePageId={activePageId}
                       onOpenPage={handleOpenPage}
-                      onCreatePageNamed={handleCreatePageNamed}
                       onImport={handleDialogImport}
                       onDropOnChapter={handleDropOnChapter}
                       onCollapse={() => { setSelectedCategoryId(null); setSelectedChapterId(null); setFocusChapterId(null); setShowChapterPanel(false) }}
@@ -1323,11 +1328,13 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onMovePageToLoose={handleDropOnLooseArea}
                       onMovePageToNotebook={handleDropOnNotebook}
                       onMovePageToCategory={handleDropOnCategory}
-                      onCopy={handleCopy}
-                      onCut={handleCut}
+                      // vault 模式隐藏复制/剪切（移动靠拖拽）
+                      onCopy={vaultReadonly ? undefined : handleCopy}
+                      onCut={vaultReadonly ? undefined : handleCut}
                       onExportPage={handleExportPage}
                       onDeletePage={handlePageDeleted}
                       onRenamePage={handleRenamePage}
+                      onCopyPath={handleCopyPath}
                       clipboard={clipboard}
                       cutItemIds={cutItemIds}
                       deletingMap={deletingMap}

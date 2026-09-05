@@ -96,6 +96,8 @@ export async function runMonkey(
     ...availableActions.filter((a) => a.startsWith('monkey.')),
     ...availableActions.filter((a) => a.startsWith('record.')),
     ...availableActions.filter((a) => a.startsWith('compat.')),
+    // ui.* 是真实键鼠事件：随机点击/输入会污染界面状态，且无断言价值
+    ...availableActions.filter((a) => a.startsWith('ui.')),
     ...exclude,
   ])
   const pool = availableActions.filter((a) => !EXCLUDE.has(a))

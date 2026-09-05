@@ -15,6 +15,10 @@ export type BridgeErrorCode =
   | 'E_ACTION_FAILED'
   | 'E_NEED_CONFIRM'
   | 'E_DISABLED'
+  | 'E_UI_NO_TARGET'
+  | 'E_UI_NOT_FOUND'
+  | 'E_UI_NOT_INTERACTABLE'
+  | 'E_UI_TIMEOUT'
   | 'E_INTERNAL'
 
 export interface BridgeError {

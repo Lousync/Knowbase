@@ -9,6 +9,7 @@ import { runSelfTest, listChecks, coverage } from './selftest'
 import { createSnapshot, listSnapshots, deleteSnapshot, diffSnapshots } from './dbdiff'
 import { buildReport } from './report'
 import { listVersions } from './compat'
+import { takeScreenshot, dumpUiTree, configureUiTarget } from './ui'
 
 /**
  * HTTP 调试桥 —— AI 用 curl 即可观测与驱动，无需冷启动应用、无需手写 CDP 协议。
@@ -29,6 +30,7 @@ let deps: BridgeDeps = {}
 
 export function configureBridge(next: BridgeDeps): void {
   deps = next
+  configureUiTarget(next.getMainWindow)
 }
 
 function send(res: ServerResponse, status: number, payload: unknown): void {
@@ -93,6 +95,8 @@ function indexDoc() {
       { method: 'GET', path: '/db/diff', desc: '两快照差异，query: from / to' },
       { method: 'GET', path: '/report', desc: 'AI 体检报告（selftest+errors+慢IPC+schema）' },
       { method: 'GET', path: '/coverage', desc: '需求↔断言覆盖率地图' },
+      { method: 'GET', path: '/ui/screenshot', desc: '截取当前界面存为 PNG，返回文件路径；?window=main|day-panel' },
+      { method: 'GET', path: '/ui/tree', desc: '可见可交互元素树（#N 索引 + 稳定选择器）；?window=main|day-panel' },
     ],
     actions: listActions(),
     checks: listChecks(),
@@ -239,6 +243,14 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       send(res, 200, ok({ total: listVersions().length, versions: listVersions() }, startedAt))
       return
     }
+    if (path === '/ui/screenshot' && method === 'GET') {
+      send(res, 200, ok(await takeScreenshot(url.searchParams.get('window') ?? undefined), startedAt))
+      return
+    }
+    if (path === '/ui/tree' && method === 'GET') {
+      send(res, 200, ok(await dumpUiTree(url.searchParams.get('window') ?? undefined), startedAt))
+      return
+    }
 
     send(res, 404, fail('E_NOT_FOUND', `未知端点 ${method} ${path}`, startedAt))
   } catch (err) {
@@ -249,7 +261,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       startedAt
     )
     const status =
-      resp.error?.code === 'E_NOT_FOUND' ? 404 : resp.error?.code?.startsWith('E_BAD') ? 400 : 500
+      resp.error?.code === 'E_NOT_FOUND'
+        ? 404
+        : resp.error?.code?.startsWith('E_BAD') || resp.error?.code?.startsWith('E_UI')
+          ? 400
+          : 500
     send(res, status, resp)
   }
 }

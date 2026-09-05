@@ -307,28 +307,22 @@ export default function App() {
     return () => window.removeEventListener('knowledge:open', handler)
   }, [])
 
-  // 读写分工：知识库「在编辑器中打开」→ 切到编辑器 Tab（EditorModule 自行处理文件打开）
+  // 读写分工：知识库「在编辑器中打开」→ 切到编辑器 Tab 并打开同一文件
+  // ISS-2026-09-04-07：跳转改走 App state + props（pendingOpenRel）。
+  // 旧实现 = window 事件 + 一次性 window pending：保活层（renderMounted）在切 Tab 时
+  // 会重建编辑器实例，旧实例的 listener 消费事件后随实例一起被丢弃，新实例拿不到
+  // pending → 永远空态。state+props 不受实例重建影响。
+  const [pendingOpenRel, setPendingOpenRel] = useState<string | null>(null)
   useEffect(() => {
     const handler = (e: Event) => {
       const relPath = (e as CustomEvent).detail?.relPath as string | undefined
-      // DIAG(2026-09-04): 定位「知识库→编辑器不打开文件」——App 层 handler 是否收到
-      console.log('[App:diag] kb-open-in-editor 收到 relPath =', relPath)
       if (typeof relPath === 'string' && relPath) {
-        // 事件丢失竞态修复：EditorModule 首次挂载前派发的事件无监听者 →
-        // App 层（始终活着）把最近一次待打开路径暂存到 window，EditorModule 首挂后消费
-        ;(window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor = relPath
+        setPendingOpenRel(relPath)
       }
       setActiveTab('editor')
     }
     window.addEventListener('kb-open-in-editor', handler)
     return () => window.removeEventListener('kb-open-in-editor', handler)
-  }, [])
-
-  // 读写分工反向通道：编辑器「在知识库中阅读」→ 切到知识库 Tab（KnowledgeModule 自行按 path 定位打开）
-  useEffect(() => {
-    const handler = () => { setActiveTab('knowledge'); setSidebarOpen(true) }
-    window.addEventListener('kb-open-in-knowledge', handler)
-    return () => window.removeEventListener('kb-open-in-knowledge', handler)
   }, [])
 
   // Listen for help:open — navigate to help tab(入口:设置弹出菜单/Toast 深链)
@@ -495,7 +489,7 @@ export default function App() {
       case 'schedule': return <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
-      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} />
+      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} />
       case 'immersive': return <ImModule isActive={on} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />

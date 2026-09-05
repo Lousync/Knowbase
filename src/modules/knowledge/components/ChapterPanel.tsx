@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Folder, Plus, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ChevronRight, ArrowLeft, FolderSearch, FolderInput, Link2Off, Copy, Scissors, FileOutput } from 'lucide-react'
+import { Folder, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, ChevronRight, ArrowLeft, ArrowUp, FolderSearch, Link2, Copy, Scissors, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -7,7 +7,6 @@ import { ConfirmDialog } from '../../../components/shared'
 import { getSetting, setSetting, reorderKnowledgePage } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../../lib/activeTab'
-import { CategoryMovePicker } from './CategoryMovePicker'
 import { useContextMenuPosition } from '../../../lib/useContextMenuPosition'
 import { DeleteWipe } from '../../../components/shared/DeleteWipe'
 
@@ -18,13 +17,11 @@ interface Props {
   selectedChapterId: string | null
   focusChapterId: string | null  // when set, hide chapter list & show only this chapter
   onSelectChapter: (id: string | null) => void
-  onCreateChapter: (name: string) => void
   onRenameChapter: (id: string, name: string) => void
   onDeleteChapter: (id: string) => void
   pages: KnowledgePage[]
   activePageId: string | null
   onOpenPage: (id: string) => void
-  onCreatePageNamed: (categoryId: string, title: string) => void
   onImport: () => void
   onDropOnChapter: (pageId: string, chapterId: string) => void
   onCollapse: () => void
@@ -45,6 +42,8 @@ interface Props {
   onExportPage?: (pageId: string) => void
   onDeletePage?: (pageId: string) => void
   onRenamePage?: (pageId: string, name: string) => void
+  /** 复制页面路径：abs=完整路径；rel=仓库相对路径 */
+  onCopyPath?: (type: 'page', id: string, mode: 'abs' | 'rel') => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
   /** 删除动画状态：'animating' 播放红色吞噬，'done' 收尾淡出（与 NotebookList 共用同一 deletingMap） */
@@ -53,29 +52,19 @@ interface Props {
 
 export function ChapterPanel({
   notebookName, notebookId, chapters, selectedChapterId, focusChapterId, onSelectChapter,
-  onCreateChapter, onRenameChapter, onDeleteChapter,
-  pages, activePageId, onOpenPage, onCreatePageNamed, onImport,
+  onRenameChapter, onDeleteChapter,
+  pages, activePageId, onOpenPage, onImport,
   onDropOnChapter, onCollapse, onToggleStar, onSortChapter, onSortPage, onRefreshPages,
   onLocateInExplorer, onMoveCategory,
   allCategories, onMovePageToLoose, onMovePageToNotebook, onMovePageToCategory,
-  onCopy, onCut, onExportPage, onDeletePage, onRenamePage, clipboard, cutItemIds, deletingMap,
+  onCopy, onCut, onExportPage, onDeletePage, onRenamePage, onCopyPath, clipboard, cutItemIds, deletingMap,
 }: Props) {
   /** 删除动画状态（与 NotebookList 同一 deletingMap：animating 渲染吞噬 / done 收尾淡出） */
   const deletingState = (id: string) => deletingMap?.get(id)
-  const [showNewChapter, setShowNewChapter] = useState(false)
-  const [newName, setNewName] = useState('')
-  // 新建页面：先命名再创建
-  const [showNewPage, setShowNewPage] = useState(false)
-  const [newPageName, setNewPageName] = useState('')
   // 章节/页面列表可折叠(章节过多时收起,页面区不被挤压)
   const [chaptersOpen, setChaptersOpen] = useState(true)
   const [pgOpen, setPgOpen] = useState(true)
 
-  const commitNewPage = () => {
-    const name = newPageName.trim()
-    setShowNewPage(false); setNewPageName('')
-    if (name) onCreatePageNamed((selectedChapterId || focusChapterId) as string, name)
-  }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editingPageId, setEditingPageId] = useState<string | null>(null)
@@ -84,10 +73,10 @@ export function ChapterPanel({
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(null)
   const { menuRef: contextMenuRef, style: contextMenuStyle } = useContextMenuPosition(contextMenu)
-  const [movePickerOpen, setMovePickerOpen] = useState(false)
-  const [movePickerPageId, setMovePickerPageId] = useState<string | null>(null)
   const [dragOverChId, setDragOverChId] = useState<string | null>(null)
   const [dragOverPageId, setDragOverPageId] = useState<string | null>(null)
+  /** 顶部「移出当前笔记本」drop 区是否激活（拖页面近面板顶部时出现，带动画提示） */
+  const [ejectOn, setEjectOn] = useState(false)
   const [dragOverPageSide, setDragOverPageSide] = useState<'left' | 'right'>('left')
   const [dragOverNotebookArea, setDragOverNotebookArea] = useState(false)
 
@@ -132,11 +121,6 @@ export function ChapterPanel({
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedChapterId, focusChapter, chapters, activePageId, pages])
 
-  function handleCreateChapter() {
-    if (!newName.trim()) { setShowNewChapter(false); setNewName(''); return }
-    onCreateChapter(newName.trim()); setNewName(''); setShowNewChapter(false)
-  }
-
   function handleStartRename(id: string, name: string) { setEditingId(id); setEditName(name) }
   function handleRename(id: string) {
     if (!editName.trim()) { setEditingId(null); return }
@@ -175,7 +159,44 @@ export function ChapterPanel({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div
+      className="relative flex flex-col h-full"
+      onDragOver={e => {
+        // 顶部 eject 区：任何来源的页面拖到面板顶部区域即激活（含跨组件/剪贴板来源）
+        const types = e.dataTransfer.types || []
+        const pageDrag = (dragRef.current?.type === 'page') || types.includes('application/x-kb-page')
+        if (!pageDrag) return
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        if (e.clientY < rect.top + 56) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          if (!ejectOn) setEjectOn(true)
+        } else if (ejectOn) setEjectOn(false)
+      }}
+      onDragLeave={e => {
+        if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setEjectOn(false)
+      }}
+      onDrop={e => {
+        const d = dragRef.current || parseDrag(e)
+        if (d?.type === 'page' && (e.target as HTMLElement).closest?.('[data-eject-zone]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          dragRef.current = null
+          setEjectOn(false)
+          onMovePageToLoose(d.id)
+        }
+      }}
+    >
+      {/* 顶部「移出当前笔记本」drop 区：拖页面到此处 = 变零散（vault 下移到收件箱）；拖近顶部时激活 */}
+      {ejectOn && (
+        <div
+          data-eject-zone
+          className="absolute top-1 left-1 right-1 z-20 mx-1 flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--accent)] bg-[var(--bg-secondary)] px-2 py-1.5 text-[11px] font-medium text-[var(--accent)] animate-pulse"
+        >
+          <ArrowUp size={12} className="shrink-0" />
+          松手：将页面移出当前目录（返回上一级 / 零散）
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--border-color)]">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -305,22 +326,6 @@ export function ChapterPanel({
             )}
           </div>
         ))}
-        {showNewChapter ? (
-          <input
-            className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-1 text-[13px] outline-none text-[var(--text-primary)] mt-0.5"
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onBlur={handleCreateChapter}
-            onKeyDown={e => { if (e.key === 'Enter') handleCreateChapter(); if (e.key === 'Escape') { setShowNewChapter(false); setNewName('') } }}
-            placeholder="章节名称"
-            autoFocus
-          />
-        ) : (
-          <button onClick={() => setShowNewChapter(true)}
-            className="w-full flex items-center gap-1.5 px-1 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors mt-0.5">
-            <Plus size={13} />新建章节
-          </button>
-        )}
         </div>
         </>
         )}
@@ -438,6 +443,7 @@ export function ChapterPanel({
                   onDragStart={e => {
                     e.dataTransfer.effectAllowed = 'move'
                     e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'page', id: p.id }))
+                    e.dataTransfer.setData('application/x-kb-page', p.id)
                     dragRef.current = { type: 'page', id: p.id }
                     ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
                   }}
@@ -500,32 +506,12 @@ export function ChapterPanel({
             )
           ))}
         {(selectedChapterId || focusChapterId) && (
-          <>
-            {showNewPage && (
-              <input
-                autoFocus
-                value={newPageName}
-                onChange={e => setNewPageName(e.target.value)}
-                onBlur={() => { commitNewPage() }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') commitNewPage()
-                  if (e.key === 'Escape') { setShowNewPage(false); setNewPageName('') }
-                }}
-                placeholder="页面名称（Enter 确认）"
-                className="w-full mt-1 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-2 py-1 text-[12px] outline-none text-[var(--text-primary)]"
-              />
-            )}
-            <div className="flex gap-1 mt-1">
-              <button onClick={() => setShowNewPage(true)}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
-                <Plus size={12} />新建页面
-              </button>
-              <button onClick={onImport}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
-                <Download size={12} />导入
-              </button>
-            </div>
-          </>
+          <div className="flex gap-1 mt-1">
+            <button onClick={onImport}
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
+              <Download size={12} />导入
+            </button>
+          </div>
         )}
         </>
         )}
@@ -579,25 +565,18 @@ export function ChapterPanel({
               </button>
             )}
             <button
-              onClick={() => {
-                onMovePageToLoose(contextMenu.pageId)
-                setContextMenu(null)
-              }}
+              onClick={() => { onCopyPath?.('page', contextMenu.pageId, 'rel'); setContextMenu(null) }}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
             >
-              <Link2Off size={14} className="text-[var(--text-muted)]" />
-              取消归属
+              <Link2 size={14} className="text-[var(--text-muted)]" />
+              复制相对路径
             </button>
             <button
-              onClick={() => {
-                setMovePickerPageId(contextMenu.pageId)
-                setMovePickerOpen(true)
-                setContextMenu(null)
-              }}
+              onClick={() => { onCopyPath?.('page', contextMenu.pageId, 'abs'); setContextMenu(null) }}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
             >
-              <FolderInput size={14} className="text-[var(--text-muted)]" />
-              移到目录...
+              <Link2 size={14} className="text-[var(--text-muted)]" />
+              复制路径
             </button>
             <div className="border-t border-[var(--border-color)] my-0.5" />
             {onDeletePage && (
@@ -608,24 +587,6 @@ export function ChapterPanel({
             )}
           </div>
         </div>
-      )}
-
-      {/* Category move picker */}
-      {movePickerOpen && movePickerPageId && (
-        <CategoryMovePicker
-          open={movePickerOpen}
-          moveType="page"
-          moveId={movePickerPageId}
-          categories={allCategories}
-          sortCats={list => [...list].sort((a, b) => a.sortOrder - b.sortOrder)}
-          isDescendant={() => false}
-          canAcceptCategory={() => true}
-          onMoveCategory={() => {}}
-          onMovePageToNotebook={onMovePageToNotebook}
-          onMovePageToCategory={onMovePageToCategory}
-          onMovePageToLoose={onMovePageToLoose}
-          onClose={() => { setMovePickerOpen(false); setMovePickerPageId(null) }}
-        />
       )}
 
       {/* Delete confirmation */}

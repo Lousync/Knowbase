@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync, type Dirent } from 'fs'
 import { join, relative } from 'path'
-import { getCurrentVault } from './vaultContext'
+import { randomUUID } from 'crypto'
+import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
 import { readJson, writeJson, deleteFile } from './jsonStore'
 import { parseMarkdown } from './mdStore'
 
@@ -105,11 +106,23 @@ function scanMarkdownFiles(root: string, dir: string, out: string[]): void {
  *  - array（早期/其它写入路径）: [{ id,name,categoryType,parentId,... }]
  * dict 优先——迁移产物是 dict 且带 path（graph 目录 scope 依赖）。
  */
-function readCategories(): { categories: KnowledgeCategoryIndexEntry[]; warnings: string[] } {
+interface ReadCategoriesResult {
+  categories: KnowledgeCategoryIndexEntry[]
+  warnings: string[]
+  /** 原始条目（按 id）：写回时以此为基底，避免丢掉迁移产物自带的 createdAt 等字段 */
+  rawById: Map<string, Record<string, unknown>>
+  /** 落盘格式：false = dict（vaultMigration 产物），true = array */
+  isArray: boolean
+}
+
+function readCategories(): ReadCategoriesResult {
   const raw = readJson<unknown>('modules/knowledge', 'categories.json', [])
   const warnings: string[] = []
   const items: Array<Record<string, unknown>> = []
+  const rawById = new Map<string, Record<string, unknown>>()
+  let isArray = false
   if (Array.isArray(raw)) {
+    isArray = true
     for (const it of raw as unknown[]) if (it && typeof it === 'object') items.push(it as Record<string, unknown>)
   } else if (raw && typeof raw === 'object') {
     for (const it of Object.values(raw as Record<string, unknown>)) if (it && typeof it === 'object') items.push(it as Record<string, unknown>)
@@ -123,6 +136,7 @@ function readCategories(): { categories: KnowledgeCategoryIndexEntry[]; warnings
       warnings.push('发现没有 id 的分类，已跳过')
       continue
     }
+    if (!rawById.has(id)) rawById.set(id, item)
     const type = asString(item.categoryType) || asString(item.type) || 'folder'
     categories.push({
       id,
@@ -134,7 +148,131 @@ function readCategories(): { categories: KnowledgeCategoryIndexEntry[]; warnings
       path: asString(item.path) || undefined,
     })
   }
-  return { categories, warnings }
+  return { categories, warnings, rawById, isArray }
+}
+
+/** 页面仓库相对路径 → 所在目录（posix，根目录为空串） */
+function dirRelOf(relPath: string): string {
+  const i = relPath.lastIndexOf('/')
+  return i === -1 ? '' : relPath.slice(0, i)
+}
+
+/**
+ * 目录即分类：为给定目录链逐段确保分类节点存在（按 path 精确匹配，缺失才建）。
+ * 已在 categories 上原地补充；返回新建节点数与「原绑定目录已消失」的失效节点 id。
+ *
+ * 对账规则（目录被移动 / 重命名 / 删除后仍不产生僵尸或重复节点）：
+ *  1. 先失效解绑：path 指向的目录已不存在 → 解绑 path，等后续按「父级 + 目录名」认领
+ *  2. 认领优先：同级同名且已解绑（或历史无 path）的节点 → 复用其 id（保住 notebook/space 类型与排序）
+ *  3. 仍无节点才新建，一律 folder（语义升级交给用户在知识库改类型）
+ */
+function ensureDirCategories(
+  dirs: string[],
+  categories: KnowledgeCategoryIndexEntry[],
+  root: string
+): { created: number; claimed: number; staleIds: Set<string> } {
+  const isDir = (rel: string): boolean => {
+    try { return statSync(join(root, rel)).isDirectory() } catch { return false }
+  }
+  const staleIds = new Set<string>()
+  for (const c of categories) {
+    if (c.path && !isDir(c.path)) {
+      staleIds.add(c.id)
+      c.path = undefined
+    }
+  }
+
+  let created = 0
+  let claimed = 0
+  for (const dir of dirs) {
+    let parentId: string | null = null
+    let prefix = ''
+    for (const seg of dir.split('/').filter(Boolean)) {
+      prefix = prefix ? `${prefix}/${seg}` : seg
+      let node = categories.find((c) => c.path === prefix)
+      if (!node) {
+        // 认领：同名且尚未绑定目录的节点（同级优先，其次跨父级——目录被移动到别处时保住原节点 id 与类型）
+        node = categories.find((c) => (c.parentId ?? null) === parentId && c.name === seg && !c.path)
+          ?? categories.find((c) => c.name === seg && !c.path)
+        if (node) {
+          node.path = prefix
+          if ((node.parentId ?? null) !== parentId) node.parentId = parentId
+          claimed++
+        }
+      }
+      if (!node) {
+        const maxOrder = categories
+          .filter((c) => (c.parentId ?? null) === parentId)
+          .reduce((m, c) => Math.max(m, c.sortOrder), -1)
+        node = {
+          id: randomUUID(),
+          name: seg,
+          parentId,
+          sortOrder: maxOrder + 1,
+          categoryType: 'folder',
+          path: prefix,
+        }
+        categories.push(node)
+        created++
+      }
+      parentId = node.id
+    }
+  }
+  return { created, claimed, staleIds }
+}
+
+/** 收集分类子树 id（含自身），用于整棵删除已消失的目录分支 */
+function collectCategorySubtree(id: string, categories: KnowledgeCategoryIndexEntry[], out: Set<string>): void {
+  if (out.has(id)) return
+  out.add(id)
+  for (const c of categories) if (c.parentId === id) collectCategorySubtree(c.id, categories, out)
+}
+
+/** 写回 categories.json：保持原落盘格式（dict/array），以原始条目为基底避免丢字段 */
+function writeCategories(
+  categories: KnowledgeCategoryIndexEntry[],
+  rawById: Map<string, Record<string, unknown>>,
+  isArray: boolean
+): void {
+  if (isArray) {
+    const rows = categories.map((c) => {
+      const base = rawById.get(c.id) ?? {}
+      const row: Record<string, unknown> = {
+        ...base,
+        id: c.id,
+        name: c.name,
+        categoryType: c.categoryType,
+        parentId: c.parentId,
+        sortOrder: c.sortOrder,
+      }
+      if (c.path) row.path = c.path
+      return row
+    })
+    writeJson('modules/knowledge', 'categories.json', rows)
+    return
+  }
+  const dict: Record<string, unknown> = {}
+  for (const c of categories) {
+    const base = rawById.get(c.id) ?? {}
+    const row: Record<string, unknown> = {
+      ...base,
+      id: c.id,
+      name: c.name,
+      type: c.categoryType,
+      parent: c.parentId,
+      sortOrder: c.sortOrder,
+    }
+    if (c.path) row.path = c.path
+    dict[c.id] = row
+  }
+  writeJson('modules/knowledge', 'categories.json', dict)
+}
+
+/** 目录 → categoryId（path 为准；根目录与未分类收件箱 → null） */
+function resolveCategoryIdByPath(relPath: string, categories: KnowledgeCategoryIndexEntry[]): string | null {
+  const dir = dirRelOf(relPath)
+  if (!dir || dir === KB_INBOX_DIR) return null
+  return categories.find((c) => c.path === dir)?.id ?? null
 }
 
 /** 全量扫描当前 Vault，生成可供 knowledgeRepo 使用的内存索引。 */
@@ -155,18 +293,60 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
 
   const categoryResult = readCategories()
   warnings.push(...categoryResult.warnings)
+  const categories = categoryResult.categories
+  let categoriesDirty = false
   const files: string[] = []
   scanMarkdownFiles(current.rootPath, current.rootPath, files)
+
+  // 第一遍：读入全部 md（目录派生需先知道「所有知识页所在目录」，再统一补建分类）
+  const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown> }> = []
+  for (const abs of files) {
+    try {
+      docs.push({
+        abs,
+        rel: relative(current.rootPath, abs).replace(/\\/g, '/'),
+        doc: parseMarkdown(readFileSync(abs, 'utf8')),
+      })
+    } catch {
+      warnings.push(`页面读取失败，已跳过：${relative(current.rootPath, abs)}`)
+    }
+  }
+
+  // 目录即分类（2026-09-04）：为知识页所在目录补建分类节点，随后按 path 定归属。
+  // 编辑器是唯一写入方（vault 模式知识库只读），位置变化一律由文件路径表达。
+  const dirs = [...new Set(docs.map((d) => dirRelOf(d.rel)).filter((d) => d && d !== KB_INBOX_DIR))].sort()
+  const { created, claimed, staleIds } = ensureDirCategories(dirs, categories, current.rootPath)
+  if (created > 0) {
+    categoriesDirty = true
+    warnings.push(`已按仓库目录补建 ${created} 个分类节点（目录即分类）`)
+  }
+  // 认领同样要落盘：目录被移动/改名后，节点的 path 与 parentId 已变（不写盘则磁盘与内存分叉）
+  if (claimed > 0) categoriesDirty = true
+
+  // 对账收尾：目录已被移动/重命名/删除且无人认领的分类节点 → 整棵子树移除（避免僵尸分类堆积）
+  const removedIds = new Set<string>()
+  for (const id of staleIds) {
+    const node = categories.find((c) => c.id === id)
+    if (node && !node.path) collectCategorySubtree(id, categories, removedIds)
+  }
+  if (removedIds.size > 0) {
+    for (const id of removedIds) {
+      const i = categories.findIndex((c) => c.id === id)
+      if (i !== -1) categories.splice(i, 1)
+    }
+    categoriesDirty = true
+    warnings.push(`已清理 ${removedIds.size} 个目录已消失的分类节点`)
+  }
+  if (categoriesDirty) writeCategories(categories, categoryResult.rawById, categoryResult.isArray)
+
   const pages: KnowledgePageIndexEntry[] = []
   const byId: Record<string, KnowledgePageIndexEntry> = {}
 
-  for (const abs of files) {
+  for (const { abs, rel, doc } of docs) {
     try {
-      const raw = readFileSync(abs, 'utf8')
-      const doc = parseMarkdown(raw)
       const id = asString(doc.frontmatter.id)
       if (!id) {
-        warnings.push(`页面缺少 frontmatter.id，已跳过：${relative(current.rootPath, abs)}`)
+        warnings.push(`页面缺少 frontmatter.id，已跳过：${rel}`)
         continue
       }
       if (byId[id]) {
@@ -177,8 +357,9 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
       const entry: KnowledgePageIndexEntry = {
         id,
         title: asString(doc.frontmatter.title) || abs.slice(Math.max(abs.lastIndexOf('\\'), abs.lastIndexOf('/')) + 1).replace(/\.md$/i, ''),
-        path: relative(current.rootPath, abs).replace(/\\/g, '/'),
-        categoryId: asString(doc.frontmatter.category) || null,
+        path: rel,
+        // path 为准：分类归属由文件所在目录派生，frontmatter.category 不再参与（历史字段，读取即忽略）
+        categoryId: resolveCategoryIdByPath(rel, categories),
         tags: asStringArray(doc.frontmatter.tags),
         starred: asString(doc.frontmatter.starred).toLowerCase() === 'true',
         sortOrder: Number.isFinite(Number(doc.frontmatter.sortOrder)) ? Number(doc.frontmatter.sortOrder) : 0,

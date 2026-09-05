@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
-  Pencil, Trash2, ChevronRight, FilePlus2, Braces, BookOpen, ListTree, Eye, PanelRightClose, Archive, FilePenLine,
+  Pencil, Trash2, ChevronRight, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
 import {
@@ -26,6 +26,10 @@ interface Props {
   sidebarEl?: HTMLElement | null
   /** Markdown 标记淡化（设置 markdownDim 透传；默认开） */
   markdownDim?: boolean
+  /** 知识库「在编辑器中打开」跳转：待打开的仓库相对路径（App state 传入，实例重建不丢，ISS-2026-09-04-07） */
+  pendingOpenRel?: string | null
+  /** 消费完 pendingOpenRel 后回调 App 清除（同一路径可再次跳转） */
+  onPendingConsumed?: () => void
 }
 
 interface InputBoxState {
@@ -36,7 +40,7 @@ interface InputBoxState {
   onSubmit: (value: string) => void
 }
 
-export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true }: Props) {
+export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [rootName, setRootName] = useState('')
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
@@ -66,8 +70,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   /** frontmatter 查看/编辑弹窗（frontmatter 前缀文本，含 --- 包裹） */
   const [fmDraft, setFmDraft] = useState<{ relPath: string; text: string } | null>(null)
   const [fmText, setFmText] = useState('')
-  /** 回跳知识库前存在未保存修改：确认是否先保存（不保存则知识库读到磁盘旧内容） */
-  const [kbReadTarget, setKbReadTarget] = useState<string | null>(null)
   /** 大纲面板开关 */
   const [outlineOpen, setOutlineOpen] = useState(false)
   const monacoRef = useRef<MonacoPaneHandle | null>(null)
@@ -116,6 +118,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   }, [])
 
   const enterWorkspace = useCallback(async (rid: string, name: string) => {
+    // ISS-2026-09-04-07 修复：同仓库重入保护。知识库跳转链路中，挂载自动进入（:142 effect）
+    // 与 openRelFromJump（:248）会先后触发两次 enterWorkspace；后到的一次若仓库未变，
+    // 其 setOpenFiles({}) 会把 openFile 刚落地的新文档清掉（表现为「跳过去但不打开文件」）。
+    // 同 rid 直接跳过清场；真换仓库（rid 不同）仍走完整重置。
+    if (rootIdRef.current === rid) return
     rootIdRef.current = rid
     setRootId(rid)
     setRootName(name)
@@ -131,10 +138,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
 
   // 读写分工：编辑器 = 当前仓库的唯一写入方 → 挂载即自动挂载当前仓库（首次引导已选过，免二次选择）
   useEffect(() => {
+    // ISS-2026-09-04-07：有跳转 pending 时让路——openRelFromJump 的消费路径会自行
+    // enterWorkspace + openFile；此处若并发进入，其 setOpenFiles({}) 会晚于 openFile
+    // 落地并把刚打开的文档清掉（表现为「跳过去但不打开文件」）
+    if (pendingOpenRel) return
     workspaceGetCurrent()
       .then((cur) => { if (cur?.rootId) void enterWorkspace(cur.rootId, cur.name ?? '') })
       .catch(() => {})
-  }, [enterWorkspace])
+  }, [pendingOpenRel, enterWorkspace])
 
   const handleOpenDir = useCallback(async () => {
     const res = await workspaceOpenDir()
@@ -163,8 +174,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const openFile = useCallback(async (node: TreeNode) => {
     if (node.type === 'dir') { void toggleDir(node.relPath); return }
     const root = rootIdRef.current
-    // DIAG(2026-09-04): 定位「跳转不打开文件」——openFile 是否被调、root 是否就绪
-    console.log('[Editor:diag] openFile 调用 node =', JSON.stringify(node), '| root =', root)
     if (!root) return
     setActivePath(node.relPath)
     if (openFilesRef.current[node.relPath]) return
@@ -236,10 +245,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
 
   // 跨模块跳转：知识库「在编辑器中打开」→ 打开同一文件（读写分工协议，见 .AGENT/docs/读写分工设计.md）
   const openRelFromJump = useCallback(async (relPath: string) => {
-    // DIAG(2026-09-04): 定位跳转不打开——openRelFromJump 入口
-    console.log('[Editor:diag] openRelFromJump 入口 relPath =', relPath, '| rootIdRef.current =', rootIdRef.current)
-    // 已消费即清暂存（防模块重挂载时误开旧文件）
-    delete (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
     if (!rootIdRef.current) {
       const cur = await workspaceGetCurrent()
       if (cur?.rootId) await enterWorkspace(cur.rootId, cur.name ?? '')
@@ -249,28 +254,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     await openFile({ relPath, name, type: 'file' } as TreeNode)
   }, [openFile, enterWorkspace])
 
+  // 跳转消费：pendingOpenRel 由 App state 传入（实例卸载重建也不丢，ISS-2026-09-04-07）。
+  // 旧实现 = window 事件 listener + 一次性 window pending：保活层切 Tab 重建实例时，
+  // 旧实例消费掉事件后连同文档一起被丢弃，新实例拿不到 pending → 永远空态。
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const relPath = (e as CustomEvent).detail?.relPath as string
-      // DIAG(2026-09-04): 定位「知识库→编辑器不打开文件」——事件是否到达 editor listener
-      console.log('[Editor:diag] kb-open-in-editor 收到 relPath =', relPath, '| rootIdRef =', rootIdRef.current, '| mounted =', !!(window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor)
-      if (!relPath || typeof relPath !== 'string') return
-      await openRelFromJump(relPath)
-    }
-    window.addEventListener('kb-open-in-editor', handler)
-    return () => window.removeEventListener('kb-open-in-editor', handler)
-  }, [openRelFromJump])
-
-  // 事件丢失竞态修复（首次打开编辑器 Tab 前派发的 kb-open-in-editor 无监听者）：
-  // App.tsx 把最近一次待打开路径暂存 window.__kbPendingOpenInEditor；本模块首挂后消费一次
-  useEffect(() => {
-    const pending = (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
-    if (typeof pending === 'string' && pending) {
-      delete (window as unknown as { __kbPendingOpenInEditor?: string }).__kbPendingOpenInEditor
-      void openRelFromJump(pending)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!pendingOpenRel) return
+    void openRelFromJump(pendingOpenRel)
+    onPendingConsumed?.()
+  }, [pendingOpenRel, openRelFromJump, onPendingConsumed])
 
   const handleChange = useCallback((relPath: string, value: string) => {
     setOpenFiles((prev) => (prev[relPath] ? { ...prev, [relPath]: { ...prev[relPath], content: value } } : prev))
@@ -364,20 +355,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     })
     for (const p of keys) await saveDoc(p)
   }, [saveDoc])
-
-  /**
-   * 读写分工反向通道：切到知识库阅读同一文件（渲染态/反链/刷题）。
-   * 知识库读的是磁盘内容，因此存在未保存修改时先确认是否保存——否则会看到旧内容。
-   */
-  const dispatchOpenInKnowledge = useCallback((relPath: string) => {
-    window.dispatchEvent(new CustomEvent('kb-open-in-knowledge', { detail: { relPath } }))
-  }, [])
-
-  const openInKnowledge = useCallback((relPath: string) => {
-    const d = openFilesRef.current[relPath]
-    if (d && fullContent(d) !== savedFullContent(d)) { setKbReadTarget(relPath); return }
-    dispatchOpenInKnowledge(relPath)
-  }, [dispatchOpenInKnowledge])
 
   // Ctrl+S / Ctrl+Shift+S（模块级快捷键：仅激活模块生效）
   useEffect(() => {
@@ -598,7 +575,48 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     return () => window.removeEventListener('keydown', onEsc)
   }, [ctxMenu])
 
+  /** 知识库拖拽移动（kb-file-moved 广播）→ 三处联动：刷新源/目标目录 + 迁移已打开文档的 key */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ srcRel?: string; dstRel?: string }>).detail
+      const srcRel = detail?.srcRel
+      const dstRel = detail?.dstRel
+      if (!srcRel || !dstRel) return
+      if (srcRel !== dstRel) {
+        setOpenFiles((prev) => {
+          const next = { ...prev }
+          if (next[srcRel]) {
+            const d = next[srcRel]
+            delete next[srcRel]
+            next[dstRel] = { ...d, relPath: dstRel }
+          }
+          return next
+        })
+        setActivePath((p) => (p === srcRel ? dstRel : p))
+      }
+      void refreshDir(parentRel(srcRel))
+      if (parentRel(dstRel) !== parentRel(srcRel)) void refreshDir(parentRel(dstRel))
+      void refreshArchived()
+    }
+    window.addEventListener('kb-file-moved', handler)
+    return () => window.removeEventListener('kb-file-moved', handler)
+  }, [refreshDir, refreshArchived])
+
   const activeDoc = activePath ? openFiles[activePath] ?? null : null
+
+  /** 复制文件/目录路径：rel=仓库相对；abs=含仓库根的完整路径 */
+  const copyNodePath = useCallback(async (rel: string, mode: 'abs' | 'rel') => {
+    try {
+      let text = rel
+      if (mode === 'abs') {
+        const cur = await workspaceGetCurrent()
+        if (!cur?.path) { showToast({ type: 'error', message: '未打开仓库' }); return }
+        text = `${cur.path.replace(/\\/g, '/')}/${rel}`
+      }
+      await navigator.clipboard.writeText(text)
+      showToast({ type: 'info', message: mode === 'abs' ? '已复制完整路径' : '已复制仓库相对路径' })
+    } catch { showToast({ type: 'error', message: '复制失败' }) }
+  }, [])
   /** 预览内容延迟值：React 19 并发渲染，预览重解析不阻塞输入（大文档打字不卡） */
   const previewContent = useDeferredValue(activeDoc?.content ?? '')
   // 标签栏只驻留「未保存修改」的文件；干净文件仅作当前预览，不占标签（切走即回收）
@@ -689,14 +707,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
             >
               <ListTree size={14} />
               大纲
-            </button>
-            <button
-              onClick={() => openInKnowledge(activeDoc.relPath)}
-              title="在知识库中阅读（渲染效果 / 反链 / 刷题）。有未保存修改时会先确认保存"
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-            >
-              <BookOpen size={14} />
-              在知识库中阅读
             </button>
             <button
               onClick={togglePreview}
@@ -975,14 +985,16 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 <Archive size={13} className="text-[var(--text-muted)]" />归档为知识页
               </button>
             )}
-            {ctxMenu.node.type === 'file' && ctxMenu.node.relPath.toLowerCase().endsWith('.md') && (
-              <button onClick={() => { const rel = ctxMenu.node.relPath; setCtxMenu(null); openInKnowledge(rel) }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
-                <BookOpen size={13} className="text-[var(--text-muted)]" />在知识库中阅读
-              </button>
-            )}
             {ctxMenu.node.relPath !== '' && (
               <>
+                <button onClick={() => { const r = ctxMenu.node.relPath; setCtxMenu(null); void copyNodePath(r, 'rel') }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                  <Link2 size={13} className="text-[var(--text-muted)]" />复制相对路径
+                </button>
+                <button onClick={() => { const r = ctxMenu.node.relPath; setCtxMenu(null); void copyNodePath(r, 'abs') }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                  <Link2 size={13} className="text-[var(--text-muted)]" />复制路径
+                </button>
                 <button onClick={() => { const n = ctxMenu.node; setCtxMenu(null); askRename(n) }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
                   <Pencil size={13} className="text-[var(--text-muted)]" />重命名
@@ -1049,32 +1061,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         showCheckbox={false}
         onConfirm={() => { if (closeTarget) closeTab(closeTarget); setCloseTarget(null) }}
         onCancel={() => setCloseTarget(null)}
-      />
-
-      {/* 回跳知识库前未保存确认：知识库渲染的是磁盘内容，先保存才能看到最新渲染 */}
-      <ConfirmDialog
-        open={kbReadTarget !== null}
-        title="先保存？"
-        message={`「${kbReadTarget ? baseName(kbReadTarget) : ''}」有未保存的修改。知识库阅读的是磁盘内容，先保存才能看到最新渲染效果。`}
-        confirmLabel="保存并查看"
-        cancelLabel="不保存直接查看"
-        showCheckbox={false}
-        onConfirm={() => {
-          const rel = kbReadTarget
-          setKbReadTarget(null)
-          if (rel) void saveDoc(rel).then((ok) => {
-            if (ok) dispatchOpenInKnowledge(rel)
-            else showToast({ type: 'info', message: '保存未完成（磁盘冲突），请先在编辑器中处理' })
-          })
-        }}
-        onCancel={() => {
-          const rel = kbReadTarget
-          setKbReadTarget(null)
-          if (rel) {
-            showToast({ type: 'info', message: '未保存，知识库显示的是磁盘上的旧内容' })
-            dispatchOpenInKnowledge(rel)
-          }
-        }}
       />
 
       {/* 新建 / 重命名输入弹窗（Electron 渲染进程不支持 window.prompt） */}

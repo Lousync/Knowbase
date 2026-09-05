@@ -11,6 +11,19 @@ import {
 import { runMonkey } from '../monkey'
 import { startRecording, stopRecording, replayableTrace } from '../recorder'
 import { buildHistoricalDb, restoreCurrentDb } from '../compat'
+import {
+  clickUi,
+  typeUi,
+  pressKeyUi,
+  waitForUi,
+  scrollUi,
+  dropFileUi,
+  mockDialogUi,
+  restoreDialogUi,
+  dialogStateUi,
+  windowUi,
+  clipboardUi,
+} from '../ui'
 import { getDatabase } from '../../database/connection'
 import {
   blogCreate,
@@ -128,6 +141,19 @@ const REGISTRY: Record<string, ActionHandler> = {
   // ---------- 兼容探针 ----------
   'compat.build': withConfirm((p) => buildHistoricalDb(String(p.until ?? ''))),
   'compat.restore': withConfirm(() => restoreCurrentDb()),
+
+  // ---------- UI 操作（真实鼠标/键盘事件；target 支持 CSS 选择器 / text=文本 / #N 树索引） ----------
+  'ui.click': (p) => clickUi(p),
+  'ui.type': (p) => typeUi(p),
+  'ui.key': (p) => pressKeyUi(p),
+  'ui.wait': (p) => waitForUi(p),
+  'ui.scroll': (p) => scrollUi(p),
+  'ui.dropFile': (p) => dropFileUi(p),
+  'ui.dialog.mock': (p) => mockDialogUi(p),
+  'ui.dialog.restore': () => restoreDialogUi(),
+  'ui.dialog.state': () => dialogStateUi(),
+  'ui.window': (p) => windowUi(p),
+  'ui.clipboard': (p) => clipboardUi(p),
 }
 
 export function listActions(): string[] {
