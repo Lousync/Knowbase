@@ -18,6 +18,7 @@ const MODULE_TABS: Array<{ id: TabName; label: string }> = [
 ]
 const tabLabel = (t: TabName) => MODULE_TABS.find((m) => m.id === t)?.label ?? t
 import { TitleBar, ActivityBar } from './components/shared'
+import { ZenHotZone } from './components/shared/ZenHotZone'
 import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
 import { QuickSearch } from './modules/knowledge/components/QuickSearch'
 import { CommandPalette, type PaletteItem } from './components/shared/CommandPalette'
@@ -105,6 +106,10 @@ export default function App() {
   useEffect(() => {
     if (!dayPanelVisible || dayPanelDetached) setDayPanelWidth(0)
   }, [dayPanelVisible, dayPanelDetached])
+
+  // 禅模式（docs/zen-mode-design.md）：0=off 1=Z1 专注 2=禅。唯一真相源在 App 层——
+  // Z2 需隐藏标题栏/活动栏（模块内无法触及）；编辑器经 onZenLevelChange 切档，切 Tab 由编辑器自动归零
+  const [zenLevel, setZenLevel] = useState<number>(0)
 
   const { s, update, ready: settingsReady } = useSettings()
   const workbench = !!s.uiWorkbench
@@ -512,7 +517,7 @@ export default function App() {
       case 'schedule': return <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
-      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} />
+      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
       case 'immersive': return <ImModule isActive={on} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
@@ -534,24 +539,28 @@ export default function App() {
   return (
     <div className={`flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)] overflow-hidden ${winRounded ? 'rounded-[var(--window-radius)]' : 'rounded-none'}`}>
       <CodePluginHosts />
-      <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} drawerWidth={dayPanelWidth} />
+      {zenLevel < 2 ? (
+        <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} drawerWidth={dayPanelWidth} />
+      ) : (
+        <ZenHotZone zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
+      )}
       <PomodoroProvider>
         <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
-          <ActivityBar active={activeTab} onChange={handleTabChange} />
+          {zenLevel < 2 && <ActivityBar active={activeTab} onChange={handleTabChange} />}
 <main className="flex-1 flex overflow-hidden bg-transparent relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称。
-                半透明底色 + 顶缘高光 = 液态玻璃卡片，透出根层玻璃底色 */}
-            <div className="m-1.5 flex min-w-0 flex-1">
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]">
+                半透明底色 + 顶缘高光 = 液态玻璃卡片；禅模式 Z2+ 全屏化（去边距/圆角/边框，眼里只有文字） */}
+            <div className={zenLevel >= 2 ? 'flex min-w-0 flex-1' : 'm-1.5 flex min-w-0 flex-1'}>
+              <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${zenLevel >= 2 ? 'bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)]' : 'rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}>
               {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同。
-                  Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1） */}
+                  Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1）；禅模式 Z1+ 收起侧栏槽 */}
               <div className="flex min-h-0 flex-1">
                 {workbench && (
                   <div
                     ref={wbSidebarRef}
                     className={`flex shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)] transition-[width] duration-150 ${
-                      activeTab === 'editor' || secondaryTab === 'editor' ? 'w-[220px]' : 'w-0 overflow-hidden border-r-0'
+                      zenLevel >= 1 || !(activeTab === 'editor' || secondaryTab === 'editor') ? 'w-0 overflow-hidden border-r-0' : 'w-[220px]'
                     }`}
                   />
                 )}

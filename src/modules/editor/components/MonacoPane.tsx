@@ -13,6 +13,8 @@ interface Props {
   onChange: (relPath: string, value: string) => void
   /** Markdown 标记淡化（设置 markdownDim 透传；默认开）。关闭时仅保留 [[双链]] accent 高亮 */
   dimEnabled?: boolean
+  /** 布局刷新键：变化时显式触发 editor.layout()（禅模式隐壳后容器尺寸变化，§6-3） */
+  layoutKey?: number
 }
 
 export interface MonacoPaneHandle {
@@ -50,7 +52,7 @@ async function getPagesCached(): Promise<KnowledgePage[]> {
 
 /** 编辑器「大纲」导航句柄透传 */
 export const MonacoPane = forwardRef<MonacoPaneHandle, Props>(function MonacoPane(
-  { doc, onChange, dimEnabled = true },
+  { doc, onChange, dimEnabled = true, layoutKey = 0 },
   ref,
 ) {
   const hostRef = useRef<MonacoPaneHandle | null>(null)
@@ -80,12 +82,12 @@ export const MonacoPane = forwardRef<MonacoPaneHandle, Props>(function MonacoPan
       </div>
     )
   }
-  return <MonacoHost ref={hostRef} doc={doc} onChange={onChange} dimEnabled={dimEnabled} />
+  return <MonacoHost ref={hostRef} doc={doc} onChange={onChange} dimEnabled={dimEnabled} layoutKey={layoutKey} />
 })
 
 /** 有效文档的 Monaco 宿主；hooks 集中在子组件，doc 为 null 时父组件卸载它（满足 hooks 规则） */
-const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Props['onChange']; dimEnabled: boolean }>(
-  function MonacoHost({ doc, onChange, dimEnabled }, ref) {
+const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Props['onChange']; dimEnabled: boolean; layoutKey: number }>(
+  function MonacoHost({ doc, onChange, dimEnabled, layoutKey }, ref) {
     const dimEnabledRef = useRef(dimEnabled)
     dimEnabledRef.current = dimEnabled
     /** onMount 内注册的整文重算（供 dimEnabled 开关即时触发） */
@@ -177,6 +179,12 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
 
     // 文件切换：更新 lastFileRef（大纲/跳转按当前文档解释行号）
     useEffect(() => { lastFileRef.current = doc.relPath }, [doc.relPath])
+
+    // 禅模式档位切换：容器尺寸变化后显式 layout 一次（automaticLayout 已有 ResizeObserver，双保险 §7-1）
+    useEffect(() => {
+      const t = window.setTimeout(() => editorRef.current?.layout(), 60)
+      return () => window.clearTimeout(t)
+    }, [layoutKey])
 
     return (
       <Editor

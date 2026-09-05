@@ -11,6 +11,9 @@ import {
   workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages, getKnowledgeGraph, onWsExternalChange,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
+import { useSettings } from '../../lib/SettingsContext'
+import { countWords } from '../../lib/wordCount'
+import { nextZenLevel, shouldExitZen, isChordAlive } from '../../lib/zenMode'
 import { FileTree } from './components/FileTree'
 import { MonacoPane, type MonacoPaneHandle } from './components/MonacoPane'
 import { PdfReaderView } from './components/PdfReaderView'
@@ -30,6 +33,10 @@ interface Props {
   pendingOpenRel?: string | null
   /** 消费完 pendingOpenRel 后回调 App 清除（同一路径可再次跳转） */
   onPendingConsumed?: () => void
+  /** 禅模式档位（App 层唯一真相源）：0=off 1=Z1 专注 2=Z2 禅 */
+  zenLevel?: number
+  /** 切档回调（Ctrl+K Z 循环 / 退出条 / Esc / 切 Tab 自动退出） */
+  onZenLevelChange?: (n: number) => void
 }
 
 interface InputBoxState {
@@ -40,7 +47,7 @@ interface InputBoxState {
   onSubmit: (value: string) => void
 }
 
-export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed }: Props) {
+export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [rootName, setRootName] = useState('')
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
@@ -69,6 +76,22 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [closeTarget, setCloseTarget] = useState<string | null>(null)
   /** 保存冲突（磁盘被外部修改）：弹三选对话框 */
   const [conflictState, setConflictState] = useState<{ relPath: string; diskMtimeMs?: number; missing: boolean } | null>(null)
+
+  // ---- 禅模式（docs/zen-mode-design.md）----
+  const { s: zenSettings, update: zenUpdate } = useSettings()
+  const zenLevelRef = useRef(zenLevel)
+  zenLevelRef.current = zenLevel
+  /** 保存反馈：禅模式下不弹 toast，悬浮条闪现「已保存 HH:MM」两秒后回落（§4） */
+  const [zenSavedAt, setZenSavedAt] = useState<string | null>(null)
+  /** 悬浮信息条 30s 无操作淡出（§4；transition-opacity + 定时器，不依赖 transitionend，§7-5） */
+  const [zenInfoVisible, setZenInfoVisible] = useState(true)
+  /** Ctrl+K 序列锚点（ms 时间戳，0=未按） */
+  const zenKAtRef = useRef(0)
+  /** 切档统一入口：更新 App 真相源 + 持久化档位（§5：写入 settings，仅记录不自动禅） */
+  const changeZen = useCallback((n: number) => {
+    zenUpdate('zenLevel', n)
+    onZenLevelChange?.(n)
+  }, [onZenLevelChange, zenUpdate])
   /** frontmatter 查看/编辑弹窗（frontmatter 前缀文本，含 --- 包裹） */
   const [fmDraft, setFmDraft] = useState<{ relPath: string; text: string } | null>(null)
   const [fmText, setFmText] = useState('')
@@ -295,7 +318,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
           },
         }
         : prev))
-      showToast({ type: 'info', message: '已保存' })
+      if (zenLevelRef.current > 0) {
+        // 禅模式：不用 toast 打断沉浸，悬浮条闪现「已保存 HH:MM」（§4）
+        setZenSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+      } else {
+        showToast({ type: 'info', message: '已保存' })
+      }
       // 保存后该文档不再脏：若非当前激活，回收其驻留（干净文件不长期占 openFiles/标签）
       pruneCleanNonActive(activePathRef.current)
       return true
@@ -585,6 +613,67 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     return () => window.removeEventListener('keydown', onEsc)
   }, [createMenu])
 
+  // ---- 禅模式状态机（§5/§6-2）----
+  // ① Ctrl+K Z 循环切档（序列 800ms 超时）；Esc 弹窗优先（合并判定，避免多 listener 竞态 §7-2）
+  const zenModalOpen = !!(inputBox || closeTarget || fmDraft || ctxMenu || createMenu || conflictState || tabCtx)
+  useEffect(() => {
+    if (!isActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        zenKAtRef.current = Date.now()
+        return
+      }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z'
+        && isChordAlive(zenKAtRef.current, Date.now())) {
+        zenKAtRef.current = 0
+        e.preventDefault()
+        changeZen(nextZenLevel(zenLevel, { hasModal: zenModalOpen, hasDocument: !!activePath }))
+        return
+      }
+      if (e.key === 'Escape' && zenLevel > 0 && shouldExitZen(zenModalOpen)) {
+        e.preventDefault()
+        changeZen(0)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zenLevel, zenModalOpen, activePath, isActive, changeZen])
+
+  // ② 切 Tab 自动退出（保活架构组件不卸载，必须监听 isActive，§7-3）
+  useEffect(() => {
+    if (!isActive && zenLevel > 0) changeZen(0)
+  }, [isActive, zenLevel, changeZen])
+
+  // ③ 关闭最后一份文档自动退出（无正文可专注）
+  useEffect(() => {
+    if (!activePath && zenLevel > 0) changeZen(0)
+  }, [activePath, zenLevel, changeZen])
+
+  // ④ 保存闪现 2s 回落
+  useEffect(() => {
+    if (!zenSavedAt) return
+    const t = window.setTimeout(() => setZenSavedAt(null), 2000)
+    return () => window.clearTimeout(t)
+  }, [zenSavedAt])
+
+  // ⑤ 悬浮信息条 30s 无操作淡出；鼠标移动/键入唤醒（§4）
+  useEffect(() => {
+    if (zenLevel === 0) { setZenInfoVisible(true); return }
+    let timer = window.setTimeout(() => setZenInfoVisible(false), 30_000)
+    const wake = () => {
+      setZenInfoVisible(true)
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => setZenInfoVisible(false), 30_000)
+    }
+    window.addEventListener('mousemove', wake)
+    window.addEventListener('keydown', wake)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('mousemove', wake)
+      window.removeEventListener('keydown', wake)
+    }
+  }, [zenLevel])
+
   /** 知识库拖拽移动（kb-file-moved 广播）→ 三处联动：刷新源/目标目录 + 迁移已打开文档的 key */
   useEffect(() => {
     const handler = (e: Event) => {
@@ -722,10 +811,10 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         </div>
       </div>
 
-      {/* 主体：文件树 + 编辑区。Workbench 外壳模式下文件树 portal 到全局侧栏槽（侧栏槽渲染在编辑器组左侧） */}
+      {/* 主体：文件树 + 编辑区。Workbench 外壳模式下文件树 portal 到全局侧栏槽（侧栏槽渲染在编辑器组左侧）。
+          禅模式 Z1+：文件树列整体隐藏（workbench 侧栏槽由 App 层收起，§6-1/§7-6） */}
       <div className="flex min-h-0 flex-1">
-        {/* 资源管理器列（含标题）：内嵌布局原样显示；workbench 模式改由 portal 渲染到全局侧栏槽 */}
-        {(() => {
+        {zenLevel < 1 && (() => {
           const treeColumn = (
             <>
               <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
@@ -775,8 +864,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         })()}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* 标签栏 */}
-          {openList.length > 0 && (
+          {/* 标签栏（禅模式隐藏：当前文件名见悬浮信息条/退出条） */}
+          {zenLevel < 1 && openList.length > 0 && (
             <div className="flex items-center gap-0.5 overflow-x-auto border-b border-[var(--border-color)] px-1.5 pt-1">
               {openList.map((rel) => {
                 const d = openFiles[rel]
@@ -822,8 +911,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               <PdfReaderView key={activeDoc.relPath} rootId={rootId} relPath={activeDoc.relPath} name={baseName(activeDoc.relPath)} />
             ) : (
             <div className="flex h-full min-h-0">
-              <div className="min-w-0 flex-1">
-                <MonacoPane ref={monacoRef} doc={activeDoc} onChange={handleChange} dimEnabled={markdownDim} />
+              {/* 禅模式 Z1+：正文限宽居中（宽度设置 zenWidth），背景延伸全屏（§4） */}
+              <div className={`min-w-0 flex-1 ${zenLevel >= 1 ? 'flex justify-center' : ''}`}>
+                <div
+                  className={zenLevel >= 1 ? 'h-full w-full' : 'min-w-0 flex-1'}
+                  style={zenLevel >= 1 ? { maxWidth: zenSettings.zenWidth, padding: '0 20px' } : undefined}
+                >
+                  <MonacoPane ref={monacoRef} doc={activeDoc} onChange={handleChange} dimEnabled={markdownDim} layoutKey={zenLevel} />
+                </div>
               </div>
               {previewOpen && activeDoc?.language === 'markdown' && (
                 <>
@@ -872,7 +967,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               </div>
             )}
           </div>
-          {/* 状态栏 */}
+          {/* 状态栏（禅模式隐藏，文件/保存状态见悬浮信息条） */}
+          {zenLevel < 1 && (
           <div className="flex items-center gap-3 border-t border-[var(--border-color)] px-2 py-1 text-[11px] text-[var(--text-muted)]">
             {activeDoc && (
               <>
@@ -898,6 +994,17 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               </>
             )}
           </div>
+          )}
+
+          {/* 禅模式悬浮信息条（§4）：右下角极轻文字，30s 无操作淡出；保存闪现「已保存 HH:MM」 */}
+          {zenLevel >= 1 && activeDoc && (
+            <div
+              className={`pointer-events-none fixed bottom-3 right-5 z-[60] text-[11px] text-[var(--text-muted)] transition-opacity duration-700 select-none ${zenInfoVisible ? 'opacity-70' : 'opacity-0'}`}
+            >
+              {zenSettings.zenShowCount && <span>{countWords(previewContent).words} 字 · </span>}
+              <span>{zenSavedAt ? `已保存 ${zenSavedAt}` : fullContent(activeDoc) !== savedFullContent(activeDoc) ? '未保存' : '无更改'}</span>
+            </div>
+          )}
         </div>
       </div>
 
