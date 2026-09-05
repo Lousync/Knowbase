@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, Feather } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions,
@@ -79,7 +79,7 @@ function nowLocal(): string { return new Date().toLocaleString('zh-CN', { hour: 
 function fmtTime(iso: string): string { try { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return '' } }
 function fmtTok(n: number): string { return n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n) }
 
-export function ImModule({ isActive }: { isActive?: boolean }) {
+export function ImModule({ isActive, zenLevel = 0, onZenLevelChange }: { isActive?: boolean; zenLevel?: number; onZenLevelChange?: (n: number) => void }) {
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeTitle, setActiveTitle] = useState('')
@@ -116,6 +116,29 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
 
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
   useEffect(() => { liveRef.current = liveSteps }, [liveSteps])
+
+  // ---- 禅模式（唯一作用域 = 本模块）----
+  // Esc 退出：本模块浮层（会话要求/Token 明细/新建菜单/素材选择）优先关闭，再退禅
+  const zenActive = zenLevel >= 1 && !!onZenLevelChange
+  useEffect(() => {
+    if (!isActive || !zenActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (instrOpen || tokenOpen || showNewMenu || pickOpen) {
+        setInstrOpen(false); setTokenOpen(false); setShowNewMenu(false); setPickOpen(false)
+        return
+      }
+      e.preventDefault()
+      onZenLevelChange?.(0)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isActive, zenActive, onZenLevelChange, instrOpen, tokenOpen, showNewMenu, pickOpen])
+
+  // 离开本模块 Tab 自动退出禅（保活架构组件不卸载，必须监听 isActive）
+  useEffect(() => {
+    if (!isActive && zenLevel > 0) onZenLevelChange?.(0)
+  }, [isActive, zenLevel, onZenLevelChange])
 
   const refreshSessions = useCallback(async () => {
     const list = await agentSessions().catch(() => [])
@@ -406,6 +429,22 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
               </button>
             ))}
           </div>
+
+          {/* 禅模式（唯一作用域 = 本模块）：一键窗口全屏 + 隐壳（标题栏/活动栏隐藏）；再点或 Esc 退出 */}
+          {onZenLevelChange && (
+            <button
+              onClick={() => onZenLevelChange(zenLevel >= 1 ? 0 : 2)}
+              title={zenLevel >= 1 ? '退出禅模式 (Esc)' : '禅模式 · 全屏沉浸'}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${
+                zenLevel >= 1
+                  ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Feather size={12} />
+              {zenLevel >= 1 ? '退出禅' : '禅模式'}
+            </button>
+          )}
         </div>
       </div>
 

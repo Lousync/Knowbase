@@ -17,7 +17,7 @@ const MODULE_TABS: Array<{ id: TabName; label: string }> = [
   { id: 'user', label: '账户' },
 ]
 const tabLabel = (t: TabName) => MODULE_TABS.find((m) => m.id === t)?.label ?? t
-import { TitleBar, ActivityBar } from './components/shared'
+import { TitleBar, ActivityBar, GlobalConfirm } from './components/shared'
 import { ZenHotZone } from './components/shared/ZenHotZone'
 import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
 import { QuickSearch } from './modules/knowledge/components/QuickSearch'
@@ -29,7 +29,7 @@ import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
-import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags } from './lib/ipc'
+import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent } from './lib/ipc'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -44,6 +44,7 @@ import { EditorModule } from './modules/editor'
 import { ImModule } from './modules/immersive'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { WelcomeOverlay } from './components/shared/WelcomeOverlay'
+import { VaultPicker } from './components/shared/VaultPicker'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
 import { Onboarding } from './components/shared/Onboarding'
@@ -86,12 +87,18 @@ export default function App() {
   }, [])
   const dayPanelMaxWidth = Math.max(300, Math.min(500, Math.floor(winWidth * 0.4)))
 
-  // 窗口圆角：透明窗口自绘 18px 大圆角；最大化/全屏时切直角（贴满屏幕时圆角会露怪缝）
-  const [winRounded, setWinRounded] = useState(true)
+  // 窗口圆角：透明窗口自绘 18px 大圆角；最大化/全屏时切直角（贴满屏幕时圆角会露四角缝）。
+  // fsHint = 禅模式已请求全屏的乐观态：Windows 下 enter-full-screen 事件可能迟到或缺失，
+  // 以「禅模式自己发起的全屏」直接置直角最可靠；事件到达后以真实状态为准
+  const [winMax, setWinMax] = useState(false)
+  const [winFs, setWinFs] = useState(false)
+  const [fsHint, setFsHint] = useState(false)
   useEffect(() => {
-    window.api?.isMaximized?.().then(v => setWinRounded(!v))
-    window.api?.onMaximizeChange?.((v: boolean) => setWinRounded(!v))
+    window.api?.isMaximized?.().then(setWinMax)
+    window.api?.onMaximizeChange?.(setWinMax)
+    window.api?.onFullscreenChange?.(setWinFs)
   }, [])
+  const winRounded = !winMax && !winFs && !fsHint
 
   // Workbench 外壳（R1-W1）：全局侧栏容器节点（EditorModule 文件树 portal 目标），
   // 以 state 持有保证 portal 目标出现后触发重渲染；非 workbench 布局保持 null。
@@ -114,12 +121,32 @@ export default function App() {
   const { s, update, ready: settingsReady } = useSettings()
   const workbench = !!s.uiWorkbench
 
+  // 禅模式（一键全屏沉浸）：进入 = 档位直达 2（隐标题栏/活动栏 + OS 全屏盖任务栏）；
+  // 退出还原进入前状态（最大化 → 重新最大化，普通 → 还原 bounds，主进程负责）。
+  // zenFullscreen 可关；zenFsActiveRef 只标记「禅模式自己进的全屏」，退出时只回收它
+  const zenFsActiveRef = useRef(false)
+  useEffect(() => {
+    if (zenLevel >= 2 && s.zenFullscreen) {
+      zenFsActiveRef.current = true
+      setFsHint(true)
+      window.api?.setFullscreen?.(true)
+    } else if (zenFsActiveRef.current) {
+      zenFsActiveRef.current = false
+      setFsHint(false)
+      window.api?.setFullscreen?.(false)
+    }
+  }, [zenLevel, s.zenFullscreen])
+
   // R1-W2：命令面板 / 快速切换器（Ctrl+Shift+P / Ctrl+O），两布局均可用（docs/rework-workbench-design.md §3）
   const [palette, setPalette] = useState<null | 'command' | 'file'>(null)
   const [fileItems, setFileItems] = useState<PaletteItem[]>([])
   const [fileLoading, setFileLoading] = useState(false)
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
+
+  // 禅模式档位统一出口：内存 + 持久化。唯一入口在 AI 教学模块（immersive 顶栏按钮），
+  // 该模块 Esc/离开 Tab 自动退出；顶部热区退出也走这里保持持久化一致
+  const changeZen = useCallback((n: number) => { setZenLevel(n); update('zenLevel', n) }, [update])
 
   // ---- 全局搜索（VS Code 式：标题栏顶部输入 + 顶部结果弹层，Ctrl+P / Ctrl+` 唤出）----
   // 数据源 = 知识库索引（页面/目录/标签），打开搜索时刷新；打开页面/定位目录经事件通道进知识库模块
@@ -415,11 +442,27 @@ export default function App() {
   // First-run onboarding — show once after load & unlock; re-openable from settings
   // 依赖 settingsReady:等真实设置到位后再判断,避免默认值 onboardingDone:false 造成的竞态弹出
   const [onboardingOpen, setOnboardingOpen] = useState(false)
+  // 首启仓库选择（Obsidian 式）：新手引导的前置步骤——无当前仓库时先选/建仓库，完成后再进引导
+  const [vaultPickOpen, setVaultPickOpen] = useState(false)
   useEffect(() => {
-    if (settingsReady && loaded && !s.onboardingDone) setOnboardingOpen(true)
+    if (!settingsReady || !loaded || s.onboardingDone) return
+    let cancelled = false
+    workspaceGetCurrent()
+      .then((cur) => {
+        if (cancelled) return
+        if (cur?.rootId) setOnboardingOpen(true)
+        else setVaultPickOpen(true)
+      })
+      .catch(() => { if (!cancelled) setVaultPickOpen(true) })
+    return () => { cancelled = true }
   }, [settingsReady, loaded, s.onboardingDone])
   useEffect(() => {
-    const handler = () => setOnboardingOpen(true)
+    // 重看引导（设置 → 关于）走与首启一致的流程：无当前仓库时先出仓库选择
+    const handler = () => {
+      workspaceGetCurrent()
+        .then((cur) => { if (cur?.rootId) setOnboardingOpen(true); else setVaultPickOpen(true) })
+        .catch(() => setOnboardingOpen(true))
+    }
     window.addEventListener('onboarding:show', handler)
     return () => window.removeEventListener('onboarding:show', handler)
   }, [])
@@ -518,7 +561,7 @@ export default function App() {
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
       case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
-      case 'immersive': return <ImModule isActive={on} />
+      case 'immersive': return <ImModule isActive={on} zenLevel={zenLevel} onZenLevelChange={changeZen} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
       case 'toolbox': return <ToolboxModule />
@@ -542,7 +585,7 @@ export default function App() {
       {zenLevel < 2 ? (
         <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} drawerWidth={dayPanelWidth} />
       ) : (
-        <ZenHotZone zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
+        <ZenHotZone zenLevel={zenLevel} onZenLevelChange={changeZen} />
       )}
       <PomodoroProvider>
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -551,8 +594,8 @@ export default function App() {
 <main className="flex-1 flex overflow-hidden bg-transparent relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称。
                 半透明底色 + 顶缘高光 = 液态玻璃卡片；禅模式 Z2+ 全屏化（去边距/圆角/边框，眼里只有文字） */}
-            <div className={zenLevel >= 2 ? 'flex min-w-0 flex-1' : 'm-1.5 flex min-w-0 flex-1'}>
-              <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${zenLevel >= 2 ? 'bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)]' : 'rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}>
+            <div className={`transition-all duration-300 ease-out ${zenLevel >= 2 ? 'flex min-w-0 flex-1' : 'm-1.5 flex min-w-0 flex-1'}`}>
+              <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-out ${zenLevel >= 2 ? 'bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)]' : 'rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}>
               {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同。
                   Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1）；禅模式 Z1+ 收起侧栏槽 */}
               <div className="flex min-h-0 flex-1">
@@ -675,6 +718,8 @@ export default function App() {
         />
       )}
       <Toast />
+      <GlobalConfirm />
+      {vaultPickOpen && <VaultPicker onDone={() => { setVaultPickOpen(false); setOnboardingOpen(true) }} />}
       {onboardingOpen && (
         <Onboarding
           onComplete={() => { update('onboardingDone', true); setOnboardingOpen(false) }}

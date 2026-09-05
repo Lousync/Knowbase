@@ -779,6 +779,16 @@ export interface WorkspaceRecent {
   path: string
   updatedAt: string
 }
+/** ws:openDir 返回（D7）：成功登记 / 选中目录不是仓库（待确认初始化）/ 错误 */
+export type VaultOpenResult =
+  | { rootId: string; name: string; path: string }
+  | { notVault: true; name: string; path: string }
+  | { error: string }
+/** P3 插图：图片入附件区后的落点描述（relPath = 仓库根相对 POSIX 路径） */
+export interface VaultStagedImage {
+  name: string
+  relPath: string
+}
 
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
@@ -791,6 +801,8 @@ export interface ElectronAPI {
   isMaximized: () => Promise<boolean>
   resizeForSidebar: (width: number, animate?: boolean) => Promise<{ applied: boolean; reason?: string }>
   onMaximizeChange: (cb: (v: boolean) => void) => void
+  setFullscreen: (flag: boolean) => Promise<void>
+  onFullscreenChange: (cb: (v: boolean) => void) => void
   setAlwaysOnTop: (onTop: boolean) => Promise<boolean>
   isAlwaysOnTop: () => Promise<boolean>
   getSetting: (key: string) => Promise<unknown>
@@ -970,10 +982,15 @@ export interface ElectronAPI {
   lanShareAddToOutbox: (data: { path: string }) => Promise<{ ok: boolean; name: string }>
   lanShareClearOutbox: () => Promise<{ ok: boolean }>
   // 编辑器工作区（Vault 仓库）：文件服务
-  workspaceOpenDir: () => Promise<({ rootId: string; name: string; path: string } & { error?: string }) | null>
+  // D7：选中目录顶层无 .knowbase 时返回 notVault（待确认初始化），不静默建仓库
+  workspaceOpenDir: () => Promise<VaultOpenResult | null>
+  workspaceInitPendingVault: (accept: boolean) => Promise<{ ok: boolean; rootId?: string; name?: string; path?: string; error?: string }>
+  workspaceCreateVault: (name: string, parentPath?: string) => Promise<({ rootId: string; name: string; path: string } & { error?: string }) | null>
   workspaceListDir: (rootId: string, relPath?: string) => Promise<{ entries?: WorkspaceEntry[]; error?: string }>
   workspaceReadFile: (rootId: string, relPath: string) => Promise<WorkspaceReadResult & { error?: string }>
   workspaceReadImage: (rootId: string, relPath: string) => Promise<{ dataUrl?: string; error?: string }>
+  workspacePickImages: (rootId: string) => Promise<{ ok: boolean; images?: VaultStagedImage[]; error?: string }>
+  workspaceSaveImage: (rootId: string, payload: { fileName: string; dataBase64: string }) => Promise<{ ok: boolean; name?: string; relPath?: string; error?: string }>
   workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => Promise<WorkspaceRangeResult & { error?: string }>
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => Promise<WorkspaceWriteResult>
   workspaceSetMdStatus: (rootId: string, relPath: string, draft: boolean) => Promise<{ ok: boolean; error?: string }>
@@ -986,6 +1003,7 @@ export interface ElectronAPI {
   workspaceOpenById: (rootId: string) => Promise<{ rootId: string; name: string; path: string } & { error?: string }>
   workspaceGetCurrent: () => Promise<{ rootId: string; name: string; path: string } | null>
   workspaceForget: (rootId: string) => Promise<{ ok: boolean }>
+  workspaceDeleteVault: (rootId: string) => Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }>
   vaultLegacySummary: () => Promise<{ hasLegacy: boolean; categories: number; pages: number; pagesEmpty: number; blogEntries: number; attachments: number; attachmentBytes: number; error?: string }>
   vaultImportLegacy: (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => Promise<{ started: boolean; error?: string }>
   onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => () => void

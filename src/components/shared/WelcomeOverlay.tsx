@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FolderOpen, Folder, Clock, ArrowRight, Database, CheckCircle2 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
-import { workspaceOpenDir, workspaceOpenById, workspaceGetRecent, vaultLegacySummary, vaultImportLegacy, onVaultImportProgress } from '../../lib/ipc'
+import { workspaceOpenById, workspaceGetRecent, vaultLegacySummary, vaultImportLegacy, onVaultImportProgress } from '../../lib/ipc'
+import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { showToast } from '../../lib/toast'
 
 interface Props {
@@ -64,9 +65,9 @@ export function WelcomeOverlay({ onDone }: Props) {
   const openNew = useCallback(async () => {
     setBusy(true)
     try {
-      const res = await workspaceOpenDir()
-      if (!res) return
-      if (res.error) { showToast({ type: 'error', message: res.error }); return }
+      // D7：非仓库目录 → 弹「初始化为仓库？」确认；取消/放弃返回 null，不做任何写入
+      const opened = await openVaultWithGuide()
+      if (!opened) return
       workspaceGetRecent().then(setRecent).catch(() => {})
       await afterOpen()
     } catch {

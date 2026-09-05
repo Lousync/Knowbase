@@ -156,6 +156,16 @@ input:focus, textarea:focus, select:focus {
    更深层 span，会覆盖我们的 color，故语义强调色用 !important；淡化用 opacity（作用于
    整层含内部颜色），加粗/斜体/删除线/背景不受层级影响。 */
 .kb-md-dim    { opacity: 0.32; }
+/* 禅模式聚焦淡化（渐进 3 档，iA Writer 式）：距光标行越远越淡，过渡平滑 */
+.zen-dim-1 { opacity: 0.6; transition: opacity 0.25s ease; }
+.zen-dim-2 { opacity: 0.38; transition: opacity 0.25s ease; }
+.zen-dim-3 { opacity: 0.2; transition: opacity 0.25s ease; }
+/* 禅模式纸感氛围：编辑器底透明（knowbase-zen 主题），容器承载纸色；
+   纸色由 editorTheme 按「实际主题明暗」写入 --zen-paper（任意主题 id 均正确），
+   亮色 = 暖纸白（iA Writer/Typora 纸面），暗色 = 墨夜色（XMind ZEN 暗色氛围） */
+.zen-paper-bg { background-color: var(--zen-paper, #211d18); transition: background-color 0.3s ease; }
+/* 禅模式进入/退出过渡：限宽容器 padding、Z2 壳 margin/圆角平滑变化 */
+.zen-transition { transition: padding 0.3s ease, background-color 0.3s ease; }
 .kb-md-strong { font-weight: 700; }
 .kb-md-em     { font-style: italic; }
 .kb-md-del    { text-decoration: line-through; opacity: 0.7; }

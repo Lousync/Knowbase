@@ -1,19 +1,21 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText, Feather,
-  Pencil, Trash2, ChevronRight, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2,
+  FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
+  Pencil, Trash2, ChevronRight, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2, ImagePlus,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
 import {
-  workspaceOpenDir, workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
+  workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
   workspaceCreateFile, workspaceMkdir, workspaceRename, workspaceTrash, workspaceGetRecent,
   workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages, getKnowledgeGraph, onWsExternalChange,
+  workspacePickImages, workspaceSaveImage,
 } from '../../lib/ipc'
+import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { showToast } from '../../lib/toast'
 import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
-import { nextZenLevel, shouldExitZen } from '../../lib/zenMode'
+import { shouldExitZen } from '../../lib/zenMode'
 import { FileTree } from './components/FileTree'
 import { MonacoPane, type MonacoPaneHandle } from './components/MonacoPane'
 import { PdfReaderView } from './components/PdfReaderView'
@@ -170,10 +172,21 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       .catch(() => {})
   }, [pendingOpenRel, enterWorkspace])
 
+  // 首启引导的仓库选择/创建（VaultPicker）发生在编辑器挂载之后 → 广播 vault:changed 时补挂载
+  useEffect(() => {
+    const onChange = (): void => {
+      workspaceGetCurrent()
+        .then((cur) => { if (cur?.rootId) void enterWorkspace(cur.rootId, cur.name ?? '') })
+        .catch(() => {})
+    }
+    window.addEventListener('vault:changed', onChange)
+    return () => window.removeEventListener('vault:changed', onChange)
+  }, [enterWorkspace])
+
   const handleOpenDir = useCallback(async () => {
-    const res = await workspaceOpenDir()
+    // D7：非仓库目录 → 弹「初始化为仓库？」确认，取消则不建
+    const res = await openVaultWithGuide()
     if (!res) return
-    if (res.error) { showToast({ type: 'error', message: res.error }); return }
     await enterWorkspace(res.rootId, res.name)
     workspaceGetRecent().then(setRecent).catch(() => {})
   }, [enterWorkspace])
@@ -183,6 +196,44 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     if (res.error) { showToast({ type: 'error', message: res.error || '无法打开该仓库' }); return }
     await enterWorkspace(res.rootId, res.name)
   }, [enterWorkspace])
+
+  // ===== P3 插图（D1）：选图/粘贴 → 主进程复制入 .attachments/年-月/ → 光标处插相对链接 =====
+  const handleInsertImage = useCallback(async () => {
+    const root = rootIdRef.current
+    if (!root) { showToast({ type: 'warning', message: '尚未打开任何仓库' }); return }
+    const res = await workspacePickImages(root)
+    if (!res.ok || !res.images) {
+      if (res.error) showToast({ type: 'error', message: res.error })
+      return
+    }
+    monacoRef.current?.insertAtCursor(res.images.map((im) => `![${im.name}](${encodeURI(im.relPath)})`).join('\n') + '\n')
+  }, [])
+
+  /** 剪贴板图片文件 → base64 过 IPC 落附件区，返回要插入的 md 片段（null = 放弃） */
+  const handlePasteImageFile = useCallback(async (file: File): Promise<string | null> => {
+    const root = rootIdRef.current
+    if (!root) { showToast({ type: 'warning', message: '尚未打开任何仓库' }); return null }
+    try {
+      const buf = await file.arrayBuffer()
+      if (buf.byteLength === 0) return null
+      const bytes = new Uint8Array(buf)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      }
+      const ext = /png/i.test(file.type) ? 'png' : /gif/i.test(file.type) ? 'gif' : /webp/i.test(file.type) ? 'webp' : /bmp/i.test(file.type) ? 'bmp' : /svg/i.test(file.type) ? 'svg' : 'jpg'
+      const fileName = file.name && /\.[a-z]+$/i.test(file.name) ? file.name : `image-${Date.now()}.${ext}`
+      const res = await workspaceSaveImage(root, { fileName, dataBase64: btoa(binary) })
+      if (!res.ok || !res.relPath || !res.name) {
+        showToast({ type: 'error', message: res.error || '粘贴图片保存失败' })
+        return null
+      }
+      return `![${res.name}](${encodeURI(res.relPath)})`
+    } catch {
+      showToast({ type: 'error', message: '粘贴图片保存失败' })
+      return null
+    }
+  }, [])
 
   const toggleDir = useCallback(async (relPath: string) => {
     setExpanded((prev) => {
@@ -612,7 +663,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   }, [createMenu])
 
   // ---- 禅模式状态机（§5/§6-2）----
-  // 入口 = 顶栏「禅模式」按钮（循环切档）；Esc 退出（弹窗优先：有弹窗时不拦截，交给各弹窗自己的 Esc 逻辑）
+  // 入口已全局化 = 标题栏 Feather 按钮（App 层一键进禅，档位直达 2）；Esc 退出（弹窗优先：
+  // 有弹窗时不拦截，交给各弹窗自己的 Esc 逻辑。仅编辑器 Tab 激活时生效，其他 Tab 由 App 兜底）
   const zenModalOpen = !!(inputBox || closeTarget || fmDraft || ctxMenu || createMenu || conflictState || tabCtx)
   useEffect(() => {
     if (zenLevel === 0 || !isActive) return
@@ -627,15 +679,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     return () => window.removeEventListener('keydown', onKey)
   }, [zenLevel, zenModalOpen, isActive, changeZen])
 
-  // ② 切 Tab 自动退出（保活架构组件不卸载，必须监听 isActive，§7-3）
+  // ② 离开编辑器 Tab 自动退出（保活架构组件不卸载，必须监听 isActive，§7-3）。
+  // 只在「编辑器激活 → 非激活」的跳变时退出：禅入口已全局化（标题栏），从其他 Tab 进入禅
+  // 时 isActive 本就为 false，不能误杀。禅中 Tab 无法切换（活动栏隐藏），实际仅防御性兜底
+  const prevEditorActiveRef = useRef(isActive)
   useEffect(() => {
-    if (!isActive && zenLevel > 0) changeZen(0)
+    if (prevEditorActiveRef.current && !isActive && zenLevel > 0) changeZen(0)
+    prevEditorActiveRef.current = isActive
   }, [isActive, zenLevel, changeZen])
-
-  // ③ 关闭最后一份文档自动退出（无正文可专注）
-  useEffect(() => {
-    if (!activePath && zenLevel > 0) changeZen(0)
-  }, [activePath, zenLevel, changeZen])
 
   // ④ 保存闪现 2s 回落
   useEffect(() => {
@@ -749,22 +800,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         <FileText size={12} className="text-[var(--text-muted)]" />
         <span className="text-[11.5px] font-medium text-[var(--text-muted)]">编辑区</span>
         <div className="ml-auto flex items-center gap-0.5">
-          {/* 禅模式入口：点击循环切档（off→Z1→Z2→off）；无文件时提示先打开（§5 进入条件） */}
-          <button
-            onClick={() => {
-              if (!activePath) { showToast({ type: 'warning', message: '请先打开一个文件，再进入禅模式' }); return }
-              changeZen(nextZenLevel(zenLevel, { hasModal: false, hasDocument: true }))
-            }}
-            title={zenLevel === 0 ? '禅模式 · 进入专注' : `禅模式 Z${zenLevel} · 点击切档`}
-            className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
-              zenLevel >= 1
-                ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <Feather size={12} />
-            {zenLevel === 0 ? '禅模式' : zenLevel === 1 ? '专注中' : '禅'}
-          </button>
           <button
             onClick={() => void handleOpenDir()}
             title="切换仓库"
@@ -776,6 +811,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
           </button>
           {activeDoc?.language === 'markdown' && (
             <>
+              <button
+                onClick={() => void handleInsertImage()}
+                title="插图：复制图片到仓库附件区 .attachments/ 并在光标处插入相对链接（也支持直接粘贴截图）"
+                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              >
+                <ImagePlus size={12} />
+                插图
+              </button>
               <button
                 onClick={() => { setOutlineOpen((v) => !v); }}
                 title="大纲（跳转标题）"
@@ -915,13 +958,26 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               <PdfReaderView key={activeDoc.relPath} rootId={rootId} relPath={activeDoc.relPath} name={baseName(activeDoc.relPath)} />
             ) : (
             <div className="flex h-full min-h-0">
-              {/* 禅模式 Z1+：正文限宽居中（宽度设置 zenWidth），背景延伸全屏（§4） */}
-              <div className={`min-w-0 flex-1 ${zenLevel >= 1 ? 'flex justify-center' : ''}`}>
+              {/* 禅模式 Z1+：正文限宽居中（宽度设置 zenWidth），背景延伸全屏（§4）；
+                  纸感氛围：纸色铺满整个编辑区（外层），限宽容器过渡 padding */}
+              <div
+                className={`min-w-0 flex-1 zen-transition ${zenLevel >= 1 ? 'flex justify-center' : ''} ${zenLevel >= 1 && zenSettings.zenPaper ? 'zen-paper-bg' : ''}`}
+              >
                 <div
-                  className={zenLevel >= 1 ? 'h-full w-full' : 'min-w-0 flex-1'}
+                  className={`zen-transition ${zenLevel >= 1 ? 'h-full w-full' : 'min-w-0 flex-1'}`}
                   style={zenLevel >= 1 ? { maxWidth: zenSettings.zenWidth, padding: '0 20px' } : undefined}
                 >
-                  <MonacoPane ref={monacoRef} doc={activeDoc} onChange={handleChange} dimEnabled={markdownDim} layoutKey={zenLevel} />
+                  <MonacoPane
+                    ref={monacoRef}
+                    doc={activeDoc}
+                    onChange={handleChange}
+                    dimEnabled={markdownDim || zenLevel >= 1}
+                    zen={zenLevel >= 1}
+                    typewriter={zenLevel >= 1 && !!zenSettings.zenTypewriter}
+                    zenPaper={!!zenSettings.zenPaper}
+                    layoutKey={zenLevel}
+                    onPasteImage={activeDoc?.language === 'markdown' ? handlePasteImageFile : undefined}
+                  />
                 </div>
               </div>
               {previewOpen && activeDoc?.language === 'markdown' && (

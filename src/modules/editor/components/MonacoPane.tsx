@@ -2,7 +2,7 @@ import { useCallback, useEffect, useImperativeHandle, useRef } from 'react'
 import { forwardRef } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
-import { bindEditorTheme } from '../../../lib/editorTheme'
+import { bindEditorTheme, applyEditorTheme, setEditorThemeVariant } from '../../../lib/editorTheme'
 import { dimMarkdownText, markdownWikiHighlights, wikiTargetTitle, type DimCls } from '../../../lib/markdownDim'
 import { getKnowledgePages } from '../../../lib/ipc'
 import type { KnowledgePage } from '../../../types'
@@ -15,11 +15,21 @@ interface Props {
   dimEnabled?: boolean
   /** 布局刷新键：变化时显式触发 editor.layout()（禅模式隐壳后容器尺寸变化，§6-3） */
   layoutKey?: number
+  /** 禅模式：非光标行整行淡化（iA Writer 式聚焦）+ 隐藏行号/大留白 */
+  zen?: boolean
+  /** 打字机滚动：光标行始终垂直居中（独立开关，默认关） */
+  typewriter?: boolean
+  /** 纸感氛围：编辑器底透明，容器承载暖纸白/墨夜色（设置 zenPaper） */
+  zenPaper?: boolean
+  /** P3 插图：粘贴图片拦截（返回要插入的 md 文本；null = 放弃）。仅 markdown 文档传入 */
+  onPasteImage?: (file: File) => Promise<string | null>
 }
 
 export interface MonacoPaneHandle {
   /** 大纲跳转：滚动到指定行并聚焦 */
   revealLine(line: number): void
+  /** P3 插图：在光标处插入文本（多张图依次调用），插入后聚焦 */
+  insertAtCursor(text: string): void
 }
 
 /** DimCls → inlineClassName（CSS 类定义见 src/styles/index.css） */
@@ -52,12 +62,13 @@ async function getPagesCached(): Promise<KnowledgePage[]> {
 
 /** 编辑器「大纲」导航句柄透传 */
 export const MonacoPane = forwardRef<MonacoPaneHandle, Props>(function MonacoPane(
-  { doc, onChange, dimEnabled = true, layoutKey = 0 },
+  { doc, onChange, dimEnabled = true, layoutKey = 0, zen = false, typewriter = false, zenPaper = true, onPasteImage },
   ref,
 ) {
   const hostRef = useRef<MonacoPaneHandle | null>(null)
   useImperativeHandle(ref, () => ({
     revealLine: (line: number) => hostRef.current?.revealLine(line),
+    insertAtCursor: (text: string) => hostRef.current?.insertAtCursor(text),
   }), [])
 
   if (!doc) {
@@ -82,18 +93,55 @@ export const MonacoPane = forwardRef<MonacoPaneHandle, Props>(function MonacoPan
       </div>
     )
   }
-  return <MonacoHost ref={hostRef} doc={doc} onChange={onChange} dimEnabled={dimEnabled} layoutKey={layoutKey} />
+  return <MonacoHost ref={hostRef} doc={doc} onChange={onChange} dimEnabled={dimEnabled} layoutKey={layoutKey} zen={zen} typewriter={typewriter} zenPaper={zenPaper} onPasteImage={onPasteImage} />
 })
 
 /** 有效文档的 Monaco 宿主；hooks 集中在子组件，doc 为 null 时父组件卸载它（满足 hooks 规则） */
-const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Props['onChange']; dimEnabled: boolean; layoutKey: number }>(
-  function MonacoHost({ doc, onChange, dimEnabled, layoutKey }, ref) {
+const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Props['onChange']; dimEnabled: boolean; layoutKey: number; zen: boolean; typewriter: boolean; zenPaper: boolean; onPasteImage?: Props['onPasteImage'] }>(
+  function MonacoHost({ doc, onChange, dimEnabled, layoutKey, zen, typewriter, zenPaper = true, onPasteImage }, ref) {
     const dimEnabledRef = useRef(dimEnabled)
     dimEnabledRef.current = dimEnabled
-    /** onMount 内注册的整文重算（供 dimEnabled 开关即时触发） */
+    /** P3 粘贴拦截回调透传（paste 监听器只挂一次，不随 prop 变化重挂） */
+    const pasteImageRef = useRef<Props['onPasteImage']>(onPasteImage)
+    pasteImageRef.current = onPasteImage
+    /** 禅聚焦淡化 + 打字机（ref 透传进 onMount 闭包） */
+    const zenDimRef = useRef(zen)
+    zenDimRef.current = zen
+    const typewriterRef = useRef(typewriter)
+    typewriterRef.current = typewriter
+    /** onMount 内注册的整文重算（供 dimEnabled/zen 开关即时触发） */
     const applyFnRef = useRef<(() => void) | null>(null)
     const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
     const lastFileRef = useRef<string>(doc.relPath)
+    /** 打字机留白去重（同一 pad 不重复 updateOptions，防 layout 事件循环） */
+    const padRef = useRef(0)
+    /** 平滑滚动动画句柄（光标移动时重启） */
+    const smoothRafRef = useRef(0)
+
+    /** 打字机留白：上下各 ~40% 视口高 → 文首/文尾行也能真正居中（iA Writer/Typora 式） */
+    const applyZenPadding = useCallback((ed: Monaco.editor.IStandaloneCodeEditor): void => {
+      const pad = Math.max(140, Math.round(ed.getLayoutInfo().height * 0.4))
+      if (Math.abs(pad - padRef.current) < 8) return
+      padRef.current = pad
+      ed.updateOptions({ padding: { top: pad, bottom: pad } })
+    }, [])
+
+    /** 平滑滚动至光标行垂直居中：瞬跳读目标 scrollTop → 回滚 → rAF 缓动（easeOutCubic 180ms） */
+    const smoothCenterLine = useCallback((ed: Monaco.editor.IStandaloneCodeEditor, line: number): void => {
+      const s0 = ed.getScrollTop()
+      ed.revealLineInCenter(line)
+      const s1 = ed.getScrollTop()
+      ed.setScrollTop(s0)
+      if (Math.abs(s1 - s0) < 2) return
+      cancelAnimationFrame(smoothRafRef.current)
+      const t0 = performance.now()
+      const step = (t: number): void => {
+        const p = Math.min(1, (t - t0) / 180)
+        ed.setScrollTop(Math.round(s0 + (s1 - s0) * (1 - Math.pow(1 - p, 3))))
+        if (p < 1) smoothRafRef.current = requestAnimationFrame(step)
+      }
+      smoothRafRef.current = requestAnimationFrame(step)
+    }, [])
 
     useImperativeHandle(ref, () => ({
       revealLine: (line: number) => {
@@ -107,10 +155,32 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
         editor.setPosition({ lineNumber: target, column: 1 })
         editor.focus()
       },
+      insertAtCursor: (text: string) => {
+        const editor = editorRef.current
+        if (!editor) return
+        const pos = editor.getPosition()
+        if (!pos) return
+        const range = { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }
+        editor.executeEdits('kb-insert', [{ range, text, forceMoveMarkers: true }])
+        editor.focus()
+      },
     }), [])
 
     const onMount = useCallback<OnMount>((editor, monaco) => {
       editorRef.current = editor
+      // 禅模式在挂载时即生效（[zen] effect 跑在 Monaco 异步挂载完成前，editorRef 尚为 null）
+      if (zenDimRef.current) {
+        editor.updateOptions({ lineNumbers: 'off', fontSize: 14 })
+        if (typewriterRef.current) applyZenPadding(editor)
+        else editor.updateOptions({ padding: { top: 28, bottom: 180 } })
+      }
+      // @monaco-editor/react 的 theme prop 重挂载时会强制 knowbase-auto；
+      // 若主题变体已被切到 knowbase-zen（纸感透明底），按当前 variant 恢复
+      applyEditorTheme()
+      // 窗口/容器尺寸变化时重算打字机留白（padRef 去重防循环）
+      editor.onDidLayoutChange(() => {
+        if (typewriterRef.current) applyZenPadding(editor)
+      })
       const collection = editor.createDecorationsCollection([])
       let scheduled = false
       let alive = true
@@ -135,6 +205,19 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
             options: { inlineClassName: DIM_PREFIX[d.cls] },
           })
         }
+        // 禅聚焦淡化（iA Writer 式渐进）：按与光标行的距离分 3 档降透明——
+        // 近处保留上下文可读，远处退场，视线自然锚定当前行
+        if (zenDimRef.current && isMd && cursorLine > 0) {
+          for (let ln = 1; ln <= lines.length; ln++) {
+            const d = Math.abs(ln - cursorLine)
+            if (d === 0) continue
+            const cls = d <= 1 ? 'zen-dim-1' : d <= 4 ? 'zen-dim-2' : 'zen-dim-3'
+            decos.push({
+              range: new monaco.Range(ln, 1, ln, 1),
+              options: { className: cls, isWholeLine: true },
+            })
+          }
+        }
         collection.set(decos)
       }
       applyFnRef.current = realApply
@@ -155,7 +238,14 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
         schedule()
       })
       editor.onDidChangeModelContent(() => schedule())
-      editor.onDidChangeCursorPosition(() => schedule())
+      editor.onDidChangeCursorPosition((e) => {
+        schedule()
+        // 打字机滚动（iA Writer/Typora 式）：平滑滚动至光标行垂直居中
+        if (typewriterRef.current) {
+          const line = e.position?.lineNumber ?? 0
+          if (line > 0) smoothCenterLine(editor, line)
+        }
+      })
       schedule()
 
       // ---- [[ 双链自动补全（数据源：仓库知识页索引，经缓存）----
@@ -163,19 +253,81 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
       // 因此模块级 guard 只注册一次（schema 全局共享）。
       installWikiCompletion(monaco)
 
+      // P3 插图：容器捕获阶段拦截 paste——剪贴板含图片文件时走 onPasteImage 落附件区并插入
+      // md 链接（Monaco 隐藏 textarea 收不到被吞的事件）；纯文本粘贴不受影响。
+      const domNode = editor.getDomNode()
+      if (domNode) {
+        const onPasteCapture = (ev: Event): void => {
+          const e = ev as ClipboardEvent
+          const cb = pasteImageRef.current
+          if (!cb) return
+          const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'))
+          if (files.length === 0) return
+          e.preventDefault()
+          e.stopPropagation()
+          void (async () => {
+            const parts: string[] = []
+            for (const f of files) {
+              const snippet = await cb(f)
+              if (snippet) parts.push(snippet)
+            }
+            if (parts.length === 0) return
+            const pos = editor.getPosition()
+            if (!pos) return
+            const range = { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }
+            editor.executeEdits('kb-paste-image', [{ range, text: parts.join('\n') + '\n', forceMoveMarkers: true }])
+            editor.focus()
+          })().catch(() => { /* 失败提示由调用方 toast */ })
+        }
+        domNode.addEventListener('paste', onPasteCapture, true)
+        editor.onDidDispose(() => domNode.removeEventListener('paste', onPasteCapture, true))
+      }
+
       editor.onDidDispose(() => {
         alive = false
         applyFnRef.current = null
         editorRef.current = null
         collection.clear()
+        cancelAnimationFrame(smoothRafRef.current)
       })
-    }, [])
+    }, [applyZenPadding, smoothCenterLine])
 
-    // dimEnabled 开关：即时清空或重算（无需等下一次击键/光标移动）
+    // dimEnabled/zen 开关：即时清空或重算（无需等下一次击键/光标移动）。
+    // zen 退出必须重算，否则禅淡化装饰残留（markdownDim 常开时 dimEnabled 不变，不重跑）
     useEffect(() => {
       const apply = applyFnRef.current
       if (apply) apply()
-    }, [dimEnabled])
+    }, [dimEnabled, zen])
+
+    // 禅模式开关：隐藏行号 + 字号微增；打字机开 → 动态大留白（首尾行可居中），关 → 固定大留白
+    useEffect(() => {
+      const ed = editorRef.current
+      if (!ed) return
+      ed.updateOptions(zen
+        ? { lineNumbers: 'off', fontSize: 14 }
+        : { lineNumbers: 'on', padding: { top: 8, bottom: 16 }, fontSize: 13 })
+      if (zen) {
+        if (typewriter) applyZenPadding(ed)
+        else {
+          padRef.current = 0
+          ed.updateOptions({ padding: { top: 28, bottom: 180 } })
+        }
+      } else {
+        padRef.current = 0
+      }
+      ed.layout()
+    }, [zen, typewriter, applyZenPadding])
+
+    // 纸感氛围：zen+zenPaper → knowbase-zen（编辑器底透明，容器 .zen-paper-bg 承载纸色，
+    // CSS 300ms 过渡）；退出时延迟恢复 knowbase-auto，等容器底色过渡完再换回不透明底，避免闪跳
+    useEffect(() => {
+      if (zen && zenPaper) {
+        setEditorThemeVariant('zen')
+        return undefined
+      }
+      const t = window.setTimeout(() => setEditorThemeVariant('auto'), 340)
+      return () => window.clearTimeout(t)
+    }, [zen, zenPaper])
 
     // 文件切换：更新 lastFileRef（大纲/跳转按当前文档解释行号）
     useEffect(() => { lastFileRef.current = doc.relPath }, [doc.relPath])

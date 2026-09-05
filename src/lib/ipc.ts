@@ -244,8 +244,12 @@ export const lanShareClearOutbox = () => a().lanShareClearOutbox()
 
 // ===== 编辑器工作区（Vault 仓库）文件服务 =====
 export const workspaceOpenDir = () => a().workspaceOpenDir()
+export const workspaceInitPendingVault = (accept: boolean) => a().workspaceInitPendingVault(accept)
+export const workspaceCreateVault = (name: string, parentPath?: string) => a().workspaceCreateVault(name, parentPath)
 export const workspaceListDir = (rootId: string, relPath?: string) => a().workspaceListDir(rootId, relPath)
 export const workspaceReadImage = (rootId: string, relPath: string) => a().workspaceReadImage(rootId, relPath)
+export const workspacePickImages = (rootId: string) => a().workspacePickImages(rootId)
+export const workspaceSaveImage = (rootId: string, payload: { fileName: string; dataBase64: string }) => a().workspaceSaveImage(rootId, payload)
 export const workspaceReadFile = (rootId: string, relPath: string) => a().workspaceReadFile(rootId, relPath)
 export const workspaceReadRange = (rootId: string, relPath: string, offset: number, length: number) => a().workspaceReadRange(rootId, relPath, offset, length)
 export const workspaceSetMdStatus = (rootId: string, relPath: string, draft: boolean) => a().workspaceSetMdStatus(rootId, relPath, draft)

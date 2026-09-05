@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ChevronsDown, Shrink, Minus, Square, Copy, X } from 'lucide-react'
+import { Shrink, Minus, Square, Copy, X } from 'lucide-react'
 
 interface Props {
-  /** 当前禅模式档位（1=专注 2=禅） */
+  /** 当前禅模式档位（2=禅；保留 number 以兼容档位扩展） */
   zenLevel: number
   onZenLevelChange: (n: number) => void
   /** 当前编辑文件名（可空） */
@@ -10,8 +10,8 @@ interface Props {
 }
 
 /**
- * 禅模式 Z2+ 顶部热区：标题栏隐藏后，窗口顶部保留 8px 可拖动热区，
- * 鼠标移入淡出唤出控制条（窗口三键 + 降档 + 退出禅模式）。
+ * 禅模式顶部热区：标题栏隐藏后，窗口顶部保留 8px 可拖动热区，
+ * 鼠标移入淡出唤出控制条（窗口三键 + 退出禅模式）。
  * 规格：docs/zen-mode-design.md §4/§6-4。淡出用 transition-opacity，不依赖 transitionend（§7-5）。
  */
 export function ZenHotZone({ zenLevel, onZenLevelChange, fileName }: Props) {
@@ -28,18 +28,11 @@ export function ZenHotZone({ zenLevel, onZenLevelChange, fileName }: Props) {
       <div className="pointer-events-none absolute inset-x-0 top-0 flex h-9 items-center gap-2 border-b border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-tertiary)_88%,transparent)] px-3 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
         <span className="flex items-center gap-1.5 text-[11.5px] text-[var(--text-muted)] select-none">
           <Shrink size={12} className="text-[var(--accent)]" />
-          禅模式 · {zenLevel === 2 ? '禅' : '专注'}
+          禅模式{zenLevel < 2 ? ` · Z${zenLevel}` : ''}
           {fileName && <span className="max-w-[240px] truncate text-[var(--text-secondary)]">· {fileName}</span>}
         </span>
 
         <div className="ml-auto flex items-center gap-0.5 no-drag">
-          <button
-            onClick={() => onZenLevelChange(Math.max(1, zenLevel - 1))}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-            title="降一档"
-          >
-            <ChevronsDown size={12} />降档
-          </button>
           <button
             onClick={() => onZenLevelChange(0)}
             className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"

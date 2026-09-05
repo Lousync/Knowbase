@@ -7,7 +7,7 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import { Copy } from 'lucide-react'
 import { showToast } from '../../lib/toast'
-import { copyImageUrlToClipboard } from '../../lib/ipc'
+import { copyImageUrlToClipboard, workspaceGetCurrent, workspaceReadImage } from '../../lib/ipc'
 import { preprocessContent, parseQuizFence } from './QuizParser'
 import { QuizCard } from './QuizCard'
 import { normalizeAnswerLayout } from '../../lib/answerLayout'
@@ -147,6 +147,9 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
           },
           // Images: add a hover "copy to clipboard" affordance
           img({ src, alt, ...props }) {
+            // P3/D1：仓库根相对附件链接（.attachments/…，含旧 _attachments 形态）→ 经主进程白名单取 data:URI
+            const vaultRel = typeof src === 'string' ? normalizeVaultRel(src) : null
+            if (vaultRel) return <VaultRelImg rel={vaultRel} alt={alt} {...props} />
             // 包内容缺陷降级：源 md 把图引用写死成 `图片资源缺失:undefined` 等占位（408 包 5 处，
             // 见 docs/verification-issues-20260904.md ISS-2026-09-04-03）→ 不渲染破图，改为显式占位
             if (typeof src === 'string' && /图片资源缺失|undefined|null/i.test(src)) {
@@ -243,6 +246,54 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
 }
 
 const WIKI_RE = /\[\[([^\]]+)\]\]/
+
+// ===== P3：仓库根相对路径图片解析（D1 附件区 .attachments/，兼容旧 .knowbase/_attachments/ 与根 _attachments/）=====
+// md 中形如 `![x](.attachments/2026-09/x.png)` 的链接对渲染进程不可直接取回（无文件系统 http 服务），
+// 统一经 ws:readImage（主进程附件白名单 + resolveSafe 越界防护）解析为 data:URI，进程内缓存。
+const vaultRelImgCache = new Map<string, string>()
+let vaultRelRootIdPromise: Promise<string | null> | null = null
+
+function normalizeVaultRel(src: string): string | null {
+  let s = src
+  try { s = decodeURIComponent(s) } catch { /* 含 % 的原始名按字面处理 */ }
+  for (let guard = 0; guard < 10; guard++) {
+    if (s.startsWith('../')) { s = s.slice(3); continue }
+    if (s.startsWith('./')) { s = s.slice(2); continue }
+    break
+  }
+  if (/^\.attachments\//i.test(s) || /^\.knowbase\/_attachments\//i.test(s) || /^_attachments\//i.test(s)) return s
+  return null
+}
+
+function VaultRelImg({ rel, alt, ...props }: { rel: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
+  const cached = vaultRelImgCache.get(rel) ?? null
+  const [dataUrl, setDataUrl] = useState<string | null>(cached)
+  useEffect(() => {
+    if (dataUrl) return
+    let alive = true
+    void (async () => {
+      try {
+        if (!vaultRelRootIdPromise) vaultRelRootIdPromise = workspaceGetCurrent().then((cur) => cur?.rootId ?? null)
+        const rootId = await vaultRelRootIdPromise
+        if (!rootId) return
+        const res = await workspaceReadImage(rootId, rel)
+        if (res.dataUrl && alive) {
+          vaultRelImgCache.set(rel, res.dataUrl)
+          setDataUrl(res.dataUrl)
+        }
+      } catch { /* 取回失败保持原生渲染（破图可见，不崩预览） */ }
+    })()
+    return () => { alive = false }
+  }, [rel, dataUrl])
+  if (!dataUrl) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-muted)]">
+        <span>🖼️</span><span>图片加载中…</span>
+      </span>
+    )
+  }
+  return <img src={dataUrl} alt={alt} {...props} />
+}
 
 /** Extract plain text from React children for heading ID generation */
 function extractText(children: React.ReactNode): string {

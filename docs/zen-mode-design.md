@@ -127,6 +127,41 @@ off ──Ctrl+K Z──> Z1 ──Ctrl+K Z──> Z2 ──Ctrl+K Z──> Z3 �
 
 ---
 
+## 8.1 呈现升级（V2.1，2026-09-05，对齐业界）
+
+用户对呈现效果不满意后调研了主流软件的禅/专注模式，落地四项改进（V3 的「禅模式专属主题」项提前部分落地）：
+
+**调研结论**
+- **iA Writer**：专注三档（句子/段落高亮、打字机居中）；平滑滚动；全屏+暗色下体验最佳。
+- **Typora**：专注 = 当前行/段保留、其余灰显；打字机 = 当前行恒居中，大留白让首尾行也能居中。
+- **XMind ZEN**：隐藏一切只留画布 + 优雅专属主题配色（4 档外观）营造心流氛围。
+- **Obsidian 禅插件生态**：居中偏移可调、淡化透明度可调、纸质主题（暖纸/墨夜）。
+
+**落地项**
+1. **渐进淡化**（`MonacoPane.tsx` realApply + `index.css`）：一刀切 opacity 0.35 → 按与光标行距离分 3 档（≤1 行 0.6 / ≤4 行 0.38 / 其余 0.2），近处保留上下文、视线自然锚定当前行。
+2. **平滑打字机滚动**（`MonacoPane.tsx` `smoothCenterLine`）：`revealLineInCenter` 瞬跳 → 瞬跳读目标 scrollTop → 回滚 → rAF easeOutCubic 180ms 缓动；打字机留白改为**动态 ~40% 视口高**（`applyZenPadding`，onDidLayoutChange 时重算、padRef 去重防循环），文首/文尾行也能真正居中。
+3. **纸感氛围主题**（`editorTheme.ts` + `index.css` + 设置 `zenPaper` 默认开）：新增 `knowbase-zen` 主题变体（编辑器底色全透明），容器 `.zen-paper-bg` 承载纸色——亮色主题暖纸白 `#f6f1e7`（iA Writer/Typora 纸面）、其余主题墨夜 `#211d18`（XMind ZEN 暗色氛围）；进出场 300ms CSS 过渡，退出时延迟 340ms 恢复 `knowbase-auto` 等容器过渡完，避免闪跳。变体切换 API：`setEditorThemeVariant('auto' | 'zen')`。
+4. **过渡动画**：Z1 限宽容器 padding/纸色 300ms（`.zen-transition`）、Z2 卡片壳 margin/圆角/阴影 300ms（`App.tsx` transition-all）。
+5. **系统全屏**（2026-09-05 追加；`electron/main/index.ts` + `preload/index.ts` + `App.tsx` + 设置 `zenFullscreen` 默认开）：Z2+ 进入 OS 级全屏（`setFullScreen`，覆盖系统任务栏，XMind ZEN 式真沉浸），退出还原进入前状态（最大化 → 重新最大化 / 普通 → 还原 bounds）；`window:fullscreenChange` 推送渲染层，与最大化事件合并驱动窗口圆角直角切换；`zenFsActiveRef` 只回收禅模式自己进的全屏，不碰用户手动全屏。**主进程/preload 改动需重启应用生效**。
+
+**实现位置**：`src/modules/editor/components/MonacoPane.tsx`、`src/lib/editorTheme.ts`、`src/styles/index.css`、`src/lib/settings.ts`（zenPaper）、`src/modules/editor/index.tsx`、`src/App.tsx`。
+
+**教训（V2.1）**：① `@monaco-editor/react` 重挂载时 theme prop 会强制回 `knowbase-auto`，onMount 需按当前 variant 重放 `applyEditorTheme()`；② Monaco 主题切换是瞬时的，透明底 + 容器 CSS 过渡是唯一能做出入出场动画的方案；③ 打字机留白直接依赖 `getLayoutInfo().height`，必须去重否则 `onDidLayoutChange` ↔ `updateOptions(padding)` 死循环。
+
+## 8.2 全局化与修复（V2.2，2026-09-05，第二轮用户反馈）
+
+用户实测反馈三组问题，修复与重构：
+
+1. **入口定档 AI 教学模块（§5 修订，用户拍板 V2.2 → V2.3）**：禅模式**唯一入口 = AI 教学模块（immersive）顶栏** Feather 按钮（「禅模式」/禅中变「退出禅」），**仅该模块可用**。二元 on/off——一键直达全屏沉浸（隐标题栏/活动栏 + OS 全屏），Z1「专注中」中间档取消。退出：Esc（本模块浮层——会话要求/Token 明细/新建菜单/素材选择——优先关闭）/ 顶部热区「退出禅模式」/ 离开本模块 Tab 自动退出（档位持久化统一走 App `changeZen`）。编辑器内的禅 Esc/自动退出逻辑保留但休眠（zen 仅 immersive 激活时存在，编辑器永不处于禅中）；编辑器的纸感/淡化/打字机机制同理休眠。标题栏入口与 App 级 Esc 兜底已撤销。
+2. **纸感主题误配（图一「文字不可见」根因）**：`.zen-paper-bg` 原用 `html.theme-light` 选择器硬编码双值，自定义亮色主题（`theme-<id>`）不匹配 → 深墨底 + 'vs' 深色字 = 全黑不可见。修复：`applyEditorTheme()` 按实际 `--bg-primary` 亮度写 `--zen-paper` CSS 变量，容器消费变量，任意主题 id 均正确。
+3. **全屏四角露缝**：Windows 下 `enter-full-screen` 事件可能迟到/缺失，圆角直角切换未触发。修复：App 增加 `fsHint` 乐观态——禅模式发起全屏时立即置直角，事件到达后以真实状态为准。
+4. **禅淡化残留（图二「内容极淡」）**：退出禅后 `dimEnabled` 不变（markdownDim 常开）导致 `[dimEnabled]` effect 不重跑，zen-dim 装饰残留。修复：重算 effect 增加 `zen` 依赖。
+5. ZenHotZone 移除「降档」按钮（二元档位下无意义）。
+
+**教训**：① 透明玻璃窗口（92% 不透明）后置高对比内容会透出「幽灵文字」，截图排障时先排除背景透印；② Electron Windows 全屏事件不可靠，自发起的状态变化要乐观置位 + 事件校正双轨；③ effect 依赖数组遗漏（zen 变化不重算装饰）是装饰类功能的经典残留源。
+
+---
+
 ## 9. 验收与冒烟
 
 **冒烟 `tmp/smoke/zen-mode-smoke.mjs`**（纯函数，不依赖 Electron）：

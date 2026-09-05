@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../../lib/SettingsContext'
 import {
   X, Pin, ArrowDownToLine, Loader2, Play,
