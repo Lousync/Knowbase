@@ -24,9 +24,12 @@ let current: VaultInfo | null = null
 
 const KB_DIR = '.knowbase'
 export const KB_SCHEMA_VERSION = 1
-/** 系统目录（相对仓库根，收在 .knowbase 内）：未分类页收件箱 / 附件 */
+/** 系统目录（相对仓库根，收在 .knowbase 内）：未分类页收件箱 */
 export const KB_INBOX_DIR = '.knowbase/_inbox'
+/** 旧附件目录（历史遗留，只读兼容；D1 定稿后不再新增内容） */
 export const KB_ATTACHMENTS_DIR = '.knowbase/_attachments'
+/** ★ 附件区（D1 定稿）：仓库根下顶层 `.attachments/`，408 图片/编辑器插图/博客图统一入此 */
+export const ATTACHMENTS_DIR = '.attachments'
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')
@@ -85,6 +88,23 @@ export function getCurrentVault(): VaultInfo | null {
 /** 当前仓库的 .knowbase 绝对路径；无当前仓库返回 null */
 export function getVaultKbRoot(): string | null {
   return current ? join(current.rootPath, KB_DIR) : null
+}
+
+/** 当前仓库的附件区（根级 .attachments）绝对路径；无当前仓库返回 null */
+export function getVaultAttachmentsRoot(): string | null {
+  return current ? join(current.rootPath, ATTACHMENTS_DIR) : null
+}
+
+/** 确保附件区目录存在（懒建：首次插图/导入时调用） */
+export function ensureAttachmentsDir(): boolean {
+  const dir = getVaultAttachmentsRoot()
+  if (!dir) return false
+  try {
+    mkdirSync(dir, { recursive: true })
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

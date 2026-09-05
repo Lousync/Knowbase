@@ -68,7 +68,11 @@ function asStringArray(value: unknown): string[] {
   return []
 }
 
-function scanMarkdownFiles(root: string, dir: string, out: string[]): void {
+/**
+ * 扫描仓库 .md（P5a 嵌套防护）：全仓库最多一个 `.knowbase`（仓库根直属那个）；
+ * 深层再出现 `.knowbase` 视为布局违规——跳过不扫描，并经 warnings 提示（D4/§1 完整性规则）。
+ */
+function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: string[]): void {
   let entries: Dirent[]
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -76,21 +80,29 @@ function scanMarkdownFiles(root: string, dir: string, out: string[]): void {
     return
   }
 
+  const atRoot = dir === root
   for (const entry of entries) {
-    if (entry.name === '_attachments' || entry.name === 'blog') continue
+    // D3（P4）：'blog' 不再是内部目录名（博客已收进 .knowbase/blog，由「.」前缀规则跳过）；
+    // '_attachments' = 历史遗留根级附件目录，继续跳过
+    if (entry.name === '_attachments') continue
     const abs = join(dir, entry.name)
     try {
       if (entry.isSymbolicLink() || lstatSync(abs).isSymbolicLink()) continue
       if (entry.isDirectory()) {
+        // P5a：嵌套 .knowbase（非仓库根直属）→ 忽略 + 提示
+        if (entry.name === '.knowbase' && !atRoot) {
+          warnings?.push(`忽略嵌套仓库目录：${relative(root, abs)}（一个仓库最多一个 .knowbase）`)
+          continue
+        }
         // . 开头目录 = 系统区（.knowbase 内仅有 _inbox 是知识页收件箱，其余跳过）
         if (entry.name.startsWith('.')) {
           if (entry.name === '.knowbase') {
             const inbox = join(abs, '_inbox')
-            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out)
+            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out, warnings)
           }
           continue
         }
-        scanMarkdownFiles(root, abs, out)
+        scanMarkdownFiles(root, abs, out, warnings)
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
         out.push(abs)
       }
@@ -296,7 +308,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const categories = categoryResult.categories
   let categoriesDirty = false
   const files: string[] = []
-  scanMarkdownFiles(current.rootPath, current.rootPath, files)
+  scanMarkdownFiles(current.rootPath, current.rootPath, files, warnings)
 
   // 第一遍：读入全部 md（目录派生需先知道「所有知识页所在目录」，再统一补建分类）
   const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown> }> = []

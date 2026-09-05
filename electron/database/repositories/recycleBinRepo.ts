@@ -6,7 +6,9 @@ import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
 import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
-import { encryptExistingPasswords } from './passwordRepo'
+import { encryptExistingPasswords, ensureSecretVaultSeeded, encryptPassword } from './passwordRepo'
+import { isVaultDataSource } from '../dataSourceMode'
+import { vaultPasswordsAll, vaultPasswordsSave } from '../../lib/kbStore/secretVaultRepo'
 
 function getSettingsRetentionDays(): number {
   try {
@@ -237,19 +239,34 @@ export function registerRecycleBinHandlers(): void {
       }
     } else if (item.module === 'passwordVault') {
       // 恢复密码条目(新快照中密码为密文,直接插回;旧明文快照插入后由加密清理统一处理)
-      const maxRow = queryAll<{ m: number }>(
-        'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_passwords'
-      )
-      run(
-        `INSERT INTO toolbox_passwords (id, title, url, account, username, password, notes, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          record.id, record.title, record.url || '', record.account || '',
-          record.username || '', record.password, record.notes || '',
-          (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
-        ]
-      )
-      encryptExistingPasswords()
+      if (isVaultDataSource()) {
+        // P5b：vault 模式恢复进 .knowbase/secret/passwords.json（密文原样，明文快照补加密）
+        ensureSecretVaultSeeded()
+        const vrows = vaultPasswordsAll()
+        if (vrows.some((r) => r.id === record.id)) return { success: false, message: '仓库中已存在同一条目' }
+        const storedPwd = typeof record.password === 'string' && !record.password.startsWith('enc1:') ? encryptPassword(record.password) : record.password
+        const nextOrder = vrows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0)
+        vrows.push({
+          id: record.id, title: record.title || '', url: record.url || null, username: record.username || null,
+          account: record.account || null, password: storedPwd, notes: record.notes || null,
+          sort_order: nextOrder, created_at: record.createdAt, updated_at: record.updatedAt,
+        })
+        vaultPasswordsSave(vrows)
+      } else {
+        const maxRow = queryAll<{ m: number }>(
+          'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_passwords'
+        )
+        run(
+          `INSERT INTO toolbox_passwords (id, title, url, account, username, password, notes, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            record.id, record.title, record.url || '', record.account || '',
+            record.username || '', record.password, record.notes || '',
+            (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
+          ]
+        )
+        encryptExistingPasswords()
+      }
     } else if (item.module === 'moments') {
       const images = Array.isArray(record.imageDataUrls)
         ? record.imageDataUrls

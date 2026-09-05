@@ -21,6 +21,10 @@ const api = {
   onMaximizeChange: (cb: (v: boolean) => void) => {
     ipcRenderer.on('window:maximizeChange', (_e, v) => cb(v))
   },
+  setFullscreen: (flag: boolean) => ipcRenderer.invoke('window:set-fullscreen', flag),
+  onFullscreenChange: (cb: (v: boolean) => void) => {
+    ipcRenderer.on('window:fullscreenChange', (_e, v) => cb(v))
+  },
   setAlwaysOnTop: (onTop: boolean) => ipcRenderer.invoke('window:setAlwaysOnTop', onTop),
   isAlwaysOnTop: () => ipcRenderer.invoke('window:isAlwaysOnTop'),
   reloadWindow: () => ipcRenderer.invoke('window:reload'),
@@ -507,9 +511,13 @@ const api = {
   lanShareClearOutbox: () => ipcRenderer.invoke('lanShare:clearOutbox'),
   // 编辑器工作区（Vault 仓库）：文件服务
   workspaceOpenDir: () => ipcRenderer.invoke('ws:openDir'),
+  workspaceInitPendingVault: (accept: boolean) => ipcRenderer.invoke('ws:initPendingVault', accept),
+  workspaceCreateVault: (name: string, parentPath?: string) => ipcRenderer.invoke('ws:createVault', name, parentPath),
   workspaceListDir: (rootId: string, relPath?: string) => ipcRenderer.invoke('ws:listDir', rootId, relPath ?? ''),
   workspaceReadFile: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:readFile', rootId, relPath),
   workspaceReadImage: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:readImage', rootId, relPath),
+  workspacePickImages: (rootId: string) => ipcRenderer.invoke('ws:pickImagesToAttachments', rootId),
+  workspaceSaveImage: (rootId: string, payload: { fileName: string; dataBase64: string }) => ipcRenderer.invoke('ws:saveImageToAttachments', rootId, payload),
   workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => ipcRenderer.invoke('ws:readRange', rootId, relPath, offset, length),
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => ipcRenderer.invoke('ws:writeFile', rootId, relPath, content, expectedMtimeMs),
   workspaceSetMdStatus: (rootId: string, relPath: string, draft: boolean) => ipcRenderer.invoke('ws:setMdStatus', rootId, relPath, draft),
@@ -522,6 +530,8 @@ const api = {
   workspaceOpenById: (rootId: string) => ipcRenderer.invoke('ws:openById', rootId),
   workspaceGetCurrent: () => ipcRenderer.invoke('ws:getCurrent'),
   workspaceForget: (rootId: string) => ipcRenderer.invoke('ws:forget', rootId),
+  // P7（D6）：删除仓库 = 整仓进 OS 回收站（主进程护栏校验；无提醒弹窗）
+  workspaceDeleteVault: (rootId: string) => ipcRenderer.invoke('ws:deleteVault', rootId),
 }
 
 contextBridge.exposeInMainWorld('api', api)

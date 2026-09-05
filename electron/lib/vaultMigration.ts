@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
-import { dirname, extname, join, relative, sep } from 'path'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import { basename, dirname, extname, join, relative, sep } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabase, getDbPath } from '../database/connection'
 import { getAttachmentsDir } from '../database/paths'
-import { getCurrentVault, KB_INBOX_DIR, KB_ATTACHMENTS_DIR } from './kbStore/vaultContext'
+import { getCurrentVault, KB_INBOX_DIR, ATTACHMENTS_DIR } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { parseMarkdown } from './kbStore/mdStore'
@@ -89,8 +89,9 @@ function serializeFrontmatter(fm: Record<string, unknown>, body: string): string
  * 幂等：字段齐全的文件跳过；仅补缺失键，不覆盖既有内容。
  */
 function backfillLegacyBlogMeta(rootPath: string): number {
-  const blogDir = join(rootPath, 'blog')
-  if (!existsSync(blogDir)) return 0
+  // D3 后博客主区在 .knowbase/blog/；旧根 blog/ 残留（迁移未完成/冲突保留件）也补扫
+  const blogDirs = [join(rootPath, '.knowbase', 'blog'), join(rootPath, 'blog')].filter((d) => existsSync(d))
+  if (blogDirs.length === 0) return 0
   const hasBlogTable = tableExists('entries')
   if (!hasBlogTable) return 0
   const srcById = new Map<string, Record<string, unknown>>()
@@ -154,7 +155,7 @@ function backfillLegacyBlogMeta(rootPath: string): number {
       } catch { /* 跳过坏文件 */ }
     }
   }
-  walk(blogDir)
+  for (const d of blogDirs) walk(d)
   return touched
 }
 const normalize = (s: unknown): string => String(s ?? '').replace(/\r\n/g, '\n')
@@ -268,6 +269,16 @@ export function runLegacyImport(opts: ImportOptions = {}, onProgress?: (p: Impor
   const warnings: string[] = []
   if (!existsSync(metaPath)) warnings.push('仓库缺少 .knowbase/meta.json，可能不是有效的 Vault')
 
+  // D3/P4 布局迁移先行：根 blog/ → .knowbase/blog/（幂等），使下面的冲突检查看到合并后的树
+  try {
+    const layout = migrateBlogLayoutIntoKnowbase(VAULT)
+    if (layout.moved > 0 || layout.images > 0) {
+      warnings.push(`博客布局迁移：移动 ${layout.moved} 文件 · 图片 ${layout.images} 张落 .attachments/blog/ · 改写引用 ${layout.rewritten} 篇`)
+    }
+  } catch (e) {
+    warnings.push(`博客布局迁移失败（不阻断导入）：${(e as Error).message}`)
+  }
+
   const stats: Record<string, unknown> = {}
   const plan: { files: PlannedFile[]; copies: PlannedCopy[]; dirs: Set<string> } = { files: [], copies: [], dirs: new Set() }
   const planDir = (abs: string): void => { plan.dirs.add(abs) }
@@ -340,7 +351,8 @@ export function runLegacyImport(opts: ImportOptions = {}, onProgress?: (p: Impor
     attByOwner.get(key)!.push(a)
     const src = join(ATT_DIR, a.file_path)
     if (!existsSync(src)) { warnings.push(`附件缺失，已跳过：${a.file_name} (${a.file_path})`); continue }
-    const dir = join(VAULT, KB_ATTACHMENTS_DIR, safeName(a.owner_type, 'misc'), safeName(a.owner_id, 'unknown'))
+    // D1 定稿：新迁入附件统一落仓库根 .attachments/<owner_type>/<owner_id>/（旧 .knowbase/_attachments 仅存历史）
+    const dir = join(VAULT, ATTACHMENTS_DIR, safeName(a.owner_type, 'misc'), safeName(a.owner_id, 'unknown'))
     // 扩展名先拆再拼回，避免 safeName 净化后重复追加导致 .jpg.jpg
     const rawName = a.file_name || ''
     const ext = extname(rawName)
@@ -387,7 +399,7 @@ export function runLegacyImport(opts: ImportOptions = {}, onProgress?: (p: Impor
       let n = 0
       body = body.replace(/!\[([^\]]*)\]\(data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)\)/g, (m, alt: string, b64: string) => {
         n += 1
-        const dir2 = join(VAULT, KB_ATTACHMENTS_DIR, 'inline', safeName(p.id))
+        const dir2 = join(VAULT, ATTACHMENTS_DIR, 'inline', safeName(p.id))
         const fn = allocPage(dir2, `img-${n}`, '.svg')
         const dst = join(dir2, fn)
         try {
@@ -441,7 +453,8 @@ export function runLegacyImport(opts: ImportOptions = {}, onProgress?: (p: Impor
   }
   const allocBlog = makeAllocator()
   const blogIndex: Record<string, unknown> = {}
-  const blogRoot = join(VAULT, 'blog')
+  // D3（P4）：博客整体收进 .knowbase/blog/（对其他软件不可见，随仓库走）
+  const blogRoot = join(VAULT, '.knowbase', 'blog')
   for (const e of entries) {
     const date = String(e.date || e.created_at || '').slice(0, 10) || '1970-01-01'
     const year = date.slice(0, 4)
@@ -470,19 +483,20 @@ export function runLegacyImport(opts: ImportOptions = {}, onProgress?: (p: Impor
   planTable('knowledge_tags', join(K, 'knowledge', 'tags.json'))
   planTable('knowledge_page_tags', join(K, 'knowledge', 'page-tags.json'))
   planTable('knowledge_pack_imports', join(K, 'knowledge', 'pack-imports.json'))
-  planJson(join(K, 'blog', 'entries.json'), blogIndex)
-  planTable('tags', join(K, 'blog', 'tags.json'))
+  planJson(join(VAULT, '.knowbase', 'blog', 'entries.json'), blogIndex)
+  planTable('tags', join(VAULT, '.knowbase', 'blog', 'tags.json'))
   planTable('moments_posts', join(K, 'moments', 'posts.json'))
   planTable('moments_albums', join(K, 'moments', 'albums.json'))
   planTable('schedule_todos', join(K, 'schedule', 'todos.json'))
   planTable('schedule_tags', join(K, 'schedule', 'tags.json'))
-  planTable('toolbox_passwords', join(K, 'toolbox', 'passwords.json'))
-  planTable('toolbox_weight_records', join(K, 'toolbox', 'weight.json'))
+  planTable('toolbox_passwords', join(VAULT, '.knowbase', 'secret', 'passwords.json'))
+  planTable('toolbox_weight_records', join(K, 'weight', 'records.json'))
   planTable('bookmarks', join(K, 'bookmarks', 'bookmarks.json'))
   planTable('bookmark_categories', join(K, 'bookmarks', 'categories.json'))
   planTable('study_sets', join(K, 'study', 'sets.json'))
   planTable('study_items', join(K, 'study', 'items.json'))
-  planTable('habits', join(K, 'habits.json'))
+  planTable('habits', join(K, 'checkin', 'habits.json'))
+  planTable('habit_records', join(K, 'checkin', 'records.json'))
   planTable('supervise_config', join(K, 'supervise', 'config.json'))
   planTable('supervise_log', join(K, 'supervise', 'log.json'))
   planTable('agent_sessions', join(K, 'agent', 'sessions.json'))
@@ -579,4 +593,129 @@ export function backupLegacyDatabase(dbPath: string): string | null {
   } catch {
     try { copyFileSync(dbPath, bak); return bak } catch { return null }
   }
+}
+
+// ---------------------------------------------------------------- 布局迁移（P4 / D3）：博客收拢 + 博客图片落位
+
+/** 递归删空目录（自底向上，只删空——冲突保留件所在的非空目录绝不触碰） */
+function cleanupEmptyDirsDeep(dir: string): void {
+  let names: string[] = []
+  try { names = readdirSync(dir) } catch { return }
+  for (const n of names) {
+    const p = join(dir, n)
+    try { if (statSync(p).isDirectory()) cleanupEmptyDirsDeep(p) } catch { /* ignore */ }
+  }
+  try { rmdirSync(dir) } catch { /* 非空/占用 → 原地保留 */ }
+}
+
+/**
+ * D3（P4）：博客整体迁入 .knowbase/blog/（幂等，frontmatter id 不变）；博客正文内联图片
+ * 从旧 sqlite/%APPDATA% 附件库落 .attachments/blog/<博文id>/，并把 `attachment://<id>` 引用
+ * 改写为根相对链接。开/建/恢复仓库时由 workspaceManager 调用；sqlite 不可读时仅做目录迁移
+ * （attachment:// 协议读源继续兼容可用，D2/R3 口径）。
+ */
+export function migrateBlogLayoutIntoKnowbase(rootPath: string): { moved: number; conflicts: number; images: number; rewritten: number } {
+  const result = { moved: 0, conflicts: 0, images: 0, rewritten: 0 }
+  const srcRoot = join(rootPath, 'blog')
+  const dstRoot = join(rootPath, '.knowbase', 'blog')
+  // 1) 根 blog/*.md → .knowbase/blog/（目标已存在 = 迁过/重名 → 跳过，幂等可重跑）
+  try {
+    if (existsSync(srcRoot) && statSync(srcRoot).isDirectory()) {
+      const files: string[] = []
+      const collect = (dir: string): void => {
+        let names: string[] = []
+        try { names = readdirSync(dir) } catch { return }
+        for (const n of names) {
+          const p = join(dir, n)
+          try {
+            if (statSync(p).isDirectory()) collect(p)
+            else if (n.toLowerCase().endsWith('.md')) files.push(p)
+          } catch { /* ignore */ }
+        }
+      }
+      collect(srcRoot)
+      for (const f of files) {
+        const target = join(dstRoot, relative(srcRoot, f))
+        if (existsSync(target)) { result.conflicts++; continue }
+        try {
+          mkdirSync(dirname(target), { recursive: true })
+          renameSync(f, target)
+          result.moved++
+        } catch { /* 单文件失败原地保留 */ }
+      }
+      // 无冲突即清理空残留（只删空目录；重跑 moved=0 也能收掉上次留下的空壳）
+      if (result.conflicts === 0) cleanupEmptyDirsDeep(srcRoot)
+    }
+  } catch { /* 目录不可读：跳过 */ }
+  // 2) 博客图片：%APPDATA% 附件库（sqlite attachments 台账，owner_type='blog_entry'）→ .attachments/blog/<博文id>/
+  const attMap = new Map<string, string>()
+  try {
+    if (tableExists('attachments')) {
+      const ATT = getAttachmentsDir()
+      const rows = all<{ id: string; owner_id: string; file_path: string; file_name: string }>(
+        "select id, owner_id, file_path, file_name from attachments where owner_type = 'blog_entry' and coalesce(trashed, 0) = 0"
+      )
+      for (const a of rows) {
+        if (!a.owner_id) continue
+        const srcImg = join(ATT, a.file_path)
+        if (!existsSync(srcImg)) continue
+        const ownerDir = safeName(a.owner_id, 'unknown')
+        const dirAbs = join(rootPath, ATTACHMENTS_DIR, 'blog', ownerDir)
+        let name = safeName(a.file_name || basename(a.file_path), 'image')
+        let dst = join(dirAbs, name)
+        try {
+          if (existsSync(dst)) {
+            // 同名：尺寸一致视为已落位复用；否则时间戳后缀防覆盖
+            if (statSync(dst).size !== statSync(srcImg).size) {
+              const ext = extname(name)
+              name = `${name.slice(0, name.length - ext.length)}-${Date.now()}${ext}`
+              dst = join(dirAbs, name)
+              mkdirSync(dirAbs, { recursive: true })
+              copyFileSync(srcImg, dst)
+              result.images++
+            }
+          } else {
+            mkdirSync(dirAbs, { recursive: true })
+            copyFileSync(srcImg, dst)
+            result.images++
+          }
+          attMap.set(String(a.id).toLowerCase(), `${ATTACHMENTS_DIR}/blog/${ownerDir}/${name}`)
+        } catch { /* 单图失败：正文保留 attachment:// 兼容读 */ }
+      }
+    }
+  } catch { /* sqlite 未就绪：目录迁移已完成，图片留待下次开机补迁 */ }
+  // 3) 正文改写：attachment://<id> → .attachments/blog/<博文id>/<文件>（两处 blog 树都扫，含冲突保留件）
+  if (attMap.size > 0) {
+    const re = /attachment:\/\/([0-9a-fA-F-]{36})\/?/g
+    const targets: string[] = []
+    for (const root of [dstRoot, srcRoot]) {
+      if (!existsSync(root)) continue
+      const stack = [root]
+      while (stack.length > 0) {
+        const dir = stack.pop()!
+        let names: string[] = []
+        try { names = readdirSync(dir) } catch { continue }
+        for (const n of names) {
+          const p = join(dir, n)
+          try {
+            if (statSync(p).isDirectory()) stack.push(p)
+            else if (n.toLowerCase().endsWith('.md')) targets.push(p)
+          } catch { /* ignore */ }
+        }
+      }
+    }
+    for (const p of targets) {
+      try {
+        const raw = readFileSync(p, 'utf-8')
+        if (!raw.includes('attachment://')) continue
+        const next = raw.replace(re, (full, id: string) => attMap.get(String(id).toLowerCase()) || full)
+        if (next === raw) continue
+        const tmp = join(dirname(p), `.${randomUUID()}.tmp`)
+        writeFileSync(tmp, next, 'utf-8')
+        try { renameSync(tmp, p) } catch { if (existsSync(p)) unlinkSync(p); renameSync(tmp, p) }
+        result.rewritten++
+      } catch { /* 单文件失败保持原样 */ }
+    }
+  }
+  return result
 }

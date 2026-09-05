@@ -1,12 +1,14 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
+import { ipcMain, BrowserWindow, dialog, app } from 'electron'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
-import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault } from './kbStore/vaultContext'
+import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
+import { migrateBlogLayoutIntoKnowbase } from './vaultMigration'
+import { isAllowedClearRoot, trashVaultFolder } from './vaultDelete'
 
 /**
  * 编辑器工作区（Vault 仓库）文件服务。
@@ -27,8 +29,10 @@ const HIDDEN_DIRS = new Set([
   '.vscode', '.idea', '.claude', '.turbo', '.next', 'build',
 ])
 
-/** 应用内部目录（去库化/迁移器约定）：文件树对用户隐藏，避免与软件数据混淆 */
-const APP_INTERNAL_DIRS = new Set(['blog', '_attachments', '_inbox'])
+/** 应用内部目录（去库化/迁移器约定）：文件树对用户隐藏，避免与软件数据混淆
+ *  注1：根级 .attachments 因「.」前缀天然隐藏（listDirEntries），无需登记
+ *  注2：D3（P4）后 'blog' 不再是内部目录——博客已收进 .knowbase/blog/ */
+const APP_INTERNAL_DIRS = new Set(['_attachments', '_inbox'])
 
 interface RootInfo {
   id: string
@@ -303,6 +307,8 @@ function loadVaults(): void {
     if (cur) {
       setCurrentVault({ rootId: cur.id, name: cur.name, rootPath: cur.rootPath })
       ensureKbRoot()
+      // 启动恢复也过一遍一次性布局迁移（P4 博客收拢；幂等）
+      runLayoutMigrations(cur.rootPath)
     }
   } catch {
     /* db 未就绪等：忽略，openDir 时重新登记 */
@@ -367,6 +373,70 @@ function requireRoot(rootId: string): RootInfo {
   return r
 }
 
+/**
+ * D7（P1）：对话框选中、但顶层无 .knowbase 的目录——暂存待用户确认「初始化为仓库」。
+ * 路径只存主进程，渲染层用 ws:initPendingVault(accept) 表态，维持「渲染层不接触绝对路径」原则。
+ */
+let pendingVaultPath: string | null = null
+
+/** 把目录登记为仓库 + 设为当前 + 初始化 .knowbase（openDir 确认初始化与 createVault 复用） */
+function adoptVaultDirectory(rootPath: string, name?: string): { rootId: string; name: string; path: string } {
+  const id = findVaultIdByPath(rootPath) ?? randomUUID()
+  const vaultName = name ?? basename(rootPath)
+  roots.set(id, { id, name: vaultName, rootPath })
+  upsertVault(id, vaultName, rootPath)
+  setCurrentVault({ rootId: id, name: vaultName, rootPath })
+  ensureKbRoot()
+  runLayoutMigrations(rootPath)
+  return { rootId: id, name: vaultName, path: rootPath }
+}
+
+/** 打开/创建/恢复仓库时的一次性布局迁移（P4 起 = 博客收拢；失败不阻断进入） */
+function runLayoutMigrations(rootPath: string): void {
+  try {
+    migrateBlogLayoutIntoKnowbase(rootPath)
+  } catch (e) {
+    console.warn('[vault-layout] 博客布局迁移失败（不阻断）:', (e as Error)?.message || e)
+  }
+}
+
+// ===== 附件落盘（P3 编辑器插图：选图/粘贴共用；D1 目标 = 仓库根 .attachments/<年-月>/）=====
+
+const IMAGE_EXT_WHITELIST = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
+const MAX_STAGE_IMAGE = 30 * 1024 * 1024
+
+function yearMonthDir(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function sanitizeFileName(name: string): string {
+  const n = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim()
+  return n || 'image'
+}
+
+/** 原名去重：冲突时加时间戳后缀（D1 命名约定） */
+function uniqueAttachmentName(dirAbs: string, fileName: string): string {
+  if (!existsSync(join(dirAbs, fileName))) return fileName
+  const ext = extname(fileName)
+  const stem = fileName.slice(0, fileName.length - ext.length)
+  return `${stem}-${Date.now()}${ext}`
+}
+
+/** 图片字节流入附件区：.attachments/<年-月>/<名>.<ext>；返回仓库根相对 POSIX 路径（md 相对链接用） */
+export function stageImageBytes(rootPath: string, fileName: string, data: Buffer): { name: string; relPath: string } {
+  const safe = sanitizeFileName(fileName)
+  const ext = extname(safe).slice(1).toLowerCase()
+  if (!IMAGE_EXT_WHITELIST.has(ext)) throw new Error(`不支持的图片类型：.${ext || '?'}`)
+  if (data.length === 0 || data.length > MAX_STAGE_IMAGE) throw new Error('图片为空或超过 30MB')
+  const ym = yearMonthDir()
+  const dirAbs = join(rootPath, ATTACHMENTS_DIR, ym)
+  mkdirSync(dirAbs, { recursive: true })
+  const name = uniqueAttachmentName(dirAbs, safe)
+  writeFileSync(join(dirAbs, name), data)
+  return { name, relPath: `${ATTACHMENTS_DIR}/${ym}/${name}` }
+}
+
 function requireInside(rootId: string, relPath: unknown): string {
   const r = requireRoot(rootId)
   const abs = resolveSafe(r.rootPath, relPath)
@@ -420,14 +490,69 @@ export function registerWorkspaceHandlers(): void {
     if (basename(rootPath).startsWith('.')) {
       return { error: '「. 开头」的隐藏目录是仓库内部数据目录，不能作为仓库根，请选择它的父目录' }
     }
-    const id = findVaultIdByPath(rootPath) ?? randomUUID()
-    const name = basename(rootPath)
-    roots.set(id, { id, name, rootPath })
-    upsertVault(id, name, rootPath)
-    // 打开仓库 = 设为当前仓库上下文 + 初始化 .knowbase
-    setCurrentVault({ rootId: id, name, rootPath })
-    ensureKbRoot()
-    return { rootId: id, name, path: rootPath }
+    // P5a 嵌套防护：路径任一段为 .knowbase = 某仓库内部（如 .knowbase\cache\proj），拒绝再登记为仓库根
+    if (rootPath.split(sep).some((s) => s.toLowerCase() === '.knowbase')) {
+      return { error: '该路径位于 .knowbase 数据目录内部，一个仓库最多一个 .knowbase，请选择仓库根目录' }
+    }
+    pendingVaultPath = null
+    // D7：顶层无 .knowbase → 该文件夹不是仓库。返回 notVault，待渲染层确认后走 ws:initPendingVault，
+    // 不再静默自动建（原行为：直接 ensureKbRoot 建骨架）
+    if (!existsSync(join(rootPath, '.knowbase'))) {
+      pendingVaultPath = rootPath
+      return { notVault: true, name: basename(rootPath), path: rootPath }
+    }
+    return adoptVaultDirectory(rootPath)
+  })
+
+  // D7 确认表态：accept=true → 初始化并进入；false → 放弃（清暂存路径）。返回 ok=false 表示无暂存/已取消
+  ipcMain.handle('ws:initPendingVault', (_e, accept: unknown) => {
+    const p = pendingVaultPath
+    pendingVaultPath = null
+    if (accept !== true || !p) return { ok: false }
+    try {
+      return { ok: true, ...adoptVaultDirectory(p) }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  // 创建仓库（首启引导 Obsidian 式流程）：名称 + 位置 → mkdir + 登记 + 设为当前。
+  // parentPath 缺省/'__default__' = 用户文档目录（快速开始路径）；目录已存在且为目录 → 直接登记复用（幂等）
+  ipcMain.handle('ws:createVault', async (_e, name: string, parentPath?: string) => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const trimmed = String(name ?? '').trim()
+    if (!trimmed) return { error: '请输入仓库名称' }
+    if (/[\\/:*?"<>|]/.test(trimmed)) return { error: '名称不能包含 \\ / : * ? " < > | 等字符' }
+    if (trimmed.startsWith('.')) return { error: '名称不能以 . 开头（隐藏目录是仓库内部数据目录）' }
+
+    let parent = parentPath && parentPath !== '__default__' ? parentPath : ''
+    if (!parent) {
+      if (parentPath !== '__default__') {
+        // 未指定位置且非快速开始 → 弹系统对话框选位置（渲染层通常已先经 openDirDialog 选好传入）
+        if (!win) return { error: '无可交互窗口' }
+        const result = await dialog.showOpenDialog(win, {
+          title: '选择新仓库的存放位置',
+          properties: ['openDirectory', 'createDirectory'],
+        })
+        if (result.canceled || result.filePaths.length === 0) return null
+        parent = result.filePaths[0]
+      } else {
+        parent = app.getPath('documents')
+      }
+    }
+
+    const rootPath = join(parent, trimmed)
+    if (existsSync(rootPath)) {
+      if (!statSync(rootPath).isDirectory()) return { error: `同名文件已存在于 ${parent}` }
+    } else {
+      try {
+        mkdirSync(rootPath, { recursive: true })
+      } catch (e) {
+        return { error: `创建文件夹失败：${(e as Error).message}` }
+      }
+    }
+    // 复用统一登记路径（含 D3 布局迁移；空目录时为空操作，幂等）
+    return adoptVaultDirectory(rootPath, trimmed)
   })
 
   // 枚举目录
@@ -450,12 +575,13 @@ export function registerWorkspaceHandlers(): void {
     }
   })
 
-  // 二进制读图（vault 附件相对路径解析 → data:URI；限制 .knowbase/_attachments 白名单防越界）
+  // 二进制读图（vault 附件相对路径解析 → data:URI；附件白名单防越界）
   ipcMain.handle('ws:readImage', (_e, rootId: string, relPath: string) => {
     try {
       const abs = requireInside(rootId, relPath)
-      // 白名单：vault 内 .knowbase/_attachments 目录 + 二进制扩展
-      if (!abs.toLowerCase().includes(`${sep}.knowbase${sep}_attachments${sep}`)) {
+      // 白名单：根级 .attachments/（D1 新附件区）+ 历史 .knowbase/_attachments/ + 二进制扩展
+      const lower = abs.toLowerCase()
+      if (!lower.includes(`${sep}.attachments${sep}`) && !lower.includes(`${sep}.knowbase${sep}_attachments${sep}`)) {
         return { error: '路径不在附件白名单' }
       }
       const buf = readFileSync(abs)
@@ -470,6 +596,49 @@ export function registerWorkspaceHandlers(): void {
       return { dataUrl: `data:${mime};base64,${buf.toString('base64')}` }
     } catch (e) {
       return { error: (e as Error).message }
+    }
+  })
+
+  // P3：选图入附件区——对话框在主进程，复制落 .attachments/<年-月>/，返回仓库根相对链接（渲染层不接触绝对路径）
+  ipcMain.handle('ws:pickImagesToAttachments', async (_e, rootId: string) => {
+    try {
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      if (!win) return { ok: false, error: '无可交互窗口' }
+      const r = await dialog.showOpenDialog(win, {
+        title: '选择插图',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'] }],
+      })
+      if (r.canceled || r.filePaths.length === 0) return { ok: false }
+      const root = requireRoot(rootId).rootPath
+      const images: { name: string; relPath: string }[] = []
+      for (const srcAbs of r.filePaths) {
+        try {
+          const ext = extname(srcAbs).slice(1).toLowerCase()
+          if (!IMAGE_EXT_WHITELIST.has(ext)) continue
+          const st = statSync(srcAbs)
+          if (!st.isFile() || st.size === 0 || st.size > MAX_STAGE_IMAGE) continue
+          const out = stageImageBytes(root, basename(srcAbs), readFileSync(srcAbs))
+          images.push(out)
+        } catch { /* 单个不可读跳过，不中断 */ }
+      }
+      return images.length > 0 ? { ok: true, images } : { ok: false, error: '没有可导入的图片（类型不支持或过大）' }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  // P3：剪贴板粘贴截图 → base64 过 IPC 落附件区（同 stageImageBytes 规则）
+  ipcMain.handle('ws:saveImageToAttachments', (_e, rootId: string, payload: { fileName: unknown; dataBase64: unknown }) => {
+    try {
+      const root = requireRoot(rootId).rootPath
+      const b64 = typeof payload?.dataBase64 === 'string' ? payload.dataBase64 : ''
+      if (b64.length === 0 || b64.length > Math.ceil(MAX_STAGE_IMAGE / 3) * 4) return { ok: false, error: '图片为空或超过 30MB' }
+      const buf = Buffer.from(b64, 'base64')
+      const out = stageImageBytes(root, typeof payload?.fileName === 'string' ? payload.fileName : 'image.png', buf)
+      return { ok: true, ...out }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
     }
   })
 
@@ -619,6 +788,7 @@ export function registerWorkspaceHandlers(): void {
       if (!r) throw new Error('工作区不存在或已被移除')
       setCurrentVault({ rootId: r.id, name: r.name, rootPath: r.rootPath })
       ensureKbRoot()
+      runLayoutMigrations(r.rootPath)
       // 切换仓库后失效新仓库缓存（多仓库陈旧兜底，与 ws:openDir 同策略）
       invalidateIndexIfCurrentVault(r.id)
       invalidateGraphIndex()
@@ -640,4 +810,50 @@ export function registerWorkspaceHandlers(): void {
     removeVault(rootId)
     return { ok: true }
   })
+
+  // P7（D6）：删除仓库 = 整仓进 OS 回收站（不弹提醒窗；注册表移除与当前态清理由本 handler 完成）
+  // 入口在设置深处（R4）；护栏 isAllowedClearRoot 防配置损坏误删整盘；回收站可还原兜底。
+  ipcMain.handle('ws:deleteVault', async (_e, rootId: string) => {
+    const r = roots.get(rootId)
+    if (!r) return { error: '仓库不存在或已被移除' }
+    if (!isAllowedClearRoot(r.rootPath)) return { error: '仓库路径校验失败，已中止（未删除任何内容）' }
+    try {
+      await trashVaultFolder(r.rootPath)
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
+    roots.delete(rootId)
+    try { removeVault(rootId) } catch { /* 登记表行可能已不在，忽略 */ }
+    const wasCurrent = getCurrentVault()?.rootId === rootId
+    if (wasCurrent) {
+      setCurrentVault(null)
+      invalidateKnowledgeIndex()
+      invalidateGraphIndex()
+    }
+    return { ok: true, deletedCurrent: wasCurrent }
+  })
+}
+
+/**
+ * 全局重置（db:clearAllData，P7 语义替换 rmSync 直删）：把全部已登记仓库逐个送 OS 回收站
+ * 并移除注册。校验失败/删除失败的仓库跳过并回报错误（绝不半途强删）。
+ */
+export async function trashAllRegisteredVaults(): Promise<{ trashed: number; errors: string[] }> {
+  const errors: string[] = []
+  let trashed = 0
+  for (const [id, r] of [...roots.entries()]) {
+    if (!isAllowedClearRoot(r.rootPath)) { errors.push(`${r.name}：路径校验失败，已跳过`); continue }
+    try {
+      await trashVaultFolder(r.rootPath)
+      trashed++
+      roots.delete(id)
+      try { removeVault(id) } catch { /* ignore */ }
+    } catch (e) {
+      errors.push(`${r.name}：${(e as Error).message}`)
+    }
+  }
+  setCurrentVault(null)
+  invalidateKnowledgeIndex()
+  invalidateGraphIndex()
+  return { trashed, errors }
 }

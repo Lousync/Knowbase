@@ -10,6 +10,9 @@ import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
+import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
+import { vaultTodosAll, vaultCreateTodo } from './kbStore/scheduleVaultRepo'
+import { ensureScheduleVaultSeeded } from '../database/repositories/scheduleRepo'
 import { extractDocText } from './docsReader'
 import type { ToolJsonSchema } from './aiTools'
 
@@ -29,6 +32,12 @@ import type { ToolJsonSchema } from './aiTools'
 function storageIs(kind: 'knowledge' | 'blog' | 'data'): boolean {
   const key = kind === 'knowledge' ? 'storageKnowledge' : kind === 'blog' ? 'storageBlog' : 'storageData'
   return getSettingReader()(key) === 'vault'
+}
+
+/** 习惯行按 sort_order ASC, created_at ASC（码位序）排序；vault/sqlite 读源共用（P5c 消费方接线） */
+function sortHabitRows<T extends { sort_order?: number; created_at?: string }>(rows: T[]): T[] {
+  const bin = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+  return rows.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || bin(String(a.created_at ?? ''), String(b.created_at ?? '')))
 }
 
 // ---- 本地日期工具（与 src/modules/toolbox/components/habit-tracker/dateUtils.ts 语义一致） ----
@@ -427,10 +436,14 @@ export function registerBuiltinTools(): void {
     readOnly: true,
     module: 'checkin',
   }, () => {
-    const habits = queryAll('SELECT id, name, rule_type, rule_days, weekly_target, archived FROM habits ORDER BY sort_order ASC, created_at ASC')
     const today = formatLocalDate(new Date())
-    const records = queryAll('SELECT habit_id, date FROM habit_records WHERE date = ?', [today])
-    const checkedToday = new Set(records.map(r => str(r.habit_id)))
+    // P5c 消费方接线：storageData=vault → 读 .knowbase/modules/checkin/*.json（排序语义同 SQL）
+    const habits: DbRow[] = storageIs('data')
+      ? sortHabitRows(vaultHabitsAll()) as unknown as DbRow[]
+      : queryAll('SELECT id, name, rule_type, rule_days, weekly_target, archived FROM habits ORDER BY sort_order ASC, created_at ASC')
+    const checkedToday = storageIs('data')
+      ? new Set(vaultRecordsAll().filter(r => r.date === today).map(r => str(r.habit_id)))
+      : new Set(queryAll('SELECT habit_id, date FROM habit_records WHERE date = ?', [today]).map(r => str(r.habit_id)))
     return habits.map(h => {
       const ruleType = str(h.rule_type, 'daily')
       const ruleDays = parseDays(str(h.rule_days, '[]'))
@@ -464,11 +477,15 @@ export function registerBuiltinTools(): void {
   }, args => {
     const windowDays = clamp(Math.floor(num(args.days, 30)), 1, 365)
     const wanted = typeof args.habitId === 'string' && args.habitId ? [args.habitId] : null
-    const habits = queryAll(
-      'SELECT id, name, rule_type, rule_days, weekly_target FROM habits ORDER BY sort_order ASC'
+    // P5c 消费方接线：vault 读源（含归档习惯，与 sqlite 路径一致）
+    const habits: DbRow[] = (storageIs('data')
+      ? sortHabitRows(vaultHabitsAll()) as unknown as DbRow[]
+      : queryAll('SELECT id, name, rule_type, rule_days, weekly_target FROM habits ORDER BY sort_order ASC')
     ).filter(h => !wanted || wanted.includes(str(h.id)))
     if (wanted && habits.length === 0) throw new Error(`习惯不存在: ${str(args.habitId)}`)
-    const allRecords = queryAll('SELECT habit_id, date FROM habit_records')
+    const allRecords: DbRow[] = storageIs('data')
+      ? vaultRecordsAll() as unknown as DbRow[]
+      : queryAll('SELECT habit_id, date FROM habit_records')
     return habits.map(h => {
       const done = new Set<string>()
       for (const rec of allRecords) {
@@ -596,11 +613,21 @@ export function registerBuiltinTools(): void {
   }, args => {
     const start = /^\d{4}-\d{2}-\d{2}$/.test(str(args.start)) ? str(args.start) : todayLocal()
     const end = /^\d{4}-\d{2}-\d{2}$/.test(str(args.end)) ? str(args.end) : start
-    const rows = queryAll(
-      `SELECT id, title, date, time, quadrant, status FROM schedule_todos
-       WHERE date BETWEEN ? AND ? ORDER BY date ASC, sort_order ASC LIMIT 100`,
-      [start, end]
-    )
+    let rows: DbRow[]
+    if (storageIs('data')) {
+      // P5c 消费方接线：读 .knowbase/modules/schedule/todos.json（date BETWEEN + 排序 + LIMIT 100 同 SQL）
+      ensureScheduleVaultSeeded()
+      rows = vaultTodosAll()
+        .filter(r => typeof r.date === 'string' && r.date >= start && r.date <= end)
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.sort_order ?? 0) - (b.sort_order ?? 0)))
+        .slice(0, 100) as unknown as DbRow[]
+    } else {
+      rows = queryAll(
+        `SELECT id, title, date, time, quadrant, status FROM schedule_todos
+         WHERE date BETWEEN ? AND ? ORDER BY date ASC, sort_order ASC LIMIT 100`,
+        [start, end]
+      )
+    }
     const QUADRANT = ['紧急重要', '重要不紧急', '紧急不重要', '不重要不紧急']
     return rows.map(r => {
       const q = num(r.quadrant, 1)
@@ -764,6 +791,17 @@ export function registerBuiltinTools(): void {
     const quadrant = clamp(Math.floor(num(args.quadrant, 1)), 0, 3)
     const time = /^\d{1,2}:\d{2}$/.test(str(args.time)) ? str(args.time) : null
     const id = randomUUID()
+    if (storageIs('data')) {
+      // P5c 消费方接线：写 .knowbase/modules/schedule/todos.json（默认值同表列：plan/pending/sort 0）
+      ensureScheduleVaultSeeded()
+      const now = new Date().toISOString()
+      vaultCreateTodo({
+        id, title, description: '', date, time, quadrant,
+        task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
+        end_criteria: '', parent_id: null, created_at: now, updated_at: now,
+      })
+      return { ok: true, id, date, quadrant }
+    }
     run(
       `INSERT INTO schedule_todos (id, title, date, time, quadrant) VALUES (?, ?, ?, ?, ?)`,
       [id, title, date, time, quadrant]
@@ -791,11 +829,21 @@ export function registerBuiltinTools(): void {
   }, args => {
     const q = str(args.name).trim().toLowerCase()
     if (!q) throw new Error('习惯名称不能为空')
+    const date = todayLocal()
+    if (storageIs('data')) {
+      // P5c 消费方接线：查/写 .knowbase/modules/checkin/*.json（幂等=UNIQUE(habit_id,date) 语义）
+      const hs = sortHabitRows(vaultHabitsAll().filter(h => !h.archived))
+      const hit = hs.find(h => h.name.toLowerCase() === q) ?? hs.find(h => h.name.toLowerCase().includes(q))
+      if (!hit) throw new Error(`未找到匹配的习惯「${str(args.name)}」`)
+      const isNew = vaultHabitRecordAddIfAbsent(hit.id, date, 'manual')
+      return isNew
+        ? { ok: true, habitId: hit.id, name: hit.name, checked: true }
+        : { ok: true, habitId: hit.id, name: hit.name, alreadyChecked: true }
+    }
     const habits = queryAll('SELECT id, name FROM habits WHERE archived = 0')
     let hit = habits.find(h => str(h.name).toLowerCase() === q)
     if (!hit) hit = habits.find(h => str(h.name).toLowerCase().includes(q))
     if (!hit) throw new Error(`未找到匹配的习惯「${str(args.name)}」`)
-    const date = todayLocal()
     const exist = queryAll('SELECT id FROM habit_records WHERE habit_id = ? AND date = ? LIMIT 1', [str(hit.id), date])
     if (exist.length > 0) return { ok: true, habitId: str(hit.id), name: str(hit.name), alreadyChecked: true }
     run('INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)', [randomUUID(), str(hit.id), date])

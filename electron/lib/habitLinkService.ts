@@ -2,6 +2,9 @@ import type { WebContents } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { notifyCheckin } from './pushService'
+import { isVaultDataSource } from '../database/dataSourceMode'
+import { vaultHabitRecordAddIfAbsent, vaultHabitsAll } from './kbStore/habitVaultRepo'
+import { vaultTodosAll } from './kbStore/scheduleVaultRepo'
 
 /**
  * 习惯跨模块自动打卡服务。
@@ -73,6 +76,10 @@ function computeMetric(a: Activity): number | null {
     }
     // 日程：当天完成的顶层任务数（parent_id IS NULL，避免父子重复计数）
     case 'schedule': {
+      // P5c 消费方接线：vault 模式读 .knowbase/modules/schedule/todos.json（过滤语义同 SQL）
+      if (isVaultDataSource()) {
+        return vaultTodosAll().filter((r) => r.status === 'done' && r.date === a.date && (r.parent_id === null || r.parent_id === undefined)).length
+      }
       const row = queryOne<{ n: number }>(
         "SELECT COUNT(*) AS n FROM schedule_todos WHERE status = 'done' AND date = ? AND parent_id IS NULL",
         [a.date]
@@ -104,12 +111,21 @@ export function recordActivity(activity: Activity, sender?: WebContents): void {
     if (!SOURCE_WHITELIST.includes(activity.source)) return
     if (!DATE_RE.test(activity.date)) return
 
-    const links = queryAll<LinkRow>(
-      `SELECT l.habit_id AS habit_id, h.name AS habit_name, l.source AS source, l.threshold AS threshold
-       FROM habit_links l JOIN habits h ON h.id = l.habit_id
-       WHERE l.source = ? AND l.enabled = 1 AND h.archived = 0`,
-      [activity.source]
-    )
+    const vaultData = isVaultDataSource()
+    const links = vaultData
+      // P5c：vault 模式习惯名改读 .knowbase/modules/checkin/habits.json（habit_links 规则表暂留 sqlite）
+      ? queryAll<LinkRow>(
+          `SELECT l.habit_id AS habit_id, '' AS habit_name, l.source AS source, l.threshold AS threshold
+           FROM habit_links l WHERE l.source = ? AND l.enabled = 1`,
+          [activity.source]
+        ).map((l) => ({ ...l, habit_name: vaultHabitsAll().find((h) => h.id === l.habit_id && !h.archived)?.name ?? '' }))
+          .filter((l) => l.habit_name)
+      : queryAll<LinkRow>(
+          `SELECT l.habit_id AS habit_id, h.name AS habit_name, l.source AS source, l.threshold AS threshold
+           FROM habit_links l JOIN habits h ON h.id = l.habit_id
+           WHERE l.source = ? AND l.enabled = 1 AND h.archived = 0`,
+          [activity.source]
+        )
     if (links.length === 0) return
 
     const value = computeMetric(activity)
@@ -119,17 +135,20 @@ export function recordActivity(activity: Activity, sender?: WebContents): void {
     const checked: AutoCheckin[] = []
     for (const link of links) {
       if (value < link.threshold) continue
-      db.run(
-        "INSERT OR IGNORE INTO habit_records (id, habit_id, date, source) VALUES (?, ?, ?, 'auto')",
-        [randomUUID(), link.habit_id, activity.date]
-      )
-      // 只有真正插入新行（今天之前没打过卡）才算一次新打卡：自动保存反复触发不重复推送
-      if (db.getRowsModified() > 0) {
+      // 幂等打卡：vault=文件内 UNIQUE(habit_id,date) 判定（返回 true 才算新打卡），sqlite=INSERT OR IGNORE + 改动行数
+      const isNew = vaultData
+        ? vaultHabitRecordAddIfAbsent(link.habit_id, activity.date, 'auto')
+        : (db.run(
+            "INSERT OR IGNORE INTO habit_records (id, habit_id, date, source) VALUES (?, ?, ?, 'auto')",
+            [randomUUID(), link.habit_id, activity.date]
+          ), db.getRowsModified() > 0)
+      // 只有真正新增（今天之前没打过卡）才算一次新打卡：自动保存反复触发不重复推送
+      if (isNew) {
         checked.push({ habitId: link.habit_id, habitName: link.habit_name, date: activity.date })
         void notifyCheckin(link.habit_id, activity.date)
       }
     }
-    saveToDisk()
+    if (!vaultData) saveToDisk()
 
     if (checked.length > 0 && sender && !sender.isDestroyed()) {
       sender.send('habit:autoChecked', checked)

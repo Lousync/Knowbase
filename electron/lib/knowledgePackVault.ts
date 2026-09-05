@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'fs'
 import { dirname, join, relative } from 'path'
 import { randomUUID } from 'crypto'
-import { getCurrentVault, KB_ATTACHMENTS_DIR } from './kbStore/vaultContext'
+import { getCurrentVault, ATTACHMENTS_DIR, KB_ATTACHMENTS_DIR } from './kbStore/vaultContext'
 import { readJson, writeJson } from './kbStore/jsonStore'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
 
@@ -12,7 +12,7 @@ import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
  * 本模块在 storageKnowledge=vault 时替代 importPack 的 sqlite 写入：
  *   - 空间/笔记本/章节 → .knowbase/modules/knowledge/categories.json
  *   - 页面        → 仓库内容目录 空间/笔记本/章节/<标题>.md（frontmatter 挂知识页元数据）
- *   - 图片        → 复制到 .knowbase/_attachments/knowledge_page/<pageId>/ 并改写相对引用
+ *   - 图片        → 复制到 .attachments/knowledge_page/<pageId>/ 并改写协议引用（D1 定稿；旧包不搬迁，兼容读取）
  *   - 映射        → .knowbase/modules/knowledge/pack-imports.json（幂等/更新/本地修改保护）
  * 纯函数（不 import electron），可对真实插件包做 node 冒烟。
  */
@@ -102,7 +102,7 @@ function readPageMd(pluginDir: string, file: string): { buf: Buffer } | { error:
   return { buf }
 }
 
-/** 复制 md 内相对图片到 .knowbase/_attachments/knowledge_page/<pageId>，返回改写后的正文 */
+/** 复制 md 内相对图片到 .attachments/knowledge_page/<pageId>，返回改写后的正文（旧 `/_attachments/` 引用跳过不改写，兼容读取） */
 function stageImages(body: string, pluginDir: string, pageFile: string, pageId: string, fileDir: string, root: string, staged: string[]): string {
   const srcDir = join(pluginDir, dirname(pageFile))
   const attTail = `knowledge_page/${pageId}`
@@ -116,7 +116,7 @@ function stageImages(body: string, pluginDir: string, pageFile: string, pageId: 
     if (!base) continue
     const src = join(srcDir, ref.replace(/\\/g, '/').replace(/^\//, ''))
     if (!existsSync(src)) continue
-    const attDir = join(root, KB_ATTACHMENTS_DIR, attTail)
+    const attDir = join(root, ATTACHMENTS_DIR, attTail)
     mkdirSync(attDir, { recursive: true })
     const dst = join(attDir, base)
     // copy 而非 move：插件包源文件必须保留（可重复导入）

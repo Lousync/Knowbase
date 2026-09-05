@@ -2,6 +2,8 @@ import { ipcMain, safeStorage } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { buildUpdateSet } from '../../lib/safeUpdate'
+import { isVaultDataSource } from '../dataSourceMode'
+import { vaultPasswordsAll, vaultPasswordsSave, vaultSecretPasswordsExists, type SecretPwdRow } from '../../lib/kbStore/secretVaultRepo'
 
 // ---- types ----
 interface PasswordRow {
@@ -14,7 +16,7 @@ interface PasswordRow {
 // 库内密文格式: 'enc1:' + base64(加密字节);无前缀视为历史明文,读取时原样返回、启动时批量加密。
 const ENC_PREFIX = 'enc1:'
 
-function encryptPassword(plain: string): string {
+export function encryptPassword(plain: string): string {
   if (!plain) return ''
   try {
     if (safeStorage.isEncryptionAvailable()) {
@@ -77,10 +79,36 @@ function run(sql: string, params: unknown[] = []): void {
   saveToDisk()
 }
 
+// ---- vault 路由（P5b / D4）：storageData=vault 时真相源 = .knowbase/secret/passwords.json ----
+// 行结构与表一致（snake_case），password 字段沿用 enc1: 密文格式，回收站快照跨模式兼容。
+
+function vaultRows(): PasswordRow[] {
+  return vaultPasswordsAll() as unknown as PasswordRow[]
+}
+
+/** 首次进入 vault 模式：从 sqlite 台账播种（密文原样搬，幂等；库不可用时从空开始） */
+export function ensureSecretVaultSeeded(): void {
+  if (!isVaultDataSource()) return
+  if (vaultSecretPasswordsExists()) return
+  let rows: SecretPwdRow[] = []
+  try {
+    rows = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords').map((r) => ({ ...r }) as unknown as SecretPwdRow)
+  } catch { rows = [] }
+  vaultPasswordsSave(rows)
+}
+
+function vaultNextSortOrder(rows: PasswordRow[]): number {
+  return rows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0)
+}
+
 // ---- IPC handlers ----
 export function registerPasswordHandlers(): void {
 
   ipcMain.handle('passwordVault:getAll', () => {
+    if (isVaultDataSource()) {
+      ensureSecretVaultSeeded()
+      return vaultRows().map(rowToPassword)
+    }
     const rows = queryAll<PasswordRow>(
       'SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC'
     )
@@ -88,6 +116,12 @@ export function registerPasswordHandlers(): void {
   })
 
   ipcMain.handle('passwordVault:getById', (_e, id: string) => {
+    if (isVaultDataSource()) {
+      ensureSecretVaultSeeded()
+      const rows = vaultRows()
+      const hit = rows.find((r) => r.id === id)
+      return hit ? rowToPassword(hit) : null
+    }
     const rows = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords WHERE id = ?', [id])
     return rows.length > 0 ? rowToPassword(rows[0]) : null
   })
@@ -97,6 +131,17 @@ export function registerPasswordHandlers(): void {
   }) => {
     const id = randomUUID()
     const now = new Date().toISOString()
+    if (isVaultDataSource()) {
+      ensureSecretVaultSeeded()
+      const rows = vaultRows()
+      const row: PasswordRow = {
+        id, title: data.title || '', url: data.url || '', username: data.username || '',
+        account: data.account || '', password: encryptPassword(data.password || ''), notes: data.notes || '',
+        sort_order: vaultNextSortOrder(rows), created_at: now, updated_at: now,
+      }
+      vaultPasswordsSave([...rows, row] as unknown as SecretPwdRow[])
+      return rowToPassword(row)
+    }
     const maxRow = queryAll<{ m: number }>(
       'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_passwords'
     )
@@ -113,6 +158,27 @@ export function registerPasswordHandlers(): void {
   ipcMain.handle('passwordVault:update', (_e, id: string, data: {
     title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number
   }) => {
+    if (isVaultDataSource()) {
+      ensureSecretVaultSeeded()
+      const rows = vaultRows()
+      const i = rows.findIndex((r) => r.id === id)
+      if (i < 0) return null
+      const cur = rows[i]
+      const next: PasswordRow = {
+        ...cur,
+        title: data.title !== undefined ? data.title : cur.title,
+        url: data.url !== undefined ? data.url : cur.url,
+        username: data.username !== undefined ? data.username : cur.username,
+        account: data.account !== undefined ? data.account : cur.account,
+        password: data.password !== undefined ? encryptPassword(data.password) : cur.password,
+        notes: data.notes !== undefined ? data.notes : cur.notes,
+        sort_order: data.sortOrder !== undefined ? data.sortOrder : cur.sort_order,
+        updated_at: new Date().toISOString(),
+      }
+      rows[i] = next
+      vaultPasswordsSave(rows as unknown as SecretPwdRow[])
+      return rowToPassword(next)
+    }
     // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入);密码先加密再入库
     const payload = { ...data, password: data.password !== undefined ? encryptPassword(data.password) : undefined }
     const { sets, params } = buildUpdateSet(
@@ -128,6 +194,22 @@ export function registerPasswordHandlers(): void {
 
   ipcMain.handle('passwordVault:delete', (_e, id: string) => {
     // Move to recycle bin instead of permanent delete
+    if (isVaultDataSource()) {
+      ensureSecretVaultSeeded()
+      const rows = vaultRows()
+      const hit = rows.find((r) => r.id === id)
+      if (!hit) return
+      const entry = rowToPassword(hit)
+      const binId = randomUUID()
+      const snapshot = JSON.stringify({ ...entry, password: encryptPassword(entry.password) })
+      run(
+        `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [binId, id, 'passwordVault', entry.title || '未命名', snapshot, new Date().toISOString()]
+      )
+      vaultPasswordsSave(rows.filter((r) => r.id !== id) as unknown as SecretPwdRow[])
+      return
+    }
     const rows = queryAll<PasswordRow>('SELECT * FROM toolbox_passwords WHERE id = ?', [id])
     if (rows.length === 0) return
     const entry = rowToPassword(rows[0])

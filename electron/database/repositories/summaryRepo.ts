@@ -2,6 +2,11 @@ import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { recordActivity } from '../../lib/habitLinkService'
+import { isVaultDataSource } from '../dataSourceMode'
+import { ensureScheduleVaultSeeded } from './scheduleRepo'
+import { ensureCheckinVaultSeeded } from './checkinRepo'
+import { vaultTodosAll } from '../../lib/kbStore/scheduleVaultRepo'
+import { vaultRecordsAll } from '../../lib/kbStore/habitVaultRepo'
 
 /**
  * 周期总结支持服务 ——
@@ -17,6 +22,15 @@ function queryOne<T>(sql: string, params: unknown[] = []): T {
   while (stmt.step()) row = stmt.getAsObject() as T
   stmt.free()
   return row as T
+}
+
+/** 存储时间戳（ISO 或 'YYYY-MM-DD HH:MM:SS'）→ 本地日期 YYYY-MM-DD（对标 sqlite date(x,'localtime')） */
+function localDay(ts: unknown): string {
+  if (typeof ts !== 'string' || !ts) return ''
+  const d = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T'))
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 export function registerSummaryHandlers(): void {
@@ -47,6 +61,21 @@ export function registerSummaryHandlers(): void {
     const count = (sql: string, params: unknown[] = []): number => {
       const r = queryOne<{ n: number }>(sql, params)
       return Number(r?.n ?? 0)
+    }
+    // P5c 消费方接线：storageData=vault 时，打卡/日程两项改读 .knowbase/modules/*.json
+    if (isVaultDataSource()) {
+      ensureCheckinVaultSeeded()
+      ensureScheduleVaultSeeded()
+      return {
+        checkins: vaultRecordsAll().filter((r) => typeof r.date === 'string' && r.date >= start && r.date <= end).length,
+        blogEntries: count('SELECT COUNT(*) AS n FROM entries WHERE date BETWEEN ? AND ?', [start, end]),
+        knowledgePages: count(
+          "SELECT COUNT(*) AS n FROM knowledge_pages WHERE date(created_at, 'localtime') BETWEEN ? AND ?",
+          [start, end]
+        ),
+        pomodoroMinutes: count('SELECT COALESCE(SUM(minutes), 0) AS n FROM pomodoro_sessions WHERE date BETWEEN ? AND ?', [start, end]),
+        scheduleDone: vaultTodosAll().filter((r) => r.status === 'done' && localDay(r.updated_at) >= start && localDay(r.updated_at) <= end && localDay(r.updated_at) !== '').length,
+      }
     }
     return {
       // 打卡次数（habit_records.date 即纯日期）

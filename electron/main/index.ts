@@ -48,9 +48,8 @@ import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
 import { registerDocsReadHandlers } from '../lib/docsIpc'
 import { registerLanShareHandlers } from '../lib/lanShare'
-import { registerWorkspaceHandlers } from '../lib/workspaceManager'
+import { registerWorkspaceHandlers, trashAllRegisteredVaults } from '../lib/workspaceManager'
 import { getCurrentVault, setCurrentVault } from '../lib/kbStore/vaultContext'
-import { clearVaultContent, isAllowedClearRoot } from '../lib/kbStore/clearVaultContent'
 import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
@@ -308,6 +307,30 @@ function registerWindowHandlers(): void {
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
+  // OS 级全屏（禅模式 Z2+）：覆盖系统任务栏，比最大化更彻底的沉浸。
+  // 进入前记录窗口状态，退出时还原（最大化态 → 重新最大化，普通态 → 还原 bounds）
+  let preFsMaximized = false
+  let preFsBounds: Electron.Rectangle | null = null
+  ipcMain.handle('window:set-fullscreen', (_e, flag: boolean) => {
+    const win = mainWindow
+    if (!win || win.isDestroyed()) return
+    if (flag && !win.isFullScreen()) {
+      preFsMaximized = win.isMaximized()
+      preFsBounds = preFsMaximized ? null : win.getBounds()
+      win.setFullScreen(true)
+    } else if (!flag && win.isFullScreen()) {
+      win.setFullScreen(false)
+      if (preFsMaximized) {
+        if (!win.isMaximized()) win.maximize()
+      } else if (preFsBounds) {
+        win.setBounds(preFsBounds)
+      }
+      preFsBounds = null
+    }
+  })
+  mainWindow?.on('enter-full-screen', () => mainWindow?.webContents.send('window:fullscreenChange', true))
+  mainWindow?.on('leave-full-screen', () => mainWindow?.webContents.send('window:fullscreenChange', false))
+
   // 抽屉式日程面板：renderer 发送「面板期望宽度」（0 = 收回），主进程以抽屉打开时刻的
   // 基准宽度为锚点计算窗口宽度。绝对值协议 —— 重复/乱序/HMR 重挂载的消息不会累积漂移。
   // 最大化/全屏时窗口由系统管理，自动跳过；右缘越界则整体左移夹回工作区。
@@ -412,20 +435,16 @@ function registerWindowHandlers(): void {
     return true
   })
 
-  // 清空所有数据（2026-09-03 对齐去库化重写）：真删当前仓库内容（文件 + .knowbase）+ 全局重置 → 回首启引导
-  ipcMain.handle('db:clearAllData', () => {
+  // 清空所有数据（P7 对齐 D6）：已登记仓库整体进 OS 回收站（可还原，替代旧 rmSync 直删）+ 全局重置 → 回首启引导
+  ipcMain.handle('db:clearAllData', async () => {
     try {
       const db = getDatabase()
 
-      // 1) 当前仓库内容真删：根下非隐藏内容 + .knowbase 整体重建（护栏校验失败则中止不删）
-      //    修复旧实现只 DROP sqlite 空表不碰 vault 文件 → 「清了文件还在、列表/图谱不一致」的历史问题
-      const vault = getCurrentVault()
-      if (vault?.rootPath) {
-        if (!isAllowedClearRoot(vault.rootPath)) {
-          return { success: false, error: '仓库路径校验失败，已中止（未删除任何内容）' }
-        }
-        const cleared = clearVaultContent(vault.rootPath)
-        console.log(`[clearAllData] 仓库内容已清空: ${cleared.removed} 项 / ${cleared.removedDirs} 目录 / .knowbase 重建`)
+      // 1) 全部已登记仓库 → 回收站并移除注册（护栏校验失败的仓库跳过并中止，绝不半途强删）
+      const { trashed, errors } = await trashAllRegisteredVaults()
+      console.log(`[clearAllData] 已送回收站 ${trashed} 个仓库${errors.length ? '；异常：' + errors.join('；') : ''}`)
+      if (errors.length > 0 && trashed === 0) {
+        return { success: false, error: errors[0] }
       }
 
       // 2) 回退 sqlite 残留表（老模块兜底）+ vault 注册清空（回首启引导重新选/建仓库）
@@ -531,7 +550,8 @@ app.whenReady().then(async () => {
     try {
       const url = new URL(request.url)
       // vault 分支：attachment://vault/<pageId>/<file> —— 页面/仓库移动均不断链
-      // （主进程每次按「当前仓库」动态定位 .knowbase/_attachments/knowledge_page/<pageId>/<file>）
+      // （主进程每次按「当前仓库」动态定位，新落盘 .attachments/knowledge_page/<pageId>/<file>，
+      //   旧包兼容读取 .knowbase/_attachments/knowledge_page/<pageId>/<file>）
       if (url.hostname === 'vault') {
         const { getCurrentVault } = await import('../lib/kbStore/vaultContext')
         const cur = getCurrentVault()
@@ -543,8 +563,12 @@ app.whenReady().then(async () => {
         // 严格白名单防路径穿越：pageId=UUID；file=文件名（无分隔符、无 ..）
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pageId)) return new Response('Not Found', { status: 404 })
         if (!/^[A-Za-z0-9._\u4e00-\u9fa5-]{1,160}$/.test(file)) return new Response('Not Found', { status: 404 })
-        const p = join(cur.rootPath, '.knowbase', '_attachments', 'knowledge_page', pageId, file)
-        if (!existsSync(p)) return new Response('Not Found', { status: 404 })
+        const candidates = [
+          join(cur.rootPath, '.attachments', 'knowledge_page', pageId, file),
+          join(cur.rootPath, '.knowbase', '_attachments', 'knowledge_page', pageId, file),
+        ]
+        const p = candidates.find((c) => existsSync(c))
+        if (!p) return new Response('Not Found', { status: 404 })
         const ext = (file.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
         const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml', ico: 'image/x-icon', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
         return new Response(Readable.toWeb(createReadStream(p)) as unknown as BodyInit, {

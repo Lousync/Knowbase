@@ -7,8 +7,9 @@ import { parseMarkdown, serializeMarkdown } from './mdStore'
 /**
  * 博客 vault 数据仓库（去库化 P1：博客(.md) + 索引，见 .AGENT/docs/去库化迁移方案.md）
  *
- * 存储形态（与迁移器导出一致，可回读既有产物）：
- *   <Vault>/blog/<年份>/<日期>.md    正文 + frontmatter 元数据（每天一篇）
+ * 存储形态（D3 定稿 2026-09-06：博客整体收进 .knowbase）：
+ *   <Vault>/.knowbase/blog/<年份>/<日期>.md    正文 + frontmatter 元数据（每天一篇）
+ *   （旧版曾放仓库根 `blog/`，由 vaultMigration.migrateBlogLayoutIntoKnowbase 一次性迁入，幂等）
  * frontmatter 字段：id / title / date / created / updated / pinned / starred /
  *                   wordCount / states / tags(names[])
  *
@@ -67,8 +68,9 @@ function requireRoot(): string {
   return cur.rootPath
 }
 
+/** 博客数据区（D3）：.knowbase/blog/（对其他软件不可见，随仓库走） */
 function blogRoot(): string {
-  return join(requireRoot(), 'blog')
+  return join(requireRoot(), '.knowbase', 'blog')
 }
 
 /** 字数：去空白后的字符数（与 sqlite word_count 维护口径一致） */
