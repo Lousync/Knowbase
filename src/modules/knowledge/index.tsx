@@ -478,6 +478,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [])
 
   const handlePageDeleted = useCallback(async (id: string) => {
+    if (writeBlocked('删除页面')) return
     await deleteWithAnimation(id, async () => {
       await deleteKnowledgePage(id)
       // 页面已删除，清除脏标记后直接关闭标签页（无需确认未保存）
@@ -491,7 +492,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         if (pages.length > 0) handleOpenPage(pages[0].id)
       }
     })
-  }, [forceCloseTab])
+  }, [forceCloseTab, vaultReadonly])
 
   const handleReorderTabs = useCallback((newOrder: string[]) => { setOpenPageIds(newOrder) }, [])
 
