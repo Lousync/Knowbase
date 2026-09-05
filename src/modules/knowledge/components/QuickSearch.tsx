@@ -194,10 +194,10 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
 
   useEffect(() => { setSelectedIdx(0) }, [results.length])
 
-  // Ctrl+P global listener
+  // 全局快捷键：Ctrl+P / Ctrl+` 唤出（App 层挂载，全模块可用）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'p') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'p' || e.key === 'P' || e.key === '`')) {
         e.preventDefault()
         onRequestRefresh?.()
         inputRef.current?.focus()
@@ -281,7 +281,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
         onChange={e => { setQuery(e.target.value); if (!open) { onRequestRefresh?.(); setOpen(true) } }}
         onFocus={() => { onRequestRefresh?.(); if (query.trim()) setOpen(true) }}
         onKeyDown={handleKeyDown}
-        placeholder="搜索"
+        placeholder="全局搜索：页面 / 目录 / 标签…（Ctrl+P）"
         className="flex-1 bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-disabled)] outline-none border-none py-0.5"
       />
     </div>

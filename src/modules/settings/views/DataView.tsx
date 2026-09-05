@@ -100,7 +100,7 @@ export function DataView() {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">数据与仓库</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">数据与仓库</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">存储形态、迁移、备份与导出</p>
 
       {/* 存储与迁移（去库化） */}
@@ -118,7 +118,7 @@ export function DataView() {
               <option value="sqlite">数据库（过渡期 · 知识库内直接编辑，迁完后删除）</option>
             </select>
             <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-              数据一律以仓库目录文件存放（去库化）：知识库列表/阅读/刷题/双链改读当前仓库的 .md 与 .json，页面创建与内容编辑统一在编辑器模块进行
+              数据以仓库文件存放，页面编辑在编辑器模块进行。
             </p>
           </div>
           <div>
@@ -205,9 +205,8 @@ export function DataView() {
               </button>
             </div>
             <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-              导出会把 sqlite 全量快照放入本仓库 <code className="bg-[var(--bg-hover)] px-1 rounded">.knowbase/backup/knowledge.db</code> 后整仓压缩；
-              导入 = 解压备份 zip 到目标目录重建仓库，可再还原 sqlite 快照让数据库读源的小模块数据恢复。
-              {backupState.hasBackupDb ? `当前仓库已有 sqlite 快照（${(backupState.dbBytes / 1024).toFixed(0)} KB）` : '当前仓库还没有 sqlite 快照'}
+              备份含 sqlite 快照，恢复仓库后可还原。
+              {backupState.hasBackupDb ? `当前快照 ${(backupState.dbBytes / 1024).toFixed(0)} KB` : '当前暂无快照'}
             </p>
           </div>
         </div>
@@ -230,7 +229,7 @@ export function DataView() {
               defaultValue={30}
             />
             <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              回收站内的内容保留满该天数后自动清除（1-3650 天）。
+              超过保留天数的内容将自动清除。
             </p>
           </div>
         </div>

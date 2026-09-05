@@ -58,7 +58,7 @@ export function AiPermissionsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">模块权限</h2>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">模块权限</h2>
         <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
           控制 AI 助手对各模块的能力边界：<b>禁止</b>=工具完全不可见；<b>只读</b>=仅查询类操作；
           <b>读写</b>=允许写入类操作。所有 AI 操作均留有审计记录，写入实时生效。

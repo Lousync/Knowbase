@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原型 · 日程侧边栏集成工具（侧边栏状态）</title>
+<style>
+  /* ===== 应用同款令牌（light / dark） ===== */
+  :root, .theme-light {
+    --bg-primary: #ffffff; --bg-secondary: #f3f3f3; --bg-tertiary: #ececec;
+    --bg-hover: #e8e8e8; --input-bg: #ffffff; --card-bg: #f9f9f9;
+    --text-primary: #333333; --text-secondary: #666666; --text-muted: #999999;
+    --border-color: #e0e0e0; --accent: #0078d4; --accent-soft: rgba(0,120,212,.12);
+    --danger: #d01020; --success: #107c10; --warning: #8a6d15;
+    --desk: #b9c3cf; /* 原型里的"桌面"底色 */
+  }
+  .theme-dark {
+    --bg-primary: #1e1e1e; --bg-secondary: #252526; --bg-tertiary: #2d2d2d;
+    --bg-hover: #2a2d2e; --input-bg: #3c3c3c; --card-bg: #2d2d2d;
+    --text-primary: #cccccc; --text-secondary: #969696; --text-muted: #6a6a6a;
+    --border-color: #3c3c3c; --accent: #007acc; --accent-soft: rgba(0,122,204,.18);
+    --danger: #e81123; --success: #4ec9b0; --warning: #c5a332;
+    --desk: #14181d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--desk);
+    min-height: 100vh; display: flex; gap: 28px; padding: 32px;
+    color: var(--text-primary); align-items: flex-start; justify-content: center;
+    transition: background .3s;
+    background-image: radial-gradient(circle at 20% 20%, rgba(255,255,255,.12), transparent 60%);
+  }
+
+  /* ===== 控制条 ===== */
+  .controls {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center; z-index: 99;
+    background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+    backdrop-filter: blur(10px); border: 1px solid var(--border-color);
+    padding: 7px 12px; border-radius: 999px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  }
+  .controls button {
+    border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);
+    border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px;
+  }
+  .controls button:hover { background: var(--bg-hover); }
+  .controls input[type=range] { width: 130px; accent-color: var(--accent); }
+
+  /* ===== 侧边栏卡片（模拟应用内的浮窗卡片壳） ===== */
+  .panel {
+    width: 300px; height: 640px; resize: horizontal; min-width: 280px; max-width: 500px;
+    overflow: hidden; display: flex; flex-direction: column;
+    border-radius: 18px; border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 14px 40px rgba(0,0,0,.25);
+  }
+  .theme-dark .panel { box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 14px 40px rgba(0,0,0,.5); }
+
+  /* ===== 表头 ===== */
+  .head {
+    flex: 0 0 40px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px 0 12px; border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
+  }
+  .head .title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+  .head .title svg { opacity: .55; }
+  .head .ops { display: flex; gap: 2px; }
+  .iconbtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border: none; border-radius: 6px;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+  }
+  .iconbtn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  /* ===== Tab 栏 ===== */
+  .tabs {
+    flex: 0 0 auto; display: flex; gap: 2px; padding: 5px 8px;
+    border-bottom: 1px solid var(--border-color); background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 4px 0 3px; border: none; border-radius: 8px; cursor: pointer;
+    background: transparent; color: var(--text-muted); font-size: 10.5px;
+  }
+  .tab:hover { background: var(--bg-hover); color: var(--text-secondary); }
+  .tab.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .tab .dot {
+    position: absolute; margin-left: 22px; margin-top: -1px; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--danger); display: none;
+  }
+  .tab.has-dot .dot { display: block; }
+
+  /* ===== 内容区 ===== */
+  .body { flex: 1; overflow-y: auto; padding: 10px 10px 12px; }
+  .body::-webkit-scrollbar { width: 8px; }
+  .body::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+  .view { display: none; flex-direction: column; gap: 10px; }
+  .view.on { display: flex; }
+
+  .sec-title {
+    display: flex; align-items: center; justify-content: space-between; gap: 4px;
+    font-size: 11px; color: var(--text-primary); padding: 0 2px;
+  }
+  .sec-title .sub { color: var(--text-muted); font-weight: 400; margin-left: 4px; }
+  .sec-title.danger { color: var(--danger); }
+  .linkbtn { border: none; background: none; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 2px; border-radius: 4px; }
+  .linkbtn:hover { color: var(--accent); }
+
+  /* 任务行 */
+  .task {
+    display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; font-size: 12px;
+  }
+  .task:hover { background: var(--bg-hover); }
+  .chk {
+    flex: 0 0 16px; width: 16px; height: 16px; border-radius: 50%;
+    border: 1.5px solid var(--border-color); cursor: pointer; position: relative;
+  }
+  .chk:hover { border-color: var(--text-secondary); }
+  .task.done .chk { background: var(--accent); border-color: var(--accent); }
+  .task.done .chk::after {
+    content: ''; position: absolute; inset: 3px 4px 5px; border-left: 2px solid #fff; border-bottom: 2px solid #fff;
+    transform: rotate(-45deg);
+  }
+  .task.done .t { text-decoration: line-through; color: var(--text-muted); }
+  .task .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip {
+    flex: 0 0 auto; font-size: 10.5px; color: var(--text-secondary);
+    background: var(--bg-tertiary); border-radius: 5px; padding: 1px 5px;
+  }
+  .chip.time { color: var(--accent); background: var(--accent-soft); }
+  .chip.overdue { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+
+  /* 快速添加 */
+  .quick { display: flex; gap: 6px; margin-top: 2px; }
+  .quick input {
+    flex: 1; min-width: 0; border: 1px solid var(--border-color); border-radius: 8px;
+    background: var(--bg-secondary); padding: 6px 8px; font-size: 11.5px; color: var(--text-primary); outline: none;
+  }
+  .quick input:focus { border-color: var(--accent); }
+  .addbtn {
+    flex: 0 0 28px; width: 28px; height: 28px; border: none; border-radius: 8px;
+    background: var(--accent); color: #fff; cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .addbtn:hover { opacity: .9; }
+  .parse { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 10.5px; color: var(--text-muted); padding: 2px 4px 0; }
+
+  /* 打卡 */
+  .ring-wrap { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-bg); }
+  .ring { --p: 60; width: 52px; height: 52px; border-radius: 50%; flex: 0 0 52px;
+    background: conic-gradient(var(--success) calc(var(--p)*1%), var(--bg-tertiary) 0);
+    display: flex; align-items: center; justify-content: center; position: relative; }
+  .ring::before { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--bg-primary); }
+  .ring span { position: relative; font-size: 12px; font-weight: 700; color: var(--success); }
+  .ring-wrap .info { font-size: 11px; color: var(--text-muted); line-height: 1.7; }
+  .ring-wrap .info b { color: var(--text-primary); font-size: 12px; }
+  .habit { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 10px; }
+  .habit:hover { background: var(--bg-hover); }
+  .habit .hdot { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%; }
+  .habit .name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .habit .week { display: flex; gap: 2.5px; }
+  .habit .week i { width: 5px; height: 12px; border-radius: 2px; background: var(--bg-tertiary); }
+  .habit .week i.f { background: var(--success); opacity: .75; }
+  .hchk {
+    flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%;
+    border: 1.5px solid var(--border-color); background: transparent; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; color: transparent; font-size: 12px;
+  }
+  .hchk:hover { border-color: var(--success); }
+  .hchk.on { background: var(--success); border-color: var(--success); color: #fff; }
+  .streak { font-size: 10.5px; color: var(--text-muted); flex: 0 0 auto; }
+
+  /* 打卡 · 今日/统计 子切换 */
+  .subtabs { display: flex; gap: 2px; background: var(--bg-tertiary); border-radius: 7px; padding: 2px; }
+  .subtabs button { border: none; background: transparent; color: var(--text-secondary); font-size: 10.5px; padding: 2px 9px; border-radius: 5px; cursor: pointer; }
+  .subtabs button.on { background: var(--bg-primary); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.10); }
+  .scard { border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg); padding: 8px 9px; }
+  .scard .sname { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; margin-bottom: 6px; }
+  .scard .sname i { width: 8px; height: 8px; border-radius: 50%; }
+  .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .scell { background: var(--bg-primary); border-radius: 7px; padding: 4px 7px; }
+  .scell .sl { font-size: 9.5px; color: var(--text-muted); }
+  .scell .sv { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .scell .sv.ac { color: var(--accent); }
+  .scell .sv.good { color: var(--success); }
+  .scell .sv.warn { color: var(--warning); }
+  .scell .sbar { height: 3px; border-radius: 2px; background: var(--bg-hover); overflow: hidden; margin-top: 3px; }
+  .scell .sbar i { display: block; height: 100%; border-radius: 2px; }
+
+  /* 番茄钟 */
+  .pomo {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 18px 12px 14px; border: 1px solid var(--border-color); border-radius: 14px;
+    background: var(--card-bg);
+  }
+  .phase { font-size: 10.5px; letter-spacing: 2px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 10px; }
+  .phase.break { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+  .clock { font-size: 46px; font-weight: 200; letter-spacing: 2px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .clock.running { color: var(--accent); }
+  .track { width: 82%; height: 4px; border-radius: 2px; background: var(--bg-tertiary); overflow: hidden; }
+  .track i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width .5s linear; }
+  .presets { display: flex; gap: 4px; background: var(--bg-tertiary); border-radius: 9px; padding: 3px; }
+  .presets button { border: none; background: transparent; color: var(--text-secondary); font-size: 11px; padding: 3px 10px; border-radius: 6px; cursor: pointer; }
+  .presets button.on { background: var(--bg-primary); color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .pomo-ops { display: flex; gap: 8px; }
+  .pmain {
+    border: none; border-radius: 9px; padding: 7px 26px; font-size: 12.5px; font-weight: 600;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .pmain.stop { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+  .pomo-stat { font-size: 11px; color: var(--text-muted); }
+
+  /* 网址导航 */
+  .search {
+    display: flex; align-items: center; gap: 6px; border: 1px solid var(--border-color);
+    border-radius: 8px; background: var(--bg-secondary); padding: 5px 8px;
+  }
+  .search input { border: none; outline: none; background: transparent; flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-primary); }
+  .cats { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cat {
+    border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary);
+    font-size: 10.5px; padding: 2.5px 9px; border-radius: 999px; cursor: pointer;
+  }
+  .cat:hover { color: var(--accent); border-color: var(--accent); }
+  .cat.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .navgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .nav {
+    display: flex; align-items: center; gap: 7px; padding: 7px 8px; cursor: pointer;
+    border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-primary);
+    text-decoration: none; color: var(--text-primary);
+  }
+  .nav:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .fav {
+    flex: 0 0 24px; width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; font-weight: 700;
+  }
+  .nav .meta { min-width: 0; }
+  .nav .nt { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav .nd { font-size: 9.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 底部：番茄钟全局状态条 */
+  .pomo-bar {
+    flex: 0 0 auto; display: none; align-items: center; gap: 8px; margin: 0 8px 8px;
+    border: 1px solid var(--border-color); border-radius: 9px; padding: 5px 9px;
+    background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent); cursor: pointer; font-size: 11px;
+  }
+  .pomo-bar:hover { background: var(--bg-hover); }
+  .pomo-bar .pb { flex: 1; height: 3.5px; border-radius: 2px; background: var(--bg-tertiary); overflow: hidden; }
+  .pomo-bar .pb i { display: block; height: 100%; background: var(--accent); width: 40%; }
+  .pomo-bar.show { display: flex; }
+
+  /* ===== 说明栏 ===== */
+  .notes {
+    width: 380px; font-size: 12.5px; line-height: 1.9; color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+    border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;
+  }
+  .notes h2 { font-size: 14px; margin-bottom: 8px; }
+  .notes h3 { font-size: 12.5px; margin: 12px 0 4px; color: var(--accent); }
+  .notes li { margin-left: 18px; }
+  .notes .dim { color: var(--text-muted); font-size: 11.5px; }
+  kbd {
+    background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px;
+    padding: 0 5px; font-size: 11px; font-family: inherit;
+  }
+</style>
+</head>
+<body class="theme-light">
+
+<div class="controls">
+  主题 <button id="themeBtn">🌙 深</button>
+  宽度 <input type="range" id="wRange" min="280" max="500" value="300">
+  <span id="wLabel">300px</span>
+</div>
+
+<!-- ============ 侧边栏原型 ============ -->
+<div class="panel" id="panel">
+  <!-- 表头 -->
+  <div class="head">
+    <div class="title">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      今日工作台
+    </div>
+    <div class="ops">
+      <button class="iconbtn" title="脱离为独立窗口"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14h6v6"/><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M4 20l6-6"/></svg></button>
+      <button class="iconbtn" title="关闭 (Ctrl+Alt+S)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+  </div>
+
+  <!-- 四 Tab -->
+  <div class="tabs">
+    <button class="tab on has-dot" data-v="v-task">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      日程<span class="dot"></span>
+    </button>
+    <button class="tab" data-v="v-habit">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      打卡
+    </button>
+    <button class="tab" data-v="v-pomo">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="10" y1="2" x2="14" y2="2"/></svg>
+      番茄
+    </button>
+    <button class="tab" data-v="v-nav">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      导航
+    </button>
+  </div>
+
+  <div class="body">
+    <!-- ===== Tab 1 · 日程 ===== -->
+    <div class="view on" id="v-task">
+      <div>
+        <div class="sec-title danger">⏰ 逾期（1）</div>
+        <div class="task">
+          <div class="chk"></div><span class="t">整理上周周报</span><span class="chip overdue">昨天</span>
+        </div>
+      </div>
+      <div>
+        <div class="sec-title">
+          <span>今天 · 9月5日 周五<span class="sub">（3 待办 / 1 完成）</span></span>
+          <button class="linkbtn" title="在主窗口任务模块中管理">↗</button>
+        </div>
+        <div class="task done"><div class="chk"></div><span class="t">晨间回顾</span><span class="chip time">08:30</span></div>
+        <div class="task"><div class="chk"></div><span class="t">评审 day-panel 抽屉动画</span><span class="chip time">10:00</span></div>
+        <div class="task"><div class="chk"></div><span class="t">回复邮件</span></div>
+        <div class="task"><div class="chk"></div><span class="t">准备周一分享大纲</span><span class="chip time">16:00</span></div>
+        <div class="quick">
+          <input placeholder="添加任务（支持「明天 14 点」自然语言）">
+          <button class="addbtn">+</button>
+        </div>
+        <div class="parse"><span style="color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:1px 6px;">明天 14:00</span><span>准备周一分享的材料</span></div>
+      </div>
+    </div>
+
+    <!-- ===== Tab 2 · 打卡 ===== -->
+    <div class="view" id="v-habit">
+      <div class="ring-wrap">
+        <div class="ring" style="--p:60"><span>3/5</span></div>
+        <div class="info">
+          <b>今日打卡 3 / 5</b><br>
+          全勤再坚持 2 项 · 最佳连续 21 天 🔥
+        </div>
+      </div>
+      <div>
+        <div class="sec-title">
+          <div class="subtabs" id="hsub">
+            <button class="on" data-s="h-today">今日</button>
+            <button data-s="h-stats">统计</button>
+          </div>
+          <button class="linkbtn" title="在主窗口工具箱中管理">管理 ↗</button>
+        </div>
+        <div id="h-today" style="margin-top:4px;">
+          <div class="habit">
+            <span class="hdot" style="background:#0D9488"></span><span class="name">阅读 30 分钟</span>
+            <span class="week"><i class="f"></i><i class="f"></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>
+            <span class="streak">21天</span>
+            <button class="hchk on">✓</button>
+          </div>
+          <div class="habit">
+            <span class="hdot" style="background:#2563EB"></span><span class="name">锻炼</span>
+            <span class="week"><i class="f"></i><i></i><i class="f"></i><i class="f"></i><i></i><i class="f"></i><i class="f"></i></span>
+            <span class="streak">2天</span>
+            <button class="hchk">✓</button>
+          </div>
+          <div class="habit">
+            <span class="hdot" style="background:#EF4444"></span><span class="name">背单词</span>
+            <span class="week"><i></i><i class="f"></i><i class="f"></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i></span>
+            <span class="streak">5天</span>
+            <button class="hchk">✓</button>
+          </div>
+          <div class="habit">
+            <span class="hdot" style="background:#CA8A04"></span><span class="name">冥想 10 分钟</span>
+            <span class="week"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>
+            <span class="streak">34天</span>
+            <button class="hchk on">✓</button>
+          </div>
+          <div class="habit">
+            <span class="hdot" style="background:#7C3AED"></span><span class="name">写日记</span>
+            <span class="week"><i class="f"></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i class="f"></i></span>
+            <span class="streak">1天</span>
+            <button class="hchk on">✓</button>
+          </div>
+        </div>
+        <div id="h-stats" style="display:none; margin-top:4px; flex-direction:column; gap:6px;">
+          <div class="scard">
+            <div class="sname"><i style="background:#0D9488"></i>阅读 30 分钟</div>
+            <div class="sgrid">
+              <div class="scell"><div class="sl">🔥 当前连续</div><div class="sv ac">21 天</div></div>
+              <div class="scell"><div class="sl">🏆 最长连续</div><div class="sv">34 天</div></div>
+              <div class="scell"><div class="sl"># 累计</div><div class="sv">187 次</div></div>
+              <div class="scell"><div class="sl">📈 近30天</div><div class="sv good">93%</div><div class="sbar"><i style="width:93%;background:#0D9488"></i></div></div>
+            </div>
+          </div>
+          <div class="scard">
+            <div class="sname"><i style="background:#2563EB"></i>锻炼</div>
+            <div class="sgrid">
+              <div class="scell"><div class="sl">🔥 当前连续</div><div class="sv ac">2 天</div></div>
+              <div class="scell"><div class="sl">🏆 最长连续</div><div class="sv">12 天</div></div>
+              <div class="scell"><div class="sl"># 累计</div><div class="sv">64 次</div></div>
+              <div class="scell"><div class="sl">📈 近30天</div><div class="sv warn">57%</div><div class="sbar"><i style="width:57%;background:#2563EB"></i></div></div>
+            </div>
+          </div>
+          <div class="scard">
+            <div class="sname"><i style="background:#CA8A04"></i>冥想 10 分钟 <span style="font-weight:400;color:var(--text-muted);font-size:9.5px;">弹性 · 每周5次</span></div>
+            <div class="sgrid">
+              <div class="scell"><div class="sl">🔥 本周</div><div class="sv good">5/5</div></div>
+              <div class="scell"><div class="sl">🏆 最长连续</div><div class="sv">41 天</div></div>
+              <div class="scell"><div class="sl"># 累计</div><div class="sv">302 次</div></div>
+              <div class="scell"><div class="sl">📈 近30天</div><div class="sv good">96%</div><div class="sbar"><i style="width:96%;background:#CA8A04"></i></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Tab 3 · 番茄 ===== -->
+    <div class="view" id="v-pomo">
+      <div class="pomo">
+        <span class="phase">专注中</span>
+        <div class="clock running" id="clock">18:24</div>
+        <div class="track"><i id="ptrack" style="width:26%"></i></div>
+        <div class="presets" id="presets">
+          <button data-m="15">15min</button>
+          <button class="on" data-m="25">25min</button>
+          <button data-m="45">45min</button>
+        </div>
+        <div class="pomo-ops">
+          <button class="pmain stop" id="pmain">暂停</button>
+          <button class="pmain stop" title="放弃本次">重置</button>
+        </div>
+        <div class="pomo-stat">今日已完成 3 个番茄 · 约 75 分钟</div>
+      </div>
+    </div>
+
+    <!-- ===== Tab 4 · 导航 ===== -->
+    <div class="view" id="v-nav">
+      <div class="search">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input placeholder="搜索书签">
+      </div>
+      <div class="cats">
+        <button class="cat on">全部</button><button class="cat">开发</button><button class="cat">设计</button>
+        <button class="cat">文档</button><button class="cat">娱乐</button>
+      </div>
+      <div class="navgrid">
+        <a class="nav" href="#" onclick="return false"><span class="fav" style="background:#2563EB">G</span><span class="meta"><span class="nt">GitHub</span><br><span class="nd">github.com</span></span></a>
+        <a class="nav" href="#" onclick="return false"><span class="fav" style="background:#0D9488">S</span><span class="meta"><span class="nt">Stack Overflow</span><br><span class="nd">stackoverflow.com</span></span></a>
+        <a class="nav" href="#" onclick="return false"><span class="fav" style="background:#CA8A04">F</span><span class="meta"><span class="nt">Figma</span><br><span class="nd">figma.com</span></span></a>
+        <a class="nav" href="#" onclick="return false"><span class="fav" style="background:#EF4444">Y</span><span class="meta"><span class="nt">YouTube</span><br><span class="nd">youtube.com</span></span></a>
+        <a class="nav" href="#" onclick="return false"><span class="fav" style="background:#7C3AED">N</span><span class="meta"><span class="nt">Notion</span><br><span class="nd">notion.so</span></span></a>
+        <a class="nav" href="#" onclick="return false"><span class="fav" style="background:#059669">M</span><span class="meta"><span class="nt">MDN</span><br><span class="nd">developer.mozilla.org</span></span></a>
+      </div>
+      <button class="linkbtn" style="align-self:center; border:1px dashed var(--border-color); border-radius:8px; padding:4px 14px;">+ 添加书签</button>
+    </div>
+  </div>
+
+  <!-- 底部全局番茄条（任一 Tab 运行中可见，点击跳番茄 Tab） -->
+  <div class="pomo-bar" id="pomoBar" onclick="switchTab('v-pomo')">
+    <span style="color:var(--accent)">🍅</span><span id="barClock">18:24</span>
+    <div class="pb"><i id="barTrack"></i></div>
+    <span style="color:var(--text-muted)">专注中</span>
+  </div>
+</div>
+
+<!-- ============ 设计说明 ============ -->
+<div class="notes">
+  <h2>原型说明 · 侧边栏状态「今日工作台」</h2>
+  <span class="dim">可交互：点 Tab 切换 / 勾选打卡 / 番茄预设与启停 / 拖上方滑块改变宽度 / 右上角切深浅主题</span>
+  <h3>结构</h3>
+  <li>表头改称「今日工作台」，脱离/关闭按钮保留原位</li>
+  <li>表头下新增 4 格图标 Tab：<b>日程 · 打卡 · 番茄 · 导航</b>，一次只显示一个工具，300px 窄栏也不拥挤</li>
+  <li>原「今日打卡」段落移入打卡 Tab（消除两处重复）；原底部番茄状态条保留为全局条：运行中悬浮于任何 Tab，点击直达番茄 Tab</li>
+  <h3>各 Tab 要点</h3>
+  <li><b>日程</b>：即现有内容（逾期 / 今日 / 快速添加），去掉打卡段后更聚焦</li>
+  <li><b>打卡</b>：顶部完成度圆环；「今日 / 统计」子切换 —— 今日为勾选列表（近 7 日迷你条 + 连击），统计为每习惯 2×2 指标卡（当前连续 / 最长连续 / 累计 / 近30天率 + 迷你进度条，弹性习惯显示本周 x/target）</li>
+  <li><b>番茄</b>：大数字倒计时 + 阶段徽章 + 预设分段器（15/25/45）；不含关联任务</li>
+  <li><b>导航</b>：搜索 + 分类 chips + 双列卡片（彩色字母 favicon + 域名），点卡片直接开浏览器</li>
+  <h3>实现备注（原型 ≠ 最终）</h3>
+  <li>底部番茄全局条<b>仅运行中显示</b>，暂停/结束即消失；显示期间点击直达番茄 Tab</li>
+  <li>三个工具的数据层完全复用现有 IPC（bookmarkGetAll / habit / pomodoro context），只是视图瘦身</li>
+  <li>「彻底移动」= 工具箱对应入口移除或保留跳转，待定后实施</li>
+</div>
+
+<script>
+  // Tab 切换
+  function switchTab(id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.v === id))
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id))
+  }
+  document.querySelectorAll('.tab').forEach(t => t.onclick = () => switchTab(t.dataset.v))
+
+  // 主题切换
+  const themeBtn = document.getElementById('themeBtn')
+  themeBtn.onclick = () => {
+    const b = document.body
+    const dark = b.classList.toggle('theme-dark')
+    b.classList.toggle('theme-light', !dark)
+    themeBtn.textContent = dark ? '☀️ 浅' : '🌙 深'
+  }
+
+  // 宽度滑块
+  const panel = document.getElementById('panel'), wRange = document.getElementById('wRange'), wLabel = document.getElementById('wLabel')
+  wRange.oninput = () => { panel.style.width = wRange.value + 'px'; wLabel.textContent = wRange.value + 'px' }
+
+  // 打卡勾选
+  document.querySelectorAll('.hchk').forEach(k => k.onclick = () => k.classList.toggle('on'))
+
+  // 打卡 · 今日/统计 子切换
+  document.querySelectorAll('#hsub button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#hsub button').forEach(x => x.classList.toggle('on', x === b))
+    const stats = b.dataset.s === 'h-stats'
+    document.getElementById('h-today').style.display = stats ? 'none' : 'block'
+    document.getElementById('h-stats').style.display = stats ? 'flex' : 'none'
+  })
+
+  // 番茄钟模拟
+  let total = 25 * 60, left = 18 * 60 + 24, running = true, timer = null
+  const clock = document.getElementById('clock'), track = document.getElementById('ptrack'),
+        barClock = document.getElementById('barClock'), barTrack = document.getElementById('barTrack'),
+        pmain = document.getElementById('pmain'), pomoBar = document.getElementById('pomoBar')
+  function fmt(s) { return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') }
+  function render() {
+    clock.textContent = fmt(left); barClock.textContent = fmt(left)
+    const p = (1 - left / total) * 100
+    track.style.width = p + '%'; barTrack.style.width = p + '%'
+  }
+  function tick() {
+    if (!running) return
+    left = left > 0 ? left - 1 : total
+    render()
+  }
+  timer = setInterval(tick, 1000); render()
+  pmain.onclick = () => {
+    running = !running
+    pmain.textContent = running ? '暂停' : '继续'
+    pmain.classList.toggle('stop', running)
+    // 全局状态条仅在番茄钟运行中显示；暂停/结束即隐藏
+    pomoBar.classList.toggle('show', running)
+    clock.classList.toggle('running', running)
+  }
+  pomoBar.classList.add('show')
+
+  // 预设切换
+  document.querySelectorAll('#presets button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#presets button').forEach(x => x.classList.remove('on'))
+    b.classList.add('on')
+    total = +b.dataset.m * 60; left = total; running = true
+    pmain.textContent = '暂停'; pmain.classList.add('stop')
+    pomoBar.classList.add('show')
+    render()
+  })
+</script>
+</body>
+</html>

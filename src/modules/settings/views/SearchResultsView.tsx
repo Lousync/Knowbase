@@ -18,7 +18,7 @@ export function SearchResultsView({ query, hits, onPick }: Props) {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">搜索结果</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">搜索结果</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-5">
         “<span className="text-[var(--text-secondary)]">{query}</span>” 命中 {hits.length} 个设置项，点击可直达。
       </p>

@@ -77,7 +77,7 @@ export function AiModelsTab() {
     <div className="space-y-8">
       {/* 用量统计（仅统计不限额） */}
       <div>
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">Token 用量</h2>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">Token 用量</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">本月累计消耗（仅统计，不设限额拦截）；每次对话回复下方的 ↑↓ 标记为单轮消耗。</p>
         <div className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md">
           <div className="flex items-center justify-between text-[13px]">
@@ -98,7 +98,7 @@ export function AiModelsTab() {
       {/* 供应商列表 */}
       <div>
         <div className="flex items-center justify-between max-w-md">
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">模型供应商</h2>
+          <h2 className="text-[15px] font-medium text-[var(--text-primary)]">模型供应商</h2>
           <div className="flex items-center gap-1">
             <button onClick={() => setCcsOpen(true)} title="从 CC Switch 配置一键导入"
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[12px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
@@ -144,8 +144,8 @@ export function AiModelsTab() {
       {/* 默认模型 */}
       {providers.some(p => p.enabled && p.models.length > 0) && (
         <div>
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">默认对话模型</h2>
-          <p className="text-[12px] text-[var(--text-muted)] mb-3">AI 对话未显式指定模型时使用此项。选中具体模型后可实测该模型是否真正可用（发送一次最小补全请求）。</p>
+          <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">默认对话模型</h2>
+          <p className="text-[12px] text-[var(--text-muted)] mb-3">未指定模型时使用，选中后可测试可用性。</p>
           <div className="flex items-start gap-2 max-w-md">
             <select value={defaultModel}
               onChange={e => { setModelTestResult(null); void llmSetDefaultModel(e.target.value).then(refresh) }}

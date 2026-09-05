@@ -23,9 +23,11 @@ interface Props {
   collapsedWidth?: number
   /** 抽屉式窗口外扩：visible 翻转时窗口宽度同步 ±当前面板宽度，主内容不被挤压（最大化/全屏时主进程自动跳过） */
   growWindow?: boolean
+  /** 面板实际占宽上报（px，折叠/卸载为 0）。供标题栏把搜索框等锚定在主内容区，外扩时不漂移 */
+  onWidthChange?: (width: number) => void
 }
 
-export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose, onSnapOpen, side = 'left', collapsedWidth = 4, growWindow = false }: Props) {
+export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, visible, className = '', children, initialWidth, showHandle = true, onSnapClose, onSnapOpen, side = 'left', collapsedWidth = 4, growWindow = false, onWidthChange }: Props) {
   const [width, setWidth] = useState(initialWidth ?? defaultWidth)
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -57,16 +59,24 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
 
   // 抽屉式窗口外扩（绝对宽度协议）：上报面板期望宽度，0 = 收回。
   // 主进程以「打开时刻基准宽」为锚点计算，重复/乱序消息不会累积漂移。
-  // 拖拽调宽实时跟随 → 抽屉被拉宽时窗口同步变宽；卸载时收回（日程面板以卸载方式隐藏）。
+  // 开合/卸载请求缓动动画（animate = !dragging），拖拽调宽传 false 即时跟随；
+  // 卸载时收回（日程面板以卸载方式隐藏）。
   useEffect(() => {
     if (!growWindow) return
-    void resizeForSidebar(visible ? widthRef.current : 0)
-  }, [growWindow, visible, width])
+    void resizeForSidebar(visible ? widthRef.current : 0, !dragging)
+  }, [growWindow, visible, width, dragging])
   useEffect(() => {
     return () => {
-      if (growWindow) void resizeForSidebar(0)
+      if (growWindow) void resizeForSidebar(0, true)
     }
   }, [growWindow])
+
+  // 面板实际占宽上报：经 ref 转发避免调用方内联回调导致重复触发
+  const reportWidthRef = useRef(onWidthChange)
+  reportWidthRef.current = onWidthChange
+  useEffect(() => {
+    reportWidthRef.current?.(visible ? width : 0)
+  }, [visible, width])
 
   // mousedown on handle
   const onHandleMouseDown = useCallback((e: React.MouseEvent) => {

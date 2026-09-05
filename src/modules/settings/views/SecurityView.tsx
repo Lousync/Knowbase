@@ -24,7 +24,7 @@ export function SecurityView() {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">安全与隐私</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">安全与隐私</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">锁屏、误删防护与插件安全策略</p>
 
       {/* 锁屏 */}

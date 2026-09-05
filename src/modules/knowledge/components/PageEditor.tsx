@@ -566,7 +566,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
   if (!page) return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-5 h-5 animate-spin" />
+      <div className="border-2 border-[var(--border-color)] border-t-[var(--accent)] rounded-full w-5 h-5 animate-spin" />
     </div>
   )
 
@@ -699,7 +699,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 onMouseLeave={() => setShowMoreMenu(false)}>
                 <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                  <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? '#c5a332' : 'none'} />
+                  <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? 'currentColor' : 'none'} />
                   {page.isStarred ? '取消收藏' : '收藏页面'}
                 </button>
                 {!vaultMode && (
@@ -742,7 +742,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         {fileType !== 'md' && fileType !== 'txt' && (
           <div className="shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
             <button onClick={() => setShowAnnotation(o => !o)}
-              className="w-full flex items-center gap-1.5 px-4 py-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
               title="展开/收起注解">
               <StickyNote size={12} className={annotation ? 'text-[var(--warning)]' : ''} />
               <span>注解{annotation ? ' · 已填写' : ''}</span>
@@ -786,8 +786,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           </div>
         ) : isPdfFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex items-center gap-2 px-6 py-2 border-b border-[var(--border-color)] shrink-0">
-              <span className="flex-1 truncate text-[15px] font-semibold text-[var(--text-primary)] min-w-0">{title || 'PDF 文档'}</span>
+            <div className="flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] shrink-0">
+              <span className="flex-1 truncate text-[12px] font-medium text-[var(--text-primary)] min-w-0">{title || 'PDF 文档'}</span>
               {/* 阅读方式切换 */}
               <div className="flex items-center gap-0.5 shrink-0">
                 <button
@@ -911,8 +911,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
         {/* Tag bar — bottom metadata strip（知识包机器标签 kb-* 自动隐藏） */}
         <div
-          className="flex items-center gap-1.5 px-4 py-1.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto"
-          title="标签用于搜索与关联：Ctrl+K 快速搜索可按标签筛选页面。知识包自动导入的内部溯源标签已隐藏。"
+          className="flex items-center gap-1.5 px-2 py-1 border-t border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 overflow-x-auto"
         >
             {visibleKnowledgeTags(entryTags).map(t => (
               <span key={t.id}

@@ -242,7 +242,7 @@ export function PdfViewer({ base64, title = '' }: Props) {
       >
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="border-2 border-[var(--border-color)] border-t-[#007acc] rounded-full w-6 h-6 animate-spin" />
+            <div className="border-2 border-[var(--border-color)] border-t-[var(--accent)] rounded-full w-6 h-6 animate-spin" />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-20 text-[var(--danger)] gap-2 px-6">

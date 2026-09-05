@@ -680,7 +680,7 @@ export function MomentsModule() {
               <span>·</span>
               <span>{imgs.urls.length} 张照片</span>
               {hiddenInTimeline && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full bg-[var(--bg-hover)] border border-[var(--border-color)]">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-md bg-[var(--bg-hover)] border border-[var(--border-color)]">
                   <EyeOff size={9} />
                   仅相册
                 </span>
@@ -691,12 +691,12 @@ export function MomentsModule() {
         </button>
         <button
           onClick={e => { e.stopPropagation(); void togglePostTimeline(post) }}
-          className={'mr-2 p-2 rounded-full transition-colors shrink-0 ' + (hiddenInTimeline
-            ? 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+          className={'mr-2 p-1 rounded-md transition-colors shrink-0 ' + (hiddenInTimeline
+            ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
             : 'text-[var(--accent)] hover:bg-[var(--bg-hover)]')}
           title={hiddenInTimeline ? '显示在时间线' : '从时间线隐藏（仅保留在相册）'}
         >
-          {hiddenInTimeline ? <EyeOff size={15} /> : <Eye size={15} />}
+          {hiddenInTimeline ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
       </div>
     )
@@ -748,12 +748,12 @@ export function MomentsModule() {
             <button
               key={t}
               onClick={e => { e.stopPropagation(); onClickTag(t) }}
-              className="px-2 py-0.5 rounded-full bg-[var(--bg-hover)] border border-[var(--border-color)] text-[11px] text-[var(--accent)] hover:bg-[var(--bg-hover)]"
+              className="px-2 py-0.5 rounded-md bg-[var(--bg-hover)] border border-[var(--border-color)] text-[11px] text-[var(--accent)] hover:bg-[var(--bg-hover)]"
             >
               #{t}
             </button>
           ) : (
-            <span key={t} className="px-2 py-0.5 rounded-full bg-[var(--bg-hover)] border border-[var(--border-color)] text-[11px] text-[var(--accent)]">
+            <span key={t} className="px-2 py-0.5 rounded-md bg-[var(--bg-hover)] border border-[var(--border-color)] text-[11px] text-[var(--accent)]">
               #{t}
             </span>
           )
@@ -832,7 +832,7 @@ export function MomentsModule() {
       <article
         key={post.id}
         onClick={() => setDetailPostId(post.id)}
-        className="flex rounded-[20px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_10px_28px_rgba(0,0,0,0.18)] cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
+        className="flex rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
         title="查看完整文案"
       >
         {renderCoverGrid(post)}
@@ -846,21 +846,21 @@ export function MomentsModule() {
             </div>
 
             <div className="flex items-center gap-0.5 shrink-0">
-              <button onClick={e => { e.stopPropagation(); handleTogglePin(post.id) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.isPinned ? '取消置顶' : '置顶'}>
+              <button onClick={e => { e.stopPropagation(); handleTogglePin(post.id) }} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title={post.isPinned ? '取消置顶' : '置顶'}>
                 {post.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
               </button>
-              <button onClick={e => { e.stopPropagation(); openAlbumModal({ mode: 'pick', postId: post.id }) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={post.albumId ? '更换相册' : '加入相册'}>
+              <button onClick={e => { e.stopPropagation(); openAlbumModal({ mode: 'pick', postId: post.id }) }} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title={post.albumId ? '更换相册' : '加入相册'}>
                 <Images size={14} />
               </button>
               {post.albumId && (
-                <button onClick={e => { e.stopPropagation(); void togglePostTimeline(post) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="仅在相册中显示（从时间线隐藏）">
+                <button onClick={e => { e.stopPropagation(); void togglePostTimeline(post) }} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title="仅在相册中显示（从时间线隐藏）">
                   <EyeOff size={14} />
                 </button>
               )}
-              <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="编辑">
+              <button onClick={e => { e.stopPropagation(); openEdit(post) }} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title="编辑">
                 <PencilLine size={14} />
               </button>
-              <button onClick={e => { e.stopPropagation(); setConfirmDeleteId(post.id) }} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)]" title="删除">
+              <button onClick={e => { e.stopPropagation(); setConfirmDeleteId(post.id) }} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)] transition-colors" title="删除">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -893,15 +893,15 @@ export function MomentsModule() {
   }
 
   return (
-    <div className="relative flex flex-col h-full bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_84%,#0b1120)_100%)] overflow-hidden">
+    <div className="relative flex flex-col h-full bg-[var(--bg-primary)] overflow-hidden">
       <div ref={pageScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         <div className="px-5 pt-4 pb-3">
-          <div className="max-w-4xl mx-auto rounded-[24px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_14px_40px_rgba(0,0,0,0.2)] px-5 py-4 flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 shadow-sm">
+          <div className="max-w-4xl mx-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] px-5 py-4 flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0">
               {avatarDataUrl ? (
                 <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-[18px] font-semibold text-[var(--accent)]">{initials(signature)}</div>
+                <div className="w-full h-full flex items-center justify-center text-[15px] font-medium text-[var(--accent)]">{initials(signature)}</div>
               )}
             </div>
             <div className="min-w-0 flex-1">
@@ -917,32 +917,32 @@ export function MomentsModule() {
                     }}
                     maxLength={30}
                     placeholder="输入签名"
-                    className="min-w-0 flex-1 max-w-sm bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-[16px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                    className="min-w-0 flex-1 max-w-sm bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md px-3 py-1.5 text-[15px] font-medium text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
                   />
                   <button
                     onClick={() => { saveSignature().catch(console.error) }}
-                    className="p-2 rounded-full text-[var(--accent)] hover:bg-[var(--bg-hover)]"
+                    className="p-1 rounded-md text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
                     title="保存签名"
                   >
-                    <Check size={17} />
+                    <Check size={15} />
                   </button>
                   <button
                     onClick={() => setEditingSignature(false)}
-                    className="p-2 rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
+                    className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                     title="取消"
                   >
-                    <X size={17} />
+                    <X size={15} />
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[20px] font-semibold text-[var(--text-primary)] truncate">{signature}</span>
+                  <span className="text-[15px] font-medium text-[var(--text-primary)] truncate">{signature}</span>
                   <button
                     onClick={startEditSignature}
-                    className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                    className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                     title="修改签名"
                   >
-                    <PencilLine size={14} />
+                    <PencilLine size={13} />
                   </button>
                 </div>
               )}
@@ -951,20 +951,20 @@ export function MomentsModule() {
         </div>
 
       {/* 搜索 + 视图切换 */}
-      <div className="sticky top-0 z-30 px-5 pb-3 pt-2 bg-[var(--bg-primary)]/85 backdrop-blur-md">
+      <div className="sticky top-0 z-30 px-2 py-1 bg-[var(--bg-primary)]/85 backdrop-blur-md">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           <div className="relative">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               value={tagQuery}
               onChange={e => setTagQuery(e.target.value)}
               placeholder="搜索标签..."
-              className="w-56 pl-9 pr-8 py-1.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)] transition-colors"
+              className="w-56 pl-8 pr-7 py-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)] transition-colors"
             />
             {tagQuery && (
               <button
                 onClick={() => setTagQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 title="清除搜索"
               >
                 <X size={13} />
@@ -972,19 +972,19 @@ export function MomentsModule() {
             )}
           </div>
 
-          <div className="flex items-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] p-0.5">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={() => switchView('timeline')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] transition-colors ${viewMode === 'timeline' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] transition-colors ${viewMode === 'timeline' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}
             >
-              <List size={13} />
+              <List size={12} />
               时间线
             </button>
             <button
               onClick={() => switchView('album')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] transition-colors ${viewMode === 'album' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] transition-colors ${viewMode === 'album' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}
             >
-              <Images size={13} />
+              <Images size={12} />
               相册
             </button>
           </div>
@@ -1001,29 +1001,29 @@ export function MomentsModule() {
           ) : viewMode === 'album' ? (
             selectedAlbum ? (
               <div>
-                <div className="flex items-center gap-2.5 mb-4">
+                <div className="flex items-center gap-2 mb-4">
                   <button
                     onClick={() => setSelectedAlbumId(null)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                   >
-                    <ChevronLeft size={14} />
+                    <ChevronLeft size={12} />
                     返回
                   </button>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[16px] font-semibold text-[var(--text-primary)] truncate">{selectedAlbum.name}</div>
+                    <div className="text-[14px] font-medium text-[var(--text-primary)] truncate">{selectedAlbum.name}</div>
                     <div className="text-[11px] text-[var(--text-muted)]">{selectedAlbum.photoCount} 张照片</div>
                   </div>
-                  <div className="flex items-center rounded-full border border-[var(--border-color)] bg-[var(--bg-primary)] p-0.5">
+                  <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => setAlbumLayout('list')}
-                      className={'p-1.5 rounded-full transition-colors ' + (albumLayout === 'list' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]')}
+                      className={'p-1 rounded-md transition-colors ' + (albumLayout === 'list' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]')}
                       title="列表排列"
                     >
                       <List size={14} />
                     </button>
                     <button
                       onClick={() => setAlbumLayout('grid')}
-                      className={'p-1.5 rounded-full transition-colors ' + (albumLayout === 'grid' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]')}
+                      className={'p-1 rounded-md transition-colors ' + (albumLayout === 'grid' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]')}
                       title="网格排列"
                     >
                       <LayoutGrid size={14} />
@@ -1031,40 +1031,40 @@ export function MomentsModule() {
                   </div>
                   <button
                     onClick={() => albumPhotoInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
                     title="直接添加照片到相册"
                   >
-                    <ImagePlus size={14} />
+                    <ImagePlus size={12} />
                     添加照片
                   </button>
                   <button
                     onClick={() => openAlbumModal({ mode: 'rename', albumId: selectedAlbum.id })}
-                    className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                     title="重命名相册"
                   >
-                    <PencilLine size={15} />
+                    <PencilLine size={14} />
                   </button>
                   {selectedAlbum.coverPostId && (
                     <button
                       onClick={() => { handleSetAlbumCover(selectedAlbum.id, '', 0).catch(console.error) }}
-                      className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                       title="取消自定义封面（恢复为第一张照片）"
                     >
-                      <X size={15} />
+                      <X size={14} />
                     </button>
                   )}
                   <button
                     onClick={() => setAlbumDeleteConfirm(selectedAlbum)}
-                    className="p-2 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"
+                    className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)] transition-colors"
                     title="删除相册"
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
 
                 {albumPosts.length === 0 ? (
-                  <div className="py-16 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
-                    这个相册还没有照片，去说说卡片上点击相册图标把照片加入进来。
+                  <div className="py-16 text-center text-[12px] text-[var(--text-muted)]">
+                    暂无照片，从说说卡片添加
                   </div>
                 ) : (
                   albumLayout === 'list' ? (
@@ -1074,7 +1074,7 @@ export function MomentsModule() {
                         const text = (post.contentMd || stripHtmlTags(post.contentHtml || '')).trim()
                         const expanded = expandedAlbumPosts.has(post.id)
                         return (
-                          <div key={post.id} className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)]">
+                          <div key={post.id} className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden">
                             {renderAlbumCardHeader(post, imgs, text, expanded)}
                             <div className="grid" style={{ gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows 300ms ease-in-out' }}>
                               <div className="overflow-hidden min-h-0">
@@ -1088,7 +1088,7 @@ export function MomentsModule() {
                       })}
                       <button
                         onClick={() => albumPhotoInputRef.current?.click()}
-                        className="w-full py-3 rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex items-center justify-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        className="w-full py-3 rounded-xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex items-center justify-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                         title="添加照片"
                       >
                         <ImagePlus size={16} />
@@ -1104,7 +1104,7 @@ export function MomentsModule() {
                         const cover = imgs.thumbs[0] || imgs.urls[0]
                         if (expanded) {
                           return (
-                            <div key={post.id} className="col-span-full rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.16)] animate-album-unfold">
+                            <div key={post.id} className="col-span-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden animate-album-unfold">
                               {renderAlbumCardHeader(post, imgs, text, true)}
                               <div className="px-3 pb-3">{renderAlbumPhotoGrid(post, imgs)}</div>
                             </div>
@@ -1130,7 +1130,7 @@ export function MomentsModule() {
                       })}
                       <button
                         onClick={() => albumPhotoInputRef.current?.click()}
-                        className="aspect-square rounded-xl border-2 border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        className="aspect-square rounded-xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/30 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                         title="添加照片"
                       >
                         <ImagePlus size={22} />
@@ -1146,16 +1146,16 @@ export function MomentsModule() {
                   <div className="text-[12px] text-[var(--text-secondary)]">共 {albums.length} 个相册</div>
                   <button
                     onClick={() => openAlbumModal({ mode: 'create' })}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
                   >
-                    <Plus size={14} />
+                    <Plus size={12} />
                     新建相册
                   </button>
                 </div>
 
                 {albums.length === 0 ? (
-                  <div className="py-16 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
-                    还没有相册。先新建一个，然后去说说卡片上把照片加入相册。
+                  <div className="py-16 text-center text-[12px] text-[var(--text-muted)]">
+                    暂无相册
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1163,19 +1163,19 @@ export function MomentsModule() {
                       <button
                         key={a.id}
                         onClick={() => setSelectedAlbumId(a.id)}
-                        className="group rounded-[18px] border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden text-left hover:border-[var(--text-muted)]/40 transition-colors shadow-[0_8px_22px_rgba(0,0,0,0.16)]"
+                        className="group rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden text-left hover:border-[var(--text-muted)]/40 transition-colors"
                       >
                         <div className="relative aspect-[4/3] bg-[var(--bg-primary)] overflow-hidden">
                           {a.cover ? (
                             <img src={a.cover} alt={a.name} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" loading="lazy" />
                           ) : (
-                            <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(14,165,233,0.25),transparent_45%),linear-gradient(135deg,#111827,#1f2937)]">
-                              <Images size={30} className="text-white/40" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-primary)]">
+                              <Images size={30} className="text-[var(--text-muted)]" />
                             </div>
                           )}
                         </div>
                         <div className="px-3 py-2.5">
-                          <div className="text-[13px] font-semibold text-[var(--text-primary)] truncate">{a.name}</div>
+                          <div className="text-[13px] font-medium text-[var(--text-primary)] truncate">{a.name}</div>
                           <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{a.photoCount} 张照片</div>
                         </div>
                       </button>
@@ -1185,19 +1185,19 @@ export function MomentsModule() {
               </>
             )
           ) : filteredPosts.length === 0 ? (
-            <div className="py-20 text-center border border-dashed border-[var(--border-color)] rounded-[24px] bg-[var(--bg-secondary)] text-[var(--text-muted)]">
-              {tagQuery ? '没有找到包含该标签的说说。' : '还没有说说，先点右下角加号发第一条。'}
+            <div className="py-20 text-center text-[12px] text-[var(--text-muted)]">
+              {tagQuery ? '该标签下暂无内容' : '暂无说说'}
             </div>
           ) : (
             <>
               {pinnedPosts.length > 0 && (
                 <section className="space-y-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)] px-1">置顶</div>
+                  <div className="text-[11.5px] font-medium text-[var(--text-muted)] px-1">置顶</div>
                   {pinnedPosts.map(renderPost)}
                 </section>
               )}
               <section className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)] px-1">时间线</div>
+                <div className="text-[11.5px] font-medium text-[var(--text-muted)] px-1">时间线</div>
                 {normalPosts.map(renderPost)}
               </section>
             </>
@@ -1211,10 +1211,10 @@ export function MomentsModule() {
           onClick={openCreate}
           // absolute 相对模块根（= 主体卡片内）：任务栏展开/收起不影响相对位置；
           // bottom-24 避开右下角 AI 助手按钮
-          className="absolute right-6 bottom-24 z-40 w-16 h-16 rounded-full bg-[var(--accent)] text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] hover:bg-[var(--accent-hover)] transition-all flex items-center justify-center"
+          className="absolute right-6 bottom-24 z-40 w-10 h-10 rounded-full bg-[var(--accent)] text-white shadow-[0_2px_12px_rgba(0,0,0,0.12)] hover:bg-[var(--accent-hover)] transition-colors flex items-center justify-center"
           title="新建说说"
         >
-          <Plus size={28} strokeWidth={2.2} />
+          <Plus size={18} />
         </button>
       )}
 
@@ -1224,21 +1224,19 @@ export function MomentsModule() {
           onMouseDown={e => { if (e.target === e.currentTarget) closeEditor() }}
           onPaste={handleEditorPaste}
         >
-          <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
-            <div className="h-[3px] shrink-0 bg-[linear-gradient(90deg,var(--accent),color-mix(in_srgb,var(--accent)_45%,transparent))]" />
-
-            <div className="px-5 h-[56px] shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border-color)]">
+          <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+            <div className="px-4 h-11 shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border-color)]">
               <button
                 onClick={() => closeEditor()}
-                className="px-2 py-1.5 rounded-lg text-[15px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
               >
                 取消
               </button>
-              <span className="text-[15px] font-semibold text-[var(--text-primary)]">{mode === 'create' ? '发表新说说' : '编辑说说'}</span>
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">{mode === 'create' ? '发表新说说' : '编辑说说'}</span>
               <button
                 onClick={handleSave}
                 disabled={!canSave}
-                className="px-5 py-1.5 rounded-full bg-gradient-to-r from-[var(--accent)] to-[color-mix(in_srgb,var(--accent)_80%,#0ea5e9)] text-white text-[14px] font-medium shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-all"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
               >
                 {saving ? '发表中...' : '发表'}
               </button>
@@ -1247,16 +1245,16 @@ export function MomentsModule() {
             <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="max-w-xl mx-auto px-6 pt-6 pb-8">
                 <div className="flex items-center gap-3 pb-5">
-                  <div className="w-11 h-11 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0 shadow-sm">
+                  <div className="w-11 h-11 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0">
                     {avatarDataUrl ? (
                       <img src={avatarDataUrl} alt="头像" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[14px] font-semibold text-[var(--accent)]">{initials(signature)}</div>
+                      <div className="w-full h-full flex items-center justify-center text-[14px] font-medium text-[var(--accent)]">{initials(signature)}</div>
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{signature}</div>
-                    <div className="text-[11px] text-[var(--text-muted)]">发到我的时间线</div>
+                    <div className="text-[13px] font-medium text-[var(--text-primary)] truncate">{signature}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">发布</div>
                   </div>
                 </div>
 
@@ -1265,7 +1263,7 @@ export function MomentsModule() {
                   value={draft.contentMd}
                   onChange={e => setDraft(prev => ({ ...prev, contentMd: e.target.value }))}
                   placeholder="这一刻的想法..."
-                  className="w-full min-h-[150px] resize-none rounded-2xl border border-[var(--border-color)] bg-[linear-gradient(180deg,var(--bg-primary)_0%,color-mix(in_srgb,var(--bg-primary)_92%,var(--bg-secondary))_100%)] px-5 py-4 text-[15px] leading-8 text-[var(--text-primary)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors placeholder:text-[var(--text-disabled)]"
+                  className="w-full min-h-[150px] resize-none rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-7 text-[var(--text-primary)] outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--text-disabled)]"
                 />
 
                 <div className="mt-4 flex items-center gap-1.5 flex-wrap">
@@ -1293,7 +1291,7 @@ export function MomentsModule() {
                         }}
                         onBlur={addTag}
                         placeholder="标签名..."
-                        className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded text-[11px] text-[var(--text-primary)] outline-none"
+                        className="w-20 px-1.5 py-0.5 bg-[var(--input-bg)] border border-[var(--accent)] rounded-md text-[11px] text-[var(--text-primary)] outline-none"
                       />
                     ) : (
                       <button
@@ -1312,7 +1310,7 @@ export function MomentsModule() {
                 <div className="mt-5">
                   <div className="grid grid-cols-3 gap-2.5 w-[264px]">
                     {draft.attachments.slice(0, editorImagesExpanded ? draft.attachments.length : GRID_VISIBLE).map((att, i) => (
-                      <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm group">
+                      <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] group">
                         <img src={att.thumbUrl} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
                         <button
                           onClick={() => removeImage(i)}
@@ -1327,7 +1325,7 @@ export function MomentsModule() {
                     {!editorImagesExpanded && draft.attachments.length > GRID_VISIBLE && (
                       <button
                         onClick={() => setEditorImagesExpanded(true)}
-                        className="relative aspect-square rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm"
+                        className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-primary)]"
                         title="展开全部图片"
                       >
                         <img src={draft.attachments[GRID_VISIBLE]?.thumbUrl} alt="" className="w-full h-full object-cover" />
@@ -1340,7 +1338,7 @@ export function MomentsModule() {
                     {draft.attachments.length < MAX_IMAGES && (editorImagesExpanded || draft.attachments.length <= GRID_VISIBLE) && (
                       <button
                         onClick={() => postImageInputRef.current?.click()}
-                        className="aspect-square rounded-2xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/40 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        className="aspect-square rounded-xl border border-dashed border-[var(--border-color)] bg-[var(--bg-hover)]/40 flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                         title="添加图片"
                       >
                         <ImagePlus size={22} />
@@ -1361,9 +1359,8 @@ export function MomentsModule() {
               </div>
             </div>
 
-            <div className="shrink-0 px-6 py-2.5 border-t border-[var(--border-color)] bg-[var(--bg-primary)]/60 flex items-center justify-between gap-3">
-              <span className="text-[11px] text-[var(--text-muted)]">纯文本文案 · 图片最多 {MAX_IMAGES} 张</span>
-              <span className="text-[11px] text-[var(--text-muted)]">{draft.contentMd.trim().length} 字 · {draft.attachments.length} 图 · {draft.tags.length} 标签</span>
+            <div className="shrink-0 px-6 py-2 border-t border-[var(--border-color)] bg-[var(--bg-primary)]/60 flex items-center justify-end">
+              <span className="text-[11px] text-[var(--text-muted)]">{draft.contentMd.trim().length} 字 · {draft.attachments.length} 图</span>
             </div>
           </div>
 
@@ -1376,9 +1373,7 @@ export function MomentsModule() {
           className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) setDetailPostId(null) }}
         >
-          <div className="w-full max-w-3xl max-h-[92%] flex flex-col rounded-[26px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
-            <div className="h-[3px] shrink-0 bg-[linear-gradient(90deg,var(--accent),color-mix(in_srgb,var(--accent)_45%,transparent))]" />
-
+          <div className="w-full max-w-3xl max-h-[92%] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
             <div className="px-5 py-4 flex items-start justify-between gap-3 border-b border-[var(--border-color)]">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] overflow-hidden flex items-center justify-center shrink-0">
@@ -1402,10 +1397,10 @@ export function MomentsModule() {
               </div>
               <button
                 onClick={() => setDetailPostId(null)}
-                className="w-8 h-8 shrink-0 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                className="p-1 shrink-0 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors flex items-center justify-center"
                 title="关闭"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
@@ -1425,7 +1420,7 @@ export function MomentsModule() {
                         src={imgs.urls[0]}
                         alt="说说图片"
                         onClick={() => setLightbox({ images: imgs.urls, index: 0 })}
-                        className="max-w-[200px] max-h-[320px] w-auto h-auto object-contain rounded-[12px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
+                        className="max-w-[200px] max-h-[320px] w-auto h-auto object-contain rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
                         loading="lazy"
                         title="点击放大查看"
                       />
@@ -1435,7 +1430,7 @@ export function MomentsModule() {
                           <div
                             key={i}
                             onClick={() => setLightbox({ images: imgs.urls, index: i })}
-                            className="relative aspect-square overflow-hidden rounded-[12px] border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
+                            className="relative aspect-square overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-zoom-in"
                             title="点击放大查看"
                           >
                             <img src={imgs.thumbs[i] || img} alt={`说说图片 ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
@@ -1457,13 +1452,13 @@ export function MomentsModule() {
           className="absolute inset-0 z-[60] bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) setAlbumModal(null) }}
         >
-          <div className="w-full max-w-sm rounded-[22px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_24px_70px_rgba(0,0,0,0.5)] overflow-hidden">
-            <div className="px-5 h-[52px] flex items-center justify-between border-b border-[var(--border-color)]">
-              <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+          <div className="w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+            <div className="px-4 h-11 flex items-center justify-between border-b border-[var(--border-color)]">
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">
                 {albumModal.mode === 'rename' ? '重命名相册' : albumModal.mode === 'pick' ? '加入相册' : '新建相册'}
               </span>
-              <button onClick={() => setAlbumModal(null)} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="关闭">
-                <X size={16} />
+              <button onClick={() => setAlbumModal(null)} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title="关闭">
+                <X size={15} />
               </button>
             </div>
 
@@ -1485,7 +1480,7 @@ export function MomentsModule() {
                   })()}
                   <div className="max-h-56 overflow-y-auto space-y-1 mb-3">
                     {albums.length === 0 ? (
-                      <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">还没有相册，先新建一个吧。</div>
+                      <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">暂无相册</div>
                     ) : (
                       albums.map(a => {
                         const current = posts.find(p => p.id === albumModal.postId)?.albumId === a.id
@@ -1521,12 +1516,12 @@ export function MomentsModule() {
                       onKeyDown={e => { if (e.key === 'Enter') confirmAlbumModal().catch(console.error) }}
                       placeholder="新相册名称..."
                       maxLength={20}
-                      className="flex-1 min-w-0 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                      className="flex-1 min-w-0 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
                     />
                     <button
                       onClick={() => { confirmAlbumModal().catch(console.error) }}
                       disabled={!albumNameDraft.trim()}
-                      className="px-3.5 py-2 rounded-xl bg-[var(--accent)] text-white text-[13px] disabled:opacity-40 hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
                     >
                       新建并加入
                     </button>
@@ -1543,16 +1538,16 @@ export function MomentsModule() {
                     onKeyDown={e => { if (e.key === 'Enter') confirmAlbumModal().catch(console.error) }}
                     placeholder={albumModal.mode === 'rename' ? '输入新的相册名称' : '输入相册名称，例如：旅行、日常'}
                     maxLength={20}
-                    className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
+                    className="w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-disabled)]"
                   />
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => setAlbumModal(null)} className="px-3.5 py-2 rounded-xl text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => setAlbumModal(null)} className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
                       取消
                     </button>
                     <button
                       onClick={() => { confirmAlbumModal().catch(console.error) }}
                       disabled={!albumNameDraft.trim()}
-                      className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-[13px] disabled:opacity-40 hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
                     >
                       {albumModal.mode === 'rename' ? '保存' : '创建'}
                     </button>
@@ -1569,11 +1564,11 @@ export function MomentsModule() {
           className="absolute inset-0 z-[60] bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) void cancelAlbumPhotoConfirm() }}
         >
-          <div className="w-full max-w-sm rounded-[22px] border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_24px_70px_rgba(0,0,0,0.5)] overflow-hidden">
-            <div className="px-5 h-[52px] flex items-center justify-between border-b border-[var(--border-color)]">
-              <span className="text-[14px] font-semibold text-[var(--text-primary)]">添加照片到相册</span>
-              <button onClick={() => void cancelAlbumPhotoConfirm()} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="关闭">
-                <X size={16} />
+          <div className="w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+            <div className="px-4 h-11 flex items-center justify-between border-b border-[var(--border-color)]">
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">添加照片到相册</span>
+              <button onClick={() => void cancelAlbumPhotoConfirm()} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title="关闭">
+                <X size={15} />
               </button>
             </div>
 
@@ -1589,12 +1584,11 @@ export function MomentsModule() {
                 )}
               </div>
 
-              <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
-                将 {albumPhotoConfirm.length} 张照片添加到「{selectedAlbum?.name || ''}」。
-                这条记录默认<b className="text-[var(--text-primary)]">只保存在相册中</b>，不出现在时间线。
+              <p className="text-[12px] text-[var(--text-secondary)]">
+                将 {albumPhotoConfirm.length} 张照片添加到「{selectedAlbum?.name || ''}」？
               </p>
 
-              <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-pointer">
+              <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={albumPhotoShowTimeline}
@@ -1608,13 +1602,13 @@ export function MomentsModule() {
               </label>
             </div>
 
-            <div className="px-4 py-3 border-t border-[var(--border-color)] flex justify-end gap-2">
-              <button onClick={() => void cancelAlbumPhotoConfirm()} className="px-3.5 py-2 rounded-xl text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+            <div className="px-4 py-2.5 border-t border-[var(--border-color)] flex justify-end gap-1">
+              <button onClick={() => void cancelAlbumPhotoConfirm()} className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
                 取消
               </button>
               <button
                 onClick={() => void confirmAlbumPhotos()}
-                className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-[13px] hover:opacity-90 transition-opacity"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
               >
                 确认添加
               </button>

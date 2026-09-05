@@ -121,7 +121,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
 
   return (
     <div ref={barRef}
-      className="w-14 mx-1.5 my-1.5 rounded-xl bg-[var(--activitybar-bg)] border border-[var(--border-color)] shadow-[0_6px_24px_rgba(0,0,0,0.16)] flex flex-col items-center py-2 gap-1 shrink-0 select-none"
+      className="w-14 mx-1.5 my-1.5 rounded-xl bg-[color-mix(in_srgb,var(--activitybar-bg)_85%,transparent)] border border-[var(--border-color)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)] flex flex-col items-center py-2 gap-1 shrink-0 select-none"
       onContextMenu={e => {
         e.preventDefault()
         setCtxMenu({ x: e.clientX, y: e.clientY })

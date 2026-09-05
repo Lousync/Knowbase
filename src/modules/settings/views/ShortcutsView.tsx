@@ -1,7 +1,7 @@
 export function ShortcutsView() {
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">快捷键</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">快捷键</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">所有可用的键盘快捷键一览</p>
 
       <div className="space-y-8">

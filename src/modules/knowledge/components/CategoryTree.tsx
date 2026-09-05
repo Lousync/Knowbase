@@ -154,7 +154,7 @@ export function CategoryTree({ categories, selectedId, onSelect, onCreate, onRen
         <button
           onClick={handleCollapseAll}
           className={`w-full flex items-center gap-1.5 px-2 rounded text-left hover:bg-[var(--bg-hover)] text-[var(--kb-row-fs)] ${
-            selectedId === null ? 'bg-[var(--bg-selected)] text-white hover:bg-[#0b5a8f]' : 'text-[var(--text-primary)]'
+            selectedId === null ? 'bg-[var(--bg-selected)] text-white hover:bg-[color-mix(in_srgb,var(--bg-selected)_85%,white)]' : 'text-[var(--text-primary)]'
           }`}
           style={{ paddingTop: 'var(--kb-row-py-lg)', paddingBottom: 'var(--kb-row-py-lg)' }}
         >

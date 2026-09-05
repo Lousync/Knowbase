@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Star, ListTree, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Star, ListTree, ChevronLeft, ChevronRight, X, FileText } from 'lucide-react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
@@ -262,7 +262,13 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
   }, [view, handleToggleOutline])
 
   return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
+    <div className="flex h-full flex-col bg-[var(--bg-primary)]">
+      {/* 顶部贯通行（图二骨架）：横跨侧栏 + 内容区；快捷动作在侧栏内搜索框上方 */}
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0 select-none">
+        <FileText size={12} className="text-[var(--text-muted)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">博客</span>
+      </div>
+      <div className="flex min-h-0 flex-1">
       <ResizablePanel storageKey="sidebarWidth_blog" defaultWidth={256} minWidth={200} maxWidth={320} visible={sidebarOpen && !showOutline} initialWidth={sidebarWidths.sidebarWidth_blog} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">
@@ -394,6 +400,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           />
         )}
       </main>
+      </div>
     </div>
   )
 }
@@ -438,10 +445,10 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
                 </button>
               )}
               <button onClick={handleToggleStar} className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors" title={entry.isStarred ? '取消收藏' : '收藏'}>
-                <Star size={16} className={entry.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
+                <Star size={16} className={entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'} />
               </button>
               <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
-              <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[#e8112320] rounded">删除</button>
+              <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded">删除</button>
             </div>
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">{entry.date}</h1>
@@ -454,7 +461,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
       <ConfirmDialog
         open={showDeleteConfirm}
         title="确认删除"
-        message={`确定要删除博文「${entry.title || entry.date}」吗？删除后可在回收站恢复，30天后将自动清空。`}
+        message="删除这篇博文？可在回收站恢复。"
         onConfirm={(skipNext) => {
           if (skipNext) { setSetting('skipDeleteConfirm_blog', true); setSkipDeleteConfirm(true) }
           setShowDeleteConfirm(false)

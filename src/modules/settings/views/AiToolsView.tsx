@@ -86,7 +86,7 @@ function UsageSummary({ usage }: { usage: AiToolUsage }) {
   const overLimit = usage.limit > 0 && usage.used >= usage.limit
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">工具调用量</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">工具调用量</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-4">
         本自然月内所有 AI 工具调用次数（内置工具与 MCP 外部工具均计入）。
       </p>
@@ -144,9 +144,9 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
     <div className="space-y-8">
       {/* 月度上限 */}
       <div data-setting-anchor="aiTools.monthlyLimit">
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">月度调用上限</h2>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">月度调用上限</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">
-          达到上限后工具调用将被拒绝并提示（防止失控循环调用）。0 表示不限制。
+          达到上限后调用将被拒绝，0 表示不限制。
         </p>
         <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md">
           <span className="text-[13px] text-[var(--text-primary)]">每月最多调用次数</span>
@@ -176,7 +176,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
           title="内置工具"
           count={tools.length}
           anchorId="aiTools.builtin"
-          titleClassName="text-[16px] font-semibold text-[var(--text-primary)]"
+          titleClassName="text-[15px] font-medium text-[var(--text-primary)]"
           titleRight={
             <button onClick={() => { void refresh() }} title="刷新"
               className="p-1.5 -mr-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
@@ -207,7 +207,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
           title="最近调用"
           count={recentAudit.length}
           anchorId="aiTools.audit"
-          titleClassName="text-[16px] font-semibold text-[var(--text-primary)]"
+          titleClassName="text-[15px] font-medium text-[var(--text-primary)]"
         >
           <p className="text-[12px] text-[var(--text-muted)] mb-3">最近 10 条审计记录（含入参摘要与耗时，不含返回内容）。</p>
           <div className="space-y-1.5 max-w-md">
@@ -292,7 +292,7 @@ function McpServersTab({ onInvoked }: { onInvoked: () => void }) {
     <div data-setting-anchor="aiTools.mcp">
       <div className="flex items-center justify-between max-w-md">
         <div>
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">MCP 服务器</h2>
+          <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">MCP 服务器</h2>
           <p className="text-[12px] text-[var(--text-muted)]">
             连接外部 Model Context Protocol 服务器，其工具将并入统一注册表。最多同时连接 {servers[0]?.maxConnections ?? 5} 个。
           </p>
@@ -647,7 +647,7 @@ function SkillsTab() {
     <div data-setting-anchor="aiTools.skill">
       <div className="flex items-center justify-between max-w-md">
         <div>
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">Skill 技能</h2>
+          <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">Skill 技能</h2>
           <p className="text-[12px] text-[var(--text-muted)]">
             声明式提示词资产，AI 助手会引用它们。可拖入 zip 独立安装，或来自插件贡献。
           </p>

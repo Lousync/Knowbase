@@ -23,10 +23,10 @@ interface Props {
 }
 
 const QUADRANTS = [
-  { value: 0, label: '🔥 紧急重要' },
-  { value: 1, label: '📌 重要不紧急' },
-  { value: 2, label: '⚡ 紧急不重要' },
-  { value: 3, label: '💤 不重要不紧急' },
+  { value: 0, label: '紧急重要' },
+  { value: 1, label: '重要不紧急' },
+  { value: 2, label: '紧急不重要' },
+  { value: 3, label: '不紧急不重要' },
 ]
 
 export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, onToggleSubtask, onDeleteSubtask, onCreateSubtask }: Props) {
@@ -113,11 +113,11 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
     const targetDate = `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`
     const td = localToday()
     if (targetDate < td) {
-      return { corrected, warning: `截止日期不能早于今天（${td}）` }
+      return { corrected, warning: '截止日期不能早于今天' }
     }
 
     if (corrected !== form.time) {
-      return { corrected, warning: '时间已自动修正为有效值' }
+      return { corrected, warning: '截止日期无效，已修正' }
     }
     return { corrected, warning: '' }
   }
@@ -340,7 +340,7 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[11px] text-[var(--text-muted)] mb-1 uppercase tracking-wider">{label}</label>
+      <label className="block text-[11px] text-[var(--text-muted)] mb-1">{label}</label>
       {children}
     </div>
   )

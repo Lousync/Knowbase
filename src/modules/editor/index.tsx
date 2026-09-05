@@ -1,5 +1,4 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
   Pencil, Trash2, ChevronRight, FilePlus2, Braces, BookOpen, ListTree, Eye, PanelRightClose, Archive, FilePenLine,
@@ -19,11 +18,16 @@ import type { EditorDoc, DirCache, TreeNode, CreateIntent } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
 import { ConfirmDialog } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
+import { ResizablePanel } from '../../components/shared/ResizablePanel'
 
 interface Props {
   isActive?: boolean
-  /** Workbench 外壳（R1-W1）：全局侧栏容器节点。传入时文件树 portal 到该节点、内嵌列收起；null/缺省 = 模块内嵌布局 */
-  sidebarEl?: HTMLElement | null
+  /** 侧栏开合（App 全局 sidebarOpen：Ctrl+B / 同 Tab 再点 / 吸附拖拽共同驱动） */
+  sidebarOpen?: boolean
+  /** 拖拽过半吸附收起（VS Code 式） */
+  onSnapCloseSidebar?: () => void
+  /** 拖拽/点击边条展开 */
+  onSnapOpenSidebar?: () => void
   /** Markdown 标记淡化（设置 markdownDim 透传；默认开） */
   markdownDim?: boolean
 }
@@ -36,7 +40,7 @@ interface InputBoxState {
   onSubmit: (value: string) => void
 }
 
-export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true }: Props) {
+export function EditorModule({ isActive = true, sidebarOpen = true, onSnapCloseSidebar, onSnapOpenSidebar, markdownDim = true }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [rootName, setRootName] = useState('')
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
@@ -620,9 +624,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       <div className="flex h-full flex-col items-center justify-center gap-5 p-8">
         <button
           onClick={() => void handleOpenDir()}
-          className="flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] px-5 py-3 text-[14px] text-[var(--text-primary)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
         >
-          <FolderOpen size={18} className="text-[var(--accent)]" />
+          <FolderOpen size={14} />
           打开文件夹作为仓库
         </button>
         {recent.length > 0 && (
@@ -650,118 +654,120 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   return (
     <div className="flex h-full flex-col">
       {/* 顶部工具栏 */}
-      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-3 py-1.5">
-        <button
-          onClick={() => void handleOpenDir()}
-          title="切换仓库"
-          className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
-        >
-          <FolderOpen size={14} className="shrink-0 text-[var(--accent)]" />
-          <span className="truncate">{rootName}</span>
-          <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />
-        </button>
-        <div className="flex-1" />
-        {activeDoc?.language === 'markdown' && (
-          <>
-            <button
-              onClick={() => { setOutlineOpen((v) => !v); }}
-              title="大纲（跳转标题）"
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] transition-colors ${
-                outlineOpen
-                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <ListTree size={14} />
-              大纲
-            </button>
-            <button
-              onClick={() => openInKnowledge(activeDoc.relPath)}
-              title="在知识库中阅读（渲染效果 / 反链 / 刷题）。有未保存修改时会先确认保存"
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-            >
-              <BookOpen size={14} />
-              在知识库中阅读
-            </button>
-            <button
-              onClick={togglePreview}
-              title="分栏预览（左编辑 / 右实时渲染）"
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] transition-colors ${
-                previewOpen
-                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              {previewOpen ? <PanelRightClose size={14} /> : <Eye size={14} />}
-              预览
-            </button>
-          </>
-        )}
-        {dirtyCount > 0 && (
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0 select-none">
+        <FileText size={12} className="text-[var(--text-muted)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">编辑区</span>
+        <div className="ml-auto flex items-center gap-0.5">
           <button
-            onClick={() => void saveAll()}
-            title="保存全部 (Ctrl+Shift+S)"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--accent)] transition-colors hover:bg-[var(--bg-hover)]"
+            onClick={() => void handleOpenDir()}
+            title="切换仓库"
+            className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
           >
-            <SaveAll size={14} />
-            保存全部 ({dirtyCount})
+            <FolderOpen size={12} className="shrink-0" />
+            <span className="truncate">{rootName}</span>
+            <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />
           </button>
-        )}
+          {activeDoc?.language === 'markdown' && (
+            <>
+              <button
+                onClick={() => { setOutlineOpen((v) => !v); }}
+                title="大纲（跳转标题）"
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
+                  outlineOpen
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <ListTree size={12} />
+                大纲
+              </button>
+              <button
+                onClick={() => openInKnowledge(activeDoc.relPath)}
+                title="在知识库中阅读（渲染 / 反链 / 刷题）"
+                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              >
+                <BookOpen size={12} />
+                在知识库中阅读
+              </button>
+              <button
+                onClick={togglePreview}
+                title="分栏预览（左编辑 / 右实时渲染）"
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
+                  previewOpen
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {previewOpen ? <PanelRightClose size={12} /> : <Eye size={12} />}
+                预览
+              </button>
+            </>
+          )}
+          {dirtyCount > 0 && (
+            <button
+              onClick={() => void saveAll()}
+              title="保存全部 (Ctrl+Shift+S)"
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+            >
+              <SaveAll size={12} />
+              保存全部 ({dirtyCount})
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* 主体：文件树 + 编辑区。Workbench 外壳模式下文件树 portal 到全局侧栏槽（侧栏槽渲染在编辑器组左侧） */}
+      {/* 主体：侧栏（资源管理器，可拖宽/吸附收放）+ 编辑区。顶栏在上方横贯全宽（图二骨架） */}
       <div className="flex min-h-0 flex-1">
-        {/* 资源管理器列（含标题）：内嵌布局原样显示；workbench 模式改由 portal 渲染到全局侧栏槽 */}
-        {(() => {
-          const treeColumn = (
-            <>
-              <div className="flex items-center justify-between border-b border-[var(--border-color)] py-1 pl-2 pr-1 text-[11.5px] text-[var(--text-muted)]">
-                <div className="flex items-center gap-1">
-                  <FileText size={12} />
-                  资源管理器
-                </div>
-                <button
-                  onClick={(e) => {
-                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                    setCreateMenu((v) => (v ? null : { x: r.left, y: r.bottom + 4 }))
-                  }}
-                  title="新建（文件 / 文件夹 / 知识页）"
-                  aria-expanded={createMenu !== null}
-                  className={`rounded p-0.5 transition-colors ${
-                    createMenu
-                      ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
-                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <Plus size={13} />
-                </button>
-              </div>
-              <FileTree
-                dirCache={dirCache}
-                expanded={expanded}
-                activePath={activePath}
-                onToggleDir={(p) => void toggleDir(p)}
-                onOpenFile={(n) => void openFile(n)}
-                onMove={(src, dst) => void moveNode(src, dst)}
-                creating={creating}
-                onCommitCreate={(dirRel, type, raw) => void commitCreate(dirRel, type, raw)}
-                onCancelCreate={() => setCreating(null)}
-                hiddenRelPaths={archivedPaths}
-                draftRelPaths={draftRelPaths}
-                onContextMenu={(e, n) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setCtxMenu({ x: e.clientX, y: e.clientY, node: n })
+        <ResizablePanel
+          storageKey="kb.editorSidebarWidth"
+          defaultWidth={220}
+          minWidth={180}
+          maxWidth={400}
+          visible={sidebarOpen}
+          showHandle
+          onSnapClose={onSnapCloseSidebar}
+          onSnapOpen={onSnapOpenSidebar}
+        >
+          <div className="flex h-full w-full flex-col overflow-hidden">
+            <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+              <FileText size={12} />
+              资源管理器
+              <button
+                onClick={(e) => {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                  setCreateMenu((v) => (v ? null : { x: r.left, y: r.bottom + 4 }))
                 }}
-              />
-            </>
-          )
-          if (sidebarEl) {
-            // Workbench 外壳：文件树 portal 到全局侧栏槽（App 侧栏槽自带标题区），此处不再内嵌树列
-            return createPortal(<div className="flex h-full w-full flex-col overflow-hidden">{treeColumn}</div>, sidebarEl)
-          }
-          return <div className="flex w-[220px] shrink-0 flex-col border-r border-[var(--border-color)]">{treeColumn}</div>
-        })()}
+                title="新建（文件 / 文件夹 / 知识页）"
+                aria-expanded={createMenu !== null}
+                className={`ml-auto p-1 rounded-md transition-colors ${
+                  createMenu
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+            <FileTree
+              dirCache={dirCache}
+              expanded={expanded}
+              activePath={activePath}
+              onToggleDir={(p) => void toggleDir(p)}
+              onOpenFile={(n) => void openFile(n)}
+              onMove={(src, dst) => void moveNode(src, dst)}
+              creating={creating}
+              onCommitCreate={(dirRel, type, raw) => void commitCreate(dirRel, type, raw)}
+              onCancelCreate={() => setCreating(null)}
+              hiddenRelPaths={archivedPaths}
+              draftRelPaths={draftRelPaths}
+              onContextMenu={(e, n) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setCtxMenu({ x: e.clientX, y: e.clientY, node: n })
+              }}
+            />
+          </div>
+        </ResizablePanel>
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* 标签栏 */}
@@ -818,7 +824,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 <>
                   <div className="w-px shrink-0 bg-[var(--border-color)]" />
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <div className="flex items-center gap-1.5 border-b border-[var(--border-color)] px-3 py-1 text-[11.5px] text-[var(--text-muted)]">
+                    <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
                       <Eye size={12} />
                       预览
                     </div>
@@ -843,7 +849,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 {(() => {
                   const items = extractOutline(activeDoc.content)
                   if (items.length === 0) {
-                    return <div className="px-3 py-2 text-[12px] text-[var(--text-muted)]">无标题（用 # 标记章节后即可跳转）</div>
+                    return <div className="px-3 py-2 text-[12px] text-[var(--text-muted)]">无标题</div>
                   }
                   return items.map((it) => (
                     <button
@@ -862,7 +868,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
             )}
           </div>
           {/* 状态栏 */}
-          <div className="flex items-center gap-3 border-t border-[var(--border-color)] px-3 py-1 text-[11px] text-[var(--text-muted)]">
+          <div className="flex items-center gap-3 border-t border-[var(--border-color)] px-2 py-1 text-[11px] text-[var(--text-muted)]">
             {activeDoc && (
               <>
                 <span>{baseName(activeDoc.relPath)}</span>
@@ -903,9 +909,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 <X size={14} />
               </button>
             </div>
-            <p className="text-[11px] leading-relaxed text-[var(--text-tertiary)]">
-              这是文件头部的元数据（含 <code className="text-[var(--text-primary)]">---</code> 包裹），正文编辑时不显示。清空全部内容可移除元数据。
-            </p>
             <textarea
               value={fmText}
               onChange={(e) => setFmText(e.target.value)}
@@ -916,7 +919,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setFmDraft(null)}
-                className="rounded-lg border border-[var(--border-color)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)]"
+                className="rounded-md px-2 py-1 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               >
                 取消
               </button>
@@ -930,7 +933,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                   }
                   setFmDraft(null)
                 }}
-                className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] text-white transition-opacity hover:opacity-90"
+                className="rounded-md bg-[var(--accent)] px-2 py-1 text-[11.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
               >
                 保存
               </button>
@@ -1058,7 +1061,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       <ConfirmDialog
         open={trashTarget !== null}
         title="移入回收站"
-        message={`「${trashTarget ? baseName(trashTarget.relPath) : ''}」将被移入系统回收站，可恢复。确定删除？`}
+        message={`「${trashTarget ? baseName(trashTarget.relPath) : ''}」移入回收站，可恢复。`}
         confirmLabel="删除"
         showCheckbox={false}
         onConfirm={() => { if (trashTarget) void doTrash(trashTarget); setTrashTarget(null) }}
@@ -1080,7 +1083,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       <ConfirmDialog
         open={kbReadTarget !== null}
         title="先保存？"
-        message={`「${kbReadTarget ? baseName(kbReadTarget) : ''}」有未保存的修改。知识库阅读的是磁盘内容，先保存才能看到最新渲染效果。`}
+        message={`「${kbReadTarget ? baseName(kbReadTarget) : ''}」有未保存的修改，先保存才能在知识库看到最新效果。`}
         confirmLabel="保存并查看"
         cancelLabel="不保存直接查看"
         showCheckbox={false}
@@ -1096,7 +1099,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
           const rel = kbReadTarget
           setKbReadTarget(null)
           if (rel) {
-            showToast({ type: 'info', message: '未保存，知识库显示的是磁盘上的旧内容' })
+            showToast({ type: 'info', message: '未保存，知识库将显示旧内容' })
             dispatchOpenInKnowledge(rel)
           }
         }}
@@ -1124,13 +1127,13 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setInputBox(null)}
-                className="rounded-md px-3 py-1 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)]"
+                className="rounded-md px-2 py-1 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               >
                 取消
               </button>
               <button
                 onClick={() => inputBox.onSubmit(inputValue)}
-                className="rounded-md bg-[var(--accent)] px-3 py-1 text-[12.5px] text-white transition-opacity hover:opacity-90"
+                className="rounded-md bg-[var(--accent)] px-2 py-1 text-[11.5px] text-white transition-colors hover:bg-[var(--accent-hover)]"
               >
                 {inputBox.submitLabel}
               </button>

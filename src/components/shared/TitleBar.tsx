@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../../lib/SettingsContext'
 import {
-  Minus, Square, X, Copy, Pin, ArrowDownToLine, Loader2, Play,
+  X, Pin, ArrowDownToLine, Loader2, Play,
   Pause, Download, AlertTriangle, RefreshCw, SlidersHorizontal, ExternalLink,
   CalendarCheck2,
 } from 'lucide-react'
@@ -22,9 +22,11 @@ interface TitleBarProps {
   dayPanelActive?: boolean
   /** 点击日程打卡侧边栏开关按钮：App 统一处理「脱离态→吸附 / 内嵌态→显示」逻辑 */
   onToggleDayPanel?: () => void
+  /** 抽屉面板当前实际占宽（0 = 收起）。搜索框以此为偏移锚定主内容区中心，外扩时不漂移 */
+  drawerWidth?: number
 }
 
-export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarProps = {}) {
+export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth = 0 }: TitleBarProps = {}) {
   const { s: settings } = useSettings()
   const badgeEgg = settings.badgeEggActivated
   const [isMaximized, setIsMaximized] = useState(false)
@@ -97,47 +99,64 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarP
 
   return (
     <div
-      className="relative flex items-center justify-between h-9 bg-[color-mix(in_srgb,var(--bg-tertiary)_72%,transparent)] backdrop-blur-md border-b border-[var(--border-color)] select-none shrink-0 drag-region"
+      className="relative flex items-center h-9 bg-[color-mix(in_srgb,var(--bg-tertiary)_72%,transparent)] backdrop-blur-md border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
-      {/* drag region spacer */}
-      <div className="flex-1" />
+      {/* 左：macOS 红绿灯窗控 + 开发版角标 + 窗口级操作（锚定主内容区，不随抽屉外扩漂移） */}
+      <div className="flex items-center h-full pl-3 no-drag group/traffic">
+        <TrafficLight color="#ff5f57" title="关闭" onClick={() => window.api?.close()}>
+          <svg width="10" height="10" viewBox="0 0 8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none">
+            <path d="M1.7 1.7 L6.3 6.3 M6.3 1.7 L1.7 6.3" />
+          </svg>
+        </TrafficLight>
+        <TrafficLight color="#febc2e" title="最小化" onClick={() => window.api?.minimize()}>
+          <svg width="10" height="10" viewBox="0 0 8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none">
+            <path d="M1.7 4 H6.3" />
+          </svg>
+        </TrafficLight>
+        <TrafficLight color="#28c840" title={isMaximized ? '还原' : '最大化'} onClick={() => window.api?.maximize()}>
+          {isMaximized ? (
+            <svg width="10" height="10" viewBox="0 0 8 8" fill="currentColor">
+              <path d="M1 3.2 L3.2 1 L3.2 3.2 Z" />
+              <path d="M7 4.8 L4.8 7 L4.8 4.8 Z" />
+            </svg>
+          ) : (
+            <svg width="10" height="10" viewBox="0 0 8 8" fill="currentColor">
+              <path d="M1 1 L4 1 L1 4 Z" />
+              <path d="M7 7 L4 7 L7 4 Z" />
+            </svg>
+          )}
+        </TrafficLight>
 
-      {/* 开发版角标：dev server 是 http://，打包版是 file:// */}
-      {(typeof location !== 'undefined' && location.protocol === 'http:') || badgeEgg ? (
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 no-drag select-none">
-          {badgeEgg ? 'YHAz' : 'DEV'}
-        </span>
-      ) : null}
+        {/* 开发版角标：dev server 是 http://，打包版是 file:// */}
+        {(typeof location !== 'undefined' && location.protocol === 'http:') || badgeEgg ? (
+          <span className="ml-2.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 select-none">
+            {badgeEgg ? 'YHAz' : 'DEV'}
+          </span>
+        ) : null}
 
-      {/* VS Code 风格居中搜索框，absolute centering */}
-      <div className="absolute left-1/2 -translate-x-1/2 no-drag" style={{ width: 'min(100% - 180px, 560px)' }}>
-        <div id="titlebar-search" />
-      </div>
-
-      {/* 窗口控制按钮 */}
-      <div className="flex h-full no-drag">
-          {showEntry && (
-            <div className="relative h-full" ref={panelRef}>
-              <WinBtn onClick={handleEntryClick} title={entryTitle}>
-                {upd.phase === 'downloading'
-                  ? <span className="relative flex items-center justify-center w-[18px] h-[18px]">
-                      <Loader2 size={13} strokeWidth={2} className="animate-spin text-[var(--accent)]" />
-                    </span>
-                  : upd.phase === 'paused'
-                    ? <Pause size={12} strokeWidth={2.5} className="text-[var(--warning)]" />
-                    : upd.phase === 'downloaded'
-                      ? <Play size={12} strokeWidth={2.5} className="text-[var(--success)]" fill="currentColor" />
-                      : upd.phase === 'error'
-                        ? <AlertTriangle size={13} strokeWidth={2} className="text-[var(--danger)]" />
-                        : <ArrowDownToLine size={14} strokeWidth={2} className="text-[var(--accent)]" />}
-                {upd.phase === 'available' && (
-                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning)] animate-pulse" title="" />
-                )}
-              </WinBtn>
+        {/* 窗口级操作：更新入口 / 日程侧边栏开关 / 置顶 */}
+        {showEntry && (
+          <div className="relative h-full ml-1" ref={panelRef}>
+            <WinBtn onClick={handleEntryClick} title={entryTitle} className="w-9">
+              {upd.phase === 'downloading'
+                ? <span className="relative flex items-center justify-center w-[18px] h-[18px]">
+                    <Loader2 size={13} strokeWidth={2} className="animate-spin text-[var(--accent)]" />
+                  </span>
+                : upd.phase === 'paused'
+                  ? <Pause size={12} strokeWidth={2.5} className="text-[var(--warning)]" />
+                  : upd.phase === 'downloaded'
+                    ? <Play size={12} strokeWidth={2.5} className="text-[var(--success)]" fill="currentColor" />
+                    : upd.phase === 'error'
+                      ? <AlertTriangle size={13} strokeWidth={2} className="text-[var(--danger)]" />
+                      : <ArrowDownToLine size={14} strokeWidth={2} className="text-[var(--accent)]" />}
+              {upd.phase === 'available' && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning)] animate-pulse" title="" />
+              )}
+            </WinBtn>
 
               {/* 下拉面板:进度/暂停/取消/重试/去设置,状态与设置页同源 */}
               {panelOpen && upd.phase !== 'downloaded' && (
-                <div className="absolute right-0 top-full mt-1 w-80 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-lg z-50 no-drag overflow-hidden">
+                <div className="absolute left-0 top-full mt-1 w-80 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-lg z-50 no-drag overflow-hidden">
                   {upd.phase === 'available' && upd.check && (
                     <div className="p-3">
                       <div className="flex items-center gap-2 mb-1">
@@ -240,6 +259,7 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarP
           <WinBtn
             onClick={onToggleDayPanel ?? (() => {})}
             title="日程与打卡侧边栏 (Ctrl+Alt+S)"
+            className="w-9"
           >
             <CalendarCheck2
               size={14}
@@ -249,28 +269,47 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel }: TitleBarP
               fillOpacity={dayPanelActive ? 0.25 : 0}
             />
           </WinBtn>
-          <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'}>
+          <WinBtn onClick={togglePin} title={isPinned ? '取消置顶' : '窗口置顶'} className="w-9">
             <Pin size={14} strokeWidth={1.5} fill={isPinned ? 'var(--text-primary)' : 'transparent'} />
           </WinBtn>
-          <WinBtn onClick={() => window.api?.minimize()} title="最小化"><Minus size={16} strokeWidth={1.5} /></WinBtn>
-          <WinBtn onClick={() => window.api?.maximize()} title={isMaximized ? '还原' : '最大化'}>
-            {isMaximized ? <Copy size={14} strokeWidth={1.5} /> : <Square size={14} strokeWidth={1.5} />}
-          </WinBtn>
-          <WinBtn onClick={() => window.api?.close()} title="关闭" isClose>
-            <X size={16} strokeWidth={1.5} />
-          </WinBtn>
         </div>
+
+      {/* VS Code 风格居中搜索框：锚定主内容区中心（左移 drawerWidth/2），抽屉外扩时纹丝不动；
+          宽度同步扣除 drawerWidth，展开前后保持不变 */}
+      <div
+        className="absolute -translate-x-1/2 no-drag"
+        style={{ left: `calc(50% - ${drawerWidth / 2}px)`, width: `min(100% - ${180 + drawerWidth}px, 560px)` }}
+      >
+        <div id="titlebar-search" />
+      </div>
     </div>
   )
 }
 
-function WinBtn({ children, onClick, title, isClose }: {
-  children: React.ReactNode; onClick: () => void; title?: string; isClose?: boolean
+function WinBtn({ children, onClick, title, className = '' }: {
+  children: React.ReactNode; onClick: () => void; title?: string; className?: string
 }) {
   return (
     <button onClick={onClick} title={title}
-      className={`relative flex items-center justify-center w-11 h-full transition-colors duration-100 ${isClose ? 'text-[var(--text-primary)] hover:bg-[var(--danger)] hover:text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
+      className={`relative flex items-center justify-center h-full transition-colors duration-100 text-[var(--text-primary)] hover:bg-[var(--bg-hover)] ${className || 'w-11'}`}>
       {children}
+    </button>
+  )
+}
+
+/** macOS 红绿灯窗控：16px 彩色圆点，hover 组内点亮符号、单键加深 */
+function TrafficLight({ color, title, onClick, children }: {
+  color: string; title?: string; onClick: () => void; children?: React.ReactNode
+}) {
+  return (
+    <button onClick={onClick} title={title}
+      className="flex items-center justify-center w-5 h-5 transition-[filter] duration-100 hover:brightness-90">
+      <span className="flex items-center justify-center w-4 h-4 rounded-full text-black/60"
+        style={{ backgroundColor: color }}>
+        <span className="flex items-center justify-center opacity-0 group-hover/traffic:opacity-100 transition-opacity duration-100">
+          {children}
+        </span>
+      </span>
     </button>
   )
 }

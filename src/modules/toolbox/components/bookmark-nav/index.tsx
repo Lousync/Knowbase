@@ -6,6 +6,7 @@ import {
   deleteBookmarkCategory, openBookmarkUrl, pickBookmarkImportFile,
 } from '../../../../lib/ipc'
 import { showToast } from '../../../../lib/toast'
+import { notifyDataChanged } from '../../../../lib/dataChanged'
 import { ConfirmDialog } from '../../../../components/shared'
 import { buildJsonExport, buildHtmlExport, parseJsonImport, domainOf } from './io'
 import { CategorySidebar } from './components/CategorySidebar'
@@ -97,12 +98,14 @@ export function BookmarkNav({ onBack }: Props) {
       if (confirmDelete.kind === 'bookmark') {
         await deleteBookmarkItem(confirmDelete.item.id)
         setBookmarks(cur => cur.filter(x => x.id !== confirmDelete.item.id))
+        notifyDataChanged('bookmark')
       } else {
         const c = confirmDelete.item
         await deleteBookmarkCategory(c.id)
         setCategories(cur => cur.filter(x => x.id !== c.id))
         setBookmarks(cur => cur.map(b => (b.categoryId === c.id ? { ...b, categoryId: '' } : b)))
         if (selected === c.id) setSelected('all')
+        notifyDataChanged('bookmark')
       }
     } catch (e) { console.error('删除失败', e) } finally {
       setConfirmDelete(null)
@@ -181,6 +184,7 @@ export function BookmarkNav({ onBack }: Props) {
       if (addedCats > 0) parts.push(`${addedCats} 个分类`)
       if (skipped > 0) parts.push(`跳过重复 ${skipped} 个`)
       showToast({ type: 'info', message: `导入完成：${parts.join('，')}` })
+      if (added > 0 || addedCats > 0) notifyDataChanged('bookmark')
       void refresh()
     } catch (e) {
       console.error('导入失败', e)
@@ -196,29 +200,29 @@ export function BookmarkNav({ onBack }: Props) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* 头部 */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors">
-            <ArrowLeft size={15} /> 返回
-          </button>
-          <div className="w-px h-4 bg-[var(--border-color)]" />
-          <Globe size={17} className="text-[var(--accent)]" />
-          <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">网址导航</h2>
-          <span className="text-[11px] text-[var(--text-muted)]">{bookmarks.length} 个书签</span>
-        </div>
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
+        </button>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">网址导航</span>
+        <span className="text-[11px] text-[var(--text-muted)]">{bookmarks.length} 个书签</span>
 
-        <div className="flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1">
           <button onClick={() => void handleImport()}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
-            <Upload size={13} /> 导入
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+            <Upload size={12} /> 导入
           </button>
           <div className="relative">
             <button onClick={() => setExportMenuOpen(o => !o)}
-              className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded border transition-colors ${
-                exportMenuOpen ? 'border-[var(--accent)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${
+                exportMenuOpen ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
               }`}
               disabled={bookmarks.length === 0}>
-              <Download size={13} /> 导出
+              <Download size={12} /> 导出
             </button>
             {exportMenuOpen && (
               <>
@@ -350,7 +354,7 @@ export function BookmarkNav({ onBack }: Props) {
           categories={categories}
           defaultCategoryId={bookmarkEditor.mode === 'create' ? bookmarkEditor.categoryId : undefined}
           onClose={() => setBookmarkEditor(null)}
-          onSaved={() => { setBookmarkEditor(null); void refresh() }}
+          onSaved={() => { setBookmarkEditor(null); notifyDataChanged('bookmark'); void refresh() }}
         />
       )}
       {categoryEditor && (

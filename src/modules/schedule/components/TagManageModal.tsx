@@ -46,7 +46,7 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
         <div className="px-5 py-4 space-y-4">
           {/* create new tag */}
           <div>
-            <label className="block text-[11px] text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">新建标签</label>
+            <label className="block text-[11px] text-[var(--text-muted)] mb-1.5">新建标签</label>
             <div className="flex gap-2 mb-1.5">
               {TAG_COLORS.map(c => (
                 <button
@@ -77,7 +77,7 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
 
           {/* existing tags list */}
           <div>
-            <label className="block text-[11px] text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">
+            <label className="block text-[11px] text-[var(--text-muted)] mb-1.5">
               已有标签 ({tags.filter(t => !isSummaryTagName(t.name)).length})
             </label>
             {tags.filter(t => !isSummaryTagName(t.name)).length === 0 ? (
@@ -106,8 +106,8 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
           {/* 系统来源标签（周任务/月任务）：表达任务来源而非用户分类，锁定不可删 */}
           {tags.some(t => isSummaryTagName(t.name)) && (
             <div>
-              <label className="block text-[11px] text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">
-                来源标签（系统维护）
+              <label className="block text-[11px] text-[var(--text-muted)] mb-1.5">
+                来源标签
               </label>
               <div className="space-y-1">
                 {tags.filter(t => isSummaryTagName(t.name)).map(t => (

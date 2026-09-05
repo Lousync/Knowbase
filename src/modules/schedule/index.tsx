@@ -16,7 +16,7 @@ import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 import { useDataChanged, notifyDataChanged } from '../../lib/dataChanged'
-const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要不紧急', 2: '⚡ 紧急不重要', 3: '💤 不重要不紧急' }
+const QUADRANT_LABELS: Record<number, string> = { 0: '紧急重要', 1: '重要不紧急', 2: '紧急不重要', 3: '不紧急不重要' }
 const QUADRANT_COLORS: Record<number, string> = { 0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]' }
 
 const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; placeholder: string; meta: string; metaIcon: number; sectionTitle: string }> = {
@@ -392,7 +392,41 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   }, [])
 
   return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
+    <div className="flex h-full flex-col bg-[var(--bg-primary)]">
+      {/* 顶部贯通行：横跨侧栏 + 内容区 */}
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0 select-none">
+        <CalendarDays size={12} className="text-[var(--text-muted)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{viewTitle}</span>
+        <div className="ml-auto flex items-center gap-0.5">
+          <div className="relative" ref={sizeMenuRef}>
+            <button onClick={() => setSizeMenuOpen(v => !v)}
+              className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+              title={`卡片大小（当前：${iconSizeLabel}）`}>
+              <Maximize2 size={13} />
+            </button>
+            {sizeMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-24 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-1 z-50" onClick={e => e.stopPropagation()}>
+                {(['sm', 'md', 'lg'] as const).map(s => (
+                  <button key={s} onClick={() => setSize(s)}
+                    className={`w-full text-left px-2 py-1 text-[11.5px] hover:bg-[var(--bg-hover)] ${iconSize === s ? 'text-[var(--text-primary)] bg-[var(--bg-selected)]' : 'text-[var(--text-secondary)]'}`}>
+                    {s === 'sm' ? '小' : s === 'md' ? '中' : '大'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={() => setTagManageOpen(true)}
+            className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+            管理标签
+          </button>
+          <button onClick={() => { setEditTarget(null); setModalOpen(true) }}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">
+            <Plus size={12} /> 添加
+          </button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
       <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
         <div className="h-full flex flex-col">
           {/* 头部：与编辑器「资源管理器」同款紧凑标题行 */}
@@ -415,37 +449,6 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
       </ResizablePanel>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-          <h3 className={`${INPUT_SZ[iconSize].sectionTitle} font-medium text-[var(--text-primary)]`}>{viewTitle}</h3>
-          <div className="flex items-center gap-2">
-            <div className="relative" ref={sizeMenuRef}>
-              <button onClick={() => setSizeMenuOpen(v => !v)}
-                className={`px-2 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[var(--border-color)] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1`}
-                title="卡片大小">
-                <Maximize2 size={INPUT_SZ[iconSize].metaIcon + 3} /> {iconSizeLabel}
-              </button>
-              {sizeMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-24 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-1 z-50" onClick={e => e.stopPropagation()}>
-                  {(['sm', 'md', 'lg'] as const).map(s => (
-                    <button key={s} onClick={() => setSize(s)}
-                      className={`w-full text-left px-3 py-1.5 ${INPUT_SZ[iconSize].meta} hover:bg-[var(--bg-hover)] ${iconSize === s ? 'text-[var(--text-primary)] bg-[var(--bg-selected)]' : 'text-[var(--text-secondary)]'}`}>
-                      {s === 'sm' ? '小' : s === 'md' ? '中' : '大'}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button onClick={() => setTagManageOpen(true)}
-              className={`px-3 py-1.5 ${INPUT_SZ[iconSize].meta} border border-[var(--border-color)] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors`}>
-              管理标签
-            </button>
-            <button onClick={() => { setEditTarget(null); setModalOpen(true) }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 ${INPUT_SZ[iconSize].meta} bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors`}>
-              <Plus size={INPUT_SZ[iconSize].metaIcon + 5} /> 添加任务
-            </button>
-          </div>
-        </div>
-
         {/* 当日任务快速添加条 */}
         <div className={`flex items-center gap-2 px-6 ${INPUT_SZ[iconSize].padY} border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0`}>
           <Zap size={INPUT_SZ[iconSize].icon} className="text-[var(--warning)] shrink-0" />
@@ -598,13 +601,12 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
               <span className="flex items-center gap-2">
                 <Check size={INPUT_SZ[iconSize].metaIcon + 4} />
                 已完成 · {doneTodos.length} 项
-                <span className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)]`}>（7天后自动清空）</span>
               </span>
               <span className="flex items-center gap-2">
                 <button
                   onClick={e => { e.stopPropagation(); handleClearDone() }}
                   className={`px-2 py-1 ${INPUT_SZ[iconSize].meta} text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded transition-colors`}
-                  title="一键清除所有已完成任务"
+                  title="已完成任务 7 天后自动清空"
                 >
                   <Trash2 size={INPUT_SZ[iconSize].metaIcon + 4} className="inline mr-0.5" />全部清除
                 </button>
@@ -632,6 +634,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
           </div>
         )}
       </div>
+      </div>
 
       <TodoEditModal
         open={modalOpen} initial={modalInitial} tags={tags} onSave={handleSave}
@@ -649,10 +652,8 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
 
 function EmptyHint({ text = '暂无任务' }: { text?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-      <div className="text-4xl mb-3">📅</div>
-      <p className="text-[13px]">{text}</p>
-      <p className="text-[11px] mt-1">点击"添加任务"创建第一个待办</p>
+    <div className="flex h-full items-center justify-center">
+      <p className="text-[12px] text-[var(--text-muted)]">{text}</p>
     </div>
   )
 }

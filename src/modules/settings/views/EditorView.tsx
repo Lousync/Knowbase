@@ -8,7 +8,7 @@ export function EditorView() {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">编辑器</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">编辑器</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">自定义编辑器行为和外观</p>
 
       <div className="mb-8" data-setting-anchor="editor.font">

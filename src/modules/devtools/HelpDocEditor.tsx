@@ -101,7 +101,7 @@ export function HelpDocEditor() {
     if (!title || !category) { showToast({ type: 'warning', message: '标题与分类不能为空' }); return }
     if (!fileName) { showToast({ type: 'warning', message: '文件名不能为空(仅允许中英文、数字、连字符、下划线)' }); return }
     if (!isKnownIcon(icon)) {
-      showToast({ type: 'warning', message: `图标「${icon}」不是有效的 lucide 图标名,侧栏将回退为 FileText` })
+      showToast({ type: 'warning', message: '图标无效，已回退 FileText' })
       return
     }
 
@@ -177,7 +177,7 @@ export function HelpDocEditor() {
           <div className="px-3 mb-3">
             <button
               onClick={newDoc}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] text-[var(--accent)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-1.5 py-1 text-[11.5px] rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
             >
               <Plus size={13} />
               新建文档
@@ -204,7 +204,7 @@ export function HelpDocEditor() {
                   </span>
                   <span className="truncate flex-1 text-left">{d.title}</span>
                   {dirty.has(d.fileName) && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="有未提交的 git 改动" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--warning)] shrink-0" title="有未提交的 git 改动" />
                   )}
                 </button>
               )
@@ -216,13 +216,13 @@ export function HelpDocEditor() {
 
       {/* 右侧:编辑区 */}
       {draft === null ? (
-        <div className="flex-1 flex items-center justify-center text-[13px] text-[var(--text-muted)]">
-          从左侧选择一篇文档,或点击「新建文档」
+        <div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">
+          选择或新建文档
         </div>
       ) : (
         <div className="flex-1 flex flex-col min-w-0">
           {/* 元信息 */}
-          <div className="shrink-0 px-5 py-3 border-b border-[var(--border-color)] grid grid-cols-[1fr_1fr_1fr] gap-3">
+          <div className="shrink-0 px-3 py-2 border-b border-[var(--border-color)] grid grid-cols-[1fr_1fr_1fr] gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-[11px] text-[var(--text-muted)]">标题</span>
               <input
@@ -278,7 +278,7 @@ export function HelpDocEditor() {
           </div>
 
           {/* 文件名 + 操作 */}
-          <div className="shrink-0 px-5 py-2 border-b border-[var(--border-color)] flex items-center gap-3">
+          <div className="shrink-0 px-3 py-1.5 border-b border-[var(--border-color)] flex items-center gap-3">
             <label className="flex items-center gap-2 flex-1 min-w-0">
               <span className="text-[11px] text-[var(--text-muted)] shrink-0">文件名</span>
               <input
@@ -289,12 +289,12 @@ export function HelpDocEditor() {
               />
             </label>
             {draft.originalFileName && dirty.has(draft.originalFileName) && (
-              <span className="text-[11px] text-amber-400 shrink-0">git 有未提交改动</span>
+              <span className="text-[11px] text-[var(--warning)] shrink-0">git 有未提交改动</span>
             )}
             {draft.originalFileName && (
               <button
                 onClick={() => setConfirmDeleteOpen(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-red-400 border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors shrink-0"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-danger)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
               >
                 <Trash2 size={13} />
                 删除
@@ -303,7 +303,7 @@ export function HelpDocEditor() {
             <button
               onClick={save}
               disabled={saving}
-              className="flex items-center gap-1 px-3 py-1.5 text-[12px] text-[var(--accent)] border border-[var(--accent)]/40 rounded-md hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 shrink-0"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50 shrink-0"
             >
               <Save size={13} />
               {saving ? '保存中…' : '保存'}
@@ -336,8 +336,8 @@ export function HelpDocEditor() {
         showCheckbox={false}
         message={
           confirmSave?.kind === 'rename'
-            ? `文件名已从「${draft?.originalFileName ?? ''}」改为「${draft?.fileName ?? ''}」。\n保存后将创建新文件并删除旧文件;代码中引用旧文档 id(文件名)的 Toast detail 会失效。`
-            : `已存在同名文档「${draft?.fileName ?? ''}」,保存将覆盖它。`
+            ? `文件名将改为「${draft?.fileName ?? ''}」，旧文件会被删除。`
+            : `已存在同名文档「${draft?.fileName ?? ''}」，保存将覆盖它。`
         }
         onConfirm={() => void doSave(confirmSave?.kind === 'rename')}
         onCancel={() => setConfirmSave(null)}
@@ -347,7 +347,7 @@ export function HelpDocEditor() {
       <ConfirmDialog
         open={confirmDeleteOpen}
         title="删除文档"
-        message={`确定删除「${draft?.title ?? ''}」(${draft?.originalFileName ?? ''})?\n已提交进 git 的内容可从历史恢复,未提交的改动将丢失。`}
+        message={`删除「${draft?.title ?? ''}」？未提交的改动将丢失。`}
         confirmLabel="删除"
         showCheckbox={false}
         onConfirm={() => void remove()}

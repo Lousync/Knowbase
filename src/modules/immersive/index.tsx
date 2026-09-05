@@ -304,122 +304,116 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--bg-primary)]">
       {/* 顶栏：任务标题/模板 + 视图切换 */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <Sparkles size={15} className="text-[var(--accent)] shrink-0" />
-        <span className="text-[13px] font-medium truncate">{activeTitle || '沉浸式 Agent'}</span>
-        <span className="text-[11px] text-[var(--text-muted)] px-2 py-0.5 rounded-full bg-[var(--bg-hover)] truncate">{template.label}</span>
-        <div className="flex-1" />
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1 shrink-0 select-none">
+        <Sparkles size={12} className="text-[var(--text-muted)] shrink-0" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{activeTitle || '沉浸式 Agent'}</span>
+        <span className="text-[11.5px] text-[var(--text-muted)] px-1.5 py-0.5 rounded-md bg-[var(--bg-hover)] truncate">{template.label}</span>
+        <div className="ml-auto flex items-center gap-0.5">
 
-        {/* 会话要求（仅本会话生效的全局约束） */}
-        <div className="relative shrink-0">
-          <button
-            onClick={() => { setInstrDraft(activeInstr); setInstrOpen(v => !v) }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] transition-colors ${activeInstr ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'} ${instrOpen ? 'bg-[var(--bg-primary)] border border-[var(--border-color)]' : ''}`}
-            title="本会话要求：给这个对话挂一条只对它生效的全局要求（如：只用中文 / 只聊这个主题 / 先结论后理由）">
-            <PenLine size={12} />
-            <span className="max-w-[120px] truncate">{activeInstr ? '会话要求' : '会话要求'}</span>
-            {activeInstr && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
-          </button>
-          {instrOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-[340px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                <span className="text-[11.5px] font-medium text-[var(--text-primary)]">本会话要求</span>
-                <button onClick={() => setInstrOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={12} /></button>
-              </div>
-              <div className="p-3 space-y-2">
-                <textarea
-                  value={instrDraft}
-                  onChange={e => setInstrDraft(e.target.value)}
-                  rows={4} maxLength={800}
-                  placeholder={'例如：\n· 只用中文回答\n· 这个对话只聊 Linux 内核\n· 每次先给结论再展开\n（留空保存 = 清除）'}
-                  className="w-full px-2.5 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] resize-none outline-none focus:border-[var(--accent)]"
-                />
-                <div className="text-[10.5px] leading-relaxed text-[var(--text-muted)]">仅对本会话生效：后续问答与「重新生成」都会遵守；切换会话互不影响。</div>
-                <div className="flex gap-2 justify-end">
-                  {activeInstr && (
-                    <button onClick={() => { setInstrDraft(''); void saveInstr() }}
-                      className="px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors text-[12px]">
-                      清除
-                    </button>
-                  )}
-                  <button onClick={() => { void saveInstr() }}
-                    className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-[12px] hover:opacity-90 transition-opacity">保存</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Token 消耗指示（默认收起；展开看本会话/月度明细） */}
-        <div className="relative shrink-0">
-          <button onClick={() => setTokenOpen(v => !v)}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] transition-colors ${tokenOpen ? 'bg-[var(--bg-primary)] text-[var(--accent)] border border-[var(--border-color)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'}`}
-            title="Token 消耗明细">
-            <Gauge size={12} />
-            <span className="tabular-nums">≈ {fmtTok(tokenStats.llmTokens)}</span>
-          </button>
-          {tokenOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-[300px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                <span className="text-[11.5px] font-medium text-[var(--text-primary)]">Token 明细</span>
-                <button onClick={() => setTokenOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={12} /></button>
-              </div>
-              <div className="p-3 space-y-2.5 text-[11.5px]">
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--text-muted)]">模型</span>
-                  <span className="text-[var(--text-primary)] truncate max-w-[190px]">{defaultModel || '（默认配置）'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--text-muted)]">本会话 LLM tokens</span>
-                  <span className="tabular-nums font-medium text-[var(--text-primary)]">{fmtTok(tokenStats.llmTokens)}{tokenStats.llmTokens >= 1000 ? `（${Math.round(tokenStats.llmTokens)}）` : ''}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5 text-center">
-                  {[['模型轮次', String(tokenStats.llmRounds)], ['工具调用', String(tokenStats.toolCalls)], ['耗时', `${Math.round(tokenStats.durationMs / 1000)}s`]].map(([k, v]) => (
-                    <div key={k} className="rounded-lg bg-[var(--bg-secondary)] py-1.5">
-                      <div className="text-[10.5px] text-[var(--text-muted)]">{k}</div>
-                      <div className="tabular-nums text-[12px] font-medium">{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-[var(--border-color)] pt-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[var(--text-muted)]">本月 LLM tokens</span>
-                    <span className="tabular-nums">{fmtTok(monthTokens)}{budget > 0 && <span className="text-[var(--text-muted)]"> / {fmtTok(budget)}</span>}</span>
-                  </div>
-                  {budget > 0 ? (
-                    <div className="h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, (monthTokens / budget) * 100)}%`, background: monthTokens / budget > 0.85 ? '#a32d2d' : '#185fa5' }} />
-                    </div>
-                  ) : (
-                    <div className="text-[10.5px] text-[var(--text-muted)]">未设月度预算（设置 → AI 工具 可配置上限）</div>
-                  )}
-                </div>
-                <div className="text-[10px] leading-relaxed text-[var(--text-muted)] border-t border-[var(--border-color)] pt-2">
-                  tokens 取自每轮模型调用的 usage 与消息轨迹；上下文占用随轮次累积（模型容量条 M1 随模型规格元数据接入）。
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-0.5 text-[12px]">
-          {(['timeline', 'doc'] as const).map(v => (
-            <button key={v} onClick={() => setView(v)}
-              className={`px-2.5 py-1 rounded-md transition-colors ${view === v ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}>
-              {v === 'timeline' ? '时间线' : '文档视图'}
+          {/* 会话要求（仅本会话生效的全局约束） */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => { setInstrDraft(activeInstr); setInstrOpen(v => !v) }}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${activeInstr ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'} ${instrOpen ? 'bg-[var(--bg-hover)]' : ''}`}
+              title="本会话要求：给这个对话挂一条只对它生效的全局要求（如：只用中文 / 只聊这个主题 / 先结论后理由）">
+              <PenLine size={12} />
+              <span className="max-w-[120px] truncate">会话要求</span>
+              {activeInstr && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
             </button>
-          ))}
+            {instrOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-[340px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden select-text">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                  <span className="text-[11.5px] font-medium text-[var(--text-primary)]">本会话要求</span>
+                  <button onClick={() => setInstrOpen(false)} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><X size={12} /></button>
+                </div>
+                <div className="p-3 space-y-2">
+                  <textarea
+                    value={instrDraft}
+                    onChange={e => setInstrDraft(e.target.value)}
+                    rows={4} maxLength={800}
+                    placeholder={'例如：\n· 只用中文回答\n· 这个对话只聊 Linux 内核\n· 每次先给结论再展开\n（留空保存 = 清除）'}
+                    className="w-full px-2.5 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] resize-none outline-none focus:border-[var(--accent)]"
+                  />
+                  <div className="flex gap-1 justify-end">
+                    {activeInstr && (
+                      <button onClick={() => { setInstrDraft(''); void saveInstr() }}
+                        className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:text-red-400 transition-colors">
+                        清除
+                      </button>
+                    )}
+                    <button onClick={() => { void saveInstr() }}
+                      className="px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">保存</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Token 消耗指示（默认收起；展开看本会话/月度明细） */}
+          <div className="relative shrink-0">
+            <button onClick={() => setTokenOpen(v => !v)}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${tokenOpen ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}
+              title="Token 消耗明细">
+              <Gauge size={12} />
+              <span className="tabular-nums">≈ {fmtTok(tokenStats.llmTokens)}</span>
+            </button>
+            {tokenOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-[300px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden select-text">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                  <span className="text-[11.5px] font-medium text-[var(--text-primary)]">Token 明细</span>
+                  <button onClick={() => setTokenOpen(false)} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><X size={12} /></button>
+                </div>
+                <div className="p-3 space-y-2.5 text-[11.5px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--text-muted)]">模型</span>
+                    <span className="text-[var(--text-primary)] truncate max-w-[190px]">{defaultModel || '（默认配置）'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--text-muted)]">本会话 LLM tokens</span>
+                    <span className="tabular-nums font-medium text-[var(--text-primary)]">{fmtTok(tokenStats.llmTokens)}{tokenStats.llmTokens >= 1000 ? `（${Math.round(tokenStats.llmTokens)}）` : ''}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    {[['模型轮次', String(tokenStats.llmRounds)], ['工具调用', String(tokenStats.toolCalls)], ['耗时', `${Math.round(tokenStats.durationMs / 1000)}s`]].map(([k, v]) => (
+                      <div key={k} className="rounded-lg bg-[var(--bg-secondary)] py-1.5">
+                        <div className="text-[10.5px] text-[var(--text-muted)]">{k}</div>
+                        <div className="tabular-nums text-[12px] font-medium">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-[var(--border-color)] pt-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[var(--text-muted)]">本月 LLM tokens</span>
+                      <span className="tabular-nums">{fmtTok(monthTokens)}{budget > 0 && <span className="text-[var(--text-muted)]"> / {fmtTok(budget)}</span>}</span>
+                    </div>
+                    {budget > 0 ? (
+                      <div className="h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, (monthTokens / budget) * 100)}%`, background: monthTokens / budget > 0.85 ? '#a32d2d' : '#185fa5' }} />
+                      </div>
+                    ) : (
+                      <div className="text-[10.5px] text-[var(--text-muted)]">未设月度预算（设置 → AI 工具 可配置上限）</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-0.5">
+            {(['timeline', 'doc'] as const).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className={`px-2 py-0.5 rounded-md text-[11.5px] transition-colors ${view === v ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}>
+                {v === 'timeline' ? '时间线' : '文档视图'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="flex flex-1 min-h-0">
         {/* 左栏：任务规划 + 会话 */}
         <aside className="w-[248px] shrink-0 border-r border-[var(--border-color)] flex flex-col min-h-0 bg-[var(--bg-secondary)]">
-          <div className="p-2.5 border-b border-[var(--border-color)]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-[var(--text-muted)]">任务规划</span>
-              <span className="text-[10px] text-[var(--text-muted)]">M1 自动推进</span>
-            </div>
+          <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">任务规划</div>
+          <div className="p-2 border-b border-[var(--border-color)] shrink-0">
             <div className="text-[11.5px] text-[var(--text-primary)] leading-relaxed max-h-16 overflow-hidden">{template.goal}</div>
             <div className="mt-2 space-y-1">
               {template.steps.map((st, i) => (
@@ -431,30 +425,32 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-2.5 pt-2 pb-1">
-            <span className="text-[11px] text-[var(--text-muted)]">会话（{sessions.length}）</span>
-            <div className="relative">
-              <button onClick={() => setShowNewMenu(v => !v)}
-                className="flex items-center gap-1 text-[11.5px] text-[var(--accent)] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors">
-                <Plus size={11} /> 新建任务
-              </button>
-              {showNewMenu && (
-                <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden">
-                  {TEMPLATES.map(t => (
-                    <button key={t.id} onClick={() => void newTask(t)}
-                      className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
-                      <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
-                      <span className="min-w-0">
-                        <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
-                        <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+          <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+            <span>会话（{sessions.length}）</span>
+            <div className="ml-auto flex items-center gap-0.5">
+              <div className="relative">
+                <button onClick={() => setShowNewMenu(v => !v)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                  <Plus size={12} /> 新建任务
+                </button>
+                {showNewMenu && (
+                  <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden">
+                    {TEMPLATES.map(t => (
+                      <button key={t.id} onClick={() => void newTask(t)}
+                        className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
+                        <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
+                        <span className="min-w-0">
+                          <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
+                          <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-1.5 pb-2 space-y-0.5">
+          <div className="flex-1 overflow-y-auto px-1.5 py-1.5 space-y-0.5">
             {sessions.map(s => (
               <div key={s.id}
                 onClick={() => { void openSession(s.id, s.title) }}
@@ -470,7 +466,7 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
               </div>
             ))}
             {sessions.length === 0 && (
-              <div className="text-[11.5px] text-[var(--text-muted)] px-2 py-3 text-center">暂无会话，点上方「新建任务」开始</div>
+              <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">暂无会话</div>
             )}
           </div>
         </aside>
@@ -489,12 +485,7 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
               )}
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
                 {messages.length === 0 && !pending && (
-                  <div className="h-full flex flex-col items-center justify-center text-center gap-1.5">
-                    <Sparkles size={26} className="text-[var(--accent)]" />
-                    <div className="text-[13px] text-[var(--text-primary)]">{template.label}</div>
-                    <div className="text-[11.5px] text-[var(--text-muted)] max-w-sm">{template.goal}</div>
-                    <div className="text-[11px] text-[var(--text-muted)] mt-1">在下方输入资料链接 / 仓库内文件名，或直接描述任务</div>
-                  </div>
+                  <div className="h-full flex items-center justify-center text-[12px] text-[var(--text-muted)]">开始对话</div>
                 )}
                 {messages.map((m, idx) => (
                   <div key={m.id ?? idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -540,7 +531,7 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
                             : <>思考中…（已调用 {toolCount} 次工具）</>}
                       </span>
                       <button onClick={() => { void agentAbort(chatIdRef.current) }}
-                        className="px-1.5 py-0.5 rounded border border-[var(--border-color)] hover:text-red-400 hover:border-red-400/50 transition-colors shrink-0">
+                        className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-red-400 transition-colors shrink-0">
                         停止
                       </button>
                     </div>
@@ -549,17 +540,16 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
                 <div ref={bottomRef} />
               </div>
 
-              <div className="shrink-0 border-t border-[var(--border-color)] p-2.5 bg-[var(--bg-secondary)]">
+              <div className="shrink-0 border-t border-[var(--border-color)] p-2 bg-[var(--bg-secondary)]">
                 <textarea value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void doSend() } }}
-                  rows={2} placeholder="粘贴资料链接、或说「仓库里讲 XX 的笔记读给我听」…（Enter 发送，Shift+Enter 换行）"
-                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] resize-none outline-none focus:border-[var(--accent)]" />
+                  rows={2} placeholder="粘贴资料或输入指令…（Enter 发送）"
+                  className="w-full px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] resize-none outline-none focus:border-[var(--accent)]" />
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="text-[10.5px] text-[var(--text-muted)]">素材 {lastChanges?.length ? '+改动' : ''} · 每次对话 AI 改动会在右侧「本次改动」列出并可直接打开</span>
                   <div className="flex-1" />
                   <button onClick={() => { void doSend() }} disabled={pending || !input.trim()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[12px] hover:opacity-90 disabled:opacity-40 transition-opacity">
-                    {pending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} 发送
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors">
+                    {pending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} 发送
                   </button>
                 </div>
               </div>
@@ -567,25 +557,25 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
           ) : reader ? (
             /* 幻灯片逐页阅读（素材 .pptx） */
             <div className="flex flex-col min-h-0">
-              <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-[var(--border-color)] text-[12px]">
-                <Presentation size={13} className="text-[var(--accent)] shrink-0" />
+              <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] text-[11.5px]">
+                <Presentation size={12} className="text-[var(--text-muted)] shrink-0" />
                 <span className="font-medium truncate">{reader.name}</span>
                 <span className="text-[var(--text-muted)] shrink-0">素材阅读</span>
                 <span className="flex-1" />
                 <span className="text-[var(--text-muted)] tabular-nums shrink-0">第 {reader.cur + 1} / {reader.pages.length} 页</span>
                 <button onClick={() => goPage(-1)} disabled={reader.cur === 0}
-                  className="p-1 rounded-md hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-colors" title="上一页">
-                  <ChevronLeft size={14} />
+                  className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors" title="上一页">
+                  <ChevronLeft size={13} />
                 </button>
                 <button onClick={() => goPage(1)} disabled={reader.cur >= reader.pages.length - 1}
-                  className="p-1 rounded-md hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-colors" title="下一页">
-                  <ChevronRight size={14} />
+                  className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors" title="下一页">
+                  <ChevronRight size={13} />
                 </button>
                 <button onClick={() => { void talkCurrentPage() }}
-                  className="px-2.5 py-1 rounded-lg bg-[var(--accent)] text-white text-[11.5px] hover:opacity-90 transition-opacity shrink-0">
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors shrink-0">
                   讲解此页
                 </button>
-                <button onClick={() => setReader(null)} className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0" title="关闭">
+                <button onClick={() => setReader(null)} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0" title="关闭">
                   <X size={13} />
                 </button>
               </div>
@@ -603,15 +593,15 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
                   </div>
                   <div className="flex justify-between mt-3">
                     <button onClick={() => goPage(-1)} disabled={reader.cur === 0}
-                      className="text-[11.5px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors">
+                      className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors">
                       ← 上一页
                     </button>
                     <button onClick={() => { void talkCurrentPage() }}
-                      className="text-[11.5px] px-2.5 py-1 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">
                       让 AI 讲这一页
                     </button>
                     <button onClick={() => goPage(1)} disabled={reader.cur >= reader.pages.length - 1}
-                      className="text-[11.5px] px-2.5 py-1 rounded-lg border border-[var(--border-color)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors">
+                      className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors">
                       下一页 →
                     </button>
                   </div>
@@ -622,7 +612,7 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
             <div className="flex-1 overflow-y-auto min-h-0">
               {docMsg ? (
                 <div className="max-w-[880px] mx-auto py-4 px-5">
-                  <div className="text-[11px] text-[var(--text-muted)] mb-2">文档视图 · 最近一条助手回复全文（长文/方案在此整篇审阅）</div>
+                  <div className="text-[11.5px] text-[var(--text-muted)] mb-2">文档视图</div>
                   <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-5 py-4">
                     <MarkdownPreview content={docMsg.content} />
                   </div>
@@ -635,106 +625,110 @@ export function ImModule({ isActive }: { isActive?: boolean }) {
         </section>
 
         {/* 右栏：资料 / 产物 / 改动 */}
-        <aside className="w-[280px] shrink-0 border-l border-[var(--border-color)] flex flex-col gap-2.5 p-2.5 overflow-y-auto bg-[var(--bg-secondary)]">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] text-[var(--text-muted)]">资料来源 {sources.length > 0 ? `（${sources.length}）` : ''}</span>
-              <span className="relative">
-                <button onClick={() => { if (!pickOpen) void refreshPptxList(); setPickOpen(v => !v) }}
-                  className="flex items-center gap-0.5 text-[10.5px] text-[var(--accent)] px-1 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors">
-                  <Plus size={10} /> PPT 素材
-                </button>
-                {pickOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-60 z-30 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
-                    <div className="px-2.5 py-1.5 border-b border-[var(--border-color)] text-[10.5px] text-[var(--text-muted)]">从当前仓库选 .pptx（自动收起）</div>
-                    <div className="max-h-52 overflow-y-auto py-1">
-                      {pickLoading ? (
-                        <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)] flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> 扫描仓库…</div>
-                      ) : pickList.length === 0 ? (
-                        <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)]">仓库里没找到 .pptx（或未打开仓库）</div>
-                      ) : (
-                        pickList.map(p => (
-                          <button key={p.rel} onClick={() => { void addSourceFromPick(p.rel, p.name) }}
-                            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors">
-                            <Presentation size={11} className="shrink-0 text-[var(--accent)]" />
-                            <span className="truncate">{p.rel}</span>
-                          </button>
-                        ))
-                      )}
+        <aside className="w-[280px] shrink-0 border-l border-[var(--border-color)] flex flex-col min-h-0 overflow-y-auto bg-[var(--bg-secondary)]">
+          <div className="shrink-0">
+            <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+              <span>资料来源{sources.length > 0 ? `（${sources.length}）` : ''}</span>
+              <div className="ml-auto flex items-center gap-0.5">
+                <span className="relative">
+                  <button onClick={() => { if (!pickOpen) void refreshPptxList(); setPickOpen(v => !v) }}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                    <Plus size={11} /> PPT 素材
+                  </button>
+                  {pickOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-60 z-30 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden">
+                      <div className="px-2.5 py-1.5 border-b border-[var(--border-color)] text-[10.5px] text-[var(--text-muted)]">从当前仓库选 .pptx</div>
+                      <div className="max-h-52 overflow-y-auto py-1">
+                        {pickLoading ? (
+                          <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)] flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> 扫描仓库…</div>
+                        ) : pickList.length === 0 ? (
+                          <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)]">未找到 .pptx</div>
+                        ) : (
+                          pickList.map(p => (
+                            <button key={p.rel} onClick={() => { void addSourceFromPick(p.rel, p.name) }}
+                              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors">
+                              <Presentation size={11} className="shrink-0 text-[var(--accent)]" />
+                              <span className="truncate">{p.rel}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </span>
+                  )}
+                </span>
+              </div>
             </div>
             {sources.length > 0 ? (
-              <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden">
-                {sources.map(s => {
-                  const active = reader?.rel === s.rel
-                  return (
-                    <div key={s.rel} className={`flex items-center gap-1.5 px-2 py-1 text-[11.5px] ${active ? 'bg-[var(--bg-hover)]' : ''}`}>
-                      <button onClick={() => { void openPptxReader(s.rel, s.name) }} title="逐页阅读"
-                        className={`flex-1 min-w-0 flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity ${active ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
-                        <Presentation size={11} className="shrink-0 text-[var(--accent)]" />
-                        <span className="truncate">{s.name}</span>
-                        {active && <span className="text-[10px] text-[var(--text-muted)] shrink-0">阅读中 {reader!.cur + 1}/{reader!.pages.length}</span>}
-                      </button>
-                      {active && !pending && (
-                        <button onClick={() => { void talkCurrentPage() }} title="让 AI 讲当前页"
-                          className="shrink-0 text-[10.5px] text-[var(--accent)] px-1 py-0.5 rounded hover:bg-[var(--bg-hover)]">讲解</button>
-                      )}
-                      <button onClick={() => removeSource(s.rel)} title="移除"
-                        className="shrink-0 text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={11} /></button>
-                    </div>
-                  )
-                })}
+              <div className="p-2">
+                <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden">
+                  {sources.map(s => {
+                    const active = reader?.rel === s.rel
+                    return (
+                      <div key={s.rel} className={`flex items-center gap-1.5 px-2 py-1 text-[11.5px] ${active ? 'bg-[var(--bg-hover)]' : ''}`}>
+                        <button onClick={() => { void openPptxReader(s.rel, s.name) }} title="逐页阅读"
+                          className={`flex-1 min-w-0 flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity ${active ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                          <Presentation size={11} className="shrink-0 text-[var(--accent)]" />
+                          <span className="truncate">{s.name}</span>
+                          {active && <span className="text-[10px] text-[var(--text-muted)] shrink-0">阅读中 {reader!.cur + 1}/{reader!.pages.length}</span>}
+                        </button>
+                        {active && !pending && (
+                          <button onClick={() => { void talkCurrentPage() }} title="让 AI 讲当前页"
+                            className="shrink-0 text-[11px] text-[var(--accent)] px-1 py-0.5 rounded-md hover:bg-[var(--bg-hover)] transition-colors">讲解</button>
+                        )}
+                        <button onClick={() => removeSource(s.rel)} title="移除"
+                          className="shrink-0 text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={11} /></button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-[var(--border-color)] px-2.5 py-3 text-center text-[11px] text-[var(--text-muted)]">
-                点「PPT 素材」从当前仓库选 .pptx → 文档视图逐页阅读，随时让 AI 讲解
-              </div>
+              <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">暂无素材</div>
             )}
           </div>
-          <div>
-            <div className="text-[11px] text-[var(--text-muted)] mb-1">产物</div>
-            <div className="rounded-lg border border-dashed border-[var(--border-color)] px-2.5 py-3 text-center text-[11px] text-[var(--text-muted)]">
-              AI 拟好的笔记/方案草稿将在此预览并可一键写入知识库<br />（写入链路已就绪，产物提取 M1 开放）
-            </div>
+          <div className="shrink-0 pb-2">
+            <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">产物</div>
+            <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">暂无产物</div>
           </div>
-          <div>
-            <div className="text-[11px] text-[var(--text-muted)] mb-1">本次改动 {lastChanges ? `（${lastChanges.length}）` : ''}</div>
+          <div className="shrink-0 pb-2">
+            <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">本次改动{lastChanges ? `（${lastChanges.length}）` : ''}</div>
             {lastChanges && lastChanges.length > 0 ? (
-              <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden">
-                <ul className="py-1 max-h-40 overflow-y-auto">
-                  {lastChanges.map((c, i) => (
-                    <li key={i}>
-                      {c.file ? (
-                        <button onClick={() => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file } }))}
-                          title="在编辑器中打开"
-                          className="w-full flex items-center gap-1.5 px-2.5 py-1 text-left text-[11.5px] group hover:bg-[var(--bg-hover)] transition-colors">
-                          <FileText size={10} className="shrink-0 text-[var(--accent)]" />
-                          <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
-                          <span className="truncate text-[var(--text-primary)]">{c.target}</span>
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11.5px]">
-                          <FileText size={10} className="shrink-0 text-[var(--text-muted)]" />
-                          <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
-                          <span className="truncate text-[var(--text-secondary)]">{c.target}</span>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+              <div className="p-2">
+                <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] overflow-hidden">
+                  <ul className="py-1 max-h-40 overflow-y-auto">
+                    {lastChanges.map((c, i) => (
+                      <li key={i}>
+                        {c.file ? (
+                          <button onClick={() => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file } }))}
+                            title="在编辑器中打开"
+                            className="w-full flex items-center gap-1.5 px-2.5 py-1 text-left text-[11.5px] group hover:bg-[var(--bg-hover)] transition-colors">
+                            <FileText size={10} className="shrink-0 text-[var(--accent)]" />
+                            <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
+                            <span className="truncate text-[var(--text-primary)]">{c.target}</span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11.5px]">
+                            <FileText size={10} className="shrink-0 text-[var(--text-muted)]" />
+                            <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
+                            <span className="truncate text-[var(--text-secondary)]">{c.target}</span>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-[var(--border-color)] px-2.5 py-3 text-center text-[11px] text-[var(--text-muted)]">本轮暂无写入改动</div>
+              <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">本轮暂无写入改动</div>
             )}
           </div>
           <div className="flex-1" />
-          <button onClick={() => { if (activeId && !pending) { setMessages([]); void refreshMessages(activeId) } }}
-            className="text-[10.5px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors text-left">
-            刷新当前会话
-          </button>
+          <div className="p-2 shrink-0">
+            <button onClick={() => { if (activeId && !pending) { setMessages([]); void refreshMessages(activeId) } }}
+              className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors text-left">
+              刷新当前会话
+            </button>
+          </div>
         </aside>
       </div>
     </div>

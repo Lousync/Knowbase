@@ -120,9 +120,6 @@ export function SummaryPanel({ date }: { date: string }) {
       <h3 className="mt-8 mb-1 text-[17px] font-semibold text-[var(--text-primary)]">
         下{win.type === 'week' ? '一周' : '一个月'}的任务
       </h3>
-      <p className="text-[12px] text-[var(--text-muted)]">
-        落在 {win.nextDate} · 自动同步到「日程」模块并带「{SUMMARY_TAG_DEFS[win.type].name}」标签，细节可在那边继续编辑
-      </p>
 
       <ul className="mt-3 space-y-0.5">
         {tasks.map(t => (
@@ -144,7 +141,7 @@ export function SummaryPanel({ date }: { date: string }) {
           value={taskTitle}
           onChange={e => setTaskTitle(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') void addTask() }}
-          placeholder="添加一条下期任务，回车确认（只记大概即可）"
+          placeholder="添加任务，回车确认"
           maxLength={60}
           className="flex-1 min-w-0 bg-transparent border-none outline-none text-[15px] leading-7 text-[var(--text-primary)] placeholder:text-[var(--text-disabled)]"
         />

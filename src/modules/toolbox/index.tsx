@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi } from 'lucide-react'
+import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
@@ -26,31 +26,31 @@ const DATA_TOOLS: ToolDefinition[] = [
   {
     id: 'weight-tracker',
     name: '体重追踪',
-    icon: <TrendingDown size={26} strokeWidth={1.5} />,
+    icon: <TrendingDown size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'password-vault',
     name: '密码本',
-    icon: <Shield size={26} strokeWidth={1.5} />,
+    icon: <Shield size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'bookmark-nav',
     name: '网址导航',
-    icon: <Globe size={26} strokeWidth={1.5} />,
+    icon: <Globe size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'data-export',
     name: '数据导出',
-    icon: <Archive size={26} strokeWidth={1.5} />,
+    icon: <Archive size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'lan-share',
     name: '设备传输',
-    icon: <Wifi size={26} strokeWidth={1.5} />,
+    icon: <Wifi size={20} strokeWidth={1.5} />,
     available: true,
   },
 ]
@@ -59,31 +59,31 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
   {
     id: 'pomodoro',
     name: '番茄钟',
-    icon: <Timer size={26} strokeWidth={1.5} />,
+    icon: <Timer size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'habit-tracker',
     name: '习惯打卡',
-    icon: <CalendarCheck2 size={26} strokeWidth={1.5} />,
+    icon: <CalendarCheck2 size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'remote-supervise',
     name: '远程监督',
-    icon: <BellRing size={26} strokeWidth={1.5} />,
+    icon: <BellRing size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'wordbook',
     name: '单词本',
-    icon: <GraduationCap size={26} strokeWidth={1.5} />,
+    icon: <GraduationCap size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
     id: 'pdf-toolkit',
     name: 'PDF 工具箱',
-    icon: <FileText size={26} strokeWidth={1.5} />,
+    icon: <FileText size={20} strokeWidth={1.5} />,
     available: true,
   },
 ]
@@ -170,7 +170,7 @@ export function ToolboxModule() {
           disabled={!tool.available}
           onClick={() => tool.available && handleActivateTool(tool.id)}
           className={`
-            flex flex-col items-center gap-2.5 p-5 rounded-lg border transition-all text-center
+            flex flex-col items-center gap-2 p-4 rounded-lg border transition-all text-center
             ${tool.available
               ? 'border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] cursor-pointer group'
               : 'border-[var(--border-color)] bg-[var(--bg-tertiary)] opacity-40 cursor-not-allowed'
@@ -202,8 +202,9 @@ export function ToolboxModule() {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-[var(--border-color)] shrink-0">
-        <h2 className="text-[16px] font-medium text-[var(--text-primary)]">🧰 工具箱</h2>
+      <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+        <Wrench size={12} />
+        工具箱
       </div>
 
       {/* Tool sections */}
@@ -232,10 +233,10 @@ export function ToolboxModule() {
                     <button
                       key={`${t.pluginId}:${t.toolId}`}
                       onClick={() => setActivePluginTool(t)}
-                      className="flex flex-col items-center gap-2.5 p-5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
+                      className="flex flex-col items-center gap-2 p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
                     >
                       <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)] relative">
-                        <PluginIconImg src={t.icon} size={26} className="group-hover:opacity-90" />
+                        <PluginIconImg src={t.icon} size={20} className="group-hover:opacity-90" />
                         <span
                           className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border border-[var(--bg-secondary)]"
                           style={{ background: t.riskLevel === 'B' ? 'var(--danger)' : t.riskLevel === 'A' ? 'var(--warning)' : 'var(--success)' }}
@@ -262,15 +263,19 @@ function PluginToolHost({ tool, onBack }: { tool: PluginTool; onBack: () => void
   // 替代原 v1 手工 iframe + 白名单桥（data 通道此前「未开放」）。
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
-      <div className="px-5 py-3 border-b border-[var(--border-color)] shrink-0 flex items-center gap-3">
-        <button onClick={onBack} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors">
-          ← 返回
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
         </button>
-        <h2 className="text-[15px] font-medium text-[var(--text-primary)] flex items-center gap-2">
-          <Puzzle size={15} className="text-[var(--accent)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+          <Puzzle size={12} className="text-[var(--accent)]" />
           {tool.name}
-          <span className="text-[10px] text-[var(--text-disabled)] font-normal">插件</span>
-        </h2>
+        </span>
+        <span className="ml-auto text-[11px] text-[var(--text-disabled)]">插件</span>
       </div>
       <div className="min-h-0 flex-1">
         <PluginFrame

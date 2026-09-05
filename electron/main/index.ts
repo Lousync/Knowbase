@@ -217,9 +217,8 @@ function createTray(): void {
 
 function createWindow(): void {
   console.log('[Window] ELECTRON_RENDERER_URL =', process.env.ELECTRON_RENDERER_URL || '(empty)')
-  // 半透明亚克力：窗口背景材质跟随系统（Windows 11 22H2+），渲染层把根容器/标题栏/卡片衔接处
-  // 做成半透明，透出材质形成玻璃感；旧系统不生效时 backgroundColor 按主题兜底，视觉不破坏
-  const theme = String(settingsCache['theme'] || 'dark')
+  // 透明窗口 + 渲染层自绘大圆角（用户决策 2026-09-05）：系统 DWM 圆角半径固定 ~8px 不可调，
+  // 且与 acrylic 材质互斥；改为透明窗口后磨砂感由应用内分层半透明模拟，旧系统无兼容性差异
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -228,8 +227,7 @@ function createWindow(): void {
     title: 'Knowbase',
     frame: false,                          // 无边框 → 自定义标题栏
     titleBarStyle: 'hidden',              // macOS 隐藏原生标题栏
-    backgroundColor: theme === 'light' ? '#f3f3f3' : '#1e1e1e', // 按主题设底色，防启动白屏
-    backgroundMaterial: process.platform === 'win32' ? 'acrylic' : 'auto',
+    transparent: true,                     // 透明底 → 根容器 18px 自绘圆角（最大化时渲染层自动切直角）
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,                         // preload 仅用 contextBridge/ipcRenderer/webUtils,完全兼容沙箱
@@ -313,13 +311,41 @@ function registerWindowHandlers(): void {
   // 抽屉式日程面板：renderer 发送「面板期望宽度」（0 = 收回），主进程以抽屉打开时刻的
   // 基准宽度为锚点计算窗口宽度。绝对值协议 —— 重复/乱序/HMR 重挂载的消息不会累积漂移。
   // 最大化/全屏时窗口由系统管理，自动跳过；右缘越界则整体左移夹回工作区。
-  let drawerBaseWidth = 0 // 0 = 抽屉未开
-  ipcMain.handle('window:resizeForSidebar', (_e, width: number) => {
+  // animate = true 时窗口宽度缓动过渡（开合平滑展开/收回），拖拽调宽传 false 即时跟随。
+  let drawerBaseWidth = 0 // 0 = 抽屉未开（收回动画 settle 时才清零，中途重开复用原基准）
+  let drawerAnimTimer: ReturnType<typeof setInterval> | null = null
+  const stopDrawerAnim = () => {
+    if (drawerAnimTimer) { clearInterval(drawerAnimTimer); drawerAnimTimer = null }
+  }
+  /** 窗口 bounds 缓动过渡（easeOutCubic，约 200ms）；新请求到来或异常时中断，latest-wins */
+  const animateWindowTo = (win: Electron.BrowserWindow, target: Electron.Rectangle, onSettle?: () => void) => {
+    stopDrawerAnim()
+    const start = win.getBounds()
+    const t0 = performance.now()
+    const duration = 200
+    drawerAnimTimer = setInterval(() => {
+      if (win.isDestroyed()) { stopDrawerAnim(); return }
+      if (win.isMaximized() || win.isFullScreen()) { stopDrawerAnim(); onSettle?.(); return }
+      const p = Math.min(1, (performance.now() - t0) / duration)
+      const e = 1 - Math.pow(1 - p, 3)
+      const w = Math.round(start.width + (target.width - start.width) * e)
+      const x = Math.round(start.x + (target.x - start.x) * e)
+      if (p >= 1) {
+        stopDrawerAnim()
+        win.setBounds({ x: target.x, y: target.y, width: target.width, height: target.height })
+        onSettle?.()
+        return
+      }
+      win.setBounds({ x, y: start.y, width: w, height: start.height })
+    }, 16)
+  }
+  ipcMain.handle('window:resizeForSidebar', (_e, width: number, animate = false) => {
     const win = mainWindow
     if (!win || win.isDestroyed() || typeof width !== 'number' || !Number.isFinite(width)) {
       return { applied: false }
     }
     if (win.isMaximized() || win.isFullScreen()) return { applied: false, reason: 'maximized' }
+    stopDrawerAnim()
     const b = win.getBounds()
     const { workArea } = screen.getDisplayMatching(b)
 
@@ -327,22 +353,29 @@ function registerWindowHandlers(): void {
     if (width <= 0) {
       if (drawerBaseWidth === 0) return { applied: false }
       const base = drawerBaseWidth
-      drawerBaseWidth = 0
       const w = Math.max(900, Math.min(workArea.width, base))
-      if (w === b.width) return { applied: false }
-      win.setBounds({ x: b.x, y: b.y, width: w, height: b.height })
+      if (w === b.width) {
+        drawerBaseWidth = 0
+        return { applied: false }
+      }
+      const target = { ...b, width: w }
+      if (animate) animateWindowTo(win, target, () => { drawerBaseWidth = 0 })
+      else { win.setBounds(target); drawerBaseWidth = 0 }
       return { applied: true, width: w }
     }
 
-    // 打开/拖拽：基准 + 面板宽（首次打开时锁定基准，并夹回工作区防膨胀）
+    // 打开/拖拽：基准 + 面板宽（首次打开时锁定基准，并夹回工作区防膨胀）。
+    // 收回动画中途再次打开（HMR 重挂载/快速切换）：基准尚未清零，自动复用原基准重新锚定。
     if (drawerBaseWidth === 0) drawerBaseWidth = Math.min(b.width, workArea.width)
     const w = Math.max(900, Math.min(workArea.width, drawerBaseWidth + Math.round(width)))
-    if (w === b.width) return { applied: true, width: w }
     let x = b.x
     if (w > b.width && x + w > workArea.x + workArea.width) {
       x = Math.max(workArea.x, workArea.x + workArea.width - w)
     }
-    win.setBounds({ x, y: b.y, width: w, height: b.height })
+    const target = { x, y: b.y, width: w, height: b.height }
+    if (target.width === b.width && target.x === b.x) return { applied: true, width: w }
+    if (animate) animateWindowTo(win, target)
+    else win.setBounds(target)
     return { applied: true, width: w }
   })
 

@@ -186,24 +186,21 @@ export function PasswordVault({ onBack }: Props) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => { if (saveTimer.current) { clearTimeout(saveTimer.current); doSave() }; onBack() }}
-            className="flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
-          >
-            <ArrowLeft size={16} /> 返回
-          </button>
-          <div className="w-px h-4 bg-[var(--border-color)]" />
-          <Shield size={17} className="text-[var(--accent)]" />
-          <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">密码本</h2>
-          <span className="text-[11px] text-[var(--text-muted)]">{entries.length} 条</span>
-        </div>
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={() => { if (saveTimer.current) { clearTimeout(saveTimer.current); doSave() }; onBack() }}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
+        </button>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">密码本</span>
+        <span className="text-[11px] text-[var(--text-muted)]">{entries.length} 条</span>
         <button
           onClick={() => { setShowNewForm(true); setNewTitle(''); setNewAccount(''); setNewUsername(''); setNewPassword(''); setNewUrl(''); setNewNotes('') }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors"
+          className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
         >
-          <Plus size={14} /> 新建
+          <Plus size={12} /> 新建
         </button>
       </div>
 
@@ -310,7 +307,7 @@ export function PasswordVault({ onBack }: Props) {
                     <button
                       onClick={() => account && handleCopyText(account, 'account')}
                       disabled={!account}
-                      className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      className="shrink-0 p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                       title="复制账号"
                     >
                       {copiedAccount ? <Check size={15} /> : <Copy size={15} />}
@@ -332,7 +329,7 @@ export function PasswordVault({ onBack }: Props) {
                     <button
                       onClick={() => username && handleCopyText(username, 'user')}
                       disabled={!username}
-                      className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      className="shrink-0 p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                       title="复制用户名"
                     >
                       {copiedUser ? <Check size={15} /> : <Copy size={15} />}
@@ -358,7 +355,7 @@ export function PasswordVault({ onBack }: Props) {
                     />
                     <button
                       onClick={() => setShowPassword(v => !v)}
-                      className="shrink-0 px-2 py-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      className="shrink-0 p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                       title={showPassword ? '隐藏' : '显示'}
                     >
                       {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -367,7 +364,7 @@ export function PasswordVault({ onBack }: Props) {
                   <button
                     onClick={() => password && handleCopyText(password, 'pass')}
                     disabled={!password}
-                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                    className="shrink-0 p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                     title="复制密码"
                   >
                     {copiedPass ? <Check size={15} /> : <Copy size={15} />}
@@ -390,7 +387,7 @@ export function PasswordVault({ onBack }: Props) {
                   <button
                     onClick={() => handleOpenUrl(url)}
                     disabled={!url}
-                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-white hover:bg-[var(--accent)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                    className="shrink-0 p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                     title="打开网址"
                   >
                     <ExternalLink size={15} />
@@ -420,9 +417,9 @@ export function PasswordVault({ onBack }: Props) {
                 </div>
                 <button
                   onClick={() => setDeleteTarget(selected.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[#e8112320] rounded transition-colors"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
-                  <Trash2 size={14} /> 删除此条目
+                  <Trash2 size={12} /> 删除此条目
                 </button>
               </div>
             </div>
@@ -526,8 +523,8 @@ export function PasswordVault({ onBack }: Props) {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--border-color)]">
-              <button onClick={() => setShowNewForm(false)} className="px-4 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)] transition-colors">取消</button>
-              <button onClick={handleCreate} disabled={!newTitle.trim()} className="px-4 py-1.5 text-[12px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">添加</button>
+              <button onClick={() => setShowNewForm(false)} className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">取消</button>
+              <button onClick={handleCreate} disabled={!newTitle.trim()} className="flex items-center px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">添加</button>
             </div>
           </div>
         </div>
@@ -544,8 +541,8 @@ export function PasswordVault({ onBack }: Props) {
             <p className="text-[13px] text-[var(--text-primary)] mb-1 font-medium">确认删除</p>
             <p className="text-[11px] text-[var(--text-muted)] mb-4">此操作不可撤销，确定要删除此密码条目吗？</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteTarget(null)} className="px-4 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)] transition-colors">取消</button>
-              <button onClick={() => handleDelete(deleteTarget)} className="px-4 py-1.5 text-[12px] bg-[var(--danger)] text-white rounded hover:bg-[#c62828] transition-colors">删除</button>
+              <button onClick={() => setDeleteTarget(null)} className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">取消</button>
+              <button onClick={() => handleDelete(deleteTarget)} className="px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--danger)] text-white hover:opacity-90 transition-colors">删除</button>
             </div>
           </div>
         </div>

@@ -576,7 +576,7 @@ export function NotebookList({
                 )}
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
-                {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
                 {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
             ))}
@@ -773,7 +773,7 @@ export function NotebookList({
                     <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                   )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
-                  {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                  {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
               ))}
@@ -831,7 +831,7 @@ export function NotebookList({
                   <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
                 )}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
-                {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />}
+                {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
                 {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
             ))}
@@ -855,7 +855,7 @@ export function NotebookList({
             <span className="shrink-0 w-3.5 flex items-center justify-center">
               {starredOpen ? <ChevronDown size={13} className="text-[var(--text-muted)]" /> : <ChevronRight size={13} className="text-[var(--text-muted)]" />}
             </span>
-            <Star size={13} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
+            <Star size={13} className="shrink-0 text-[var(--warning)]" fill="currentColor" />
             <span className="flex-1 text-left">收藏</span>
             <span className="text-[10px] text-[var(--text-muted)] shrink-0">{starredPages.length}</span>
           </button>
@@ -872,7 +872,7 @@ export function NotebookList({
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
                     : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
                   }`}>
-                  <Star size={11} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
+                  <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />
                   {editingPageId === p.id ? (
                     <input
                       className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
@@ -1178,7 +1178,7 @@ export function NotebookList({
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除"
-        message={`确定要删除「${deleteTarget?.name ?? ''}」吗？其下所有子目录和页面将一并移入回收站。`}
+        message={`删除「${deleteTarget?.name ?? ''}」？子目录和页面一并移入回收站。`}
         confirmLabel="删除"
         onConfirm={(skipNext) => {
           if (skipNext) { setSkipDeleteConfirm(true); setSetting('skipDeleteConfirm_knowledgeCategory', true) }

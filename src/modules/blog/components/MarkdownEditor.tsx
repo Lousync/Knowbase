@@ -289,13 +289,13 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--bg-primary)]">
       {/* toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={handleCancelWithCheck} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-            <ArrowLeft size={15} /> 返回
+      <div className="flex items-center justify-between gap-0.5 px-2 py-1 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+        <div className="flex items-center gap-1">
+          <button onClick={handleCancelWithCheck} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+            <ArrowLeft size={13} /> 返回
           </button>
           <div className="w-px h-4 bg-[var(--input-bg)]" />
-          <span className="text-[13px] text-[var(--text-primary)] font-medium">{date}</span>
+          <span className="text-[12px] text-[var(--text-primary)] font-medium">{date}</span>
 
           {/* Mood states */}
           <div className="w-px h-4 bg-[var(--input-bg)]" />
@@ -313,7 +313,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5">
           <span className="text-[11px] text-[var(--text-muted)] min-w-[60px] text-right">
             {saving ? '保存中...' : lastSaved ? '已保存 ' + fmtTime(lastSaved) : ''}
           </span>
@@ -321,7 +321,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             <>
               <button
                 onClick={() => imageInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                 title="插入图片"
               >
                 <ImagePlus size={13} />
@@ -329,7 +329,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
               </button>
               <button
                 onClick={() => setShowTplModal(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                 title="套用博客模板"
               >
                 <LayoutTemplate size={13} />
@@ -338,27 +338,27 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             </>
           )}
           <button onClick={() => setShowPreview(!showPreview)}
-            className={'flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded transition-colors ' + (showPreview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]')}
+            className={'flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ' + (showPreview ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]')}
             title="Ctrl+/">
             {showPreview ? <Code size={13} /> : <Eye size={13} />}
             {showPreview ? '源码' : '预览'}
           </button>
           {onToggleOutline && (
             <button onClick={onToggleOutline}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
               title="大纲 (Ctrl+O)">
               <ListTree size={13} />
               大纲
             </button>
           )}
           <button onClick={handleSaveAndClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">
             完成
           </button>
           <button onClick={handleDeleteEntry}
-            className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--danger)] hover:bg-[#e8112320] transition-colors"
+            className="p-1 rounded-md text-[var(--text-secondary)] hover:text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors"
             title="删除">
-            <Trash2 size={16} />
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
@@ -498,7 +498,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
       <ConfirmDialog
         open={showDeleteConfirm}
         title="确认删除"
-        message="确定要删除这篇博文吗？删除后可在回收站恢复，30天后将自动清空。"
+        message="删除这篇博文？可在回收站恢复。"
         confirmLabel="删除"
         onConfirm={(skipNext) => {
           if (skipNext) {

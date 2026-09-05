@@ -9,7 +9,7 @@ export function GeneralView() {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">通用与行为</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">通用与行为</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">启动、缩放、外壳与基础行为</p>
 
       {/* 界面缩放 */}
@@ -44,7 +44,7 @@ export function GeneralView() {
             <span className="text-[13px] text-[var(--text-primary)] leading-relaxed">
               启用 Workbench 布局
               <span className="block text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
-                实验性 VS Code 外壳：活动栏 / 侧栏视图 / 编辑器组 / 状态栏。开启后编辑器模块的文件树抽到全局侧栏；其余模块暂以整页形态驻留编辑器组，逐步迁移。出问题随时切回旧布局。
+                实验性 VS Code 外壳布局，可随时切回。
               </span>
             </span>
           </label>
