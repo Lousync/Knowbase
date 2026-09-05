@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Entry, Tag } from '../../../types'
-import { Edit3, ChevronRight, ChevronDown, FileText, Search, Star, List, Hash } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Search, Star, Hash, Edit3, List } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
 import { formatEntryDate, localToday } from '../../../lib/date'
 
@@ -242,7 +242,6 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
       showToast({
         type: 'warning',
         message: '日期太早，暂不支持此日期之前的日志补写。',
-        detail: '键盘快捷键',
       })
       return
     }
@@ -253,7 +252,6 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
       showToast({
         type: 'warning',
         message: '不能创建未来日期的日志。',
-        detail: '键盘快捷键',
       })
       return
     }
@@ -262,42 +260,36 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
 
   return (
     <aside className="w-full bg-[var(--bg-secondary)] flex flex-col h-full shrink-0 overflow-x-hidden">
-      <div className="px-4 py-4 border-b border-[var(--border-color)]">
-        <h1 className="text-sm font-semibold text-[var(--text-primary)] select-none">📝 博客</h1>
-      </div>
-
-      {/* 今日按钮 */}
-      <div className="px-3 py-3 space-y-1.5">
-        <button
-          onClick={onNewEntry}
-          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-white text-[13px] rounded hover:bg-[var(--accent-hover)] transition-colors"
-        >
-          <Edit3 size={15} />
-          {hasToday ? '继续编写' : '今日文章编写'}
-        </button>
-        {/* 全部文章入口 */}
-        {onShowAll && (
+      {/* 标题行：文章 + 快捷动作 */}
+      <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+        <span>文章</span>
+        <div className="ml-auto flex items-center gap-0.5">
           <button
-            onClick={onShowAll}
-            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1 text-[13px] rounded border transition-colors ${
-              !selectedDate
-                ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)]'
-            }`}
+            onClick={onNewEntry}
+            title={hasToday ? '继续编写今日文章' : '新建今日文章'}
+            className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
-            <List size={13} />
-            全部文章
+            <Edit3 size={13} />
           </button>
-        )}
+          {onShowAll && (
+            <button
+              onClick={onShowAll}
+              title="全部文章"
+              className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <List size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 收藏 */}
       {starredEntries.length > 0 && (
-        <div className="px-2 py-1 border-b border-[var(--border-color)]">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-semibold text-[var(--warning)] uppercase tracking-wider">
-            <Star size={11} fill="#c5a332" />
+        <div className="px-2 py-1">
+          <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text-muted)]">
+            <Star size={11} className="text-[var(--warning)] fill-[var(--warning)]" />
             收藏
-            <span className="text-[var(--text-disabled)] font-normal normal-case">{starredEntries.length}</span>
+            <span className="text-[var(--text-disabled)]">{starredEntries.length}</span>
           </div>
           <div className="space-y-0.5">
             {starredEntries.map(e => (
@@ -310,7 +302,7 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                     : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
-                <Star size={10} className="shrink-0 text-[var(--warning)]" fill="#c5a332" />
+                <Star size={10} className="shrink-0 text-[var(--warning)] fill-[var(--warning)]" />
                 <span className="truncate flex-1">{formatEntryDate(e.date)}</span>
               </button>
             ))}
@@ -320,8 +312,8 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
 
       {/* 树状归档 */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-1 flex flex-col">
-        <div className="px-3 py-2 flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+        <div className="px-2 py-1 flex items-center justify-between">
+          <span className="text-[11px] text-[var(--text-muted)]">
             文章归档
           </span>
           {activeSearch && (
@@ -405,10 +397,10 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
             {/* Title matches */}
             {tagSearchResults.titleMatches.length > 0 && (
               <div className="mb-1">
-                <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text-muted)]">
                   <FileText size={11} />
                   标题匹配
-                  <span className="text-[var(--text-disabled)] font-normal normal-case">{tagSearchResults.titleMatches.length}</span>
+                  <span className="text-[var(--text-disabled)]">{tagSearchResults.titleMatches.length}</span>
                 </div>
                 {tagSearchResults.titleMatches.map(e => (
                   <button
@@ -427,11 +419,11 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
             {/* Tag matches */}
             {tagSearchResults.tagEntries.map(({ tag, entries: tagged }) => (
               <div key={tag.id} className="mb-1">
-                <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
+                <div className="flex items-center gap-1.5 px-2 py-1 text-[11px]"
                   style={{ color: tag.color }}>
                   <Hash size={11} />
                   标签: {tag.name}
-                  <span className="font-normal normal-case" style={{ opacity: 0.6 }}>{tagged.length}</span>
+                  <span style={{ opacity: 0.6 }}>{tagged.length}</span>
                 </div>
                 {tagged.map(e => (
                   <button
@@ -462,8 +454,8 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
               <button onClick={() => toggle(year)}
                 className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
                 {yearOpen
-                  ? <ChevronDown size={15} className="text-[#888] shrink-0" />
-                  : <ChevronRight size={15} className="text-[#888] shrink-0" />}
+                  ? <ChevronDown size={15} className="text-[var(--text-muted)] shrink-0" />
+                  : <ChevronRight size={15} className="text-[var(--text-muted)] shrink-0" />}
                 <span className="font-semibold">{year} 年</span>
                 <span className="text-[10px] text-[var(--text-disabled)] ml-1">
                   {searchResults ? '搜索' : ''}
@@ -480,8 +472,8 @@ export function Sidebar({ entries, starredEntries, selectedDate, onSelectDate, o
                     <button onClick={() => toggle(mk)}
                       className="w-full flex items-center gap-1 px-2 py-1 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors">
                       {mOpen
-                        ? <ChevronDown size={15} className="text-[#888] shrink-0" />
-                        : <ChevronRight size={15} className="text-[#888] shrink-0" />}
+                        ? <ChevronDown size={15} className="text-[var(--text-muted)] shrink-0" />
+                        : <ChevronRight size={15} className="text-[var(--text-muted)] shrink-0" />}
                       <span>{MONTH_NAMES[month] || `${month}月`}</span>
                       <span className="text-[10px] text-[var(--text-muted)] ml-1">
                         {days.filter(d => d.hasContent).length || ''}

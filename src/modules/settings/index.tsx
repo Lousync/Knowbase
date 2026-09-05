@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Info } from 'lucide-react'
+import { Info, Settings } from 'lucide-react'
 import { getAppVersion } from '../../lib/ipc'
 import { AppearanceView } from './views/AppearanceView'
 import { EditorView } from './views/EditorView'
@@ -135,11 +135,13 @@ export function SettingsModule() {
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
       {/* Left nav */}
-      <div className="w-48 shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] py-4 flex flex-col">
-        <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-4 mb-1">
+      <div className="w-48 shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col">
+        <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+          <Settings size={12} />
           设置
         </div>
 
+        <div className="py-1">
         {SECTIONS.map(s => {
           const hitCount = counts[s.id] ?? 0
           const hidden = searching && hitCount === 0
@@ -148,10 +150,10 @@ export function SettingsModule() {
             <button
               key={s.id}
               onClick={() => { setSection(s.id); setQuery(''); setComboOpen(false) }}
-              className={`w-full flex items-center gap-2 px-4 py-2 text-[13px] transition-colors pl-[14px] ${
+              className={`w-full flex items-center gap-2 px-2 py-1 text-[12px] transition-colors border-l-2 ${
                 section === s.id
-                  ? 'bg-[var(--bg-selected)] text-[var(--text-primary)] border-l-2 border-l-[var(--accent)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border-l-2 border-l-transparent'
+                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border-l-transparent'
               }`}
             >
               <span className={section === s.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}>
@@ -166,6 +168,7 @@ export function SettingsModule() {
             </button>
           )
         })}
+        </div>
 
         <div className="mt-auto pt-2 border-t border-[var(--border-color)] px-4">
           <span className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
@@ -178,7 +181,7 @@ export function SettingsModule() {
       {/* Right content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Search bar */}
-        <div className="px-8 pt-6 pb-2 shrink-0">
+        <div className="px-6 pt-4 pb-2 shrink-0">
           <div className="max-w-2xl mx-auto">
             <SettingsSearchBox
               query={query}
@@ -192,7 +195,7 @@ export function SettingsModule() {
             />
             {searching && hits.length === 0 && !comboOpen && (
               <p className="text-[12px] text-[var(--text-muted)] mt-3 text-center">
-                没有匹配的设置项，试试“字体”“行号”“提醒”“MCP”“编码”等关键词
+                未找到匹配的设置项
               </p>
             )}
           </div>
@@ -200,7 +203,7 @@ export function SettingsModule() {
 
         {/* Content */}
         <div ref={contentRef} className="flex-1 overflow-y-auto py-6">
-          <div className="max-w-2xl mx-auto px-8">
+          <div className="max-w-2xl mx-auto px-6">
             {searching ? (
               hits.length > 0
                 ? <SearchResultsView query={query.trim()} hits={hits} onPick={jumpTo} />

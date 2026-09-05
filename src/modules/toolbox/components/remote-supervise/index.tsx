@@ -149,22 +149,24 @@ export function RemoteSupervise({ onBack }: Props) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* 头部 */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-            <ArrowLeft size={14} /> 返回
-          </button>
-          <span className="text-[14px] font-medium text-[var(--text-primary)]">远程监督</span>
-        </div>
-        <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
+        </button>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">远程监督</span>
+        <div className="ml-auto flex items-center gap-1">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-[12px] transition-colors ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] transition-colors ${
                 tab === t.id
-                  ? 'bg-[var(--accent)] text-white'
-                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]'
+                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'
               }`}
             >
               {t.icon} {t.label}

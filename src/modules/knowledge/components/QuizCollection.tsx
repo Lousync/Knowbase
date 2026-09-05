@@ -350,7 +350,7 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
             <button
               onClick={() => void toggleFav(r)}
               title={r.isFavorite ? '取消收藏' : '收藏'}
-              className={`shrink-0 p-1 rounded hover:bg-[var(--bg-hover)] ${r.isFavorite ? 'text-[#f5b301]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`shrink-0 p-1 rounded hover:bg-[var(--bg-hover)] ${r.isFavorite ? 'text-[var(--warning)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
             >
               <Star size={14} fill={r.isFavorite ? 'currentColor' : 'none'} />
             </button>
@@ -664,7 +664,7 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
                         on ? 'text-white' : 'bg-transparent'
                       }`}
                       style={on
-                        ? { borderColor: t.color, background: t.color, color: '#fff' }
+                        ? { borderColor: t.color, background: t.color }
                         : { borderColor: t.color, color: t.color }}
                     >
                       {t.name}

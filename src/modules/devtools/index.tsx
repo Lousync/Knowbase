@@ -41,7 +41,17 @@ export function DevToolsModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   const ActiveComponent = active?.component
 
   return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
+    <div className="flex h-full flex-col bg-[var(--bg-primary)]">
+      {/* 顶部贯通行（图二骨架）：横跨侧栏 + 内容区（标题自侧栏上移） */}
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0 select-none">
+        <FlaskConical size={12} className="text-[var(--text-muted)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">开发者工具</span>
+        <span className="text-[9px] px-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">DEV</span>
+        <div className="ml-auto flex items-center gap-0.5">
+          {active && <span className="text-[11.5px] text-[var(--text-muted)]">{active.label}</span>}
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1">
       <ResizablePanel
         storageKey="sidebarWidth_devtools"
         defaultWidth={CONSTRAINTS.default}
@@ -52,12 +62,7 @@ export function DevToolsModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         onSnapClose={onSnapCloseSidebar}
         onSnapOpen={onSnapOpenSidebar}
       >
-        <div className="w-full h-full bg-[var(--bg-secondary)] py-4 flex flex-col overflow-y-auto">
-          <div className="flex items-center gap-2 px-4 mb-3">
-            <FlaskConical size={14} className="text-[var(--accent)]" />
-            <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">开发者工具</span>
-            <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)] font-mono font-semibold">DEV</span>
-          </div>
+        <div className="w-full h-full bg-[var(--bg-secondary)] py-2 flex flex-col overflow-y-auto">
           {TOOLS.map(t => {
             const isActive = t.id === active?.id
             return (
@@ -75,18 +80,13 @@ export function DevToolsModule({ sidebarOpen = true, sidebarWidths = {} as Recor
               </button>
             )
           })}
-
-          <div className="mt-auto px-4 pt-3 border-t border-[var(--border-color)]">
-            <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
-              改动直接写入 src/ 源码目录,git 提交后随构建进入正式版
-            </p>
-          </div>
         </div>
       </ResizablePanel>
 
       {/* 右侧:当前工具 */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {ActiveComponent && <ActiveComponent />}
+      </div>
       </div>
     </div>
   )

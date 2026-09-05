@@ -198,12 +198,12 @@ export function ChapterPanel({
         </div>
       )}
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--border-color)]">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
           <button onClick={onCollapse}
-            className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
             title="返回">
-            <ArrowLeft size={18} />
+            <ArrowLeft size={16} />
           </button>
           {focusChapter && editingId === focusChapter.id ? (
             <input
@@ -216,7 +216,7 @@ export function ChapterPanel({
               autoFocus
             />
           ) : (
-            <span className="text-[12px] font-medium text-[var(--text-secondary)] truncate">
+            <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">
               {focusChapter ? `${notebookName} / ${focusChapter.name}` : notebookName}
             </span>
           )}
@@ -225,7 +225,7 @@ export function ChapterPanel({
           {focusChapter && editingId !== focusChapter.id && (
             <button
               onClick={() => handleStartRename(focusChapter.id, focusChapter.name)}
-              className="p-0.5 rounded hover:bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
               title="重命名章节 (F2)">
               <Pencil size={13} />
             </button>

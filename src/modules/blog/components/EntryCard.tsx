@@ -13,7 +13,7 @@ interface EntryCardProps {
 
 const SIZE_MAP = {
   s: { py: 'py-1', px: 'px-3', title: 'text-[12px]', meta: 'text-[10px]', gap: 'gap-2' },
-  m: { py: 'py-3', px: 'px-4', title: 'text-[14px]', meta: 'text-[11px]', gap: 'gap-2' },
+  m: { py: 'py-2', px: 'px-3', title: 'text-[14px]', meta: 'text-[11px]', gap: 'gap-2' },
   l: { py: 'py-4', px: 'px-5', title: 'text-[16px]', meta: 'text-[12px]', gap: 'gap-3' },
 }
 
@@ -49,7 +49,7 @@ export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCar
           className="shrink-0 p-0.5 hover:scale-110 transition-transform"
           title={entry.isStarred ? '取消收藏' : '收藏'}
         >
-          <Star size={14} className={entry.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
+          <Star size={14} className={entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'} />
         </button>
 
         {/* Date */}

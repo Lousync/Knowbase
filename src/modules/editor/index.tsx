@@ -53,6 +53,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
   const [openFiles, setOpenFiles] = useState<Record<string, EditorDoc>>({})
   const [activePath, setActivePath] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: TreeNode } | null>(null)
+  /** 资源管理器标题「+」新建下拉：锚定按钮下方展开（文件 / 文件夹 / 知识页） */
+  const [createMenu, setCreateMenu] = useState<{ x: number; y: number } | null>(null)
   const [trashTarget, setTrashTarget] = useState<TreeNode | null>(null)
   const [inputBox, setInputBox] = useState<InputBoxState | null>(null)
   const [inputValue, setInputValue] = useState('')
@@ -575,6 +577,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     return () => window.removeEventListener('keydown', onEsc)
   }, [ctxMenu])
 
+  // 「+」新建下拉：Esc 关闭（外部点击由遮罩层处理）
+  useEffect(() => {
+    if (!createMenu) return
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setCreateMenu(null) }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [createMenu])
+
   /** 知识库拖拽移动（kb-file-moved 广播）→ 三处联动：刷新源/目标目录 + 迁移已打开文档的 key */
   useEffect(() => {
     const handler = (e: Event) => {
@@ -628,9 +638,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       <div className="flex h-full flex-col items-center justify-center gap-5 p-8">
         <button
           onClick={() => void handleOpenDir()}
-          className="flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] px-5 py-3 text-[14px] text-[var(--text-primary)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
         >
-          <FolderOpen size={18} className="text-[var(--accent)]" />
+          <FolderOpen size={14} />
           打开文件夹作为仓库
         </button>
         {recent.length > 0 && (
@@ -657,81 +667,59 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
 
   return (
     <div className="flex h-full flex-col">
-      {/* 顶部工具栏 */}
-      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-3 py-1.5">
-        <button
-          onClick={() => void handleOpenDir()}
-          title="切换仓库"
-          className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
-        >
-          <FolderOpen size={14} className="shrink-0 text-[var(--accent)]" />
-          <span className="truncate">{rootName}</span>
-          <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />
-        </button>
-        <div className="mx-1 h-4 w-px bg-[var(--border-color)]" />
-        <button
-          onClick={() => askCreateNode('', 'file')}
-          title="新建文件"
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-        >
-          <Plus size={14} />
-          新建文件
-        </button>
-        <button
-          onClick={() => askCreateNode('', 'dir')}
-          title="新建文件夹"
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-        >
-          <FolderPlus size={14} />
-          新建文件夹
-        </button>
-        <button
-          onClick={() => askCreateKnowledgePage('')}
-          title="新建知识页（带 frontmatter id，进入知识库索引）"
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-        >
-          <FilePlus2 size={14} />
-          新建知识页
-        </button>
-        <div className="flex-1" />
-        {activeDoc?.language === 'markdown' && (
-          <>
-            <button
-              onClick={() => { setOutlineOpen((v) => !v); }}
-              title="大纲（跳转标题）"
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] transition-colors ${
-                outlineOpen
-                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <ListTree size={14} />
-              大纲
-            </button>
-            <button
-              onClick={togglePreview}
-              title="分栏预览（左编辑 / 右实时渲染）"
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] transition-colors ${
-                previewOpen
-                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              {previewOpen ? <PanelRightClose size={14} /> : <Eye size={14} />}
-              预览
-            </button>
-          </>
-        )}
-        {dirtyCount > 0 && (
+      {/* 顶部贯行（统一紧凑样式）：标题居左，动作按钮靠右 */}
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0 select-none">
+        <FileText size={12} className="text-[var(--text-muted)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">编辑区</span>
+        <div className="ml-auto flex items-center gap-0.5">
           <button
-            onClick={() => void saveAll()}
-            title="保存全部 (Ctrl+Shift+S)"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-[var(--accent)] transition-colors hover:bg-[var(--bg-hover)]"
+            onClick={() => void handleOpenDir()}
+            title="切换仓库"
+            className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
           >
-            <SaveAll size={14} />
-            保存全部 ({dirtyCount})
+            <FolderOpen size={12} className="shrink-0" />
+            <span className="truncate">{rootName}</span>
+            <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />
           </button>
-        )}
+          {activeDoc?.language === 'markdown' && (
+            <>
+              <button
+                onClick={() => { setOutlineOpen((v) => !v); }}
+                title="大纲（跳转标题）"
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
+                  outlineOpen
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <ListTree size={12} />
+                大纲
+              </button>
+              <button
+                onClick={togglePreview}
+                title="分栏预览（左编辑 / 右实时渲染）"
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] transition-colors ${
+                  previewOpen
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {previewOpen ? <PanelRightClose size={12} /> : <Eye size={12} />}
+                预览
+              </button>
+            </>
+          )}
+          {dirtyCount > 0 && (
+            <button
+              onClick={() => void saveAll()}
+              title="保存全部 (Ctrl+Shift+S)"
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+            >
+              <SaveAll size={12} />
+              保存全部 ({dirtyCount})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 主体：文件树 + 编辑区。Workbench 外壳模式下文件树 portal 到全局侧栏槽（侧栏槽渲染在编辑器组左侧） */}
@@ -740,9 +728,24 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         {(() => {
           const treeColumn = (
             <>
-              <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)]">
+              <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
                 <FileText size={12} />
                 资源管理器
+                <button
+                  onClick={(e) => {
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    setCreateMenu((v) => (v ? null : { x: r.left, y: r.bottom + 4 }))
+                  }}
+                  title="新建（文件 / 文件夹 / 知识页）"
+                  aria-expanded={createMenu !== null}
+                  className={`ml-auto p-1 rounded-md transition-colors ${
+                    createMenu
+                      ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <Plus size={13} />
+                </button>
               </div>
               <FileTree
                 dirCache={dirCache}
@@ -829,7 +832,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                     <div className="flex items-center gap-1.5 border-b border-[var(--border-color)] px-3 py-1 text-[11.5px] text-[var(--text-muted)]">
                       <Eye size={12} />
                       预览
-                      <span className="ml-auto text-[var(--text-tertiary)]">随编辑实时更新</span>
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
                       <MarkdownPreview
@@ -871,7 +873,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
             )}
           </div>
           {/* 状态栏 */}
-          <div className="flex items-center gap-3 border-t border-[var(--border-color)] px-3 py-1 text-[11px] text-[var(--text-muted)]">
+          <div className="flex items-center gap-3 border-t border-[var(--border-color)] px-2 py-1 text-[11px] text-[var(--text-muted)]">
             {activeDoc && (
               <>
                 <span>{baseName(activeDoc.relPath)}</span>
@@ -944,6 +946,30 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                 保存
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 资源管理器「+」新建下拉：文件 / 文件夹 / 知识页 */}
+      {createMenu && (
+        <div className="fixed inset-0 z-[70]" onClick={() => setCreateMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCreateMenu(null) }}>
+          <div
+            className="absolute min-w-[150px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
+            style={{ left: Math.min(createMenu.x, window.innerWidth - 170), top: Math.min(createMenu.y, window.innerHeight - 140) }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => { setCreateMenu(null); askCreateNode('', 'file') }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <Plus size={13} className="text-[var(--text-muted)]" />新建文件
+            </button>
+            <button onClick={() => { setCreateMenu(null); askCreateNode('', 'dir') }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <FolderPlus size={13} className="text-[var(--text-muted)]" />新建文件夹
+            </button>
+            <button onClick={() => { setCreateMenu(null); askCreateKnowledgePage('') }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <FilePlus2 size={13} className="text-[var(--text-muted)]" />新建知识页
+            </button>
           </div>
         </div>
       )}
@@ -1045,7 +1071,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       <ConfirmDialog
         open={trashTarget !== null}
         title="移入回收站"
-        message={`「${trashTarget ? baseName(trashTarget.relPath) : ''}」将被移入系统回收站，可恢复。确定删除？`}
+        message={`「${trashTarget ? baseName(trashTarget.relPath) : ''}」移入回收站，可恢复。`}
         confirmLabel="删除"
         showCheckbox={false}
         onConfirm={() => { if (trashTarget) void doTrash(trashTarget); setTrashTarget(null) }}

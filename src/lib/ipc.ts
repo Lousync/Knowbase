@@ -35,6 +35,8 @@ export const minimize = () => a().minimize()
 export const maximize = () => a().maximize()
 export const close = () => a().close()
 export const isMaximized = () => a().isMaximized()
+/** 抽屉式日程面板：上报面板期望宽度（0 = 收回），主进程以打开时刻基准宽为锚点调整窗口 */
+export const resizeForSidebar = (width: number, animate?: boolean) => a().resizeForSidebar(width, animate)
 export const onMaximizeChange = (cb: (v: boolean) => void) => a().onMaximizeChange(cb)
 export const openDirDialog = () => a().openDirDialog()
 

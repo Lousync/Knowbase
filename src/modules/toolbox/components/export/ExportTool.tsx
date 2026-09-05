@@ -121,10 +121,15 @@ export function ExportTool({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"><ArrowLeft size={15} /> 返回</button>
-        <div className="w-px h-4 bg-[var(--border-color)]" />
-        <Upload size={15} className="text-[var(--accent)]" /><h2 className="text-[14px] font-semibold text-[var(--text-primary)]">数据导出</h2>
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
+        </button>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">数据导出</span>
       </div>
       <div className="flex flex-1 min-h-0">
       {/* Left: Config panel */}

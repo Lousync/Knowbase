@@ -12,7 +12,7 @@ export function ReminderView() {
   return (
     <div className="space-y-10">
       <div>
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">打卡提醒</h2>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">打卡提醒</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">
           到达设定时间后，若当天仍有计划内习惯未打卡，会在应用内弹窗提醒（每天至多一次）。
         </p>

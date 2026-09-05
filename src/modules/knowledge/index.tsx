@@ -23,7 +23,6 @@ import { SpacePanel } from './components/SpacePanel'
 import { PageEditor } from './components/PageEditor'
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { GraphView } from './components/graph/GraphView'
-import { QuickSearch } from './components/QuickSearch'
 import { QuizCollection } from './components/QuizCollection'
 import { QuizMode } from '../../components/shared/QuizMode'
 import type { QuizItem } from '../../components/shared/QuizParser'
@@ -79,7 +78,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const vaultReadonly = settings.storageKnowledge === 'vault'
   const writeBlocked = (action: string): boolean => {
     if (!vaultReadonly) return false
-    showToast({ type: 'warning', message: `仓库文件模式：知识库为只读导航，「${action}」请在编辑器模块操作（或到 设置 → 高级 切回数据库读源）` })
+    showToast({ type: 'warning', message: '仓库文件模式为只读，请到编辑器模块操作' })
     return true
   }
   const sidebarItemVars = KNOWLEDGE_SIDEBAR_ITEM_VARS[settings.knowledgeSidebarItemSize] ?? KNOWLEDGE_SIDEBAR_ITEM_VARS.m
@@ -1024,6 +1023,25 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     requestAnimationFrame(() => setLocateCategoryId(categoryId))
   }, [categories])
 
+  // 全局搜索（App 层 QuickSearch）跨模块通道：按 id 打开页面 / 定位目录。
+  // 冷启动时知识库可能尚未挂载，App 在切 Tab 后延迟派发；handleOpenPage 自带按 id 拉取兜底。
+  useEffect(() => {
+    const openPage = (e: Event): void => {
+      const pageId = (e as CustomEvent<{ pageId?: string }>).detail?.pageId
+      if (pageId) void handleOpenPage(pageId)
+    }
+    const locateCategory = (e: Event): void => {
+      const categoryId = (e as CustomEvent<{ categoryId?: string }>).detail?.categoryId
+      if (categoryId) handleLocateCategory(categoryId)
+    }
+    window.addEventListener('kb-open-knowledge-page', openPage)
+    window.addEventListener('kb-locate-knowledge-category', locateCategory)
+    return () => {
+      window.removeEventListener('kb-open-knowledge-page', openPage)
+      window.removeEventListener('kb-locate-knowledge-category', locateCategory)
+    }
+  }, [handleOpenPage, handleLocateCategory])
+
   const handleLocateInExplorer = useCallback((pageId: string) => {
     const page = allPages.find(p => p.id === pageId)
     if (!page) return
@@ -1097,7 +1115,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   return (
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
-      <div className="flex h-full bg-[var(--bg-primary)]">
+      <div className="flex h-full flex-col bg-[var(--bg-primary)]">
         {readingMode ? (
           /* ===== 沉浸阅读：只保留正文 ===== */
           <div className="flex-1 min-w-0 relative">
@@ -1158,12 +1176,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                     draftWikiTitles={draftWikiTitles}
                     onWikiLink={t => {
                       if (draftWikiTitles.has(t)) {
-                        showToast({ type: 'warning', message: `「${t}」为草稿（修改中）— 归档为知识页后可阅读` })
+                        showToast({ type: 'warning', message: `「${t}」为草稿，归档后可阅读` })
                         return
                       }
                       const hit = allPages.find(p => p.title === t)
                       if (hit) void openInReading(hit.id)
-                      else showToast({ type: 'warning', message: `未找到「${t}」— 退出阅读后可点击虚线创建` })
+                      else showToast({ type: 'warning', message: `未找到「${t}」` })
                     }}
                   />
                 )}
@@ -1175,16 +1193,23 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           </div>
         ) : (
         <>
+        {/* 顶部贯通行（图二骨架）：页签栏横跨侧栏 + 内容区；图谱模式隐藏（保持全幅） */}
+        {!graphMode && (
+          <PageTabBar
+            openPageIds={openPageIds}
+            activePageId={activePageId}
+            openPageInfos={openPageInfos}
+            dirtyPageIds={dirtyPageIds}
+            onSelectTab={handleOpenPage}
+            onCloseTab={handleCloseTab}
+            onReorder={handleReorderTabs}
+            rightActions={<div id="editor-toolbar-slot" className="flex items-center gap-0.5" />}
+          />
+        )}
+        <div className="flex min-h-0 flex-1">
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={!graphMode && panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
-            {/* vault 数据形态说明条：知识库只读导航，写收口编辑器（R0 读写分工） */}
-            {vaultReadonly && (
-              <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-                <span className="shrink-0 px-1 py-0.5 rounded text-[10px] font-medium bg-[var(--info)]/15 text-[var(--info)]">仓库文件</span>
-                <span className="text-[10.5px] text-[var(--text-muted)] leading-snug">页面以 .md 文件存放 · 新建/编辑请用编辑器模块</span>
-              </div>
-            )}
             {/* 空间沉浸视图顶部：返回栏（仅空间内显示） */}
             {selectedSpaceId && selectedSpace && (
               <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={vaultReadonly ? undefined : handleRenameNotebook} />
@@ -1195,23 +1220,24 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               <div className="flex items-center gap-1 px-2 pt-1.5 pb-1 border-b border-[var(--border-color)] shrink-0">
                 <button
                   onClick={() => setShowOutline(false)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${!showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${!showOutline ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
                 >
                   <Folder size={13} />文件
                 </button>
                 <button
                   onClick={() => setShowOutline(true)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${showOutline ? 'bg-[var(--bg-selected)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors ${showOutline ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
                 >
                   <ListTree size={13} />大纲
                 </button>
               </div>
             )}
 
-            {/* 空间列表层：顶部居中「工作区」标题 — 字号跟随知识库侧边栏设置（与下方条目节奏一致） */}
+            {/* 空间列表层：顶部「知识库」标题 — 与日程/博客等模块侧栏标题行完全同款 */}
             {!selectedSpaceId && (
-              <div className="flex items-center justify-center px-2 py-[var(--kb-row-py-lg)] border-b border-[var(--border-color)] shrink-0">
-                <span className="font-medium text-[var(--text-secondary)] text-center text-[var(--kb-row-fs)]">工作区</span>
+              <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+                <BookMarked size={12} />
+                知识库
               </div>
             )}
 
@@ -1405,19 +1431,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onClearScope={() => setGraphScope(null)}
               onOpenInReader={(id) => void openPageInReader(id)}
             />
-          ) : (
-          <>
-          <PageTabBar
-            openPageIds={openPageIds}
-            activePageId={activePageId}
-            openPageInfos={openPageInfos}
-            dirtyPageIds={dirtyPageIds}
-            onSelectTab={handleOpenPage}
-            onCloseTab={handleCloseTab}
-            onReorder={handleReorderTabs}
-            rightActions={<div id="editor-toolbar-slot" className="flex items-center gap-0.5" />}
-          />
-          {activePageId ? (
+          ) : activePageId ? (
             <PageEditor
               pageId={activePageId}
               categories={categories}
@@ -1439,26 +1453,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
-              <FileText size={48} className="mb-4 opacity-25" />
-              <p className="text-sm">{vaultReadonly ? '从左侧选择页面开始阅读（页面存于仓库 .md 文件）' : '选择或创建一个页面开始'}</p>
+              <FileText size={48} className="opacity-25" />
             </div>
           )}
-          </>
-          )}
+        </div>
         </div>
         </>
         )}
       </div>
-      {isActive && (
-        <QuickSearch
-          pages={allPages}
-          categories={categories}
-          tags={allKnowledgeTags}
-          onOpenPage={handleOpenPage}
-          onLocateCategory={handleLocateCategory}
-          onRequestRefresh={handleSearchRefresh}
-        />
-      )}
 
       {/* Unsaved changes confirm dialog */}
       <ConfirmDialog
@@ -1480,17 +1482,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       {/* C 级模块插件视图：全屏覆盖层（沙箱 iframe + 数据桥） */}
       {activePluginView && (
         <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label={`${activePluginView.title}（插件）`}>
-          <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-            <Puzzle size={14} className="text-[var(--accent)]" />
-            <span className="text-[13px] font-medium text-[var(--text-primary)]">{activePluginView.title}</span>
+          <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] select-none">
+            <Puzzle size={12} className="text-[var(--text-muted)]" />
+            <span className="text-[11.5px] font-medium text-[var(--text-muted)]">{activePluginView.title}</span>
             <span className="text-[10px] text-[var(--text-disabled)]">{activePluginView.name} · 插件</span>
             <div className="flex-1" />
             <button
               onClick={() => setActivePluginView(null)}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+              title="关闭"
+              className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
             >
               <X size={14} />
-              关闭
             </button>
           </div>
           <div className="flex-1 min-h-0">

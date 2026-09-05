@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Sun, Moon, Puzzle, Flame } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { THEME_OPTIONS, BLOG_SIZE_OPTIONS, KNOWLEDGE_SIDEBAR_SIZE_OPTIONS, applyThemeClass } from '../../../lib/settings'
-import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, IconPreview } from '../../../components/shared/ModuleIcons'
+import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, EditorIcon, IconPreview } from '../../../components/shared/ModuleIcons'
 import { ensurePluginThemeStyles, type PluginThemeWithVars } from '../../../lib/pluginService'
 import { BUILTIN_ICON_PACKS, usePluginIconPacks, type IconModuleId } from '../../../lib/sidebarIcons'
 import { pluginListDeleteFxSkins } from '../../../lib/ipc'
@@ -59,7 +59,7 @@ export function AppearanceView() {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">外观</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">外观</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">自定义应用的外观和主题</p>
 
       <div className="mb-8" data-setting-anchor="appearance.theme">
@@ -82,7 +82,7 @@ export function AppearanceView() {
       <div className="mb-8" data-setting-anchor="appearance.deleteFx">
         <SettingSelect
           title="删除动画皮肤"
-          description="知识库删除条目时的吞噬特效外观;安装带删除动画皮肤的插件后会自动追加到列表。"
+          description="知识库删除条目时的吞噬特效外观。"
           value={s.deleteFxSkin}
           onChange={id => update('deleteFxSkin', id)}
           options={fxSkinOptions.map(fx => ({
@@ -99,7 +99,7 @@ export function AppearanceView() {
       <div className="mb-8" data-setting-anchor="appearance.sidebarIcons">
         <SettingSelect
           title="侧边栏图标风格"
-          description="活动栏模块图标风格;安装带图标包的插件后会自动追加到列表末尾。"
+          description="活动栏模块图标风格。"
           value={s.sidebarIconStyle}
           onChange={id => update('sidebarIconStyle', id)}
           options={iconPacks.map(pack => ({
@@ -127,6 +127,7 @@ export function AppearanceView() {
               { id: 'blog', label: '博客', icon: <BlogIcon size={16} /> },
               { id: 'schedule', label: '日程', icon: <ScheduleIcon size={16} /> },
               { id: 'knowledge', label: '知识库', icon: <KnowledgeIcon size={16} /> },
+              { id: 'editor', label: '编辑区', icon: <EditorIcon size={16} /> },
               { id: 'moments', label: '说说', icon: <MomentsIcon size={16} /> },
               { id: 'toolbox', label: '工具箱', icon: <ToolboxIcon size={16} /> },
             ]

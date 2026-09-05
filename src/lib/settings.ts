@@ -79,11 +79,11 @@ export const KNOWLEDGE_SIDEBAR_SIZE_OPTIONS = [
 
 /** 知识库侧边栏条目大小 → CSS 变量（--kb-row-py 树行内边距 / --kb-row-py-lg 章节行内边距 / --kb-row-fs 行字号）。
  *  三档必须拉开足够差距，否则切换时视觉几乎无变化（用户会以为设置无效）。
- *  字号 12/14/18px + 行高递进，紧凑↔标准↔宽松一眼可辨；标准档(m)接近原默认外观。 */
+ *  字号对齐全应用侧栏规格（资源管理器/博客树 12~12.5px）：紧凑 11.5 / 标准 12.5 / 宽松 16。 */
 export const KNOWLEDGE_SIDEBAR_ITEM_VARS: Record<string, Record<string, string>> = {
-  s: { '--kb-row-py': '0px', '--kb-row-py-lg': '2px', '--kb-row-fs': '12px' },
-  m: { '--kb-row-py': '3px', '--kb-row-py-lg': '5px', '--kb-row-fs': '14px' },
-  l: { '--kb-row-py': '9px', '--kb-row-py-lg': '12px', '--kb-row-fs': '18px' },
+  s: { '--kb-row-py': '0px', '--kb-row-py-lg': '2px', '--kb-row-fs': '11.5px' },
+  m: { '--kb-row-py': '3px', '--kb-row-py-lg': '5px', '--kb-row-fs': '12.5px' },
+  l: { '--kb-row-py': '9px', '--kb-row-py-lg': '12px', '--kb-row-fs': '16px' },
 }
 
 export const FONT_SIZE_OPTIONS = [

@@ -40,13 +40,19 @@
   /* ===== sketch 基建(theme-handdrawn.md 第四节)=====
      默认值与既有视觉完全一致;主题包可覆写实现手绘线条效果。
      消费点:.prose-content 内的容器/分隔/链接/引用(见下方 prose 区)。 */
-  --radius-card: 8px;
-  --radius-btn: 6px;
+  --radius-card: 10px;
+  --radius-btn: 8px;
   --shadow-card: none;
   --divider-style: 1px solid var(--border-color);
   --heading-rule: 1px solid var(--bg-tertiary);
   --link-hover-deco: underline;
   --quote-bar: 3px solid var(--accent);
+
+  /* ===== 液态玻璃基建（窗口自绘大圆角 + 玻璃高光）=====
+     窗口为透明无边框（transparent: true），圆角由根容器按 --window-radius 自绘，
+     最大化时渲染层自动切直角；--glass-edge 为卡片顶缘高光描边。 */
+  --window-radius: 18px;
+  --glass-edge: rgba(255, 255, 255, 0.08);
 
 }
 
@@ -79,6 +85,8 @@ html.theme-light {
   /* 拖拽高亮 */
   --drop-bg: #D6EBFF;
   --drop-border: #0078d4;
+
+  --glass-edge: rgba(255, 255, 255, 0.65);
 }
 
 /* ===== 全局基础 ===== */
@@ -87,7 +95,9 @@ html, body, #root {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: var(--bg-primary);
+  /* 透明底：窗口本身 transparent，圆角外区域完全透明（自卸载圆角裁切），
+     根容器以高不透明底色 + 分层半透明模拟磨砂玻璃 */
+  background: transparent;
   color: var(--text-primary);
 }
 

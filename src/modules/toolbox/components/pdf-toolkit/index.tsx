@@ -223,21 +223,21 @@ export function PdfToolkit({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* 顶栏 */}
-      <div className="shrink-0 px-4 py-2.5 border-b border-[var(--border-color)] flex items-center gap-3 flex-wrap">
+      <div className="shrink-0 flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 flex-wrap">
         <button onClick={onBack} title="返回工具箱"
-          className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         </button>
-        <span className="text-[13px] font-semibold text-[var(--text-primary)]">PDF 工具箱</span>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">PDF 工具箱</span>
         <input ref={fileInputRef} type="file" accept=".pdf" multiple className="hidden"
           onChange={e => { void addFiles(e.target.files); e.target.value = '' }} />
         <button onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">
           <FileText size={12} /> 添加 PDF
         </button>
         {files.length >= 2 && (
           <button onClick={() => void mergeAll()} disabled={!!busy}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors">
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors">
             <Merge size={12} /> 合并全部（{files.length}）
           </button>
         )}

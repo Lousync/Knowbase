@@ -106,7 +106,7 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
                   style={{ top, left, width, height }}
                 >
                   <h4 className="text-[12px] font-medium text-[var(--text-primary)] mb-1.5 flex items-center gap-1 shrink-0">
-                    <span>{cfg.emoji}</span> {cfg.label}
+                    {cfg.label}
                     <span className="text-[10px] text-[var(--text-muted)] ml-0.5">({items.length})</span>
                   </h4>
                   <div className="space-y-0.5 overflow-y-auto flex-1">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sparkles } from 'lucide-react'
-import type { TabName } from './types'
+import type { TabName, KnowledgePage, KnowledgeCategory, KnowledgeTag } from './types'
 
 /** 模块清单（打开命令 / 分屏副栏选择共用；devtools 为 dev-only 不列入口） */
 const MODULE_TABS: Array<{ id: TabName; label: string }> = [
@@ -19,7 +19,7 @@ const MODULE_TABS: Array<{ id: TabName; label: string }> = [
 const tabLabel = (t: TabName) => MODULE_TABS.find((m) => m.id === t)?.label ?? t
 import { TitleBar, ActivityBar } from './components/shared'
 import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
-import { GlobalSearchPanel } from './components/shared/GlobalSearchPanel'
+import { QuickSearch } from './modules/knowledge/components/QuickSearch'
 import { CommandPalette, type PaletteItem } from './components/shared/CommandPalette'
 import { SplitPaneBar } from './components/shared/SplitPaneBar'
 import { CodePluginHosts } from './components/shared/CodePluginHosts'
@@ -28,7 +28,7 @@ import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
-import { getKnowledgePages } from './lib/ipc'
+import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags } from './lib/ipc'
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -76,13 +76,6 @@ export default function App() {
   // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
   const [dayPanelVisible, setDayPanelVisible] = useState(false)
   const [dayPanelDetached, setDayPanelDetached] = useState(false)
-  // Workbench 外壳（R1-W1）：全局侧栏容器节点（EditorModule 文件树 portal 目标），
-  // 以 state 持有保证 portal 目标出现后触发重渲染；非 workbench 布局保持 null。
-  // ref 回调用 useCallback 稳定引用：React 卸载节点时才以 null 调用，避免内联箭头每帧触发 setState
-  const [wbSidebarEl, setWbSidebarEl] = useState<HTMLElement | null>(null)
-  const wbSidebarRef = useCallback((node: HTMLDivElement | null) => {
-    setWbSidebarEl(node)
-  }, [])
   // 窗口宽度：任务栏最大宽度与窗口联动（窄窗口自动收窄，主体不被压扁）
   const [winWidth, setWinWidth] = useState(() => window.innerWidth)
   useEffect(() => {
@@ -91,6 +84,28 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
   const dayPanelMaxWidth = Math.max(300, Math.min(500, Math.floor(winWidth * 0.4)))
+
+  // 窗口圆角：透明窗口自绘 18px 大圆角；最大化/全屏时切直角（贴满屏幕时圆角会露怪缝）
+  const [winRounded, setWinRounded] = useState(true)
+  useEffect(() => {
+    window.api?.isMaximized?.().then(v => setWinRounded(!v))
+    window.api?.onMaximizeChange?.((v: boolean) => setWinRounded(!v))
+  }, [])
+
+  // Workbench 外壳（R1-W1）：全局侧栏容器节点（EditorModule 文件树 portal 目标），
+  // 以 state 持有保证 portal 目标出现后触发重渲染；非 workbench 布局保持 null。
+  // ref 回调用 useCallback 稳定引用：React 卸载节点时才以 null 调用，避免内联箭头每帧触发 setState
+  const [wbSidebarEl, setWbSidebarEl] = useState<HTMLElement | null>(null)
+  const wbSidebarRef = useCallback((node: HTMLDivElement | null) => {
+    setWbSidebarEl(node)
+  }, [])
+
+  // 抽屉面板实际占宽：标题栏搜索框/按钮锚定主内容区的偏移依据（面板卸载时归零）
+  const [dayPanelWidth, setDayPanelWidth] = useState(0)
+  useEffect(() => {
+    if (!dayPanelVisible || dayPanelDetached) setDayPanelWidth(0)
+  }, [dayPanelVisible, dayPanelDetached])
+
   const { s, update, ready: settingsReady } = useSettings()
   const workbench = !!s.uiWorkbench
 
@@ -98,21 +113,29 @@ export default function App() {
   const [palette, setPalette] = useState<null | 'command' | 'file'>(null)
   const [fileItems, setFileItems] = useState<PaletteItem[]>([])
   const [fileLoading, setFileLoading] = useState(false)
-  // 底部面板（全局搜索 v1，仅 Workbench 布局，Ctrl+` 开合）
-  const [bottomPanel, setBottomPanel] = useState(false)
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
-  useEffect(() => {
-    if (!workbench) { setBottomPanel(false); return }
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === '`')) {
-        e.preventDefault()
-        setBottomPanel((v) => !v)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [workbench])
+
+  // ---- 全局搜索（VS Code 式：标题栏顶部输入 + 顶部结果弹层，Ctrl+P / Ctrl+` 唤出）----
+  // 数据源 = 知识库索引（页面/目录/标签），打开搜索时刷新；打开页面/定位目录经事件通道进知识库模块
+  const [gsPages, setGsPages] = useState<KnowledgePage[]>([])
+  const [gsCategories, setGsCategories] = useState<KnowledgeCategory[]>([])
+  const [gsTags, setGsTags] = useState<KnowledgeTag[]>([])
+  const refreshGlobalSearch = useCallback(async () => {
+    try {
+      const [p, c, t] = await Promise.all([getKnowledgePages(), getKnowledgeCategories(), getKnowledgeTags()])
+      setGsPages(p ?? []); setGsCategories(c ?? []); setGsTags(t ?? [])
+    } catch { /* 索引未就绪时保持旧数据 */ }
+  }, [])
+  const openKnowledgePageFromSearch = useCallback((pageId: string) => {
+    setActiveTab('knowledge')
+    // 冷启动时知识库模块可能尚未挂载（保活注册表为空），延迟派发等监听器就绪
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent('kb-open-knowledge-page', { detail: { pageId } })), 100)
+  }, [])
+  const locateKnowledgeCategoryFromSearch = useCallback((categoryId: string) => {
+    setActiveTab('knowledge')
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent('kb-locate-knowledge-category', { detail: { categoryId } })), 100)
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -220,7 +243,7 @@ export default function App() {
     if (!settingsReady || !loaded) return
     try {
       const hidden: string[] = JSON.parse(s.activityBarHidden || '[]')
-      const all = ['blog','schedule','knowledge','moments','toolbox','plugins','recycle','help'] as const
+      const all = ['blog','schedule','knowledge','editor','moments','toolbox','plugins','recycle','help'] as const
       if (all.includes(s.startupTab as any) && !hidden.includes(s.startupTab)) {
         setActiveTab(s.startupTab as TabName)
         return
@@ -509,19 +532,20 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_76%,transparent)] overflow-hidden">
+    <div className={`flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)] overflow-hidden ${winRounded ? 'rounded-[var(--window-radius)]' : 'rounded-none'}`}>
       <CodePluginHosts />
-      <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} />
+      <TitleBar dayPanelActive={dayPanelVisible || dayPanelDetached} onToggleDayPanel={toggleDayPanel} drawerWidth={dayPanelWidth} />
       <PomodoroProvider>
         <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar active={activeTab} onChange={handleTabChange} />
-<main className="flex-1 flex overflow-hidden bg-[var(--bg-primary)] relative">
-            {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称 */}
+<main className="flex-1 flex overflow-hidden bg-transparent relative">
+            {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称。
+                半透明底色 + 顶缘高光 = 液态玻璃卡片，透出根层玻璃底色 */}
             <div className="m-1.5 flex min-w-0 flex-1">
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
-              {/* Workbench（R1-W1）：全局侧栏槽（左）+ 编辑器组（右）。编辑器激活时文件树 portal 进侧栏；
-                  其余模块暂以整页形态驻留编辑器组（逐模块迁移中）。旧布局 = 无边栏直渲模块 */}
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]">
+              {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同。
+                  Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1） */}
               <div className="flex min-h-0 flex-1">
                 {workbench && (
                   <div
@@ -595,6 +619,7 @@ export default function App() {
                 side="right"
                 visible
                 showHandle
+                growWindow
               >
                 {/* 内嵌面板的"子窗口"外壳：留白 + 圆角 + 阴影，让它在主窗口内像独立浮窗（微信会议窗同款） */}
                 <div className="m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
@@ -610,7 +635,15 @@ export default function App() {
       {/* 全局 AI 助手侧栏 */}
       <AssistantPanel />
         </div>
-      {workbench && bottomPanel && <GlobalSearchPanel onClose={() => setBottomPanel(false)} />}
+      {/* 全局搜索（VS Code 式顶部弹层）：输入 portal 进标题栏，全模块可用 */}
+      <QuickSearch
+        pages={gsPages}
+        categories={gsCategories}
+        tags={gsTags}
+        onOpenPage={openKnowledgePageFromSearch}
+        onLocateCategory={locateKnowledgeCategoryFromSearch}
+        onRequestRefresh={refreshGlobalSearch}
+      />
       {workbench && <WorkbenchStatusBar />}
         </div>
       </PomodoroProvider>

@@ -144,7 +144,7 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
                 <button key={o.id} onClick={() => setRuleType(o.id)}
                   className={`py-1.5 text-[12px] rounded border transition-colors ${
                     ruleType === o.id
-                      ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]'
+                      ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--text-primary)]'
                       : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                   }`}>
                   {o.label}
@@ -201,7 +201,7 @@ export function HabitEditorModal({ mode, habit, onClose, onSaved }: Props) {
                     <button key={o.id} onClick={() => setLinkSource(o.id)} title={o.hint}
                       className={`py-1.5 text-[12px] rounded border transition-colors ${
                         linkSource === o.id
-                          ? 'border-[var(--accent)] bg-[#007acc20] text-[var(--text-primary)]'
+                          ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--text-primary)]'
                           : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                       }`}>
                       {o.label}

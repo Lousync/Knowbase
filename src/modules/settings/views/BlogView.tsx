@@ -64,7 +64,7 @@ export function BlogView() {
   return (
     <div className="space-y-10">
       <div>
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">周期总结</h2>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">周期总结</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">
           命中总结日的博文会在文末附上周/月统计与下期任务面板。同一天同时命中周、月总结时，优先显示月总结。
         </p>
@@ -114,7 +114,7 @@ export function BlogView() {
       </div>
 
       <div data-setting-anchor="blog.templates">
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">博客模板</h2>
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">博客模板</h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">
           写日记时点工具栏「模板」一键套用；当天没那么多可写时特别有用。
         </p>

@@ -32,20 +32,6 @@ function localToday(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-function relativeTime(dateStr: string): string {
-  if (!dateStr) return ''
-  const now = new Date()
-  const td = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const target = new Date(y, m - 1, d)
-  const diff = Math.round((target.getTime() - td.getTime()) / 86400000)
-  if (diff === 0) return '今天'
-  if (diff === -1) return '昨天'
-  if (diff === 1) return '明天'
-  if (diff < -1) return `${Math.abs(diff)}天前`
-  return `${diff}天后`
-}
-
 export function CalendarView({ year, month, selectedDate, dotDates, deadlineCounts, viewMode, onSelectDate, onPrevMonth, onNextMonth, onToday, onViewModeChange, onQuadrantChart }: Props) {
   const today = localToday()
 
@@ -71,59 +57,50 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
     return `${year}-${m}-${d}`
   }
 
-  const timeLabel = selectedDate ? relativeTime(selectedDate) : ''
-
   return (
     <div className="w-full shrink-0 bg-[var(--bg-secondary)] flex flex-col select-none">
-      {/* header */}
-      <div className="px-4 py-3 border-b border-[var(--border-color)] space-y-2">
-        <div className="flex items-center justify-between">
-          <button onClick={onPrevMonth} className="p-1 hover:bg-[var(--input-bg)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-[14px] font-medium text-[var(--text-primary)]">{year}年 {MONTHS[month - 1]}</span>
-          <button onClick={onNextMonth} className="p-1 hover:bg-[var(--input-bg)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
+      {/* header 两行：月份导航 / 视图切换 —— 窄侧栏下月份不再被按钮挤压截断 */}
+      <div className="flex items-center gap-0.5 px-1.5 pt-1">
+        <button onClick={onPrevMonth} title="上个月" className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+          <ChevronLeft size={14} />
+        </button>
+        <span className="flex-1 min-w-0 truncate text-center text-[12px] font-medium text-[var(--text-primary)] select-none">{year}年 {MONTHS[month - 1]}</span>
+        <button onClick={onNextMonth} title="下个月" className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+          <ChevronRight size={14} />
+        </button>
         <button
           onClick={onToday}
-          className="w-full text-[12px] py-1 bg-[var(--input-bg)] text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+          title="回到今天"
+          className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
         >
           今天
         </button>
+      </div>
 
-        {/* relative time hint */}
-        {timeLabel && (
-          <div className="text-center text-[11px] text-[var(--text-muted)]">{timeLabel}</div>
-        )}
-
-        {/* view mode buttons */}
-        <div className="flex gap-1">
+      {/* 视图切换行：三视图居中成组，象限图靠右 */}
+      <div className="flex items-center px-2 pt-0.5 pb-1 border-b border-[var(--border-color)]">
+        <div className="flex-1 flex justify-center gap-0.5">
           {VIEW_MODES.map(m => (
             <button
               key={m.id}
               onClick={() => onViewModeChange(m.id)}
               title={m.label}
-              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] transition-colors ${
+              className={`px-2 py-0.5 rounded-md transition-colors ${
                 viewMode === m.id
                   ? 'bg-[var(--accent)] text-white'
-                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--input-bg)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
               }`}
             >
               {m.icon}
             </button>
           ))}
         </div>
-
-        {/* quadrant chart button */}
         <button
           onClick={onQuadrantChart}
-          className="w-full flex items-center justify-center gap-1.5 text-[12px] py-1.5 border border-dashed border-[#4a4a4a] text-[var(--text-secondary)] rounded hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors"
+          title="象限图"
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
         >
           <LayoutGrid size={13} />
-          查看象限图
         </button>
       </div>
 
@@ -159,7 +136,7 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
                 <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[var(--accent)]" />
               )}
               {deadlineNum > 0 && (
-                <span className={`absolute bottom-0.5 right-0.5 text-[9px] font-bold leading-none ${isSelected ? 'text-white' : 'text-[#d16969]'}`}>
+                <span className={`absolute bottom-0.5 right-0.5 text-[9px] font-bold leading-none ${isSelected ? 'text-white' : 'text-[var(--danger)]'}`}>
                   {deadlineNum}
                 </span>
               )}

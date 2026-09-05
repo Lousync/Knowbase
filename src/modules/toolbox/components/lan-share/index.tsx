@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MessageSquare, FileText, Paperclip, Trash2, Wifi, X, Upload, Clock } from 'lucide-react'
+import { MessageSquare, FileText, Paperclip, Trash2, Wifi, X, Upload, Clock, ArrowLeft } from 'lucide-react'
 import { showToast } from '../../../../lib/toast'
 import {
   getPathForFile,
@@ -174,14 +174,18 @@ export function LanShare({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
-      <div className="px-5 py-3 border-b border-[var(--border-color)] shrink-0 flex items-center gap-3">
-        <button onClick={onBack} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors">
-          ← 返回
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
         </button>
-        <h2 className="text-[15px] font-medium text-[var(--text-primary)] flex items-center gap-2">
-          <Wifi size={15} className={running ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+          <Wifi size={12} className={running ? 'text-[var(--accent)]' : ''} />
           设备传输
-        </h2>
+        </span>
         {running && (
           <span className="ml-auto text-[11px] text-[var(--text-muted)] flex items-center gap-1">
             <Clock size={12} /> {formatCountdown(remaining)}

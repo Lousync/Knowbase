@@ -42,7 +42,7 @@ export function DataClearSection() {
           </div>
           <button
             onClick={open}
-            className="px-4 py-1.5 text-[12px] font-semibold bg-[var(--danger)] text-white rounded hover:brightness-110 transition-all"
+            className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors"
           >
             清空全部数据
           </button>
@@ -69,7 +69,7 @@ export function DataClearSection() {
                 /* Step 1: Warning */
                 <div className="space-y-4">
                   <div className="bg-[var(--danger)]/10 border border-[var(--danger)]/30 rounded-lg p-4">
-                    <p className="text-[13px] text-[var(--text-primary)] leading-relaxed">
+                    <p className="text-[12px] text-[var(--text-primary)] leading-relaxed">
                       此操作将<strong className="text-[var(--danger)]">永久删除</strong>以下全部数据：
                     </p>
                     <ul className="mt-2 space-y-1 text-[12px] text-[var(--text-secondary)] list-disc list-inside">
@@ -87,18 +87,17 @@ export function DataClearSection() {
                   <div className="bg-[var(--warning)]/10 border border-[var(--warning)]/30 rounded-lg p-3 flex items-start gap-2">
                     <AlertTriangle size={15} className="text-[var(--warning)] shrink-0 mt-0.5" />
                     <div className="text-[12px] text-[var(--text-primary)] leading-relaxed">
-                      <p className="font-semibold text-[var(--warning)] mb-1">建议先导出备份</p>
-                      <p>请在操作前通过「导出」模块备份全部数据，清空后<strong>无法恢复</strong>。</p>
+                      <p>清空后<strong>无法恢复</strong>，建议先导出备份。</p>
                     </div>
                   </div>
 
                   <div className="flex gap-2 pt-2">
-                    <button onClick={close} className="flex-1 py-2 text-[13px] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors">
+                    <button onClick={close} className="flex-1 py-1 text-[12px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors">
                       取消
                     </button>
                     <button
                       onClick={() => setStep(2)}
-                      className="flex-1 py-2 text-[13px] font-semibold bg-[var(--danger)] text-white rounded-md hover:brightness-110 transition-all"
+                      className="flex-1 py-1 text-[12px] rounded-md text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors"
                     >
                       我已知晓，继续
                     </button>
@@ -107,7 +106,7 @@ export function DataClearSection() {
               ) : (
                 /* Step 2: Type confirmation phrase */
                 <div className="space-y-4">
-                  <p className="text-[13px] text-[var(--text-primary)] leading-relaxed">
+                  <p className="text-[12px] text-[var(--text-primary)] leading-relaxed">
                     请在下方输入 <code className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded text-[var(--danger)] font-mono text-[12px] select-all">{CONFIRM_PHRASE}</code> 以确认操作：
                   </p>
 
@@ -122,17 +121,17 @@ export function DataClearSection() {
                   />
 
                   {input.length > 0 && input.trim() !== CONFIRM_PHRASE && (
-                    <p className="text-[11px] text-[var(--text-muted)]">请完整输入上方短语，一字不差</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">输入上方短语以确认</p>
                   )}
 
                   <div className="flex gap-2 pt-1">
-                    <button onClick={() => { setStep(1); setInput('') }} className="flex-1 py-2 text-[13px] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors" disabled={clearing}>
+                    <button onClick={() => { setStep(1); setInput('') }} className="flex-1 py-1 text-[12px] text-[var(--text-secondary)] border border-[var(--border-color)] rounded-md hover:bg-[var(--bg-hover)] transition-colors" disabled={clearing}>
                       上一步
                     </button>
                     <button
                       onClick={handleClear}
                       disabled={input.trim() !== CONFIRM_PHRASE || clearing}
-                      className="flex-1 py-2 text-[13px] font-semibold bg-[var(--danger)] text-white rounded-md hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                      className="flex-1 py-1 text-[12px] font-medium bg-[var(--danger)] text-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     >
                       {clearing ? '清空中...' : '确认清空'}
                     </button>

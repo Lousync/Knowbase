@@ -57,11 +57,9 @@ export function UserModule() {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-[var(--border-color)] shrink-0">
-        <div className="flex items-center gap-2">
-          <User size={17} className="text-[var(--accent)]" />
-          <span className="text-[14px] font-semibold text-[var(--text-primary)]">用户</span>
-        </div>
+      <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+        <User size={12} />
+        用户
       </div>
 
       {/* Content */}
@@ -92,7 +90,7 @@ export function UserModule() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <h2
-                      className="text-[18px] font-semibold text-[var(--text-primary)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                      className="text-[15px] font-medium text-[var(--text-primary)] cursor-pointer hover:text-[var(--accent)] transition-colors"
                       onClick={() => setEditing(true)}
                       title="点击修改用户名"
                     >

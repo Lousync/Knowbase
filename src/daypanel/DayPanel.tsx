@@ -3,8 +3,7 @@ import {
   GripHorizontal, X, Check, Pencil, Trash2, CalendarClock,
   Plus, ChevronRight, ChevronDown, ExternalLink,
   PanelRightClose, PanelRightOpen,
-  FileText, BookOpen, MessageCircle, Wrench,
-  Timer,
+  Timer, CalendarDays, ListChecks, Globe,
 } from 'lucide-react'
 import type { ScheduleTodo, Habit, HabitRecord } from '../types'
 import { usePomodoro } from '../modules/toolbox/hooks/PomodoroContext'
@@ -18,17 +17,19 @@ import { notifyDataChanged, useDataChanged } from '../lib/dataChanged'
 import { showToast } from '../lib/toast'
 import { parseQuickDate } from './parseQuickDate'
 import { isPlannedOn, currentStreak, buildRecordIndex } from '../modules/toolbox/components/habit-tracker/dateUtils'
+import { HabitPanel } from './panel/HabitPanel'
+import { PomodoroPanel, PomodoroPopoutPanel } from './panel/PomodoroPanel'
+import { NavPanel } from './panel/NavPanel'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-/** 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块（设置入口已移走，避免与停靠面板视觉竞争） */
-const MODULE_LINKS: { tab: string; icon: typeof FileText; label: string }[] = [
-  { tab: 'blog', icon: FileText, label: '博客' },
-  { tab: 'schedule', icon: CalendarClock, label: '日程' },
-  { tab: 'knowledge', icon: BookOpen, label: '知识库' },
-  { tab: 'moments', icon: MessageCircle, label: '说说' },
-  { tab: 'toolbox', icon: Wrench, label: '工具箱' },
-]
+/** 「今日工作台」四 Tab：日程 / 打卡 / 番茄 / 导航（嵌入式在表头下方，脱离态在底部） */
+const DAY_TABS = [
+  { id: 'task', icon: CalendarDays, label: '日程' },
+  { id: 'habit', icon: ListChecks, label: '打卡' },
+  { id: 'pomo', icon: Timer, label: '番茄' },
+  { id: 'nav', icon: Globe, label: '导航' },
+] as const
 
 /** 距次日 00:00:05 的毫秒数（用于跨零点刷新定时器） */
 function msUntilTomorrow(): number {
@@ -85,6 +86,8 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   const [editing, setEditing] = useState<{ id: string; title: string; date: string; time: string } | null>(null)
   const [quick, setQuick] = useState('')
   const [manualTime, setManualTime] = useState<string | null>(null)
+  // 嵌入式「今日工作台」当前 Tab（脱离态忽略）
+  const [tab, setTab] = useState<'task' | 'habit' | 'pomo' | 'nav'>('task')
 
   // 番茄钟状态（从 PomodoroContext 取；嵌入式与脱离态都由 Provider 包裹）
   const pom = usePomodoro()
@@ -255,6 +258,24 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   const openInMain = useCallback((tab: string) => {
     window.api?.dayPanelOpenInMain?.(tab)
   }, [])
+
+  // 四工具 Tab 按钮组：嵌入式渲染在表头下方，脱离态渲染在底部（替代原模块导航栏）
+  const renderTabButtons = () => DAY_TABS.map(t => (
+    <button
+      key={t.id}
+      onClick={() => setTab(t.id)}
+      className={`relative flex flex-1 flex-col items-center gap-px rounded-lg py-1 text-[10.5px] transition-colors ${
+        tab === t.id ? 'bg-[var(--accent)]/10 font-semibold text-[var(--accent)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+      }`}
+      title={t.label}
+    >
+      <t.icon size={14} strokeWidth={1.8} />
+      {t.label}
+      {t.id === 'task' && overdue.length > 0 && (
+        <span className="absolute right-[26%] top-1 h-1.5 w-1.5 rounded-full bg-[var(--danger)]" title={`${overdue.length} 个逾期`} />
+      )}
+    </button>
+  ))
 
   // ---- 行渲染 ----
   function taskRow(t: ScheduleTodo, isOverdue: boolean) {
@@ -454,7 +475,7 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
       >
         <div className="flex items-center gap-1.5 text-[12px]">
           {mode === 'popout' && !isTopDock && <GripHorizontal size={13} className="text-[var(--text-muted)]" />}
-          日程与打卡
+          {mode === 'embedded' ? '今日工作台' : '日程与打卡'}
           {isTopDock && <span className="text-[10px] font-normal text-[var(--text-muted)]">顶部停靠 · 移出自动收回</span>}
         </div>
         <div className="flex items-center gap-0.5" style={mode === 'popout' ? noDrag : undefined}>
@@ -486,7 +507,18 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
         </div>
       </div>
 
+      {/* 嵌入式四 Tab 栏（表头下方） */}
+      {mode === 'embedded' && (
+        <div
+          className="flex shrink-0 gap-1 border-b border-[var(--border-color)] px-2 py-1.5"
+          style={{ backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 60%, transparent)' }}
+        >
+          {renderTabButtons()}
+        </div>
+      )}
+
       <div className="flex-1 space-y-4 overflow-y-auto px-2.5 py-3">
+        {tab === 'task' && (<>
         {/* 逾期 */}
         {overdue.length > 0 && (
           <section>
@@ -556,99 +588,67 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
             )}
           </div>
         </section>
+        </>)}
 
-        <div className="border-t border-[var(--border-color)]" />
-
-        {/* 今日打卡 */}
-        <section>
-          <div className="mb-1 flex items-center justify-between gap-1 px-1">
-            <p className="min-w-0 flex-1 truncate text-[11px]">
-              <span className="font-medium">今日打卡</span>
-              <span className="ml-1 text-[var(--text-muted)]">（{checkedToday}/{plannedHabits.length}）</span>
-            </p>
-            <button
-              onClick={() => openInMain('toolbox')}
-              className="inline-flex shrink-0 items-center text-[var(--text-muted)] hover:text-[var(--accent)]"
-              title="在主窗口工具箱中管理习惯"
-            >
-              <ExternalLink size={11} />
-            </button>
-          </div>
-          <div className="space-y-0.5">
-            {plannedHabits.map(h => {
-              const checked = habitIndex.get(h.id)?.has(todayStr) ?? false
-              const streak = currentStreak(h, habitIndex.get(h.id) ?? new Set(), todayDate)
-              return (
-                <div key={h.id} className="flex items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-[var(--bg-hover)]">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: h.color }} />
-                  <span className="flex-1 truncate text-xs">{h.name}</span>
-                  {streak > 0 && <span className="shrink-0 text-[11px] text-[var(--text-muted)]">连续 {streak} 天</span>}
-                  <button
-                    onClick={() => void checkHabit(h)}
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                      checked ? 'border-[var(--success)] bg-[var(--success)] text-white' : 'border-[var(--border-color)] hover:border-[var(--text-secondary)]'
-                    }`}
-                    title={checked ? '取消打卡' : '打卡'}
-                  >
-                    {checked && <Check size={12} strokeWidth={3} />}
-                  </button>
-                </div>
-              )
-            })}
-            {plannedHabits.length === 0 && <p className="px-1 py-1 text-xs text-[var(--text-muted)]">今天没有计划中的习惯</p>}
-          </div>
-        </section>
+        {/* 打卡 / 番茄 / 导航 三个工具 Tab */}
+        {tab === 'habit' && (
+          <HabitPanel
+            habits={habits}
+            habitIndex={habitIndex}
+            plannedHabits={plannedHabits}
+            checkedToday={checkedToday}
+            onCheck={h => void checkHabit(h)}
+            todayDate={todayDate}
+            onOpenInMain={() => openInMain('toolbox')}
+          />
+        )}
+        {tab === 'pomo' && (mode === 'embedded'
+          ? <PomodoroPanel />
+          : <PomodoroPopoutPanel status={pomodoroStatus} onOpenInMain={() => openInMain('toolbox')} />)}
+        {tab === 'nav' && <NavPanel />}
       </div>
 
-      {/* 番茄钟状态条（停靠态 + 番茄钟在用时才显示，置于模块栏上方）
-          原 StatusBar 已删除，番茄钟失去常驻入口；停靠态下显示倒计时+状态+展开主面板的入口。
-          embedded 态（pomodoroStatus 为 null 默认值）：从 PomodoroContext 取权威（同一 Provider）。
-          popout 态（pomodoroStatus 来自主进程广播）：独立 BrowserWindow 无 Provider 上下文，点击
-          会唤起主窗口切到工具箱（番茄钟主面板在工具箱内）。 */}
-      {isTopDock && (pomodoroStatus ? pomodoroStatus.visible : ps.visible) && (
-        <div className="shrink-0 border-t border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-tertiary)_55%,transparent)] px-2 py-1">
-          <button
-            onClick={pomodoroStatus
-              ? () => { void window.api?.dayPanelOpenInMain?.('toolbox') }
-              : () => { pom.setState(s => ({ ...s, expanded: !s.expanded })) }
-            }
-            className={`relative w-full flex items-center justify-center gap-1.5 rounded-md py-1 text-[11px] font-medium transition-colors overflow-hidden ${
-              !pomodoroStatus && ps.expanded ? 'bg-[var(--bg-hover)]' : ''
-            } hover:bg-[var(--bg-hover)]`}
-            title="番茄钟"
-          >
-            {/* 阶段进度填充：已完成比例从左到右增长（accent 淡色，不喧宾夺主） */}
-            <div
-              className="absolute inset-y-0 left-0 bg-[var(--accent)]/15 transition-[width] duration-700 ease-linear"
-              style={{ width: `${Math.max(0, Math.min(1, pomodoroStatus ? pomodoroStatus.progress : pom.progress)) * 100}%` }}
-            />
-            <Timer size={12} className="relative text-[var(--accent)]" />
-            <span className="relative font-mono">{pomodoroStatus ? pomodoroStatus.display : pom.display}</span>
-            <span className="relative opacity-80">
-              {pomodoroStatus
-                ? (pomodoroStatus.done ? '✓' : pomodoroStatus.running ? (pomodoroStatus.phase === 'work' ? '专注中' : '休息中') : '已暂停')
-                : (ps.done ? '✓' : ps.running ? (ps.phase === 'work' ? '专注中' : '休息中') : '已暂停')}
-            </span>
-          </button>
-        </div>
+      {/* 嵌入式全局番茄条：仅运行中显示（暂停/结束即消失），任意 Tab 可见，点击直达番茄 Tab */}
+      {mode === 'embedded' && ps.visible && ps.running && (
+        <button
+          onClick={() => setTab('pomo')}
+          className="relative mx-2 mb-2 flex shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-lg border border-[var(--border-color)] py-1.5 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+          title="番茄钟运行中，点击查看"
+        >
+          <div
+            className="absolute inset-y-0 left-0 bg-[var(--accent)]/15 transition-[width] duration-700 ease-linear"
+            style={{ width: `${Math.max(0, Math.min(1, pom.progress)) * 100}%` }}
+          />
+          <Timer size={12} className="relative text-[var(--accent)]" />
+          <span className="relative font-mono">{pom.display}</span>
+          <span className="relative opacity-80">{ps.phase === 'work' ? '专注中' : '休息中'}</span>
+        </button>
       )}
 
-      {/* 停靠态底部模块切换栏：点击唤起主窗口并切到对应模块 */}
-      {isTopDock && (
-        <div className="shrink-0 border-t border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-tertiary)_55%,transparent)] px-1 py-1.5">
-          <div className="flex items-center justify-around">
-            {MODULE_LINKS.map(({ tab, icon: Icon, label }) => (
-              <button
-                key={tab}
-                onClick={() => { window.api?.dayPanelOpenInMain?.(tab) }}
-                title={`打开 ${label}`}
-                className="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]"
-              >
-                <Icon size={15} strokeWidth={1.5} />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
+      {/* 脱离态全局番茄条：仅运行中显示，点击直达番茄 Tab（快照来自主进程广播） */}
+      {mode === 'popout' && pomodoroStatus?.running && (
+        <button
+          onClick={() => setTab('pomo')}
+          className="relative mx-2 mb-2 flex shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-lg border border-[var(--border-color)] py-1.5 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+          title="番茄钟运行中，点击查看"
+        >
+          <div
+            className="absolute inset-y-0 left-0 bg-[var(--accent)]/15 transition-[width] duration-700 ease-linear"
+            style={{ width: `${Math.max(0, Math.min(1, pomodoroStatus.progress)) * 100}%` }}
+          />
+          <Timer size={12} className="relative text-[var(--accent)]" />
+          <span className="relative font-mono">{pomodoroStatus.display}</span>
+          <span className="relative opacity-80">{pomodoroStatus.phase === 'work' ? '专注中' : '休息中'}</span>
+        </button>
+      )}
+
+      {/* 脱离态底部四工具 Tab（替代原模块导航栏，与侧边栏同款） */}
+      {mode === 'popout' && (
+        <div
+          className="flex shrink-0 gap-1 border-t border-[var(--border-color)] px-2 py-1.5"
+          style={{ backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 60%, transparent)' }}
+        >
+          {renderTabButtons()}
         </div>
       )}
     </div>

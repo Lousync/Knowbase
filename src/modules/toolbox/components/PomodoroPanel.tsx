@@ -21,14 +21,15 @@ export function PomodoroPanel() {
   return (
     <div className="absolute inset-0 z-30 bg-[var(--bg-primary)] flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-[var(--border-color)] shrink-0">
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
         <button
           onClick={() => pom.setState(s => ({ ...s, expanded: false }))}
-          className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
         >
-          ← 返回
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         </button>
-        <h2 className="text-[15px] font-medium text-[var(--text-primary)]">🍅 番茄钟</h2>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">番茄钟</span>
       </div>
 
       {/* Content */}

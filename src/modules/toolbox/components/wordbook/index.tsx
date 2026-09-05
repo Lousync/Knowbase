@@ -78,14 +78,14 @@ export function WordbookModule({ onBack }: { onBack: () => void }) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶栏 */}
-      <div className="shrink-0 px-4 py-2.5 border-b border-[var(--border-color)] flex items-center gap-3 flex-wrap">
+      <div className="shrink-0 flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 flex-wrap">
         {/* 分区页先回总览；总览页才退回工具箱 */}
         <button onClick={() => (view === 'home' ? onBack() : setView('home'))}
           title={view === 'home' ? '返回工具箱' : '返回总览'}
-          className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         </button>
-        <span className="text-[13px] font-semibold text-[var(--text-primary)]">单词本</span>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">单词本</span>
         <div className="flex items-center gap-1">
           {BOOKS.map(b => (
             <button key={b.id} onClick={() => void setBook(s.wordbookActiveBook === b.id ? '' : b.id)}

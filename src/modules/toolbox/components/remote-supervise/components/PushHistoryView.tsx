@@ -129,7 +129,7 @@ export function PushHistoryView() {
           <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-[var(--text-muted)]" /></div>
         ) : logs.length === 0 ? (
           <div className="text-center py-8 text-[12px] text-[var(--text-muted)]">
-            暂无推送记录，打卡后这里会显示推送给监督者的消息
+            暂无推送记录
           </div>
         ) : (
           logs.map(log => (

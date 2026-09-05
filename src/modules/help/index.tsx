@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { LifeBuoy } from 'lucide-react'
+import { CircleHelp, LifeBuoy } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { loadHelpDocs, type HelpDoc } from './docsLoader'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -71,24 +71,26 @@ export function HelpModule() {
   return (
     <div className="flex h-full bg-[var(--bg-primary)]">
       {/* Left nav */}
-      <div className="w-48 shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] py-4 flex flex-col">
-        <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide px-4 mb-2">
+      <div className="w-48 shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col">
+        <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+          <CircleHelp size={12} />
           帮助
         </div>
 
+        <div className="py-1">
         {[...categories.entries()].map(([cat, catDocs]) => (
-          <div key={cat} className="mb-3">
-            <div className="text-[10px] font-semibold text-[var(--text-disabled)] uppercase tracking-wide px-4 mb-1">
+          <div key={cat} className="mb-2">
+            <div className="text-[10px] text-[var(--text-muted)] px-2 mb-1">
               {cat}
             </div>
             {catDocs.map(d => (
               <button
                 key={d.id}
                 onClick={() => setActiveDoc(d.id)}
-                className={`w-full flex items-center gap-2 px-4 py-1.5 text-[13px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-2 py-1 text-[12px] transition-colors border-l-2 ${
                   activeDoc === d.id
-                    ? 'bg-[var(--bg-selected)] text-[var(--text-primary)] border-l-2 border-l-[var(--accent)] pl-[14px]'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border-l-2 border-l-transparent pl-[14px]'
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border-l-transparent'
                 }`}
               >
                 <span className={activeDoc === d.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}>
@@ -99,6 +101,7 @@ export function HelpModule() {
             ))}
           </div>
         ))}
+        </div>
 
         {/* 反馈入口 — 跳转 GitHub Issues */}
         <div className="mt-auto px-3 pt-3 border-t border-[var(--border-color)]">
@@ -118,10 +121,9 @@ export function HelpModule() {
         <div className="max-w-2xl mx-auto px-8">
           {activeEntry && (
             <>
-              <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">
+              <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-6">
                 {activeEntry.title}
               </h2>
-              <p className="text-[12px] text-[var(--text-muted)] mb-8">{activeEntry.category}</p>
               <MarkdownPreview content={activeEntry.md} />
             </>
           )}

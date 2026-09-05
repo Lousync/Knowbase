@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Puzzle, RefreshCw, Search, FolderOpen, Download, Loader2,
   CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield, Boxes, BookMarked,
   History, Trash2, ScrollText, Package } from 'lucide-react'
@@ -448,8 +448,8 @@ export function PluginsModule() {
     <button
       key={key}
       onClick={onClick}
-      className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left border-l-2 transition-colors ${
-        active ? 'bg-[var(--bg-selected)] border-l-[var(--accent)]' : 'border-l-transparent hover:bg-[var(--bg-hover)]'
+      className={`w-full flex items-start gap-2.5 px-2 py-1.5 text-left border-l-2 transition-colors ${
+        active ? 'bg-[var(--bg-hover)] border-l-[var(--accent)]' : 'border-l-transparent hover:bg-[var(--bg-hover)]'
       }`}
     >
       {node}
@@ -521,10 +521,10 @@ export function PluginsModule() {
               <>
                 {(entry.contributions || []).includes('knowledgePages') && (
                   <p className="p-2.5 rounded-md border border-[var(--warning)]/40 bg-[var(--warning)]/10 text-[var(--text-primary)]">
-                    此插件将在知识库中<strong>新建学习空间</strong>
+                    将在知识库<strong>新建学习空间</strong>
                     {consentPackInfo?.spaceName ? <>《{consentPackInfo.spaceName}》</> : null}
-                    {consentPackInfo ? <>(含 {consentPackInfo.notebookCount ?? 1} 个笔记本 · {consentPackInfo.totalPages ?? '?'} 页)</> : null}
-                    ,不会写入你已有空间的任何层级;卸载插件后已导入内容全部保留。
+                    {consentPackInfo ? <>(含 {consentPackInfo.notebookCount ?? 1} 笔记本 · {consentPackInfo.totalPages ?? '?'} 页)</> : null}
+                    ，卸载后内容保留。
                   </p>
                 )}
                 <p>该插件的数据导入功能将写入以下模块:</p>
@@ -541,12 +541,12 @@ export function PluginsModule() {
                     本次更新新增了写入能力({newContributions.map(k => CONTRIBUTION_LABELS[k] || k).join('、')}),需重新确认。
                   </p>
                 )}
-                <p className="text-[11px] text-[var(--text-muted)]">导入动作沿用既有去重保护;已导入的数据在卸载插件后保留。</p>
+                <p className="text-[11px] text-[var(--text-muted)]">已导入数据在卸载后保留。</p>
               </>
             )}
             {level === 'B' && (
               <>
-                <p>该插件为增强能力插件,请勾选允许其使用的能力:</p>
+                <p>请勾选允许该插件使用的能力:</p>
                 <div className="space-y-2">
                   {(entry.capabilities || []).map(c => (
                     <label key={c} className="flex items-start gap-2.5 p-2.5 rounded-md border border-[var(--border-color)] cursor-pointer hover:bg-[var(--bg-hover)]">
@@ -564,7 +564,7 @@ export function PluginsModule() {
                   ))}
                   {newCapabilities.length > 0 && (
                     <p className="text-[var(--warning)] text-[11px]">
-                      本次更新新增能力:{newCapabilities.map(c => CAPABILITY_LABELS[c] || c).join('、')},需重新勾选授权。
+                      新增能力:{newCapabilities.map(c => CAPABILITY_LABELS[c] || c).join('、')}，需重新授权。
                     </p>
                   )}
                 </div>
@@ -607,14 +607,14 @@ export function PluginsModule() {
       const updatable = installedVer && installedVer !== p.version
       return (
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-8 py-8">
+          <div className="max-w-2xl mx-auto px-6 py-4">
             <div className="flex items-start gap-4 mb-5">
               <div className="w-14 h-14 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center shrink-0">
                 <PluginIconImg src={p.iconUrl} size={34} className="text-[var(--accent)]" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
+                  <h2 className="text-[15px] font-medium text-[var(--text-primary)] leading-tight">{p.name}</h2>
                   <LevelBadge level={level} />
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
@@ -656,14 +656,14 @@ export function PluginsModule() {
     const p = selected.plugin
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-8 py-8">
+        <div className="max-w-2xl mx-auto px-6 py-4">
           <div className="flex items-start gap-4 mb-5">
             <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${p.enabled && !p.broken ? 'bg-[var(--accent)]/10' : 'bg-[var(--bg-tertiary)]'}`}>
               <PluginIconImg src={p.icon} size={34} className={p.enabled && !p.broken ? 'text-[var(--accent)]' : 'text-[var(--text-disabled)]'} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-tight">{p.name}</h2>
+                <h2 className="text-[15px] font-medium text-[var(--text-primary)] leading-tight">{p.name}</h2>
                 <LevelBadge level={p.riskLevel} size="lg" />
                 {p.builtin && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)]">内置</span>}
               </div>
@@ -676,7 +676,7 @@ export function PluginsModule() {
                 </div>
               )}
               {p.legacyGrant && (
-                <div className="text-[11px] text-[var(--text-muted)] mt-1">按旈权限继承(theme + clipboard);更新时将重新确认。</div>
+                <div className="text-[11px] text-[var(--text-muted)] mt-1">沿用旧版权限，更新时重新确认。</div>
               )}
             </div>
             <button
@@ -721,7 +721,7 @@ export function PluginsModule() {
                     </div>
                   )
                 })}
-                <p className="text-[11px] text-[var(--text-muted)]">撤销授权后,插件对应操作将被拒绝并记录到最近活动。</p>
+                <p className="text-[11px] text-[var(--text-muted)]">撤销后对应操作将被拒绝。</p>
               </div>
             </>
           )}
@@ -849,7 +849,7 @@ export function PluginsModule() {
           {/* 卸载(内置插件不可卸载,仅可禁用) */}
           <div className="mt-4 pt-5 border-t border-[var(--border-color)]">
             {p.builtin ? (
-              <p className="text-[11px] text-[var(--text-muted)]">这是随应用分发的官方插件,不可卸载;不需要时可在上方禁用。</p>
+              <p className="text-[11px] text-[var(--text-muted)]">官方内置插件不可卸载，可禁用。</p>
             ) : (
               <>
                 <button
@@ -865,7 +865,7 @@ export function PluginsModule() {
                   {confirmDeleteId === p.id ? '再点一次确认卸载' : '卸载插件'}
                 </button>
                 <p className="text-[11px] text-[var(--text-muted)] mt-2">
-                  {p.riskLevel === 'A' ? '卸载删除插件文件;已导入的数据保留在对应模块中。' : '卸载会删除插件文件与全部授权。'}
+                  {p.riskLevel === 'A' ? '卸载仅删除插件文件，已导入数据保留。' : '卸载将删除插件文件与全部授权。'}
                 </p>
               </>
             )}
@@ -879,13 +879,18 @@ export function PluginsModule() {
     <div className="flex h-full bg-[var(--bg-primary)]">
       {/* 左侧面板 */}
       <div className="w-[280px] shrink-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col">
+        <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+          <Puzzle size={12} />
+          插件
+        </div>
+
         <div className="flex p-2 gap-1 shrink-0">
           {(['installed', 'market'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 px-3 py-1.5 text-[12px] rounded-md transition-colors ${
-                tab === t ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'
+              className={`flex-1 px-2 py-0.5 text-[11.5px] rounded-md transition-colors ${
+                tab === t ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]'
               }`}
             >
               {t === 'installed' ? `已安装 (${installed.length})` : '市场'}
@@ -974,7 +979,7 @@ export function PluginsModule() {
               {!installed.some(x => x.id === 'knowbase.quizbook') && (
                 <button
                   onClick={() => void handleInstallBundledQuizbook()}
-                  className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left border-l-2 border-l-transparent hover:bg-[var(--bg-hover)] transition-colors"
+                  className="w-full flex items-start gap-2.5 px-2 py-1.5 text-left border-l-2 border-l-transparent hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <BookMarked size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
                   <div className="flex-1 min-w-0">
@@ -994,15 +999,8 @@ export function PluginsModule() {
                 </button>
               )}
               {filteredInstalled.length === 0 ? (
-                <div className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed">
-                  {q ? '没有匹配的插件' : (
-                    <>
-                      还没有安装插件
-                      <div>
-                        <button onClick={() => { setTab('market'); setSearch('') }} className="text-[var(--accent)] hover:underline mt-2">去市场逛逛 →</button>
-                      </div>
-                    </>
-                  )}
+                <div className="py-8 text-center text-[12px] text-[var(--text-muted)]">
+                  {q ? '没有匹配的插件' : '暂无插件，可前往市场安装'}
                 </div>
               ) : filteredInstalled.map(installedItem)}
             </div>
@@ -1153,6 +1151,6 @@ export function PluginsModule() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2.5">{children}</h3>
+    <h3 className="text-[11px] text-[var(--text-muted)] mb-2.5">{children}</h3>
   )
 }

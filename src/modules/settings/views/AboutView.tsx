@@ -25,7 +25,7 @@ export function AboutView() {
 
   return (
     <div>
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-1">关于</h2>
+      <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">关于</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">版本信息与应用更新</p>
 
       <div className="mb-8" data-setting-anchor="advanced.update">
@@ -53,7 +53,7 @@ export function AboutView() {
             className="w-full px-2.5 py-1.5 text-[12px] font-mono bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
           />
           <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-            以 <code>镜像/原始地址</code> 前缀方式加速安装包下载;镜像失效时自动回退直连;下载中途更换镜像会自动切换通道并断点续传。常用:{' '}
+            镜像仅用于加速下载，失效自动回退直连。常用:{' '}
             {[['gh.dpik.top', 'https://gh.dpik.top'], ['gh-proxy.com', 'https://gh-proxy.com'], ['cdn.gh-proxy.com', 'https://cdn.gh-proxy.com']].map(([name, url], i) => (
               <button key={url} onClick={() => update('updateMirror', url)} className="text-[var(--accent)] hover:underline font-mono" title={`使用 ${url}`}>
                 {name}{i < 2 ? ' / ' : ''}
@@ -151,7 +151,7 @@ export function AboutView() {
                 >
                   <Play size={12} />运行安装程序
                 </button>
-                <p className="text-[11px] text-[var(--text-muted)] mt-2">安装完成后重新打开应用即完成更新;旧安装包将在更新成功后自动清理</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-2">重新打开应用即完成更新。</p>
               </div>
             ) : (
               <div>

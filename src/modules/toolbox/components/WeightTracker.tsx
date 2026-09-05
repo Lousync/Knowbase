@@ -194,13 +194,16 @@ export function WeightTracker({ onBack }: Props) {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"><ArrowLeft size={15} /> 返回</button>
-          <div className="w-px h-4 bg-[var(--border-color)]" />
-          <TrendingDown size={17} className="text-[var(--accent)]" /><h2 className="text-[14px] font-semibold text-[var(--text-primary)]">体重追踪</h2>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title="返回"
+        >
+          <ArrowLeft size={12} />
+        </button>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)]">体重追踪</span>
+        <div className="ml-auto flex items-center gap-2">
           {selectedPt && (
             <div className="flex items-center gap-1 px-2 py-1 text-[11px] bg-[var(--bg-selected)] rounded border border-[var(--border-color)]">
               <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: SERIES_COLORS[seriesList.indexOf(selectedPt.series) % SERIES_COLORS.length] }} />
@@ -212,7 +215,7 @@ export function WeightTracker({ onBack }: Props) {
             </div>
           )}
           <button onClick={() => { setEditId(null); setFormWeight(''); setFormDate(today); setFormSeries(seriesList[0] || 'default'); setFormNewSeries(''); setFormNote(''); setShowForm(true) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]"><Plus size={14} /> 记录</button>
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"><Plus size={12} /> 记录</button>
         </div>
       </div>
 

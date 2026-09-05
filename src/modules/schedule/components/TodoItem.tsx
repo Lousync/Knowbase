@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Check, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag } from '../../../types'
 
-const QUADRANT_LABELS: Record<number, string> = { 0: '🔥 紧急重要', 1: '📌 重要', 2: '⚡ 紧急', 3: '💤 消遣' }
+const QUADRANT_LABELS: Record<number, string> = { 0: '紧急重要', 1: '重要不紧急', 2: '紧急不重要', 3: '不紧急不重要' }
 const QUADRANT_COLORS: Record<number, string> = {
   0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]'
 }
@@ -23,7 +23,7 @@ interface Props {
 // 三档比例：check 约为 title 的 1.6x，间距同步缩放
 const SZ: Record<string, { check: number; checkIcon: number; title: string; meta: string; desc: string; tagBar: string; trash: number; padX: string; padY: string; gap: string; mTop: string }> = {
   sm: { check: 18, checkIcon: 11, title: 'text-[13px]', meta: 'text-[11px]', desc: 'text-[11px]', tagBar: 'h-4', trash: 14, padX: 'px-3', padY: 'py-2', gap: 'gap-2', mTop: '' },
-  md: { check: 24, checkIcon: 15, title: 'text-[15px]', meta: 'text-[12px]', desc: 'text-[12px]', tagBar: 'h-5', trash: 17, padX: 'px-4', padY: 'py-3', gap: 'gap-3', mTop: 'mt-0.5' },
+  md: { check: 24, checkIcon: 15, title: 'text-[15px]', meta: 'text-[12px]', desc: 'text-[12px]', tagBar: 'h-5', trash: 17, padX: 'px-3', padY: 'py-2', gap: 'gap-3', mTop: 'mt-0.5' },
   lg: { check: 30, checkIcon: 19, title: 'text-[18px]', meta: 'text-[13px]', desc: 'text-[14px]', tagBar: 'h-6', trash: 20, padX: 'px-5', padY: 'py-3.5', gap: 'gap-4', mTop: 'mt-1' },
 }
 
