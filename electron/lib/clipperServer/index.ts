@@ -1,7 +1,7 @@
 import { app, ipcMain, shell } from 'electron'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
-import { getCurrentVault } from '../kbStore/vaultContext'
+import { getCurrentVault, KB_DRAFT_DIR } from '../kbStore/vaultContext'
 import { generateToken, tokenMatches } from '../lanShare/auth'
 import { createClipperServer, listenClipper, CLIPPER_DEFAULT_PORT } from './server'
 import type { Server } from 'http'
@@ -76,7 +76,7 @@ export interface ClipListItem { name: string; size: number; mtimeMs: number }
 function listClips(): { available: boolean; dir: string; items: ClipListItem[] } {
   const v = getCurrentVault()
   if (!v) return { available: false, dir: '', items: [] }
-  const dir = join(v.rootPath, '_inbox', 'clipper')
+  const dir = join(v.rootPath, KB_DRAFT_DIR, 'clipper')
   if (!existsSync(dir)) return { available: true, dir, items: [] }
   try {
     const items = readdirSync(dir)
@@ -109,7 +109,7 @@ export function registerClipperHandlers(deps: ClipperDeps): void {
       error: startError,
       token,
       tokenHint: token.slice(0, 6) + '...' + token.slice(-4),
-      vault: v ? { name: v.name, saveDir: join(v.rootPath, '_inbox', 'clipper') } : null,
+      vault: v ? { name: v.name, saveDir: join(v.rootPath, KB_DRAFT_DIR, 'clipper') } : null,
       extensionDir: extensionDir(),
       clips: listClips(),
     }

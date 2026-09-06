@@ -3,7 +3,8 @@
 > **Q0 已实现**（2026-09，分支 fix/optimize-v2.15.1：`ebf46e2`/`e12d27d`/`583c8ca` + 扩展）。实现期三处与本文的偏差以代码为准：
 > ① **不引 dompurify**——实测其配 linkedom 是静默 no-op（sanitize 原样返回输入，只给假安全感），消毒由 `clipperServer/sanitize.ts` 自实现（输入/输出双端剥离，对抗样本冒烟全净）；
 > ② defuddle 引入口径 = **`defuddle/node` + 打进 bundle**（`/node` 无 require 条件、linkedom cjs 运行时 require ESM-only css-select 会炸主进程，`canvas` 标 external；见 electron.vite.config.ts 注释）；
-> ③ **桌面端入口 = 工具箱「网页剪藏」面板**（用户拍板，非设置页卡片）。
+> ③ **桌面端入口 = 工具箱「网页剪藏」面板**（用户拍板，非设置页卡片）；
+> ④ **草稿落点改 `.knowbase/_draft/clipper/`**（实现后用户追加决策）——工具草稿属软件侧产物，收进 `.knowbase` 系统区即被文件树（`.` 前缀隐藏）与知识索引（dot 目录仅放行 `.knowbase/_inbox`）天然隔离，无需任何专门分支规则；命名 `_draft` 延续「软件相关文件夹统一 `_` 前缀」口径（`_inbox`/`_attachments` 同族）。正文所提顶层 `_inbox/clipper` 路径以代码为准；顶层任意深度 `_inbox` 跳过规则保留（迁移器遗留目录的兼容护栏）。
 > 另外 §7 冒烟落地为 `tmp/smoke/clipper-smoke-entry.ts`（25 断言全绿，含 5MB-413 排空回 413 而非断连、相对链接绝对化、`_inbox` 零索引零 warning）。
 
 > 日期：2026-09-02 · 类型：方案文档（本会话只出方案，不落代码）· 状态：**用户中意，已要求分析并成文，待拍板**

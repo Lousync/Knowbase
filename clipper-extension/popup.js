@@ -1,5 +1,5 @@
 // Knowbase Web Clipper — 薄扩展（docs/plugin-web-clipper-design.md §3.3）
-// 职责：抓当前页 DOM → 发给本机 clipperServer 提取转 md → 落仓库 `_inbox/clipper/`。
+// 职责：抓当前页 DOM → 发给本机 clipperServer 提取转 md → 落仓库 `.knowbase/_draft/clipper/`。
 // 桌面端端口会漂移（默认段被占时），故探测 [42817, 42817+7]。token 存 chrome.storage.local。
 
 const DEFAULT_PORT = 42817

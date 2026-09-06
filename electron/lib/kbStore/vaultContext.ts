@@ -26,6 +26,8 @@ const KB_DIR = '.knowbase'
 export const KB_SCHEMA_VERSION = 1
 /** 系统目录（相对仓库根，收在 .knowbase 内）：未分类页收件箱 */
 export const KB_INBOX_DIR = '.knowbase/_inbox'
+/** 系统目录：工具草稿区（Web 剪藏落点等）——软件侧工具类文件夹统一 `_` 前缀，与用户内容目录区分 */
+export const KB_DRAFT_DIR = '.knowbase/_draft'
 /** 旧附件目录（历史遗留，只读兼容；D1 定稿后不再新增内容） */
 export const KB_ATTACHMENTS_DIR = '.knowbase/_attachments'
 /** ★ 附件区（D1 定稿）：仓库根下顶层 `.attachments/`，408 图片/编辑器插图/博客图统一入此 */

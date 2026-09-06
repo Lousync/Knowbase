@@ -11,7 +11,7 @@ import { stripDangerous } from './sanitize'
  *
  * 路由：
  *   GET  /api/ping       连接探测（免 token——扩展首次配对前就要能探测；仅回版本/仓库名等非敏感信息）
- *   POST /api/clip       {url,title,html} → defuddle 提取转 md → 原子写 <vault>/_inbox/clipper/
+ *   POST /api/clip       {url,title,html} → defuddle 提取转 md → 原子写 <vault>/.knowbase/_draft/clipper/
  *   POST /api/clip-link  {url,title} → 「仅存链接」轻量草稿（SPA 无正文时的 fallback 出口）
  *
  * 安全（对齐设计文档 §4）：
@@ -20,7 +20,7 @@ import { stripDangerous } from './sanitize'
  *     扩展 id 无法预登记——unpacked 安装 id 随路径变，按方案放行 + token 双保险）
  *  3. 写路由需 Bearer token（不进 query，避免落入任何 URL 日志）
  *  4. 体积上限 5MB / JSON 体一次性读取；url 必须 http(s)；标题净化复用 sanitizeFileName；
- *     落盘路径完全服务端拼接（`_inbox/clipper/<date>-<净化标题>.md`），无用户可控路径成分
+ *     落盘路径完全服务端拼接（`.knowbase/_draft/clipper/<date>-<净化标题>.md`），无用户可控路径成分
  *  5. 内容双端消毒（extract.stripDangerous 输入输出各一遍）
  */
 
@@ -132,7 +132,7 @@ export function createClipperServer(opts: ClipperServerOptions): Server {
       if (!tokenMatches(opts.getToken(), provided)) return deny(res, 401, '无效的配对令牌')
       const vault = opts.getVaultRoot()
       if (!vault) return deny(res, 422, 'NO_VAULT：请先在 Knowbase 中打开一个仓库')
-      const CLIP_REL_DIR = '_inbox/clipper' // 回执/展示统一正斜杠（win32 join 会混入反斜杠）
+      const CLIP_REL_DIR = '.knowbase/_draft/clipper' // 回执/展示统一正斜杠（win32 join 会混入反斜杠）
       readBody(req, async (raw) => {
         if (raw === null) return deny(res, 413, '请求体超过 5MB 上限')
         let payload: Record<string, unknown>

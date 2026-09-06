@@ -85,8 +85,9 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
     // D3（P4）：'blog' 不再是内部目录名（博客已收进 .knowbase/blog，由「.」前缀规则跳过）；
     // '_attachments' = 历史遗留根级附件目录，继续跳过
     if (entry.name === '_attachments') continue
-    // 收件箱（Web 剪藏/迁移器草稿区）永不入索引：与文件树 APP_INTERNAL_DIRS 同口径
+    // 收件箱（迁移器草稿区遗留语义）永不入索引：与文件树 APP_INTERNAL_DIRS 同口径
     // （大小写不敏感、任意深度）；.knowbase/_inbox 的显式放行见下方 dot 分支，不受本行影响
+    // 注：Web 剪藏草稿已迁至 .knowbase/_draft/clipper（随 . 前缀规则天然跳过，不依赖本行）
     if (entry.isDirectory() && entry.name.toLowerCase() === '_inbox') continue
     const abs = join(dir, entry.name)
     try {

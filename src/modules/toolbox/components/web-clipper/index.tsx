@@ -7,7 +7,7 @@ import type { ClipperStatus } from '../../../../types'
 /**
  * 网页剪藏服务面板（工具箱入口，docs/plugin-web-clipper-design.md）。
  * 剪藏动作发生在浏览器扩展里；本面板负责：服务状态、配对令牌、自检、最近剪藏回顾、扩展安装指引。
- * 产物落当前仓库 `_inbox/clipper/`（草稿区，不进知识索引），在编辑器中整理后转正。
+ * 产物落当前仓库 `.knowbase/_draft/clipper/`（草稿区，不进知识索引），在编辑器中整理后转正。
  */
 
 function formatTime(ts: number): string {
@@ -124,7 +124,7 @@ export function WebClipper({ onBack }: { onBack: () => void }) {
             {st?.error && <div className="text-[11px] text-[var(--danger,#e5484d)]">{st.error}</div>}
             <div className="text-[11.5px] text-[var(--text-muted)] leading-relaxed">
               {st?.vault
-                ? <>剪藏落点：<code className="text-[var(--text-secondary)]">{st.vault.name}/_inbox/clipper/</code>（草稿区，不进知识索引/图谱；编辑器打开整理后加 frontmatter id 转正）</>
+                ? <>剪藏落点：<code className="text-[var(--text-secondary)]">{st.vault.name}/.knowbase/_draft/clipper/</code>（草稿区，不进知识索引/图谱；编辑器打开整理后加 frontmatter id 转正）</>
                 : <span className="text-[var(--warning)]">尚未打开仓库——扩展剪藏会收到「请先在 Knowbase 打开仓库」提示</span>}
             </div>
           </div>
