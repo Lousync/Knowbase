@@ -21,7 +21,7 @@ function ok(name, cond, extra = '') {
 }
 
 console.log('P3b 断言：整理成文档（主进程）')
-ok('organizeDoc 懒建文件夹 + 讲义·标题.md 落盘', FLD.includes('organizeDoc') && FLD.includes('ensureSessionFolder(sessionId, getSetting)') && FLD.includes('`讲义·${sanitizeTitle(title)}`'))
+ok('organizeDoc 懒建文件夹 + 讲义·标题.md 落盘（P7 前缀参数化，默认讲义）', FLD.includes('organizeDoc') && FLD.includes('ensureSessionFolder(sessionId, getSetting)') && FLD.includes("`${prefix || '讲义'}·${sanitizeTitle(title)}`"))
 ok('幂等：同名同内容返回既有路径；不同内容 (n) 后缀不覆盖', FLD.includes('if (readFileSync(abs, \'utf-8\') === body) return') && FLD.includes(' (${n}).md'))
 ok('organizeDoc 通道注册', FLD.includes("'aiTeach:organizeDoc'"))
 

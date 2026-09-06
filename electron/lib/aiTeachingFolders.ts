@@ -318,14 +318,14 @@ export function migrateRootDir(oldName: string, newName: string): { ok: boolean;
  * `讲义·{标题}.md`。写路径经 ensure 懒建文件夹（2-5 旧会话首次整理即补建）；
  * 幂等：同名同内容直接返回既有路径（前端「已生成文档 →」跳转），同名不同内容加 (n) 后缀不覆盖。
  */
-export function organizeDoc(sessionId: string, title: string, content: string, getSetting: (key: string) => unknown): FolderResult {
+export function organizeDoc(sessionId: string, title: string, content: string, getSetting: (key: string) => unknown, prefix = '讲义'): FolderResult {
   try {
     const ensured = ensureSessionFolder(sessionId, getSetting)
     if (!ensured.ok || !ensured.relPath) return { ok: false, error: ensured.error ?? '会话文件夹不可用' }
     const vault = getCurrentVault()
     if (!vault) return { ok: false, error: '尚未打开仓库' }
     const body = String(content ?? '').replace(/\r\n/g, '\n')
-    const base = `讲义·${sanitizeTitle(title)}`
+    const base = `${prefix || '讲义'}·${sanitizeTitle(title)}`
     const dirAbs = join(vault.rootPath, ensured.relPath)
     let name = `${base}.md`
     for (let n = 1; n < 50; n++) {
@@ -352,6 +352,6 @@ export function registerAiTeachingFolderHandlers(getSetting: (key: string) => un
   // P2：会话约束文件（CONSTRAINTS.md）读写
   ipcMain.handle('aiTeach:readConstraints', (_e, sessionId: string) => readConstraints(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeach:writeConstraints', (_e, sessionId: string, text: string) => writeConstraints(String(sessionId ?? ''), String(text ?? ''), getSetting))
-  // P3b：整理成文档（回答 md 落盘会话文件夹，幂等）
-  ipcMain.handle('aiTeach:organizeDoc', (_e, sessionId: string, title: string, content: string) => organizeDoc(String(sessionId ?? ''), String(title ?? '讲义'), String(content ?? ''), getSetting))
+  // P3b：整理成文档（回答 md 落盘会话文件夹，幂等）；P7 起支持产物前缀（讲义/测验）
+  ipcMain.handle('aiTeach:organizeDoc', (_e, sessionId: string, title: string, content: string, prefix?: string) => organizeDoc(String(sessionId ?? ''), String(title ?? '讲义'), String(content ?? ''), getSetting, typeof prefix === 'string' && prefix ? prefix : '讲义'))
 }

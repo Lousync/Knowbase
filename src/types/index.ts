@@ -1276,7 +1276,7 @@ export interface ElectronAPI {
   aiTeachDeleteSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachReadConstraints: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
   aiTeachWriteConstraints: (id: string, text: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
-  aiTeachOrganizeDoc: (id: string, title: string, content: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachOrganizeDoc: (id: string, title: string, content: string, prefix?: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   // P5 工作区两层（§3.2-6；元数据入 .knowbase/modules/aiTeaching/workspaces.json）
   aiTeachListWorkspaces: () => Promise<{ workspaces: AiTeachWorkspaceInfo[]; sessionWs: Record<string, string>; unassignedCount: number; lastWorkspaceId: string | null }>
   aiTeachCreateWorkspace: (name: string) => Promise<{ ok: boolean; workspace?: AiTeachWorkspaceInfo; error?: string }>

@@ -248,8 +248,12 @@ async function runAgentLoop(
   const titleRuleHint = source === 'aiTeaching'
     ? '\n\n【回答标题规则（AI教学）】每条回答的第一行必须是一个简短标题，形如 `### 这里写标题`（不超过 20 字，概括本回答核心内容），标题后换行写正文；标题行之前不得有任何其他文字。该标题用于用户在对话流中快速定位每条回答。'
     : ''
+  // P7（§3.2-7 题目视图）：AI教学出题走知识库 quiz 围栏协议，题目面板/答题组件直接解析复用
+  const quizRuleHint = source === 'aiTeaching'
+    ? '\n\n【出题格式规则（AI教学）】当用户要求出题/测验/练习时，除开场说明与收尾提示外，每道题单独输出一个 ```quiz 围栏代码块，块内是一个 JSON 对象（不要注释、不要多个对象）：{"no":1,"points":"2分","question":"题干（支持 markdown）","options":[{"key":"A","text":"选项一"},{"key":"B","text":"选项二"},{"key":"C","text":"选项三"},{"key":"D","text":"选项四"}],"answer":"A","explanation":"答案解析（支持 markdown）"}。answer 的值必须是 options 中某个 key；默认四选一。围栏块之间可换行连续排列，客户端会自动收集进「题目」视图供答题。'
+    : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + instHint + titleRuleHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + instHint + titleRuleHint + quizRuleHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0

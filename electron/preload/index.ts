@@ -236,7 +236,7 @@ const api = {
   aiTeachDeleteSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:deleteSessionFolder', id),
   aiTeachReadConstraints: (id: string) => ipcRenderer.invoke('aiTeach:readConstraints', id),
   aiTeachWriteConstraints: (id: string, text: string) => ipcRenderer.invoke('aiTeach:writeConstraints', id, text),
-  aiTeachOrganizeDoc: (id: string, title: string, content: string) => ipcRenderer.invoke('aiTeach:organizeDoc', id, title, content),
+  aiTeachOrganizeDoc: (id: string, title: string, content: string, prefix?: string) => ipcRenderer.invoke('aiTeach:organizeDoc', id, title, content, prefix),
   // AI教学 P5：工作区两层（§3.2-6）
   aiTeachListWorkspaces: () => ipcRenderer.invoke('aiTeach:listWorkspaces'),
   aiTeachCreateWorkspace: (name: string) => ipcRenderer.invoke('aiTeach:createWorkspace', name),

@@ -8,6 +8,8 @@ import {
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachSetLastWorkspace,
 } from '../../lib/ipc'
 import { AiTeachFileTree } from './AiTeachFileTree'
+import { QuizMode } from '../../components/shared/QuizMode'
+import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -29,7 +31,10 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * 一个工作区=一门课程含多对话，元数据入仓库 .knowbase/modules/aiTeaching/workspaces.json；
  * 顶栏页签=本工作区对话（会话列表区退役）、工作区 chip 返回选择页；左栏树挂工作区文件夹层；
  * 新对话自动归属当前工作区，产物落 `AI教学/{工作区}/{MM-DD 标题}/`（存量扁平文件夹不迁移，锚点扫描双深度兼容）。
- * 占位（P6~P8）：素材库 SOURCES v3、题目视图、用户画像。
+ * P7 题目视图（§3.2-7/3-9）：中栏「对话 ⇄ 题目」切换器；AI 按 quiz 围栏协议出题（注入格式规则），
+ * 题目自动收录进题目视图，答题复用知识库 QuizMode（判分/解析/错题），交卷后成绩报告落会话文件夹 `测验·*.md`，
+ * 逐题记录经 quizRecord:report（aiTeach: 命名空间）入知识库错题体系（3-10）。
+ * 占位（P6/P8）：素材库 SOURCES v3、用户画像。
  */
 
 /** P5：工作区卡片「最近活跃」相对时间（updated_at 'YYYY-MM-DD HH:MM:SS' 本地串） */
@@ -221,6 +226,14 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     () => sessions.filter(s => (wsSessionMap[s.id] ?? '__none__') === (activeWs ?? '__none__')),
     [sessions, wsSessionMap, activeWs],
   )
+  // ---------- P7 题目视图（§3.2-7/3-9 中栏顶部切换器；答题复用知识库 QuizMode，3-10 记录持久化） ----------
+  const [midView, setMidView] = useState<'chat' | 'quiz'>('chat')
+  const [quizOpen, setQuizOpen] = useState(false)
+  const [lastQuizReport, setLastQuizReport] = useState<{ rel: string; score: string } | null>(null)
+  const quizItems = useMemo(
+    () => messages.filter(m => m.role === 'assistant').flatMap(m => extractQuizzes(m.content)),
+    [messages],
+  )
   const [showNewMenu, setShowNewMenu] = useState(false)
   // ---- Token 消耗统计（月度走 llm:getUsage）----
   const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
@@ -330,6 +343,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
     setDocView(null) // 切会话退出文档阅读（P4）
+    setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
     const row = sessions.find(s => s.id === sid)
     setInstrDismiss(false)
     void loadConstraints(sid, row?.instructions ?? '')
@@ -375,6 +389,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
     setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false); setDocView(null)
+    setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     void sendText(tpl.opening, cid)
@@ -395,6 +410,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       activeIdRef.current = null
       setActiveId(null); setActiveTitle(''); setMessages([]); setLastChanges(null); setLiveSteps([]); setDocView(null)
       setActiveInstr(''); setInstrRel('')
+      setMidView('chat'); setQuizOpen(false); setLastQuizReport(null)
     }
     void refreshSessions()
   }, [sessions, wsSessionMap, openSession, refreshSessions])
@@ -437,6 +453,56 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     const q = wsSearch.trim().toLowerCase()
     return q ? wsList.filter(w => w.name.toLowerCase().includes(q)) : wsList
   }, [wsList, wsSearch])
+
+  /** P7：快捷发问（空题目视图引导；与输入框同链路，自动带 aiTeaching 规则） */
+  const sendQuick = useCallback((text: string) => {
+    if (pending) return
+    if (!activeIdRef.current) { showToast({ type: 'warning', message: '先在「对话」里发一条消息或新建任务' }); return }
+    setMidView('chat')
+    const cid = crypto.randomUUID()
+    chatIdRef.current = cid
+    void sendText(text, cid)
+  }, [pending, sendText])
+
+  /** P7（测验结果联动产物）：整卷答完 → 报告 md 落会话文件夹 `测验·随堂测验 MM-DD HH:mm.md` */
+  const handleQuizFinish = useCallback(async (s: { total: number; correctCount: number; records: Array<{ no: number; correct: boolean; picked: string }> }) => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    const now = new Date()
+    const p2 = (n: number) => String(n).padStart(2, '0')
+    const stamp = `${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`
+    const byNo = new Map(quizItems.map(q => [q.no, q]))
+    const pct = s.total ? Math.round((s.correctCount / s.total) * 100) : 0
+    const lines: string[] = [
+      '### 随堂测验报告',
+      '',
+      `> 会话「${activeTitle || '未命名'}」 · 得分 **${s.correctCount} / ${s.total}**（${pct}%） · ${stamp}`,
+      '',
+      '| 题号 | 我的答案 | 结果 |',
+      '|---|---|---|',
+      ...s.records.map(r => `| ${r.no} | ${r.picked} | ${r.correct ? '✓' : '✗'} |`),
+    ]
+    const wrong = s.records.filter(r => !r.correct)
+    if (wrong.length) {
+      lines.push('', '## 错题解析', '')
+      for (const r of wrong) {
+        const item = byNo.get(r.no)
+        if (!item) continue
+        lines.push(`**第 ${item.no} 题** ${(item.question || '').replace(/\s*\n+\s*/g, ' ').slice(0, 200)}`, '', `我选了 ${r.picked}，正确答案 **${item.answer}**。`, '', item.explanation || '（本题无解析）', '')
+      }
+    } else {
+      lines.push('', '全部答正确，保持状态 💪')
+    }
+    lines.push('', '_报告由 AI教学题目视图在答题完成后自动生成；题干与解析以对话原文为准。_')
+    const r = await aiTeachOrganizeDoc(sid, `随堂测验 ${stamp}`, lines.join('\n'), '测验').catch(() => null)
+    if (r && r.ok && r.relPath) {
+      setLastQuizReport({ rel: r.relPath, score: `${s.correctCount}/${s.total}` })
+      showToast({ type: 'info', message: `测验成绩 ${s.correctCount}/${s.total} · 报告已存 ${r.relPath.split('/').pop()}` })
+      void refreshWorkspaces()
+    } else {
+      showToast({ type: 'error', message: `测验报告落盘失败${r?.error ? `：${r.error}` : ''}` })
+    }
+  }, [quizItems, activeTitle, refreshWorkspaces])
 
   /** P2（2-6）：保存会话要求 = 写会话文件夹 CONSTRAINTS.md（懒建兜底）；清掉旧 DB 字段残留防双真相源 */
   const saveInstr = async (): Promise<void> => {
@@ -648,6 +714,21 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [messages, liveSteps])
   const monthTokens = usage?.monthTokens ?? 0
   const budget = usage?.budget ?? 0
+
+  /** P7：中栏顶部「对话 ⇄ 题目」分段切换器（3-9 按 §六 L399 形态） */
+  const chipCls = (on: boolean) => `px-2 py-1 rounded-md text-[11.5px] transition-colors ${on ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`
+  const midChips = (
+    <div className="shrink-0 flex items-center gap-1 px-3 pt-2 select-none">
+      <button onClick={() => setMidView('chat')} className={chipCls(midView === 'chat')}>💬 对话</button>
+      <button onClick={() => setMidView('quiz')} className={chipCls(midView === 'quiz')}>📝 题目{quizItems.length > 0 ? `（${quizItems.length}）` : ''}</button>
+      {lastQuizReport && (
+        <button onClick={() => { void openDocView(lastQuizReport.rel) }} title="中栏阅读最近一次测验报告"
+          className="ml-auto text-[10.5px] px-1.5 py-0.5 rounded-md text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors truncate max-w-[220px]">
+          🧾 最近测验 {lastQuizReport.score} · 报告 →
+        </button>
+      )}
+    </div>
+  )
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--bg-primary)]">
@@ -897,8 +978,58 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 )}
               </div>
             </div>
+          ) : !reader && midView === 'quiz' ? (
+            /* P7（§3.2-7）：题目视图——题目 = 对话回答里的 ```quiz 围栏协议块（QuizParser 解析） */
+            <div className="flex-1 flex flex-col min-h-0 relative">
+              {midChips}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="max-w-[820px] mx-auto w-full px-4 py-4 space-y-2">
+                  {quizItems.length === 0 ? (
+                    <div className="py-16 text-center">
+                      <div className="text-[13px] text-[var(--text-secondary)]">本对话还没有题目</div>
+                      <div className="mt-1 text-[11.5px] text-[var(--text-muted)]">让 AI 在「对话」里出题（按测验协议自动收录到这里），或快捷发起：</div>
+                      <div className="mt-4 flex items-center justify-center gap-2">
+                        {['根据最近的讲解内容出 5 道选择题', '围绕本会话主题出 3 道基础题'].map(t => (
+                          <button key={t} onClick={() => sendQuick(t)}
+                            className="px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[11.5px] text-[var(--text-secondary)] hover:border-[var(--accent)]/60 hover:text-[var(--text-primary)] transition-colors">{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2.5">
+                        <button onClick={() => setQuizOpen(true)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[12.5px] hover:opacity-90 transition-opacity">
+                          <Presentation size={13} /> 开始答题（{quizItems.length} 题）
+                        </button>
+                        <span className="text-[10.5px] text-[var(--text-muted)]">自动判分、错题显示解析；交卷后成绩报告落会话文件夹</span>
+                      </div>
+                      {quizItems.map((q, i) => (
+                        <div key={`${q.no}-${i}`} className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2.5">
+                          <div className="text-[12px] leading-relaxed text-[var(--text-primary)]">
+                            <span className="text-[var(--text-muted)] mr-1.5 tabular-nums">{i + 1}.</span>
+                            {q.question.split('\n')[0].slice(0, 140)}
+                          </div>
+                          <div className="mt-1 text-[10.5px] text-[var(--text-muted)]">选项 {q.options.map(o => o.key).join('/')}{q.points ? ` · ${q.points}` : ''} · 来自对话消息</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+              {quizOpen && activeId && quizItems.length > 0 && (
+                <QuizMode
+                  quizzes={quizItems}
+                  pageTitle={activeTitle || '随堂测验'}
+                  pageId={`aiTeach:${activeId}`}
+                  onClose={() => setQuizOpen(false)}
+                  onFinish={handleQuizFinish}
+                />
+              )}
+            </div>
           ) : !reader ? (
             <>
+              {midChips}
               {activeInstr && !instrDismiss && (
                 <div className="shrink-0 flex items-center gap-2 mx-4 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-secondary)]">
                   <PenLine size={11} className="shrink-0 text-[var(--accent)]" />

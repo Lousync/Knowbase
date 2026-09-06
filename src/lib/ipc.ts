@@ -493,7 +493,7 @@ export const aiTeachReadConstraints = (id: string): Promise<AiTeachConstraintsRe
 /** 写会话 CONSTRAINTS.md（懒建文件夹；不再写 DB sessionInstructions） */
 export const aiTeachWriteConstraints = (id: string, text: string): Promise<AiTeachConstraintsResult> => a().aiTeachWriteConstraints(id, text)
 /** P3b：整理成文档——回答 md 落盘会话文件夹（懒建夹 + 幂等），返回产物相对路径 */
-export const aiTeachOrganizeDoc = (id: string, title: string, content: string): Promise<AiTeachFolderResult> => a().aiTeachOrganizeDoc(id, title, content)
+export const aiTeachOrganizeDoc = (id: string, title: string, content: string, prefix?: string): Promise<AiTeachFolderResult> => a().aiTeachOrganizeDoc(id, title, content, prefix)
 // P5 工作区两层（§3.2-6）
 export const aiTeachListWorkspaces = () => a().aiTeachListWorkspaces()
 export const aiTeachCreateWorkspace = (name: string) => a().aiTeachCreateWorkspace(name)
