@@ -31,7 +31,7 @@ ok('模块 send 传 aiTeaching', MOD.includes("agentChat(sid, raw, undefined, ci
 
 console.log('P3a 断言：中栏去气泡 + 快速定位条 + 文档地图')
 ok('视图切换退役（timeline/doc state 删除）', !MOD.includes("useState<'timeline'") && !MOD.includes("'文档视图'"))
-ok('中栏条件翻为 !reader（对话流恒定，reader 占用中栏）', MOD.includes('{!reader ? (') && !MOD.includes(') : reader ? ('))
+ok('中栏三态优先级链 reader/docView 接管（P4 语义：docView > reader > 对话流恒定）', MOD.includes(') : !reader ? (') && !MOD.includes(') : reader ? ('))
 ok('用户消息保留气泡 + assistant 平铺', MOD.includes('bg-[var(--accent)] text-white rounded-xl') && /<MarkdownPreview content=\{m\.content\} \/>/.test(MOD))
 ok('定位条刻度 + 标题提取回退链（标题→首行→回答N）',
   MOD.includes('msgAnchorTitle') && MOD.includes('#{1,6}') && MOD.includes('`回答 ${n + 1}`'))

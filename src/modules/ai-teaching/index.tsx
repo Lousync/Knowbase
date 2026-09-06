@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, Feather } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
-  workspaceGetCurrent, workspaceListDir, docsPptxPages,
+  workspaceGetCurrent, workspaceListDir, workspaceReadFile, docsPptxPages,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice,
 } from '../../lib/ipc'
+import { AiTeachFileTree } from './AiTeachFileTree'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -21,8 +22,24 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * P2 约束文件化：会话要求唯一真相源 = 会话文件夹 CONSTRAINTS.md（弹层读写文件，主进程每轮重读注入）。
  * P3 中栏改版：AI 回答去气泡平铺 + 逐条操作条（整理成文档/复制/轨迹）；右缘快速定位条（标题锚点）；
  * 输入区流式停止键 + 本对话模型/思考强度合一菜单（仅本对话生效）；顶栏收敛（时间线/文档视图/文档地图退役）。
- * 占位（P4~P7）：左侧栏 VS Code 化、工作区两层、素材库 SOURCES v3、题目视图。
+ * P4 左栏 VS Code 化（§3.7/3.9）：多分区侧栏（资源管理器=产物根文件树全套操作 / 会话 / 任务规划），
+ * 折叠贴靠+状态记忆，左右侧栏整体收放记忆；md 点击 → 中栏文档阅读视图（方案 B：工具行+宽幅渲染+h2/h3 大纲+滚动记忆）。
+ * 占位（P5~P7）：工作区两层、素材库 SOURCES v3、题目视图。
  */
+
+/** P4 §3.9-1：侧栏分区头（VS Code 式贴靠——收起只剩头，展开体占剩余高度） */
+function SectionHead({ open, title, onToggle, right }: { open: boolean; title: string; onToggle: () => void; right?: React.ReactNode }) {
+  return (
+    <div
+      onClick={onToggle}
+      className={`flex items-center gap-1 px-2 py-1.5 shrink-0 select-none cursor-pointer border-t border-[var(--border-color)] text-[11px] font-semibold tracking-wide text-[var(--text-muted)] hover:bg-[var(--bg-hover)] first:border-t-0 ${open ? 'bg-[var(--bg-secondary)]' : ''}`}
+    >
+      {open ? <ChevronDown size={11} className="shrink-0" /> : <ChevronRight size={11} className="shrink-0" />}
+      <span className="truncate">{title}</span>
+      {right && <span className="ml-auto flex items-center gap-0.5" onClick={e => e.stopPropagation()}>{right}</span>}
+    </div>
+  )
+}
 
 /** P3b：思考强度档位（与主进程 LlmInvokeRequest.effort 同口径） */
 type Effort = 'off' | 'low' | 'medium' | 'high'
@@ -121,6 +138,43 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [providerList, setProviderList] = useState<LlmProviderInfo[]>([])
   const [modelCapable, setModelCapable] = useState(false)
   const [organized, setOrganized] = useState<Record<string, string>>({})
+  // P4（§3.7/3.9）：左栏 VS Code 多分区（折叠贴靠+状态记忆）+ 侧栏整体收放 + 中栏文档阅读视图（方案 B）
+  const [collapsedSec, setCollapsedSec] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem('aiTeach.sections.collapsed') || '{}') } catch { return {} } })
+  const toggleSec = useCallback((k: string) => setCollapsedSec(prev => {
+    const n = { ...prev, [k]: !prev[k] }
+    localStorage.setItem('aiTeach.sections.collapsed', JSON.stringify(n))
+    return n
+  }), [])
+  const [leftOpen, setLeftOpen] = useState(() => localStorage.getItem('aiTeach.leftOpen') !== '0')
+  const [rightOpen, setRightOpen] = useState(() => localStorage.getItem('aiTeach.rightOpen') !== '0')
+  const toggleSide = (side: 'left' | 'right') => {
+    if (side === 'left') { const v = !leftOpen; setLeftOpen(v); localStorage.setItem('aiTeach.leftOpen', v ? '1' : '0') }
+    else { const v = !rightOpen; setRightOpen(v); localStorage.setItem('aiTeach.rightOpen', v ? '1' : '0') }
+  }
+  const [aiTeachRoot, setAiTeachRoot] = useState('AI教学')
+  const [docView, setDocView] = useState<{ rel: string; name: string; content: string } | null>(null)
+  const [docOutline, setDocOutline] = useState<Array<{ id: string; text: string; lv: number }>>([])
+  const docScrollRef = useRef<HTMLDivElement>(null)
+  const docScrollPos = useRef<Record<string, number>>({})
+  const openDocView = useCallback(async (rel: string) => {
+    const cur = await workspaceGetCurrent().catch(() => null)
+    const rootId = (cur as { rootId?: string } | null)?.rootId
+    if (!rootId) { showToast({ type: 'error', message: '尚未打开仓库' }); return }
+    const r = await workspaceReadFile(rootId, rel).catch(() => null)
+    if (!r || typeof r.content !== 'string') { showToast({ type: 'error', message: '读取文档失败' }); return }
+    setDocView({ rel, name: rel.split('/').pop() ?? rel, content: r.content }) // 与逐页阅读互斥靠渲染优先级：docView > reader > 对话
+  }, [])
+  useEffect(() => { void getSettingRaw('aiTeachRootDir').then(v => { const s = String(v ?? '').trim(); if (s) setAiTeachRoot(s) }).catch(() => {}) }, [])
+  // 阅读视图渲染完成：DOM 收集 h2/h3 大纲 + 恢复滚动位置（§3.9-2 状态记忆）
+  useEffect(() => {
+    if (!docView) { setDocOutline([]); return }
+    const raf = requestAnimationFrame(() => {
+      const els = docScrollRef.current?.querySelectorAll('h2, h3') ?? []
+      setDocOutline(Array.from(els).map(el => ({ id: (el as HTMLElement).id, text: (el.textContent ?? '').trim(), lv: el.tagName === 'H2' ? 2 : 3 })).filter(x => x.id && x.text))
+      if (docScrollRef.current) docScrollRef.current.scrollTop = docScrollPos.current[docView.rel] ?? 0
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [docView])
   const [showNewMenu, setShowNewMenu] = useState(false)
   // ---- Token 消耗统计（月度走 llm:getUsage）----
   const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
@@ -225,6 +279,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // 切换会话
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
+    setDocView(null) // 切会话退出文档阅读（P4）
     const row = sessions.find(s => s.id === sid)
     setInstrDismiss(false)
     void loadConstraints(sid, row?.instructions ?? '')
@@ -265,7 +320,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
-    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false)
+    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false); setDocView(null)
     // P2：模板播种（_templates/CONSTRAINTS.md 存在时）→ 建夹完成后立刻载入展示
     void aiTeachEnsureSessionFolder(row.id).then(async () => { await loadConstraints(row.id, '') })
     const cid = crypto.randomUUID()
@@ -463,10 +518,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (!sid) return
     const key = mid ?? `idx${idx}`
     const existing = organized[key]
-    if (existing) {
-      window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: existing } }))
-      return
-    }
+    if (existing) { void openDocView(existing); return } // P4 方案 B 入口②：已生成 → 中栏阅读
     const title = msgAnchorTitle(content, idx)
     const r = await aiTeachOrganizeDoc(sid, title, content).catch(() => null)
     if (r?.ok && r.relPath) {
@@ -608,90 +660,153 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       </div>
 
       <div className="flex flex-1 min-h-0">
-        {/* 左栏：任务规划 + 会话 */}
-        <aside className="w-[248px] shrink-0 border-r border-[var(--border-color)] flex flex-col min-h-0 bg-[var(--bg-secondary)]">
-          <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">任务规划</div>
-          <div className="p-2 border-b border-[var(--border-color)] shrink-0">
-            <div className="text-[11.5px] text-[var(--text-primary)] leading-relaxed max-h-16 overflow-hidden">{template.goal}</div>
-            <div className="mt-2 space-y-1">
-              {template.steps.map((st, i) => (
-                <div key={st} className="flex items-center gap-1.5 text-[11.5px]">
-                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] shrink-0 ${i === 0 && pending ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-hover)] text-[var(--text-muted)]'}`}>{i + 1}</span>
-                  <span className={i === 0 && pending ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}>{st}</span>
+        {/* 左栏（P4 §3.7）：VS Code 多分区——资源管理器 / 会话 / 任务规划；折叠贴靠（§3.9-1）状态记忆 */}
+        <aside className={`shrink-0 border-r border-[var(--border-color)] flex flex-col min-h-0 bg-[var(--bg-secondary)] ${leftOpen ? 'w-[248px]' : 'w-[26px]'}`}>
+          {!leftOpen ? (
+            <button onClick={() => toggleSide('left')} title="展开侧边栏"
+              className="h-8 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              <PanelLeftOpen size={13} />
+            </button>
+          ) : (
+            <>
+              <SectionHead open={!collapsedSec.explorer} title="资源管理器" onToggle={() => toggleSec('explorer')} />
+              {!collapsedSec.explorer && (
+                <div className="flex-1 min-h-0 pb-1">
+                  <AiTeachFileTree
+                    activeRel={docView && docView.rel.startsWith(`${aiTeachRoot}/`) ? docView.rel.slice(aiTeachRoot.length + 1) : null}
+                    onOpenMd={(rel) => { void openDocView(`${aiTeachRoot}/${rel}`) }}
+                    onOpenExternal={(rel) => { window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: `${aiTeachRoot}/${rel}` } })) }}
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
+              )}
 
-          <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
-            <span>会话（{sessions.length}）</span>
-            <div className="ml-auto flex items-center gap-0.5">
-              <div className="relative">
-                <button onClick={() => setShowNewMenu(v => !v)}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                  <Plus size={12} /> 新建任务
-                </button>
-                {showNewMenu && (
-                  <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden">
-                    {TEMPLATES.map(t => (
-                      <button key={t.id} onClick={() => void newTask(t)}
-                        className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
-                        <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
-                        <span className="min-w-0">
-                          <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
-                          <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
-                        </span>
+              <SectionHead open={!collapsedSec.sessions} title={`会话（${sessions.length}）`} onToggle={() => toggleSec('sessions')}
+                right={
+                  <div className="relative">
+                    <button onClick={() => setShowNewMenu(v => !v)} title="新建任务"
+                      className="flex items-center gap-0.5 px-1 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                      <Plus size={12} />
+                    </button>
+                    {showNewMenu && (
+                      <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden">
+                        {TEMPLATES.map(t => (
+                          <button key={t.id} onClick={() => void newTask(t)}
+                            className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
+                            <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
+                            <span className="min-w-0">
+                              <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
+                              <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                } />
+              {!collapsedSec.sessions && (
+                <div className={`overflow-y-auto shrink-0 px-1.5 space-y-0.5 ${collapsedSec.plan ? 'flex-1 min-h-0 py-1' : 'max-h-[34%] py-1'}`}>
+                  {sessions.map(s => (
+                    <div key={s.id}
+                      onClick={() => { void openSession(s.id, s.title) }}
+                      className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${s.id === activeId ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
+                      <Bot size={12} className={s.id === activeId ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+                      <span className="flex-1 min-w-0">
+                        {renamingId === s.id ? (
+                          <input
+                            autoFocus
+                            value={renameDraft}
+                            maxLength={40}
+                            onChange={e => setRenameDraft(e.target.value)}
+                            onBlur={() => void commitRename(s.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id) }
+                              else if (e.key === 'Escape') { e.stopPropagation(); setRenamingId(null) }
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            className="w-full px-1 py-0.5 rounded border border-[var(--accent)] bg-[var(--input-bg)] text-[12px] text-[var(--text-primary)] outline-none"
+                          />
+                        ) : (
+                          <span
+                            className="block text-[12px] truncate text-[var(--text-primary)]"
+                            title="双击重命名（会话文件夹同步改名）"
+                            onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(s.id); setRenameDraft(s.title) }}
+                          >{s.title}</span>
+                        )}
+                      </span>
+                      <button onClick={e => { void delSession(e, s.id, s.title) }}
+                        className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-red-400 transition-opacity">
+                        <Trash2 size={11} />
                       </button>
+                    </div>
+                  ))}
+                  {sessions.length === 0 && (
+                    <div className="py-4 text-center text-[12px] text-[var(--text-muted)]">暂无会话</div>
+                  )}
+                </div>
+              )}
+
+              <SectionHead open={!collapsedSec.plan} title="任务规划" onToggle={() => toggleSec('plan')} />
+              {!collapsedSec.plan && (
+                <div className={`shrink-0 p-2 border-t border-[var(--border-color)] ${collapsedSec.sessions && !collapsedSec.explorer ? '' : 'overflow-y-auto max-h-[40%]'}`}>
+                  <div className="text-[11.5px] text-[var(--text-primary)] leading-relaxed">{template.goal}</div>
+                  <div className="mt-2 space-y-1">
+                    {template.steps.map((st, i) => (
+                      <div key={st} className="flex items-center gap-1.5 text-[11.5px]">
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] shrink-0 ${i === 0 && pending ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-hover)] text-[var(--text-muted)]'}`}>{i + 1}</span>
+                        <span className={i === 0 && pending ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}>{st}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="shrink-0 flex items-center border-t border-[var(--border-color)]">
+                <button onClick={() => toggleSide('left')} title="折叠侧边栏"
+                  className="h-6 flex items-center gap-1 px-2 text-[10.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                  <PanelLeftClose size={11} /> 折叠侧栏
+                </button>
+              </div>
+            </>
+          )}
+        </aside>
+
+        {/* 中栏：阅读视图（P4 方案 B 接管） > 逐页阅读 > 对话流 */}
+        <section className="flex-1 flex flex-col min-w-0 min-h-0">
+          {docView ? (
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11.5px] select-none">
+                <button onClick={() => setDocView(null)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0">
+                  <ArrowLeft size={12} /> 返回对话
+                </button>
+                <FileText size={12} className="shrink-0 text-[var(--accent)]" />
+                <span className="font-medium truncate text-[var(--text-primary)]" title={docView.rel}>{docView.name}</span>
+                <span className="text-[10px] text-[var(--text-muted)] truncate hidden xl:inline">{docView.rel}</span>
+                <button onClick={() => { const rel = docView.rel; window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel } })) }}
+                  className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+                  title="在编辑器标签页中打开（可编辑保存）">
+                  <ExternalLink size={11} /> 在编辑器中打开 ↗
+                </button>
+              </div>
+              <div className="flex-1 flex min-h-0">
+                <div ref={docScrollRef} onScroll={e => { docScrollPos.current[docView.rel] = (e.target as HTMLDivElement).scrollTop }} className="flex-1 overflow-y-auto min-h-0">
+                  <div className="max-w-[820px] mx-auto py-5 px-6">
+                    <MarkdownPreview content={docView.content} />
+                  </div>
+                </div>
+                {docOutline.length > 2 && (
+                  <div className="w-[150px] shrink-0 border-l border-[var(--border-color)] overflow-y-auto py-2 hidden lg:block" title="文档大纲（h2/h3，点击定位）">
+                    <div className="px-2.5 pb-1 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">大纲</div>
+                    {docOutline.map((h, i) => (
+                      <button key={`${h.id}-${i}`} onClick={() => { const el = docScrollRef.current?.querySelector(`[id="${CSS.escape(h.id)}"]`); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+                        className={`block w-full text-left px-2.5 py-0.5 text-[10.5px] truncate text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors ${h.lv === 3 ? 'pl-5' : ''}`}
+                        title={h.text}>{h.text}</button>
                     ))}
                   </div>
                 )}
               </div>
             </div>
-          </div>
-          <div className="flex-1 overflow-y-auto px-1.5 py-1.5 space-y-0.5">
-            {sessions.map(s => (
-              <div key={s.id}
-                onClick={() => { void openSession(s.id, s.title) }}
-                className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${s.id === activeId ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
-                <Bot size={12} className={s.id === activeId ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
-                <span className="flex-1 min-w-0">
-                  {renamingId === s.id ? (
-                    <input
-                      autoFocus
-                      value={renameDraft}
-                      maxLength={40}
-                      onChange={e => setRenameDraft(e.target.value)}
-                      onBlur={() => void commitRename(s.id)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id) }
-                        else if (e.key === 'Escape') { e.stopPropagation(); setRenamingId(null) }
-                      }}
-                      onClick={e => e.stopPropagation()}
-                      className="w-full px-1 py-0.5 rounded border border-[var(--accent)] bg-[var(--input-bg)] text-[12px] text-[var(--text-primary)] outline-none"
-                    />
-                  ) : (
-                    <span
-                      className="block text-[12px] truncate text-[var(--text-primary)]"
-                      title="双击重命名（会话文件夹同步改名）"
-                      onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(s.id); setRenameDraft(s.title) }}
-                    >{s.title}</span>
-                  )}
-                </span>
-                <button onClick={e => { void delSession(e, s.id, s.title) }}
-                  className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-red-400 transition-opacity">
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            ))}
-            {sessions.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">暂无会话</div>
-            )}
-          </div>
-        </aside>
-
-        {/* 中栏：对话流（reader 激活时为阅读视图） */}
-        <section className="flex-1 flex flex-col min-w-0 min-h-0">
-          {!reader ? (
+          ) : !reader ? (
             <>
               {activeInstr && !instrDismiss && (
                 <div className="shrink-0 flex items-center gap-2 mx-4 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-secondary)]">
@@ -901,8 +1016,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           )}
         </section>
 
-        {/* 右栏：资料 / 产物 / 改动 */}
-        <aside className="w-[280px] shrink-0 border-l border-[var(--border-color)] flex flex-col min-h-0 overflow-y-auto bg-[var(--bg-secondary)]">
+        {/* 右栏（P4 可收放记忆）：资料 / 产物 / 改动 */}
+        <aside className={`shrink-0 border-l border-[var(--border-color)] flex flex-col min-h-0 bg-[var(--bg-secondary)] ${rightOpen ? 'w-[280px] overflow-y-auto' : 'w-[26px]'}`}>
+          {!rightOpen ? (
+            <button onClick={() => toggleSide('right')} title="展开右栏"
+              className="h-8 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              <PanelRightOpen size={13} />
+            </button>
+          ) : (
+          <>
           <div className="shrink-0">
             <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
               <span>资料来源{sources.length > 0 ? `（${sources.length}）` : ''}</span>
@@ -1000,12 +1122,18 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             )}
           </div>
           <div className="flex-1" />
-          <div className="p-2 shrink-0">
+          <div className="p-2 shrink-0 flex items-center justify-between">
             <button onClick={() => { if (activeId && !pending) { setMessages([]); void refreshMessages(activeId) } }}
               className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors text-left">
               刷新当前会话
             </button>
+            <button onClick={() => toggleSide('right')} title="折叠右栏"
+              className="p-1 rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              <PanelRightClose size={12} />
+            </button>
           </div>
+          </>
+          )}
         </aside>
       </div>
     </div>
