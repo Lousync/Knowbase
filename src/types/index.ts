@@ -1258,6 +1258,13 @@ export interface ElectronAPI {
   agentRenameSession: (id: string, title: string) => Promise<boolean>
   agentSetSessionInstructions: (id: string, instructions: string) => Promise<{ ok: boolean; error?: string }>
   agentDeleteSession: (id: string) => Promise<boolean>
+  // ===== AI教学 P1：会话 ⇄ 文件夹绑定（docs/ai-teaching-module-rework.md §二）=====
+  aiTeachEnsureSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachRenameSessionFolder: (id: string, title: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachDeleteSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
+  onAiTeachNotice: (cb: (msg: string) => void) => () => void
   llmCcSwitchList: () => Promise<CcSwitchScanResult>
   llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>
 }

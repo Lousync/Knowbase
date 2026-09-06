@@ -43,6 +43,7 @@ import { registerMcpHandlers, restoreMcpConnections } from '../lib/mcpService'
 import { registerSkillHandlers } from '../lib/skillService'
 import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
+import { registerAiTeachingFolderHandlers, migrateRootDir as migrateAiTeachRootDir } from '../lib/aiTeachingFolders'
 import { registerTranslateHandlers } from '../lib/translateService'
 import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
@@ -439,6 +440,20 @@ function registerWindowHandlers(): void {
     if (typeof key !== 'string' || !(key in SETTINGS)) return false
     const expected = typeof (SETTINGS as unknown as Record<string, { default: unknown }>)[key].default
     if (typeof value !== expected) return false
+    // AI教学 P1（3-15）：aiTeachRootDir 改名 → 当前仓库旧根目录重命名迁移；
+    // 失败（占用/权限）保留原文件夹并广播提示不阻塞，仅新名非法时回滚设置值
+    if (key === 'aiTeachRootDir' && typeof value === 'string') {
+      const raw = settingsCache[key]
+      const prev = typeof raw === 'string' && raw ? raw : String((SETTINGS as unknown as Record<string, { default: unknown }>).aiTeachRootDir.default)
+      if (prev !== value) {
+        settingsCache[key] = value
+        const r = migrateAiTeachRootDir(prev, value)
+        if (!r.ok && r.error === '目录名不合法') { settingsCache[key] = prev; return false }
+        if (saveTimer) clearTimeout(saveTimer)
+        saveTimer = setTimeout(flushSettingsToDisk, 500)
+        return true
+      }
+    }
     settingsCache[key] = value
     // Debounce write to disk — coalesce rapid setSetting calls into one write
     if (saveTimer) clearTimeout(saveTimer)
@@ -735,6 +750,8 @@ app.whenReady().then(async () => {
     }
     registerLlmHandlers({ getSettingValue, setSettingValue })
     registerAgentHandlers()
+    // AI教学 P1：会话 ⇄ 文件夹绑定（aiTeach:* IPC，总纲 §二）
+    registerAiTeachingFolderHandlers((key) => settingsCache[key])
     // 划词翻译:离线词典 + LLM 翻译/AI 精讲
     registerTranslateHandlers()
     // 单词本:生词本 + 每日队列 SRS + 词书

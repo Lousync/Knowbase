@@ -476,5 +476,17 @@ export const agentNewSession = (title?: string): Promise<AgentSessionInfo> => a(
 export const agentMessages = (sessionId: string): Promise<AgentStoredMessage[]> => a().agentMessages(sessionId)
 export const agentRenameSession = (id: string, title: string): Promise<boolean> => a().agentRenameSession(id, title)
 export const agentDeleteSession = (id: string): Promise<boolean> => a().agentDeleteSession(id)
+// ===== AI教学 P1：会话 ⇄ 文件夹绑定 =====
+export interface AiTeachFolderResult { ok: boolean; relPath?: string | null; error?: string }
+/** 幂等确保会话文件夹存在（新建对话确认 / P3 产物落盘懒创建共用） */
+export const aiTeachEnsureSessionFolder = (id: string): Promise<AiTeachFolderResult> => a().aiTeachEnsureSessionFolder(id)
+/** 查询会话文件夹相对路径（无则 relPath=null；删除确认前探测用） */
+export const aiTeachSessionFolder = (id: string): Promise<AiTeachFolderResult> => a().aiTeachSessionFolder(id)
+/** 会话重命名 → 文件夹同步重命名（无文件夹则不动，懒创建时生效） */
+export const aiTeachRenameSessionFolder = (id: string, title: string): Promise<AiTeachFolderResult> => a().aiTeachRenameSessionFolder(id, title)
+/** 会话文件夹移入系统回收站 */
+export const aiTeachDeleteSessionFolder = (id: string): Promise<AiTeachFolderResult> => a().aiTeachDeleteSessionFolder(id)
+export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)
+export const onAiTeachNotice = (cb: (msg: string) => void) => a().onAiTeachNotice(cb)
 export const llmCcSwitchList = (): Promise<CcSwitchScanResult> => a().llmCcSwitchList()
 export const llmCcSwitchImport = (ids: string[]): Promise<CcSwitchImportResult> => a().llmCcSwitchImport(ids)

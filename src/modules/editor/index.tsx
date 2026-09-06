@@ -9,7 +9,7 @@ import {
   workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
   workspaceCreateFile, workspaceMkdir, workspaceRename, workspaceTrash, workspaceGetRecent,
   workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages, getKnowledgeGraph, onWsExternalChange,
-  workspacePickImages, workspaceSaveImage,
+  workspacePickImages, workspaceSaveImage, onAiTeachTreeRefresh,
 } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { VaultSwitcher } from '../../components/shared/VaultSwitcher'
@@ -276,6 +276,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
       },
     }))
   }, [toggleDir])
+
+  // AI教学 P1：会话文件夹落盘/改名/删除 → 刷新文件树（根级 + 产物根目录）
+  useEffect(() => {
+    return onAiTeachTreeRefresh(({ dirRel }) => {
+      void refreshDir('')
+      if (dirRel) void refreshDir(dirRel)
+    })
+  }, [refreshDir])
 
   // ---- AI 写入（vault 写工具）落盘后的外部变更通知：目标文件正被打开 → 复用保存冲突三选 ----
   useEffect(() => {

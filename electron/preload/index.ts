@@ -228,6 +228,23 @@ const api = {
   agentRenameSession: (id: string, title: string) => ipcRenderer.invoke('agent:renameSession', id, title),
   agentSetSessionInstructions: (id: string, instructions: string) => ipcRenderer.invoke('agent:setSessionInstructions', id, instructions),
   agentDeleteSession: (id: string) => ipcRenderer.invoke('agent:deleteSession', id),
+  // AI教学 P1：会话 ⇄ 文件夹绑定
+  aiTeachEnsureSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:ensureSessionFolder', id),
+  aiTeachSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:sessionFolder', id),
+  aiTeachRenameSessionFolder: (id: string, title: string) => ipcRenderer.invoke('aiTeach:renameSessionFolder', id, title),
+  aiTeachDeleteSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:deleteSessionFolder', id),
+  /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
+  onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
+    const handler = (_e: unknown, p: { dirRel: string }) => cb(p)
+    ipcRenderer.on('aiTeach:tree-refresh', handler)
+    return () => { ipcRenderer.removeListener('aiTeach:tree-refresh', handler) }
+  },
+  /** AI教学主进程侧不可静默的提示（根目录迁移失败等） */
+  onAiTeachNotice: (cb: (msg: string) => void) => {
+    const handler = (_e: unknown, msg: string) => cb(msg)
+    ipcRenderer.on('aiTeach:notice', handler)
+    return () => { ipcRenderer.removeListener('aiTeach:notice', handler) }
+  },
   llmCcSwitchList: () => ipcRenderer.invoke('llm:ccswitch:list'),
   llmCcSwitchImport: (ids: string[]) => ipcRenderer.invoke('llm:ccswitch:import', ids),
   // 插件安全分级 + 内容包导入

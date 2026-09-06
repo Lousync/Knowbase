@@ -4,8 +4,10 @@ import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions,
   workspaceGetCurrent, workspaceListDir, docsPptxPages,
+  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, onAiTeachNotice,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
+import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo } from '../../types'
 
@@ -13,7 +15,9 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * 「AI教学」模块（原 id immersive / 沉浸式 Agent；总纲 docs/ai-teaching-module-rework.md，
  * 历史设计 docs/agent-immersive-mode-design.md M0 骨架）
  * 独立全屏 Tab（五区布局），与轻问答共用 AgentRunner 会话库与 agent:step 推送。
- * 已实现：会话列表/新建任务（场景模板）/发送/回复渲染/实时步骤/轨迹折叠/改动清单可跳编辑器/文档视图。
+ * 已实现：会话列表/新建任务（场景模板）/发送/回复渲染/实时步骤/轨迹折叠/改动清单可跳编辑器/文档视图；
+ * P1 会话⇄文件夹绑定：新建对话即建 `{MM-DD} 标题` 文件夹（.session.json 锚点）、重命名同步改夹、
+ * 删除会话按 aiTeachDeleteSessionFolder（ask/keep/delete）处理文件夹（进系统回收站）。
  * 占位（M1）：素材管理、产物草稿与写入、步骤引擎自动推进、diff 视图。
  */
 
@@ -100,6 +104,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     void llmGetUsage().then(setUsage).catch(() => null)
     void getSettingRaw('defaultChatModel').then(v => setDefaultModel(String(v ?? ''))).catch(() => {})
   }, [])
+  // P1：主进程侧不可静默的提示（根目录改名迁移失败/目标占用等）
+  useEffect(() => onAiTeachNotice((msg) => { if (msg) showToast({ type: 'warning', message: msg }) }), [])
   // 会话级全局要求（仅本会话；056 迁移 + agent:setSessionInstructions）
   const [activeInstr, setActiveInstr] = useState('')
   const [instrOpen, setInstrOpen] = useState(false)
@@ -168,6 +174,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // 打开 AI教学 Tab 时同步会话
   useEffect(() => { void refreshSessions() }, [refreshSessions, isActive])
 
+  // P1 重命名会话（双击列表行）：agentRenameSession + 文件夹同步改名
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
   // 实时步骤（agent:step，按 chatId 过滤）
   useEffect(() => {
     return onAgentStep(({ chatId, step }) => {
@@ -211,6 +220,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const newTask = useCallback(async (tpl: Template) => {
     const row = await agentNewSession(`${tpl.label}`).catch(() => null)
     if (!row) return
+    // P1（2-2）：新建对话确认即建会话文件夹（懒建语义下空会话也不删）
+    void aiTeachEnsureSessionFolder(row.id).then(r => {
+      if (r && !r.ok && r.error) showToast({ type: 'error', message: `会话文件夹创建失败：${r.error}` })
+    })
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
@@ -302,9 +315,44 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setReader(r => (r && r.rel === rel ? null : r))
   }, [])
 
-  const delSession = useCallback(async (e: React.MouseEvent, sid: string) => {
+  /** 提交重命名：DB 标题 + 会话文件夹同步（无文件夹的旧会话不主动建，2-5 懒创建时自然用新名） */
+  const commitRename = useCallback(async (sid: string) => {
+    const t = renameDraft.trim().slice(0, 40)
+    setRenamingId(null)
+    const row = sessions.find(s => s.id === sid)
+    if (!t || !row || t === row.title) return
+    setSessions(prev => prev.map(s => (s.id === sid ? { ...s, title: t } : s)))
+    if (activeIdRef.current === sid) setActiveTitle(t)
+    await agentRenameSession(sid, t).catch(() => null)
+    void aiTeachRenameSessionFolder(sid, t).then(r => {
+      if (r && !r.ok && r.error) showToast({ type: 'error', message: `会话文件夹改名失败：${r.error}` })
+    })
+  }, [renameDraft, sessions])
+
+  /** 删除会话（P1，2-4）：对话记录必删；产物文件夹按 aiTeachDeleteSessionFolder 设置处理 */
+  const delSession = useCallback(async (e: React.MouseEvent, sid: string, title?: string) => {
     e.stopPropagation()
+    const mode = String((await getSettingRaw('aiTeachDeleteSessionFolder').catch(() => null)) ?? 'ask')
+    let rmFolder = false
+    if (mode !== 'keep') {
+      const f = await aiTeachSessionFolder(sid).catch(() => null)
+      if (f?.ok && f.relPath) {
+        if (mode === 'delete') rmFolder = true
+        else {
+          rmFolder = await showGlobalConfirm({
+            title: '删除会话',
+            message: `对话记录「${title ?? ''}」将被删除。该会话在仓库中的产物文件夹「${f.relPath}」是否一并移入系统回收站？（「保留文件夹」= 只删对话记录）`,
+            confirmLabel: '删除文件夹',
+            cancelLabel: '保留文件夹',
+            variant: 'danger',
+          })
+        }
+      }
+    }
     await agentDeleteSession(sid).catch(() => null)
+    if (rmFolder) void aiTeachDeleteSessionFolder(sid).then(r => {
+      if (r && !r.ok && r.error) showToast({ type: 'error', message: `会话文件夹删除失败：${r.error}` })
+    })
     if (activeIdRef.current === sid) { setActiveId(null); setMessages([]); activeIdRef.current = null }
     void refreshSessions()
   }, [refreshSessions])
@@ -497,9 +545,29 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${s.id === activeId ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
                 <Bot size={12} className={s.id === activeId ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[12px] truncate text-[var(--text-primary)]">{s.title}</span>
+                  {renamingId === s.id ? (
+                    <input
+                      autoFocus
+                      value={renameDraft}
+                      maxLength={40}
+                      onChange={e => setRenameDraft(e.target.value)}
+                      onBlur={() => void commitRename(s.id)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id) }
+                        else if (e.key === 'Escape') { e.stopPropagation(); setRenamingId(null) }
+                      }}
+                      onClick={e => e.stopPropagation()}
+                      className="w-full px-1 py-0.5 rounded border border-[var(--accent)] bg-[var(--input-bg)] text-[12px] text-[var(--text-primary)] outline-none"
+                    />
+                  ) : (
+                    <span
+                      className="block text-[12px] truncate text-[var(--text-primary)]"
+                      title="双击重命名（会话文件夹同步改名）"
+                      onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(s.id); setRenameDraft(s.title) }}
+                    >{s.title}</span>
+                  )}
                 </span>
-                <button onClick={e => { void delSession(e, s.id) }}
+                <button onClick={e => { void delSession(e, s.id, s.title) }}
                   className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-red-400 transition-opacity">
                   <Trash2 size={11} />
                 </button>
