@@ -57,12 +57,13 @@ export function PomodoroPanel() {
             style={{ width: `${Math.max(0, Math.min(1, pom.progress)) * 100}%` }}
           />
         </div>
-        <div className="flex gap-1 rounded-lg bg-[var(--bg-tertiary)] p-0.5">
+        {/* 预设分段器：换行网格（UI 打磨点2）——插件扩展预设后 chip 不再被压成竖排文字 */}
+        <div className="flex flex-wrap justify-center gap-1 rounded-lg bg-[var(--bg-tertiary)] p-1">
           {pom.presets.map((p, i) => (
             <button
               key={`${p.label}-${i}`}
               onClick={() => pom.setPresetIdx(i)}
-              className={`rounded-md px-2.5 py-0.5 text-[11px] transition-colors ${
+              className={`whitespace-nowrap truncate max-w-full rounded-md px-2.5 py-0.5 text-[11px] transition-colors ${
                 ps.presetIdx === i
                   ? 'bg-[var(--bg-primary)] font-semibold text-[var(--accent)] shadow-sm'
                   : 'text-[var(--text-secondary)]'

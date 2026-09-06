@@ -2,7 +2,7 @@ import { useSettings } from '../../../lib/SettingsContext'
 import { FONT_OPTIONS, FONT_CSS_MAP } from '../../../lib/settings'
 import { SettingSelect } from '../components/SettingSelect'
 import { NumberField } from '../components/fields/NumberField'
-import { SettingSwitch } from '../components/SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 export function EditorView() {
   const { s, update } = useSettings()

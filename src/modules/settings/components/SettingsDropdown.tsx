@@ -3,7 +3,7 @@ import { Sun, Moon, RotateCcw, Folder } from 'lucide-react'
 import { setSetting, getAllSettings, openDirDialog } from '../../../lib/ipc'
 import { THEME_OPTIONS, FONT_OPTIONS, FONT_CSS_MAP, ENCODING_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import type { AppSettings } from '../../../lib/settings'
-import { SettingSwitch } from './SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={16} />,

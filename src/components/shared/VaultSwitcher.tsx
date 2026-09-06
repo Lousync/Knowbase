@@ -6,7 +6,8 @@ import { showToast } from '../../lib/toast'
 import type { WorkspaceRecent } from '../../types'
 
 /**
- * 标题栏仓库切换器（P8 / D8）：左侧当前仓库名 → 下拉切最近仓库 / 打开其他 / 新建 / 重命名。
+ * 仓库切换器（P8 / D8 → UI 打磨点1 迁至编辑器侧栏底部）：条形按钮 → 向上弹出面板
+ * （最近仓库 / 打开其他 / 文件管理器打开 / 重命名 / 新建）。
  * 形态从简：切换与新建后整窗重载（数据激活重读约定）；重命名只改展示名（不动文件夹）。
  */
 export function VaultSwitcher() {
@@ -92,19 +93,19 @@ export function VaultSwitcher() {
   }
 
   return (
-    <div className="relative h-full ml-2" ref={ref}>
+    <div className="relative w-full" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
         title={cur ? `当前仓库：${cur.name}\n${cur.path}` : '打开仓库'}
-        className={`flex items-center gap-1 h-full max-w-[180px] px-2 rounded-md text-[12px] transition-colors no-drag ${open ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'} text-[var(--text-primary)]`}
+        className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] transition-colors ${open ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'} text-[var(--text-primary)]`}
       >
         <Layers size={13} className="shrink-0 text-[var(--accent)]" />
-        <span className="truncate font-medium">{cur ? cur.name : '未打开仓库'}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-left">{cur ? cur.name : '未打开仓库'}</span>
         <ChevronDown size={11} className={`shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-[280px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-2xl py-1 z-[130] no-drag text-[var(--text-primary)]">
+        <div className="absolute left-0 bottom-full mb-1 w-[260px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-2xl py-1 z-[130] text-[var(--text-primary)]">
           {mode === 'list' && (
             <>
               <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">最近仓库</div>

@@ -8,7 +8,7 @@ import {
   aiToolsListSkills, aiToolsCopySkillPrompt, aiToolsInstallSkill, aiToolsInstallSkillFromFile, aiToolsUninstallSkill, aiToolsToggleSkill,
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
-import { SettingSwitch } from '../components/SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 import { AiPermissionsTab } from './AiPermissionsTab'
 import { CollapseList } from '../components/CollapseList'
 import { SettingListPanel } from '../components/SettingListPanel'

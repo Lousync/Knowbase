@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft, Scissors } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft, Scissors, Eye } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
@@ -12,6 +12,8 @@ import { LanShare } from './components/lan-share'
 import { WebClipper } from './components/web-clipper'
 import { getPluginTools, type PluginTool } from '../../lib/pluginService'
 import { showToast } from '../../lib/toast'
+import { useSettings } from '../../lib/SettingsContext'
+import { SettingSwitch } from '../../components/shared/SettingSwitch'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
 import { PluginFrame } from '../../components/shared/PluginFrame'
 
@@ -117,6 +119,35 @@ export function ToolboxModule() {
     }
   }, [refreshPluginTools])
 
+  // ---- UI 打磨点3：工具显隐管理（toolboxHiddenTools 持久化；隐藏 ≠ 卸载，仅画廊卡片过滤） ----
+  const { s, update } = useSettings()
+  const hiddenIds = useMemo(() => {
+    try {
+      const a = JSON.parse(String(s.toolboxHiddenTools ?? '[]'))
+      return new Set<string>(Array.isArray(a) ? a.filter((x): x is string => typeof x === 'string') : [])
+    } catch { return new Set<string>() }
+  }, [s.toolboxHiddenTools])
+  const [manageOpen, setManageOpen] = useState(false)
+  const manageRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!manageOpen) return
+    const onDown = (e: PointerEvent) => { if (!manageRef.current?.contains(e.target as Node)) setManageOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setManageOpen(false) }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [manageOpen])
+  const setToolShown = (id: string, show: boolean) => {
+    const cur = new Set(hiddenIds)
+    if (show) cur.delete(id); else cur.add(id)
+    update('toolboxHiddenTools', JSON.stringify([...cur]))
+  }
+  const manageGroups: { title: string; items: { id: string; name: string }[] }[] = [
+    { title: '数据工具', items: DATA_TOOLS.map((t) => ({ id: t.id, name: t.name })) },
+    { title: '效率工具', items: PRODUCTIVITY_TOOLS.map((t) => ({ id: t.id, name: t.name })) },
+    ...(pluginTools.length > 0 ? [{ title: '插件工具', items: pluginTools.map((t) => ({ id: `${t.pluginId}:${t.toolId}`, name: t.name })) }] : []),
+  ]
+
   const handleActivateTool = (toolId: string) => {
     if (toolId === 'pomodoro') {
       window.dispatchEvent(new CustomEvent('pomodoro:activate', { detail: { preset: 0 } }))
@@ -208,56 +239,84 @@ export function ToolboxModule() {
   )
 
   // Gallery view
+  const dataVis = DATA_TOOLS.filter((t) => !hiddenIds.has(t.id))
+  const prodVis = PRODUCTIVITY_TOOLS.filter((t) => !hiddenIds.has(t.id))
+  const pluginVis = pluginTools.filter((t) => !hiddenIds.has(`${t.pluginId}:${t.toolId}`))
+  const sep = (
+    <div className="flex items-center gap-3 max-w-[600px] mx-auto">
+      <div className="flex-1 h-px bg-[var(--border-color)]" />
+    </div>
+  )
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       {/* Header */}
       <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
         <Wrench size={12} />
         工具箱
-      </div>
-
-      {/* Tool sections */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {renderSection('数据工具', DATA_TOOLS)}
-
-        {/* Divider */}
-        <div className="flex items-center gap-3 max-w-[600px] mx-auto">
-          <div className="flex-1 h-px bg-[var(--border-color)]" />
-        </div>
-
-        {renderSection('效率工具', PRODUCTIVITY_TOOLS)}
-
-        {/* 插件工具(UI 插件贡献) */}
-        {pluginTools.length > 0 && (
-          <>
-            <div className="flex items-center gap-3 max-w-[600px] mx-auto">
-              <div className="flex-1 h-px bg-[var(--border-color)]" />
-            </div>
-
-            <div className="space-y-2.5">
-              <h3 className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider px-1">插件工具</h3>
-              <div className="flex justify-center">
-                <div className="grid grid-cols-3 gap-3 w-full max-w-[660px]">
-                  {pluginTools.map(t => (
-                    <button
-                      key={`${t.pluginId}:${t.toolId}`}
-                      onClick={() => setActivePluginTool(t)}
-                      className="flex flex-col items-center gap-2 p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
-                    >
-                      <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)] relative">
-                        <PluginIconImg src={t.icon} size={20} className="group-hover:opacity-90" />
-                        <span
-                          className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border border-[var(--bg-secondary)]"
-                          style={{ background: t.riskLevel === 'B' ? 'var(--danger)' : t.riskLevel === 'A' ? 'var(--warning)' : 'var(--success)' }}
-                          title={`安全等级 ${t.riskLevel}`}
-                        />
-                      </div>
-                      <div className="text-[13px] font-medium leading-tight text-[var(--text-primary)]">{t.name}</div>
-                    </button>
+        {/* UI 打磨点3：工具显隐管理入口（popover 三组开关，即时写 toolboxHiddenTools） */}
+        <div className="relative ml-auto" ref={manageRef}>
+          <button
+            onClick={() => setManageOpen((o) => !o)}
+            title="管理显示的工具"
+            aria-expanded={manageOpen}
+            className={`p-1 rounded-md transition-colors ${manageOpen ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}
+          >
+            <Eye size={13} />
+          </button>
+          {manageOpen && (
+            <div className="absolute right-2 top-full mt-1 w-[240px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-2xl py-1.5 z-50 text-[var(--text-primary)]">
+              {manageGroups.map((g) => (
+                <div key={g.title} className="mb-1 last:mb-0">
+                  <div className="px-3 pt-1 pb-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{g.title}</div>
+                  {g.items.map((it) => (
+                    <div key={it.id} className="flex items-center gap-2 px-3 py-1">
+                      <span className="min-w-0 flex-1 truncate text-[12px]">{it.name}</span>
+                      <SettingSwitch size="sm" checked={!hiddenIds.has(it.id)} onChange={(v) => setToolShown(it.id, v)} aria-label={`显示${it.name}`} />
+                    </div>
                   ))}
                 </div>
-              </div>
+              ))}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tool sections（隐藏项连同分区标题一起不渲染；全隐藏 → 空态） */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {dataVis.length === 0 && prodVis.length === 0 && pluginVis.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-[12px] text-[var(--text-muted)]">所有工具均已隐藏，点击右上角 👁 管理显示</div>
+        ) : (
+          <>
+            {dataVis.length > 0 && renderSection('数据工具', dataVis)}
+            {dataVis.length > 0 && prodVis.length > 0 && sep}
+            {prodVis.length > 0 && renderSection('效率工具', prodVis)}
+            {(dataVis.length > 0 || prodVis.length > 0) && pluginVis.length > 0 && sep}
+            {pluginVis.length > 0 && (
+              <div className="space-y-2.5">
+                <h3 className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider px-1">插件工具</h3>
+                <div className="flex justify-center">
+                  <div className="grid grid-cols-3 gap-3 w-full max-w-[660px]">
+                    {pluginVis.map(t => (
+                      <button
+                        key={`${t.pluginId}:${t.toolId}`}
+                        onClick={() => setActivePluginTool(t)}
+                        className="flex flex-col items-center gap-2 p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-all text-center group cursor-pointer"
+                      >
+                        <div className="text-[var(--accent)] group-hover:text-[var(--accent-hover)] relative">
+                          <PluginIconImg src={t.icon} size={20} className="group-hover:opacity-90" />
+                          <span
+                            className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border border-[var(--bg-secondary)]"
+                            style={{ background: t.riskLevel === 'B' ? 'var(--danger)' : t.riskLevel === 'A' ? 'var(--warning)' : 'var(--success)' }}
+                            title={`安全等级 ${t.riskLevel}`}
+                          />
+                        </div>
+                        <div className="text-[13px] font-medium leading-tight text-[var(--text-primary)]">{t.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

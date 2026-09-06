@@ -1,6 +1,6 @@
 import { useSettings } from '../../../lib/SettingsContext'
 import { NumberField } from '../components/fields/NumberField'
-import { SettingSwitch } from '../components/SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 /** 设置 → 通用与行为：界面缩放 / 外壳布局（Workbench 灰度）/ 自动保存信息 */
 export function GeneralView() {

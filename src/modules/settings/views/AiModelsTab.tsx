@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Bot, Gauge, Plus, Trash2, RefreshCw, Loader2, Star, Pencil, Import } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
-import { SettingSwitch } from '../components/SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
   llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel, llmTestModel,

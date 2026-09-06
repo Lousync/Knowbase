@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BellRing } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { SettingSwitch } from '../components/SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 /** 设置 → 提醒：应用内提醒类功能开关 */
 export function ReminderView() {

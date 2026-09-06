@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { SettingSwitch } from '../components/SettingSwitch'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 /**  插件安全等级（固定顺序，UI toggle 写入时也按此序拼接） */
 const LEVEL_ORDER = ['S', 'A', 'B', 'C'] as const
