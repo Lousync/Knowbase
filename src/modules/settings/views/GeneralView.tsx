@@ -12,6 +12,27 @@ export function GeneralView() {
       <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">通用与行为</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">启动、缩放、外壳与基础行为</p>
 
+      {/* 启动行为（仓库选择页，Obsidian 式） */}
+      <div className="mb-8" data-setting-anchor="startup.vaultPicker">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">启动行为</h3>
+        <div className="max-w-md space-y-4">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!s.startupVaultPicker}
+              onChange={(e) => update('startupVaultPicker', e.target.checked)}
+              className="mt-0.5 accent-[var(--accent)]"
+            />
+            <span className="text-[13px] text-[var(--text-primary)] leading-relaxed">
+              每次启动选择仓库
+              <span className="block text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
+                进入应用时先显示仓库选择页，可从已有仓库一键进入；关闭后直连上次的仓库。
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
       {/* 界面缩放 */}
       <div className="mb-8" data-setting-anchor="advanced.zoom">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">界面缩放</h3>

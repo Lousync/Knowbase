@@ -75,6 +75,8 @@ export default function App() {
   // 首次引导：无「当前仓库」时全屏选择页（对标 Obsidian 打开 vault）
   const [welcomeOpen, setWelcomeOpen] = useState(false)
   const [welcomeChecked, setWelcomeChecked] = useState(false)
+  // 启动仓库选择页（startupVaultPicker，默认开）：已有仓库时每次进入先给一次选择/快速直入的机会
+  const [startupPickerOpen, setStartupPickerOpen] = useState(false)
   // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
   const [dayPanelVisible, setDayPanelVisible] = useState(false)
   const [dayPanelDetached, setDayPanelDetached] = useState(false)
@@ -259,16 +261,26 @@ export default function App() {
   useHabitAutoCheckinToast()
   const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
 
-  // 启动检测当前仓库：无 → 引导页（在 loaded 后执行一次）
+  // 启动检测当前仓库：无 → 引导页；有且开启「每次启动选择仓库」→ 启动仓库选择页（在 loaded 后执行一次）
+  // 首启未完成新手引导时不出启动选择页——下方 onboarding 效应已按首启流程接管，避免双浮层
+  // sessionStorage 一次性标记：应用内切库会整窗 reload（数据激活重读约定），热重载不再打扰；冷启动才重新出页
   useEffect(() => {
-    if (!loaded || welcomeChecked) return
+    if (!loaded || welcomeChecked || !settingsReady) return
     let alive = true
     window.api?.workspaceGetCurrent?.()
-      .then((cur) => { if (alive) setWelcomeOpen(!cur) })
+      .then((cur) => {
+        if (!alive) return
+        if (!cur) setWelcomeOpen(true)
+        else if (s.startupVaultPicker && s.onboardingDone && !sessionStorage.getItem('kb-startup-picker-shown')) {
+          sessionStorage.setItem('kb-startup-picker-shown', '1')
+          setStartupPickerOpen(true)
+        }
+      })
       .catch(() => { if (alive) setWelcomeOpen(true) })
       .finally(() => { if (alive) setWelcomeChecked(true) })
     return () => { alive = false }
-  }, [loaded, welcomeChecked])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, welcomeChecked, settingsReady])
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
   useEffect(() => {
@@ -720,6 +732,7 @@ export default function App() {
       <Toast />
       <GlobalConfirm />
       {vaultPickOpen && <VaultPicker onDone={() => { setVaultPickOpen(false); setOnboardingOpen(true) }} />}
+      {startupPickerOpen && <VaultPicker startup onDone={() => setStartupPickerOpen(false)} />}
       {onboardingOpen && (
         <Onboarding
           onComplete={() => { update('onboardingDone', true); setOnboardingOpen(false) }}

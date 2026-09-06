@@ -1,28 +1,60 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, FolderOpen, Plus, Sparkles } from 'lucide-react'
-import { getAppVersion, openDirDialog, workspaceCreateVault } from '../../lib/ipc'
+import { ArrowLeft, CornerDownLeft, FolderOpen, Plus, Sparkles } from 'lucide-react'
+import { getAppVersion, openDirDialog, workspaceCreateVault, workspaceGetCurrent, workspaceGetRecent, workspaceOpenById } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { showToast } from '../../lib/toast'
+import type { WorkspaceRecent } from '../../types'
 
 type VaultResult = { rootId: string; name: string; path: string; error?: string } | null
 
+/** updatedAt（sqlite localtime 字符串 / ISO）→ 人话相对时间 */
+function relTime(iso: string): string {
+  try {
+    const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'))
+    const ms = Date.now() - d.getTime()
+    if (Number.isNaN(ms)) return ''
+    const days = Math.floor(ms / 86_400_000)
+    if (days <= 0) return '今天'
+    if (days === 1) return '昨天'
+    if (days < 30) return `${days} 天前`
+    return d.toLocaleDateString()
+  } catch {
+    return ''
+  }
+}
+
 /**
- * 首启仓库选择（Obsidian 式，docs/agent 无关）：新手引导前置步骤。
- * 快速开始（文档目录默认仓）/ 新建仓库（名称+位置）/ 打开本地文件夹，完成或跳过后进入新手引导。
+ * 仓库选择页（Obsidian 式）：双形态复用。
+ * - 首启形态（默认）：新手引导前置步骤——已有仓库列表快速进入 / 快速开始 / 新建仓库 / 打开本地文件夹。
+ * - 启动形态（startup=true，设置 startupVaultPicker）：每次进入应用先选仓库——
+ *   已有仓库列表为主入口（点行即进，切换则整窗重载），新建/打开放底部；底部「直接进入」可跳过。
  * 完成后广播 vault:changed——编辑器挂载早于本流程，需据此自动挂载新仓库。
  */
-export function VaultPicker({ onDone }: { onDone: () => void }) {
+export function VaultPicker({ onDone, startup = false }: { onDone: () => void; startup?: boolean }) {
   const [mode, setMode] = useState<'home' | 'create'>('home')
   const [version, setVersion] = useState('')
   const [name, setName] = useState('')
   const [parentPath, setParentPath] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [recent, setRecent] = useState<WorkspaceRecent[]>([])
+  const [curId, setCurId] = useState<string | null>(null)
 
   useEffect(() => { void getAppVersion().then(setVersion).catch(() => {}) }, [])
 
+  // 仓库登记本就跨重启持久化：两种形态都列出已有仓库作为快速进入入口
+  useEffect(() => {
+    let alive = true
+    void workspaceGetRecent().then((r) => { if (alive) setRecent(r) }).catch(() => {})
+    if (startup) void workspaceGetCurrent().then((c) => { if (alive) setCurId(c?.rootId ?? null) }).catch(() => {})
+    return () => { alive = false }
+  }, [startup])
+
+  // 选定仓库后的收尾：启动形态可能切换了库，统一广播 + 整窗重载（数据激活重读约定）；
+  // 首启形态保持原行为（广播 + 回调进入引导，不重载）
   const finish = () => {
     window.dispatchEvent(new Event('vault:changed'))
-    onDone()
+    if (startup) setTimeout(() => location.reload(), 350)
+    else onDone()
   }
 
   const apply = (res: VaultResult): boolean => {
@@ -30,6 +62,18 @@ export function VaultPicker({ onDone }: { onDone: () => void }) {
     if (res.error) { showToast({ type: 'error', message: res.error }); return false }
     finish()
     return true
+  }
+
+  const enterVault = async (v: WorkspaceRecent): Promise<void> => {
+    if (busy) return
+    if (v.rootId === curId) { onDone(); return } // 点的就是本次默认仓库：免切换直接进
+    setBusy(true)
+    try {
+      const res = await workspaceOpenById(v.rootId)
+      if (!res || (res as { error?: string }).error) { showToast({ type: 'error', message: (res as { error?: string })?.error || '打开仓库失败' }); return }
+      if (startup) showToast({ type: 'info', message: `已进入仓库「${v.name}」` })
+      finish()
+    } finally { setBusy(false) }
   }
 
   const quickStart = async (): Promise<void> => {
@@ -43,9 +87,7 @@ export function VaultPicker({ onDone }: { onDone: () => void }) {
       // D7：非仓库目录在 openVaultWithGuide 内弹「初始化为仓库？」确认，取消则不建
       const opened = await openVaultWithGuide()
       if (opened) finish()
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }
 
   const browse = async (): Promise<void> => {
@@ -60,9 +102,11 @@ export function VaultPicker({ onDone }: { onDone: () => void }) {
     try { apply(await workspaceCreateVault(trimmed, parentPath ?? '__default__')) } finally { setBusy(false) }
   }
 
+  const hasRecent = recent.length > 0
+
   return (
     <div className="fixed inset-0 z-[95] bg-[var(--bg-primary)] flex items-center justify-center select-none">
-      <div className="w-full max-w-[620px] mx-6 -mt-8">
+      <div className="w-full max-w-[620px] mx-6 -mt-8 max-h-[calc(100vh-64px)] overflow-y-auto">
         {/* 品牌区（Obsidian 式：图标 + 名称 + 版本） */}
         <div className="text-center mb-9">
           <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mx-auto mb-4">
@@ -74,13 +118,55 @@ export function VaultPicker({ onDone }: { onDone: () => void }) {
 
         {mode === 'home' ? (
           <div className="vault-picker-step">
-            <button
-              onClick={() => void quickStart()}
-              disabled={busy}
-              className="w-full py-2.5 text-[13px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors mb-7 disabled:opacity-60"
-            >
-              快速开始
-            </button>
+            {startup && (
+              <h2 className="text-[15px] font-semibold text-[var(--text-primary)] mb-4">选择要进入的仓库</h2>
+            )}
+            {/* 快速开始仅在没有任何已有仓库时出现（首次使用的主路径） */}
+            {!startup && !hasRecent && (
+              <button
+                onClick={() => void quickStart()}
+                disabled={busy}
+                className="w-full py-2.5 text-[13px] font-medium text-white bg-[var(--accent)] rounded-md hover:bg-[var(--accent-hover)] transition-colors mb-7 disabled:opacity-60"
+              >
+                快速开始
+              </button>
+            )}
+            {startup && !hasRecent && (
+              <p className="text-[12px] text-[var(--text-muted)] mb-4">还没有登记过仓库——用下面的方式创建一个。</p>
+            )}
+            {hasRecent && (
+              <>
+                <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-1.5 px-1">
+                  {startup ? '已有仓库' : '快速进入'}
+                </div>
+                <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] divide-y divide-[var(--border-color)] mb-7 overflow-hidden">
+                  {recent.map((v, i) => (
+                    <button
+                      key={v.rootId}
+                      autoFocus={startup && i === 0}
+                      onClick={() => void enterVault(v)}
+                      disabled={busy}
+                      title={v.path}
+                      className={`w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 ${startup && i === 0 ? 'bg-[var(--accent)]/5' : ''}`}
+                    >
+                      <span className={`w-4 shrink-0 text-[var(--accent)] ${startup && i === 0 ? '' : 'opacity-50'}`}>
+                        <CornerDownLeft size={14} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13px] font-medium text-[var(--text-primary)] truncate">
+                          {v.name}
+                          {v.rootId === curId && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-normal text-[var(--accent)] bg-[var(--accent)]/10 align-middle">上次使用</span>
+                          )}
+                        </span>
+                        <span className="block text-[11px] text-[var(--text-muted)] truncate mt-0.5">{v.path}</span>
+                      </span>
+                      <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{relTime(v.updatedAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] px-5 divide-y divide-[var(--border-color)]">
               <VaultRow
                 icon={<Plus size={15} />}
@@ -99,12 +185,21 @@ export function VaultPicker({ onDone }: { onDone: () => void }) {
               />
             </div>
             <div className="text-center mt-7">
-              <button
-                onClick={onDone}
-                className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
-              >
-                暂不设置，稍后在编辑区打开仓库
-              </button>
+              {startup ? (
+                <button
+                  onClick={onDone}
+                  className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                >
+                  跳过，直接进入上次使用的仓库
+                </button>
+              ) : (
+                <button
+                  onClick={onDone}
+                  className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                >
+                  暂不设置，稍后在编辑区打开仓库
+                </button>
+              )}
             </div>
           </div>
         ) : (
