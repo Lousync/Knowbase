@@ -166,6 +166,7 @@
   .model-menu .mi:hover{background:var(--bg);}
   .model-menu .mi .chk{width:14px; color:var(--accent); visibility:hidden;}
   .model-menu .mi.on .chk{visibility:visible;}
+  .model-menu .menu-sec{padding:7px 13px 3px; font-size:10.5px; font-weight:600; color:var(--mut); letter-spacing:.5px;}
   .model-menu .mi .tag{margin-left:auto; font-size:10px; color:var(--mut); border:1px solid var(--line); border-radius:8px; padding:0 7px;}
 
   /* 右栏 */
@@ -212,6 +213,7 @@
     <div class="pk-title">选择教学工作区</div>
     <div class="pk-sub">一个工作区 = 一门课程 / 一个主题 · 内含多个对话 · 每个对话绑定编辑区一个文件夹</div>
     <div class="pk-search">🔍 搜索工作区…</div>
+    <div style="display:flex; justify-content:center; margin-bottom:20px;"><span class="chip" onclick="openOv('ovProfileG')">👤 全局画像 · 计算机科学与技术 本科生</span></div>
     <div class="pk-grid">
       <button class="ws-card" onclick="enterWS('数学冲刺')">
         <h4>📚 数学冲刺</h4><div class="meta">3 个对话 · 最近活跃 今天</div>
@@ -265,6 +267,7 @@
       <span class="chip" onclick="newConv()">＋ 新建对话</span>
       <div class="top-tools">
         <span class="chip" onclick="showConstraints()">✎ 会话要求 <small style="color:var(--mut)">CONSTRAINTS.md</small></span>
+        <span class="chip" onclick="openOv('ovProfileC')">👤 画像</span>
         <span class="chip" onclick="showToken()">⏱ ≈ 0</span>
         <span class="chip" onclick="toggleZen()">⊙ 禅模式</span>
       </div>
@@ -285,10 +288,10 @@
             <div class="row open"><span class="tw">▶</span> 📁 09-06 随堂测验</div>
             <div class="kids">
               <div class="row doc" onclick="showConstraints()">📄 CONSTRAINTS.md</div>
-              <div class="row doc" onclick="previewDoc('讲义·一次函数图像.md')">📄 讲义·一次函数图像.md</div>
+              <div class="row doc" onclick="openDocView('讲义·一次函数图像.md')">📄 讲义·一次函数图像.md</div>
             </div>
             <div class="row open"><span class="tw">▶</span> 📁 09-05 函数基础</div>
-            <div class="kids"><div class="row doc" onclick="previewDoc('讲义·函数与图像.md')">📄 讲义·函数与图像.md</div></div>
+            <div class="kids"><div class="row doc" onclick="openDocView('讲义·函数与图像.md')">📄 讲义·函数与图像.md</div></div>
             <div class="row"><span class="tw">▶</span> 📁 _templates</div>
             <div class="kids"><div class="row doc">📄 CONSTRAINTS.md（工作区模板）</div></div>
           </div></div>
@@ -319,6 +322,7 @@
         <div class="c-switch">
           <span class="chip on" id="swChat" onclick="switchCenter('chat')">💬 对话</span>
           <span class="chip" id="swQuiz" onclick="switchCenter('quiz')">📝 题目</span>
+          <span class="chip" id="swDoc" onclick="switchCenter('doc')" style="display:none">📄 文档</span>
         </div>
         <div class="chat-wrap">
           <div id="chatScroll"></div>
@@ -342,15 +346,26 @@
             </div>
           </div>
         </div>
+<!-- 文档阅读视图（方案 B：中栏接管） -->
+        <div id="docView" style="display:none; flex:1; min-height:0; flex-direction:column;">
+          <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 6px;">
+            <button class="btn" onclick="switchCenter('chat')">← 返回对话</button>
+            <b id="docViewTitle" style="font-size:14px"></b>
+            <span class="chip" style="margin-left:auto" onclick="toast('已跳转编辑器并定位到该文件')">在编辑器中打开 ↗</span>
+          </div>
+          <div style="flex:1; display:flex; min-height:0; border-top:1px solid var(--line2);">
+            <div id="docViewBody" style="flex:1; overflow-y:auto; padding:22px 40px; font-size:13.5px; line-height:1.8;"></div>
+            <div style="width:190px; border-left:1px solid var(--line2); padding:12px; font-size:11.5px; color:var(--sub); overflow-y:auto;">
+              <div style="font-weight:600; margin-bottom:6px; color:var(--txt)">大纲</div>
+              <div id="docOutline"></div>
+            </div>
+          </div>
+        </div>
         <div class="inputbar">
           <input class="box" id="input" placeholder="粘贴资料或输入指令…（Enter 发送）" onkeydown="if(event.key==='Enter')sendMsg()">
           <div class="model-wrap">
-            <span class="chip" id="modelBtn" onclick="toggleModelMenu(event)" title="切换模型（本对话生效）">🤖 <b id="modelName">DeepSeek V3</b> ▾</span>
+            <span class="chip" id="modelBtn" onclick="toggleModelMenu(event)" title="模型与思考强度（本对话生效）">🤖 <b id="modelName"></b> ▾</span>
             <div class="model-menu" id="modelMenu"></div>
-          </div>
-          <div class="model-wrap">
-            <span class="chip" id="thinkBtn" onclick="toggleThinkMenu(event)" title="思考强度：越深越聪明，但更慢更耗 token">🧠 思考:<b id="thinkName">中</b> ▾</span>
-            <div class="model-menu" id="thinkMenu"></div>
           </div>
           <button class="btn primary send" id="sendBtn" onclick="sendMsg()">➤ 发送</button>
         </div>
@@ -440,6 +455,42 @@
   </div>
 </div>
 
+<!-- 全局画像弹层 -->
+<div class="overlay" id="ovProfileG" onclick="if(event.target===this)closeOv('ovProfileG')">
+  <div class="dialog">
+    <div class="dhead">👤 全局画像 — PROFILE.md <span class="x" onclick="closeOv('ovProfileG')">✕</span></div>
+    <div class="dbody md">
+      <p style="color:var(--sub); font-size:11.5px">跨工作区共享 · AI 每次对话自动注入 · 首次进入由诊断问答生成</p>
+      <p><b>身份</b>：计算机科学与技术 本科生</p>
+      <p><b>通用偏好</b>：中文 · 先结论后解释 · 例子驱动 · 喜欢随堂测验检验</p>
+      <p><b>已知基础</b>：编程基础扎实；浏览器 / HTTP 概念不需解释</p>
+      <p style="color:var(--mut); font-size:11.5px">演进方式：AI 建议 → 你确认后写入（Plan B）</p>
+    </div>
+    <div class="dfoot"><button class="btn" onclick="closeOv('ovProfileG')">关闭</button><button class="btn primary">在编辑器中打开</button></div>
+  </div>
+</div>
+
+<!-- 会话画像弹层 -->
+<div class="overlay" id="ovProfileC" onclick="if(event.target===this)closeOv('ovProfileC')">
+  <div class="dialog">
+    <div class="dhead">👤 会话画像 — 09-06 随堂测验/PROFILE.md <span class="x" onclick="closeOv('ovProfileC')">✕</span></div>
+    <div class="dbody md">
+      <p style="color:var(--sub); font-size:11.5px">本对话的细致画像（叠加在全局画像之上）</p>
+      <p><b>当前水平</b>：函数基础 ✓ · 一次函数 学习中 · 图像平移变换 <span style="color:var(--danger)">薄弱</span></p>
+      <p><b>本对话进度</b>：分章精讲 3/5 · 随堂测验未开始</p>
+      <div class="suggest" style="border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-top:8px; background:var(--accent-soft);">
+        <div style="font-size:11.5px; font-weight:600; color:var(--accent)">🤖 AI 画像更新建议（待确认）</div>
+        <p style="font-size:12px; margin:4px 0">检测到「图像平移变换」连续 2 次出错 → 建议标记为薄弱点并增加练习。</p>
+        <div style="display:flex; gap:6px; margin-top:4px">
+          <button class="btn primary" onclick="acceptSuggest()">✓ 接受</button>
+          <button class="btn" onclick="this.closest('.suggest').remove(); toast('已忽略建议')">忽略</button>
+        </div>
+      </div>
+    </div>
+    <div class="dfoot"><button class="btn" onclick="closeOv('ovProfileC')">关闭</button><button class="btn primary">在编辑器中打开</button></div>
+  </div>
+</div>
+
 <script>
 /* ---------- 视图跳转 ---------- */
 function gotoView(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); }
@@ -479,23 +530,6 @@ function toggleSb(id, h){
 /* 文件树折叠 */
 document.querySelectorAll('#fileTree > .row').forEach(r=>r.addEventListener('click',()=>r.classList.toggle('open')));
 
-/* ---------- 文档预览 / RESOURCES.md ---------- */
-const DOC_CONTENT = {
-  '讲义·一次函数图像.md': `<h3 style="margin-bottom:8px">一次函数的图像</h3>
-    <p><b>一、定义</b>：形如 y = kx + b（k ≠ 0）的函数。</p>
-    <p><b>二、图像与斜率</b>：k &gt; 0 上升，k &lt; 0 下降；b 为 y 轴截距 (0, b)。</p>
-    <p><b>三、与方程的关系</b>：kx + b = 0 的解即图像与 x 轴交点的横坐标。</p>
-    <p style="color:var(--mut); font-size:11.5px">—— 由 AI 对话整理生成 · 2026-09-06</p>`,
-  '讲义·函数与图像.md': `<h3 style="margin-bottom:8px">函数与图像</h3>
-    <p>上一会话生成的讲义：平面直角坐标系、函数概念、图像平移变换。</p>
-    <p style="color:var(--mut); font-size:11.5px">—— 由 AI 对话整理生成 · 2026-09-05</p>`
-};
-function previewDoc(name){
-  document.getElementById('docTitle').textContent = name;
-  document.getElementById('docBody').innerHTML = DOC_CONTENT[name] ||
-    `<p>《${name}》的内容预览。</p><p style="color:var(--mut); font-size:11.5px">原型演示：实际实现中点击即渲染该 md 文档。</p>`;
-  openOv('ovDoc');
-}
 let resSeq = 3;
 const RES_SAMPLES = [
   { icon:'🌐', type:'网页', name:'B 站·一次函数微课' },
@@ -521,12 +555,33 @@ function showResources(){ renderResBody(); openOv('ovRes'); }
 
 /* ---------- 中栏切换 ---------- */
 function switchCenter(v){
-  const chat = v==='chat';
+  const chat = v==='chat', quiz = v==='quiz', doc = v==='doc';
   document.getElementById('swChat').classList.toggle('on', chat);
-  document.getElementById('swQuiz').classList.toggle('on', !chat);
+  document.getElementById('swQuiz').classList.toggle('on', quiz);
+  document.getElementById('swDoc').classList.toggle('on', doc);
+  document.getElementById('swDoc').style.display = 'inline-flex';
   document.getElementById('chatScroll').parentElement.style.display = chat?'flex':'none';
-  document.getElementById('quizView').style.display = chat?'none':'block';
+  document.getElementById('quizView').style.display = quiz?'block':'none';
+  document.getElementById('docView').style.display = doc?'flex':'none';
 }
+
+/* ---------- 方案 B：文档阅读视图（中栏接管） ---------- */
+const DOC_CONTENT = {
+  '讲义·一次函数图像.md': '<h3>一、一次函数的定义</h3><p>形如 <b>y = kx + b</b>（k ≠ 0）的函数叫做一次函数。当 b = 0 时为正比例函数。</p><h3>二、图像与斜率</h3><p>图像是一条直线：<b>k &gt; 0</b> 时直线上升，<b>k &lt; 0</b> 时直线下降；<b>b</b> 是直线与 y 轴的交点 (0, b)。</p><h3>三、与方程的关系</h3><p>方程 kx + b = 0 的解，就是图像与 x 轴交点的横坐标。</p><h3>四、例题</h3><div style="background:#27272a;color:#e4e4e7;border-radius:8px;padding:10px 14px;font:12px/1.6 Consolas,monospace">// 例：绘制 y = 2x + 1<br>const y = x => 2*x + 1;<br>console.log(y(3)); // 7</div><h3>五、小结</h3><p>抓住「两点定线」：取 x=0 与 x=1 两点即可画出图像。</p><p style="color:var(--mut);font-size:11.5px">—— 由 AI 对话整理生成 · 2026-09-06</p>',
+  '讲义·函数与图像.md': '<h3>一、平面直角坐标系</h3><p>有序数对 (x, y) 与平面内点的对应关系。</p><h3>二、函数的概念</h3><p>每个 x 有唯一 y 与之对应。</p><h3>三、图像平移变换</h3><p>y = f(x) 向上平移 k 个单位得到 y = f(x) + k。</p><p style="color:var(--mut);font-size:11.5px">—— 由 AI 对话整理生成 · 2026-09-05</p>'
+};
+function openDocView(name){
+  document.getElementById('docViewTitle').textContent = name;
+  const body = document.getElementById('docViewBody');
+  body.innerHTML = DOC_CONTENT[name] || '<p>《' + name + '》的内容预览（原型演示）。</p>';
+  const ol = document.getElementById('docOutline');
+  ol.innerHTML = [...body.querySelectorAll('h3')].map(function(h, i){
+    h.id = 'doc-h-' + i;
+    return '<div style="padding:2px 4px;border-radius:5px;cursor:pointer" onclick="document.getElementById(\'doc-h-' + i + '\').scrollIntoView({behavior:\'smooth\'})">' + h.textContent + '</div>';
+  }).join('');
+  switchCenter('doc');
+}
+
 
 /* ---------- 题目 ---------- */
 let picked=null;
@@ -577,7 +632,9 @@ function makeDoc(act){
   // 左栏文件树 + 右栏产物 同步出现
   const kids = document.querySelector('#fileTree .kids');
   const f = document.createElement('div'); f.className='row doc new-doc'; f.textContent='📄 '+name;
+  f.onclick = ()=>openDocView(name);
   kids.appendChild(f);
+  DOC_CONTENT[name] = act.closest('.msg').querySelector('.md').innerHTML;
   const ol = document.getElementById('outputList');
   const o = document.createElement('div'); o.className='fileitem'; o.textContent='📄 '+name;
   ol.appendChild(o);
@@ -618,26 +675,35 @@ const MODELS = [
 ];
 let curModel = MODELS[0];
 function renderModelMenu(){
-  document.getElementById('modelMenu').innerHTML = MODELS.map(m =>
+  // 模型分区
+  const models = MODELS.map(m =>
     `<div class="mi ${m.id===curModel.id?'on':''}" onclick="pickModel('${m.id}')">
        <span class="chk">✓</span><span>${m.label}</span>${m.tag?`<span class="tag">${m.tag}</span>`:''}
      </div>`).join('');
+  // 思考强度分区（跟随模型能力：不支持则整区禁用）
+  const ok = curModel.reasoning;
+  const think = THINK.map(t => {
+    const on = ok && t.id === curThink.id;
+    return `<div class="mi ${on?'on':''}" ${ok?'':`style="opacity:.4" title="当前模型不支持"`} onclick="${ok?`pickThink('${t.id}')`:`toast('当前模型不支持思考强度')`}">
+       <span class="chk">${on?'✓':''}</span><span>🧠 思考: ${t.label}</span><span class="tag">${t.desc}</span>
+     </div>`;}).join('');
+  document.getElementById('modelMenu').innerHTML =
+    `<div class="menu-sec">模型</div>${models}
+     <div class="menu-sec">思考强度${ok?'':'（当前模型不支持）'}</div>${think}`;
 }
 function toggleModelMenu(e){
   e.stopPropagation();
   renderModelMenu();
   document.getElementById('modelMenu').classList.toggle('show');
-  document.getElementById('thinkMenu').classList.remove('show');
 }
 function pickModel(id){
   curModel = MODELS.find(m=>m.id===id);
-  document.getElementById('modelName').textContent = curModel.label;
-  document.getElementById('modelMenu').classList.remove('show');
-  refreshThinkChip();
+  updateModelChip();
+  renderModelMenu();   // 菜单保持打开，思考强度区即时切换可用/禁用
   toast('已切换模型：'+curModel.label+'（本对话生效）'+(curModel.reasoning?'':'，该模型不支持思考强度'));
 }
 
-/* ---------- 思考强度（跟随模型能力，不支持的模型禁用） ---------- */
+/* ---------- 思考强度（合并进模型菜单，跟随模型能力） ---------- */
 const THINK = [
   { id:'off',    label:'关闭', desc:'直接回答，最快' },
   { id:'low',    label:'低',   desc:'少量思考' },
@@ -645,31 +711,18 @@ const THINK = [
   { id:'high',   label:'高',   desc:'最深思考，更慢更耗 token' },
 ];
 let curThink = THINK[2];
-function refreshThinkChip(){
-  const btn = document.getElementById('thinkBtn');
-  const ok = curModel.reasoning;
-  btn.style.opacity = ok ? '1' : '.45';
-  btn.title = ok ? '思考强度：越深越聪明，但更慢更耗 token' : '当前模型不支持思考强度';
-  btn.style.cursor = ok ? 'pointer' : 'not-allowed';
-}
-function toggleThinkMenu(e){
-  e.stopPropagation();
-  if (!curModel.reasoning){ toast('当前模型 '+curModel.label+' 不支持思考强度，请先切换支持思考的模型'); return; }
-  document.getElementById('thinkMenu').innerHTML = THINK.map(t =>
-    `<div class="mi ${t.id===curThink.id?'on':''}" onclick="pickThink('${t.id}')">
-       <span class="chk">✓</span><span>🧠 ${t.label}</span><span class="tag">${t.desc}</span>
-     </div>`).join('');
-  document.getElementById('thinkMenu').classList.toggle('show');
-  document.getElementById('modelMenu').classList.remove('show');
-}
 function pickThink(id){
   curThink = THINK.find(t=>t.id===id);
-  document.getElementById('thinkName').textContent = curThink.label;
-  document.getElementById('thinkMenu').classList.remove('show');
+  updateModelChip();
+  renderModelMenu();
   toast('思考强度：'+curThink.label+'（'+curThink.desc+'）');
 }
+function updateModelChip(){
+  document.getElementById('modelName').textContent =
+    curModel.label + (curModel.reasoning ? ' · 🧠 ' + curThink.label : '');
+}
 document.addEventListener('click', e => {
-  if (!e.target.closest('.model-wrap')){ document.getElementById('modelMenu').classList.remove('show'); document.getElementById('thinkMenu').classList.remove('show'); }
+  if (!e.target.closest('.model-wrap')) document.getElementById('modelMenu').classList.remove('show');
 });
 
 /* ---------- 发送 / 流式输出 / 停止（与其他 AI 工具一致的发送键状态） ---------- */
@@ -741,6 +794,11 @@ const style = document.createElement('style');
 style.textContent = '@keyframes blink{50%{opacity:0}}';
 document.head.appendChild(style);
 
+function acceptSuggest(){
+  toast('画像已更新：图像平移变换 → 薄弱点 ✓（写入会话 PROFILE.md）');
+  const d = document.querySelector('#ovProfileC .dhead');
+  if (d) d.childNodes[0].textContent = '👤 会话画像 — 已更新 ✓ ';
+}
 /* ---------- 弹层 / 禅模式 ---------- */
 function openOv(id){ document.getElementById(id).classList.add('show'); }
 function closeOv(id){ document.getElementById(id).classList.remove('show'); }
