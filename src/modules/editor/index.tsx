@@ -961,10 +961,10 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               {/* 禅模式 Z1+：正文限宽居中（宽度设置 zenWidth），背景延伸全屏（§4）；
                   纸感氛围：纸色铺满整个编辑区（外层），限宽容器过渡 padding */}
               <div
-                className={`min-w-0 flex-1 zen-transition ${zenLevel >= 1 ? 'flex justify-center' : ''} ${zenLevel >= 1 && zenSettings.zenPaper ? 'zen-paper-bg' : ''}`}
+                className={`h-full min-w-0 flex-1 zen-transition ${zenLevel >= 1 ? 'flex justify-center' : ''} ${zenLevel >= 1 && zenSettings.zenPaper ? 'zen-paper-bg' : ''}`}
               >
                 <div
-                  className={`zen-transition ${zenLevel >= 1 ? 'h-full w-full' : 'min-w-0 flex-1'}`}
+                  className={`h-full zen-transition ${zenLevel >= 1 ? 'w-full' : 'min-w-0 flex-1'}`}
                   style={zenLevel >= 1 ? { maxWidth: zenSettings.zenWidth, padding: '0 20px' } : undefined}
                 >
                   <MonacoPane
