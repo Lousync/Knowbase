@@ -21,6 +21,18 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * 占位（M1）：素材管理、产物草稿与写入、步骤引擎自动推进、diff 视图。
  */
 
+/** P3a（3-13）：回答锚点标题——取首行 markdown 标题（主进程已注入标题规则）；无标题退首行截断，再退「回答N」 */
+function msgAnchorTitle(content: string, n: number): string {
+  const lines = String(content ?? '').split('\n')
+  for (const l of lines) {
+    const m = /^\s{0,3}#{1,6}\s+(.+)/.exec(l)
+    const t = m?.[1]?.replace(/[*`>]/g, '').trim()
+    if (t) return t.slice(0, 40)
+  }
+  const first = (lines.find(l => l.trim().length > 0) ?? '').trim()
+  return first ? first.slice(0, 28) : `回答 ${n + 1}`
+}
+
 interface Template {
   id: string
   label: string
@@ -94,7 +106,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [pending, setPending] = useState(false)
   const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
   const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
-  const [view, setView] = useState<'timeline' | 'doc'>('timeline')
+  // P3a（§3.7/3.8）：视图切换退役——中栏恒为对话流，reader 激活时占用中栏；顶栏改「文档地图」
+  const [mapOpen, setMapOpen] = useState(false)
+  const [mapFiles, setMapFiles] = useState<string[]>([])
   const [showNewMenu, setShowNewMenu] = useState(false)
   // ---- Token 消耗统计（月度走 llm:getUsage）----
   const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
@@ -120,6 +134,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [reader, setReader] = useState<{ rel: string; name: string; pages: Array<{ n: number; text: string }>; cur: number } | null>(null)
   const [activeIdRef, chatIdRef] = [useRef<string | null>(null), useRef('')]
   const bottomRef = useRef<HTMLDivElement>(null)
+  // P3a 快速定位条：消息滚动容器 + 当前锚点高亮
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [activeAnchor, setActiveAnchor] = useState(0)
   const liveRef = useRef(liveSteps)
 
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
@@ -207,7 +224,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     const sid = activeIdRef.current
     if (!sid) { setPending(false); return null }
     setMessages(prev => [...prev, { role: 'user', content: raw, createdAt: nowLocal() }])
-    const r = await agentChat(sid, raw, undefined, cid)
+    const r = await agentChat(sid, raw, undefined, cid, 'aiTeaching')
     setLastChanges(r?.changes && r.changes.length ? r.changes : null)
     await refreshMessages(sid)
     setPending(false)
@@ -292,7 +309,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       return
     }
     setReader({ rel, name, pages: r.pages, cur: 0 })
-    setView('doc')
     setPickOpen(false)
   }, [])
 
@@ -314,7 +330,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (!reader || pending) return
     const page = reader.pages[reader.cur]
     if (!page) return
-    setView('timeline')
+    setReader(null) // P3a：讲当前页退出阅读视图回对话流（reader 激活才占用中栏）
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     const text = `我在逐页阅读 PPT《${reader.name}》第 ${reader.cur + 1} 页。请基于这一页讲清楚要点，讲完停一下等我的问题：\n\n${page.text.slice(0, 2200)}`
@@ -370,8 +386,51 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
 
   const toolCount = liveSteps.filter(s => s.kind === 'tool').length
   const lastStep = liveSteps[liveSteps.length - 1]
-  const assistantMsgs = messages.filter(m => m.role === 'assistant')
-  const docMsg = assistantMsgs[assistantMsgs.length - 1]
+  // P3a（§3.8-1）：快速定位条锚点——每条 AI 回答取首行标题（标题规则由主进程注入，3-13）
+  const anchors = useMemo(
+    () => messages.flatMap((m, idx) => (m.role === 'assistant' ? [{ idx, title: msgAnchorTitle(m.content, idx) }] : [])),
+    [messages])
+  const jumpToAnchor = useCallback((idx: number) => {
+    scrollRef.current?.querySelector(`[data-msg-idx="${idx}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+  const onConvScroll = useCallback(() => {
+    const c = scrollRef.current
+    if (!c || anchors.length === 0) return
+    const top = c.getBoundingClientRect().top
+    let cur = 0
+    anchors.forEach((a, i) => {
+      const el = c.querySelector(`[data-msg-idx="${a.idx}"]`)
+      if (el && el.getBoundingClientRect().top - top <= 90) cur = i
+    })
+    setActiveAnchor(cur)
+  }, [anchors])
+  useEffect(() => { setActiveAnchor(0) }, [activeId])
+
+  /** 文档地图（P3a，§3.7-3.12）：列当前会话文件夹内文件产物（锚点/约束文件除外），点击跳编辑器 */
+  const toggleDocMap = useCallback(async () => {
+    if (mapOpen) { setMapOpen(false); return }
+    setMapOpen(true)
+    setMapFiles([])
+    const sid = activeIdRef.current
+    if (!sid) return
+    const cur = await workspaceGetCurrent().catch(() => null)
+    const rootId = (cur as { rootId?: string } | null)?.rootId
+    const f = await aiTeachSessionFolder(sid).catch(() => null)
+    if (!rootId || !f?.ok || !f.relPath) return
+    const out: string[] = []
+    const walk = async (dir: string, depth: number) => {
+      if (depth > 2 || out.length > 100) return
+      const res = await workspaceListDir(rootId, dir).catch(() => null)
+      for (const e of res?.entries ?? []) {
+        const rel = `${dir}/${e.name}`
+        if (e.type === 'dir') await walk(rel, depth + 1)
+        else if (!e.name.startsWith('.')) out.push(rel)
+      }
+    }
+    await walk(f.relPath, 0)
+    out.sort((a, b) => (a.endsWith('.md') === b.endsWith('.md') ? a.localeCompare(b) : a.endsWith('.md') ? -1 : 1))
+    if (activeIdRef.current === sid) setMapFiles(out)
+  }, [mapOpen])
   const tokenStats = useMemo(() => {
     const all: AgentTraceStep[] = [...messages.flatMap(m => m.trace ?? []), ...liveSteps]
     let llmTokens = 0, llmRounds = 0, toolCalls = 0, durationMs = 0
@@ -482,13 +541,28 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             )}
           </div>
 
-          <div className="flex items-center gap-0.5">
-            {(['timeline', 'doc'] as const).map(v => (
-              <button key={v} onClick={() => setView(v)}
-                className={`px-2 py-0.5 rounded-md text-[11.5px] transition-colors ${view === v ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}>
-                {v === 'timeline' ? '时间线' : '文档视图'}
-              </button>
-            ))}
+          {/* 文档地图（P3a，§3.7-3.12）：会话文件夹内文件产物 → 跳编辑器打开 */}
+          <div className="relative shrink-0">
+            <button onClick={() => { void toggleDocMap() }}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${mapOpen ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}
+              title="文档地图：本会话文件夹内的文件产物，点击跳转编辑器打开">
+              <FileText size={12} />
+              <span>文档地图</span>
+            </button>
+            {mapOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-[340px] max-h-[360px] overflow-y-auto z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl select-text">
+                <div className="sticky top-0 px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11.5px] font-medium text-[var(--text-primary)]">本会话文件（{mapFiles.length}）</div>
+                {mapFiles.length === 0 ? (
+                  <div className="px-3 py-4 text-[11.5px] text-[var(--text-muted)]">尚无文件产物（本会话生成讲义/题目等后出现在这里）</div>
+                ) : mapFiles.map(rel => (
+                  <button key={rel} onClick={() => { setMapOpen(false); window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel } })) }}
+                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[11.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                    <FileText size={11} className="shrink-0 text-[var(--accent)]" />
+                    <span className="truncate" title={rel}>{rel}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 禅模式（唯一作用域 = 本模块）：一键窗口全屏 + 隐壳（标题栏/活动栏隐藏）；再点或 Esc 退出 */}
@@ -591,9 +665,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           </div>
         </aside>
 
-        {/* 中栏：对话 / 文档 */}
+        {/* 中栏：对话流（reader 激活时为阅读视图） */}
         <section className="flex-1 flex flex-col min-w-0 min-h-0">
-          {view === 'timeline' ? (
+          {!reader ? (
             <>
               {activeInstr && !instrDismiss && (
                 <div className="shrink-0 flex items-center gap-2 mx-4 mt-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-secondary)]">
@@ -603,38 +677,40 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   <button onClick={() => setInstrDismiss(true)} title="隐藏（不删除）" className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={11} /></button>
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
+              <div className="relative flex-1 min-h-0">
+              <div ref={scrollRef} onScroll={onConvScroll} className="absolute inset-0 overflow-y-auto pl-4 pr-8 py-3 space-y-3 min-h-0">
                 {messages.length === 0 && !pending && (
                   <div className="h-full flex items-center justify-center text-[12px] text-[var(--text-muted)]">开始对话</div>
                 )}
                 {messages.map((m, idx) => (
-                  <div key={m.id ?? idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[86%] min-w-0 ${m.role === 'user' ? 'bg-[var(--accent)] text-white rounded-xl rounded-br-sm px-3.5 py-2' : ''}`}>
-                      {m.role === 'assistant' && (
-                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3.5 py-2.5">
-                          <MarkdownPreview content={m.content} />
-                          <div className="text-[10px] text-[var(--text-muted)] mt-1.5 flex items-center gap-3">
-                            <span>{fmtTime(m.createdAt)}</span>
-                            {m.trace && m.trace.length > 0 && (
-                              <details className="cursor-pointer select-none">
-                                <summary className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">调用轨迹（{m.trace.length} 步）</summary>
-                                <ul className="mt-1 space-y-0.5">
-                                  {m.trace.map((st, j) => (
-                                    <li key={j} className="flex items-center gap-1 text-[10.5px]">
-                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.ok ? 'bg-[var(--success)]' : 'bg-red-500'}`} />
-                                      <Wrench size={9} className="shrink-0 text-[var(--text-muted)]" />
-                                      <span className="truncate">{st.kind === 'tool' ? toolName(st.name) : '思考'}</span>
-                                      <span className="ml-auto tabular-nums text-[var(--text-muted)]">{st.durationMs}ms{st.tokens ? ` · ${st.tokens}t` : ''}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </details>
-                            )}
-                          </div>
+                  <div key={m.id ?? idx} data-msg-idx={idx} className={m.role === 'user' ? 'flex justify-end' : 'min-w-0'}>
+                    {m.role === 'user' ? (
+                      /* 用户消息保留右侧气泡（§3.8-3：仅 AI 回复去气泡） */
+                      <div className="max-w-[86%] min-w-0 bg-[var(--accent)] text-white rounded-xl rounded-br-sm px-3.5 py-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap">{m.content}</div>
+                    ) : (
+                      /* P3a 去气泡：助手回复平铺 markdown 原生排版，meta 行轻量化 */
+                      <div className="min-w-0">
+                        <MarkdownPreview content={m.content} />
+                        <div className="text-[10px] text-[var(--text-muted)] mt-1 flex items-center gap-3">
+                          <span>{fmtTime(m.createdAt)}</span>
+                          {m.trace && m.trace.length > 0 && (
+                            <details className="cursor-pointer select-none">
+                              <summary className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">调用轨迹（{m.trace.length} 步）</summary>
+                              <ul className="mt-1 space-y-0.5">
+                                {m.trace.map((st, j) => (
+                                  <li key={j} className="flex items-center gap-1 text-[10.5px]">
+                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.ok ? 'bg-[var(--success)]' : 'bg-red-500'}`} />
+                                    <Wrench size={9} className="shrink-0 text-[var(--text-muted)]" />
+                                    <span className="truncate">{st.kind === 'tool' ? toolName(st.name) : '思考'}</span>
+                                    <span className="ml-auto tabular-nums text-[var(--text-muted)]">{st.durationMs}ms{st.tokens ? ` · ${st.tokens}t` : ''}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
                         </div>
-                      )}
-                      {m.role === 'user' && <span className="text-[13px] leading-relaxed break-words">{m.content}</span>}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -658,6 +734,19 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   </div>
                 )}
                 <div ref={bottomRef} />
+                </div>
+                {/* 右缘快速定位条（§3.8-1，3-13）：每条回答一个刻度，hover 预览标题，点击滚动定位 */}
+                {anchors.length > 1 && (
+                  <div className="absolute right-1 top-2 bottom-2 w-3 flex flex-col items-center justify-evenly z-10">
+                    {anchors.map((a, i) => (
+                      <button key={a.idx} onClick={() => jumpToAnchor(a.idx)}
+                        title={a.title}
+                        className={`group relative w-1.5 rounded-full transition-all ${i === activeAnchor ? 'h-3 bg-[var(--accent)]' : 'h-1.5 bg-[var(--border-color)] hover:bg-[var(--text-muted)]'}`}>
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 hidden group-hover:block whitespace-nowrap max-w-[260px] truncate px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[10px] text-[var(--text-primary)] shadow z-20">{a.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="shrink-0 border-t border-[var(--border-color)] p-2 bg-[var(--bg-secondary)]">
@@ -674,8 +763,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 </div>
               </div>
             </>
-          ) : reader ? (
-            /* 幻灯片逐页阅读（素材 .pptx） */
+          ) : (
+            /* 幻灯片逐页阅读（素材 .pptx）：reader 激活时占用中栏（P3a 起为对话流的二选一视图） */
             <div className="flex flex-col min-h-0">
               <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] text-[11.5px]">
                 <Presentation size={12} className="text-[var(--text-muted)] shrink-0" />
@@ -727,19 +816,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {docMsg ? (
-                <div className="max-w-[880px] mx-auto py-4 px-5">
-                  <div className="text-[11.5px] text-[var(--text-muted)] mb-2">文档视图</div>
-                  <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-5 py-4">
-                    <MarkdownPreview content={docMsg.content} />
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full flex items-center justify-center text-[12px] text-[var(--text-muted)]">尚无助手回复</div>
-              )}
             </div>
           )}
         </section>

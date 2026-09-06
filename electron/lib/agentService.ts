@@ -68,6 +68,8 @@ export interface AgentChatRequest {
   context?: AgentContextInfo
   /** 渲染层生成的调用标识——配合 agent:abort 实现停止生成 */
   chatId?: string
+  /** 调用来源（P3a §3.8-2）：'aiTeaching' 时附加「每条回答带标题」等模块专属规则；轻问答不传 */
+  source?: string
 }
 
 /** 单次请求对用户数据的写改动（供 UI 列出「本次改了哪些文件/条目」） */
@@ -195,7 +197,7 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, _chatId: st
   appendAgentMessage(sessionId, 'user', message)
   ensureSessionTitle(sessionId, message)
 
-  return runAgentLoop(sessionId, req.context, signal, trace)
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source)
 }
 
 /** 从会话库当前内容直接推理（不追加新用户消息）——重新生成/编辑重推共用 */
@@ -203,7 +205,8 @@ async function runAgentLoop(
   sessionId: string,
   context: AgentContextInfo | undefined,
   signal: AbortSignal,
-  trace: AgentTraceStep[]
+  trace: AgentTraceStep[],
+  source?: string
 ): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
   const history = getAgentMessages(sessionId)
@@ -236,8 +239,12 @@ async function runAgentLoop(
   const instHint = sessionInst
     ? `\n\n【本会话全局要求】（用户为此对话单独设定于 CONSTRAINTS.md，最高优先级，必须严格遵守；与用户消息冲突时以用户当下消息为准）\n${sessionInst}`
     : ''
+  // P3a（§3.8-2 标题规则，3-13 拍板）：AI教学会话每条回答首行带三级标题，供快速定位条取锚点标题
+  const titleRuleHint = source === 'aiTeaching'
+    ? '\n\n【回答标题规则（AI教学）】每条回答的第一行必须是一个简短标题，形如 `### 这里写标题`（不超过 20 字，概括本回答核心内容），标题后换行写正文；标题行之前不得有任何其他文字。该标题用于用户在对话流中快速定位每条回答。'
+    : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + instHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + instHint + titleRuleHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0
@@ -342,7 +349,7 @@ async function agentRegenerate(req: AgentChatRequest, signal: AbortSignal): Prom
   const lastUser = [...msgs].reverse().find(m => m.role === 'user')
   if (!lastUser) return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
   deleteMessagesAfter(sessionId, lastUser.id)
-  return runAgentLoop(sessionId, req.context, signal, trace)
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source)
 }
 
 /** 改写某条用户消息并重新生成其后的回复 */
@@ -357,7 +364,7 @@ async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, 
   if (msg.role !== 'user') return { ok: false, sessionId, error: '只能编辑用户消息', trace }
   updateMessageContent(msg.id, content)
   deleteMessagesAfter(sessionId, msg.id)
-  return runAgentLoop(sessionId, req.context, signal, trace)
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source)
 }
 
 export function registerAgentHandlers(): void {

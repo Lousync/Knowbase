@@ -8,8 +8,9 @@
 
 | 类别 | 内容 |
 |---|---|
-| ✅ 已完成 | **P0** id/命名迁移（2026-09-06 落地：`immersive`→`aiTeaching`、目录 `src/modules/ai-teaching/`、活动栏 label「AI教学」、order/hidden 一次性迁移、命令面板补「打开 AI教学」；见 R10） · **P1** 会话⇄文件夹绑定（2026-09-06 落地：`aiTeachRootDir`/`aiTeachDeleteSessionFolder` 设置 + 改名迁移、新建对话建 `{MM-DD} 标题/` + `.session.json` 锚点、双击重命名同步改夹、删除 ask/keep/delete 进回收站、编辑区树联动；见 R13） · **P2** CONSTRAINTS.md（2026-09-06 落地：约束从 DB 字段升级为会话文件夹 `CONSTRAINTS.md` 唯一真相源、每轮发送重读注入 + 4000 截断、建夹从 `_templates/CONSTRAINTS.md` 播种、会话要求弹层改读写文件并展示落盘路径、旧 DB 字段读兼容且写时清除防双源；见 R15） |
-| ✅ 可立即开工 | **P3** 中栏改版 · **P4** 侧栏 VS Code 化 · **P5** 工作区两层 · **P7** 题目视图（详见 §六） |
+| ✅ 已完成 | **P0** id/命名迁移（2026-09-06 落地：`immersive`→`aiTeaching`、目录 `src/modules/ai-teaching/`、活动栏 label「AI教学」、order/hidden 一次性迁移、命令面板补「打开 AI教学」；见 R10） · **P1** 会话⇄文件夹绑定（2026-09-06 落地：`aiTeachRootDir`/`aiTeachDeleteSessionFolder` 设置 + 改名迁移、新建对话建 `{MM-DD} 标题/` + `.session.json` 锚点、双击重命名同步改夹、删除 ask/keep/delete 进回收站、编辑区树联动；见 R13） · **P2** CONSTRAINTS.md（2026-09-06 落地：约束从 DB 字段升级为会话文件夹 `CONSTRAINTS.md` 唯一真相源、每轮发送重读注入 + 4000 截断、建夹从 `_templates/CONSTRAINTS.md` 播种、会话要求弹层改读写文件并展示落盘路径、旧 DB 字段读兼容且写时清除防双源；见 R15） · **P3a** 中栏改版第一批（2026-09-06 落地：source 注入「每条回答带 `###` 标题」规则、去气泡（用户气泡/助手平铺）、右缘快速定位条 hover 预览+点击定位、顶栏时间线/文档视图→文档地图；见 R16） |
+| 🔨 进行中 | **P3b** 逐条「整理成文档」+ 输入区停止键/模型/思考强度选择器 |
+| ✅ 可立即开工 | **P4** 侧栏 VS Code 化 · **P5** 工作区两层 · **P7** 题目视图（详见 §六） |
 | ✅ 可立即开工 | **P6** 素材库（结构 v3 + SOURCE.md 模板 YAML 版已定 §3.13，3-28~3-31 全部拍板） |
 | ⏳ 待拍板疑问 | 3-7 工作区选择页是否每次进入都显示 · 3-8/3-10/3-11 按 §3.5 建议执行（未正式拍板）。**其余全部关闭（3-24~3-31 已拍板，见 §3.12/3.13）** |
 | 📦 交付物 | 总纲（本文）· 整体交互原型 `ai-teaching-prototype.html` · 原型拼装台 `ai-teaching-layout-builder.html` · 用户布局存档 `ai-teaching-layout-user-v1.json` |
@@ -169,7 +170,15 @@ AI教学/数学冲刺/
 
 **1. 侧栏折叠行为（VS Code 式贴靠）**：展开的分区占满侧栏剩余高度，收起的分区头**紧贴其下方**（而不是悬在底部）；全部分区都收起时，分区头叠放在侧栏顶部。
 
-**2. 资源管理器文档就地预览**：点击侧栏文件树中的 md 文档 → 弹出预览（渲染后的内容），提供「在编辑器中打开」按钮跳编辑区；不需要为看一眼内容而切换模块。
+**2. 资源管理器文档就地预览（已拍板：方案 B 中栏接管）**：点击侧栏文件树中的 md 文档 → **中栏整体切换为文档阅读视图**——顶部「← 返回对话」+ 文件名 +「在编辑器中打开 ↗」；正文宽幅 md 渲染；右缘自动生成该文档的 h3 大纲（点击滚动定位）。原弹窗预览方案废弃。
+
+**方案 B 交互规格（已确认，原型 ai-teaching-prototype.html 已实现）**：
+
+- **入口**：①左栏资源管理器点击任意 md 文档；②AI 回答「整理成文档」后点「✓ 已生成文档 →」；
+- **视图布局**：顶部工具行（← 返回对话 / 文件名 / 在编辑器中打开 ↗）→ 正文区（宽幅 md 渲染：章节标题、代码块深色块、行距按阅读排版）→ 右缘**大纲栏**（自动从文档 h3 提取，点击平滑滚动定位）；
+- **中栏切换器联动**：出现「📄 文档」chip 并高亮，与 💬 对话 / 📝 题目 三视图并列互切；
+- **状态记忆**：阅读中切走（回对话/切 Tab）再回来，文档与滚动位置保留；
+- **原弹窗预览废弃**：不再使用居中小弹窗形式。
 
 **3. 资料来源 → RESOURCES.md 素材库**：
 
@@ -481,4 +490,7 @@ P0 ─→ P1 ─→ P2
 
 | 2026-09-06 · R14 | 思考强度并入模型选择器菜单（模型分区 + 思考强度分区，跟随模型能力禁用）；chip 显示「模型 · 🧠 档位」 |
 | 2026-09-06 · R15 | **P2 实施完成（CONSTRAINTS.md 约束文件化，§2.3/2-6）**：`aiTeachingFolders.ts` 增 readConstraints/writeConstraints（写路径懒建文件夹后落盘，仅存文件）+ 建夹时从 `{根}/_templates/CONSTRAINTS.md` 播种（P5 工作区两层后改读工作区级）；AgentRunner 注入改 `resolveConstraintsForInjection`——文件是唯一真相源（每轮重读，编辑器改动即时生效），无文件夹的旧会话读兼容回退 DB 一次，注入超 4000 字符截断提示；`aiTeach:read/writeConstraints` 三层接线；模块「会话要求」弹层改读写文件（展示落盘路径 instrRel、maxLength 800→2000），保存成功后清除旧 DB `sessionInstructions` 残留防双真相源；`agent:setSessionInstructions` 通道保留作退役缓冲。冒烟 `tmp/smoke/ai-teaching-p2-source-smoke.mjs` 18/18 绿；tsc node=7/web=29 行与基线一致零新增 |
+
+| 2026-09-06 · R15 | 文档预览拍板方案 B（中栏接管，弃弹窗）：阅读视图 + 大纲 + 返回对话；整体原型已实现 |
+| 2026-09-06 · R16 | **P3a 实施完成（中栏改版第一批：去气泡 + 快速定位条 + 标题规则）**：主进程 `AgentChatRequest.source`，`runAgentLoop` 当 `source==='aiTeaching'` 注入「每条回答首行 `### 标题`」规则（三处调用透传 req.source，ipc/types/模块链路带 source='aiTeaching'）；模块中栏视图切换退役（timeline/doc state 删除）→ 对话流恒定、reader 激活时占用中栏（契合 R15 方案 B）；**去气泡**：用户消息保留右气泡、AI 回复平铺 markdown 原生排版；**右缘快速定位条**：每条回答一刻度，`msgAnchorTitle` 取 `###` 标题（回退首行→「回答N」），hover 预览标题·点击平滑定位·滚动高亮当前；顶栏「时间线/文档视图」→「文档地图」（扫描本会话文件夹内产物、md 优先、点击跳编辑器）。冒烟 `tmp/smoke/ai-teaching-p3a-source-smoke.mjs` 14/14（P0/P1/P2/pptx 冒烟同步更新语义全绿）；tsc node=7/web=29 与基线一致零新增。**P3b 待做**：逐条「整理成文档」+ 输入区停止键/模型/思考强度选择器 |
 

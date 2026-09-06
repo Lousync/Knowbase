@@ -462,7 +462,7 @@ export const pdfExport = (payload: { data: Uint8Array; defaultName: string; kind
 /** 界面逐页阅读：当前仓库内 .pptx → [{n,text}] */
 export const docsPptxPages = (relPath: string): Promise<{ ok: boolean; pages?: Array<{ n: number; text: string }>; total?: number; error?: string }> => a().docsPptxPages(relPath)
 
-export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId })
+export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string, source?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId, source })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
 export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
