@@ -2,6 +2,7 @@ import { useSettings } from '../../../lib/SettingsContext'
 import { FONT_OPTIONS, FONT_CSS_MAP } from '../../../lib/settings'
 import { SettingSelect } from '../components/SettingSelect'
 import { NumberField } from '../components/fields/NumberField'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 export function EditorView() {
   const { s, update } = useSettings()
@@ -52,18 +53,14 @@ export function EditorView() {
 
       <div data-setting-anchor="editor.lineNumbers">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">显示</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" checked={s.showLineNumbers}
-            onChange={() => update('showLineNumbers', !s.showLineNumbers)}
-            className="accent-[var(--accent)]" />
+        <label className="flex items-center justify-between gap-4 cursor-pointer max-w-md">
           <span className="text-[13px] text-[var(--text-primary)]">显示行号</span>
+          <SettingSwitch checked={s.showLineNumbers} onChange={(v) => update('showLineNumbers', v)} />
         </label>
         <div data-setting-anchor="editor.markdownDim" className="mt-2.5">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" checked={s.markdownDim}
-              onChange={() => update('markdownDim', !s.markdownDim)}
-              className="accent-[var(--accent)]" />
+          <label className="flex items-center justify-between gap-4 cursor-pointer max-w-md">
             <span className="text-[13px] text-[var(--text-primary)]">Markdown 标记淡化（光标行保留原始标记）</span>
+            <SettingSwitch checked={s.markdownDim} onChange={(v) => update('markdownDim', v)} />
           </label>
         </div>
         <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">

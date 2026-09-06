@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSettings } from '../../../lib/SettingsContext'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 /**  插件安全等级（固定顺序，UI toggle 写入时也按此序拼接） */
 const LEVEL_ORDER = ['S', 'A', 'B', 'C'] as const
@@ -32,27 +33,19 @@ export function SecurityView() {
         <div className="space-y-2.5 max-w-sm">
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)]">跳过博客删除确认对话框</span>
-            <input type="checkbox" checked={s.skipDeleteConfirm_blog}
-              onChange={() => update('skipDeleteConfirm_blog', !s.skipDeleteConfirm_blog)}
-              className="accent-[var(--accent)]" />
+            <SettingSwitch checked={s.skipDeleteConfirm_blog} onChange={(v) => update('skipDeleteConfirm_blog', v)} />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)]">跳过知识库页面删除确认对话框</span>
-            <input type="checkbox" checked={s.skipDeleteConfirm_knowledge}
-              onChange={() => update('skipDeleteConfirm_knowledge', !s.skipDeleteConfirm_knowledge)}
-              className="accent-[var(--accent)]" />
+            <SettingSwitch checked={s.skipDeleteConfirm_knowledge} onChange={(v) => update('skipDeleteConfirm_knowledge', v)} />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)]">跳过目录/笔记本删除确认对话框</span>
-            <input type="checkbox" checked={s.skipDeleteConfirm_knowledgeCategory}
-              onChange={() => update('skipDeleteConfirm_knowledgeCategory', !s.skipDeleteConfirm_knowledgeCategory)}
-              className="accent-[var(--accent)]" />
+            <SettingSwitch checked={s.skipDeleteConfirm_knowledgeCategory} onChange={(v) => update('skipDeleteConfirm_knowledgeCategory', v)} />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)]">跳过章节删除确认对话框</span>
-            <input type="checkbox" checked={s.skipDeleteConfirm_chapter}
-              onChange={() => update('skipDeleteConfirm_chapter', !s.skipDeleteConfirm_chapter)}
-              className="accent-[var(--accent)]" />
+            <SettingSwitch checked={s.skipDeleteConfirm_chapter} onChange={(v) => update('skipDeleteConfirm_chapter', v)} />
           </label>
         </div>
         <p className="text-[11px] text-[var(--text-muted)] mt-2 leading-relaxed">
@@ -102,9 +95,7 @@ export function SecurityView() {
         <div data-setting-anchor="security.pluginSignature">
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)]">市场插件强制签名校验</span>
-            <input type="checkbox" checked={!!s.pluginRequireSignature}
-              onChange={(e) => update('pluginRequireSignature', e.target.checked)}
-              className="accent-[var(--accent)]" />
+            <SettingSwitch checked={!!s.pluginRequireSignature} onChange={(v) => update('pluginRequireSignature', v)} />
           </label>
         </div>
         <div data-setting-anchor="security.pluginKeys">

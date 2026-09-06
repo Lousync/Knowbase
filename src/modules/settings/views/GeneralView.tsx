@@ -1,5 +1,6 @@
 import { useSettings } from '../../../lib/SettingsContext'
 import { NumberField } from '../components/fields/NumberField'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 
 /** 设置 → 通用与行为：界面缩放 / 外壳布局（Workbench 灰度）/ 自动保存信息 */
 export function GeneralView() {
@@ -16,19 +17,14 @@ export function GeneralView() {
       <div className="mb-8" data-setting-anchor="startup.vaultPicker">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">启动行为</h3>
         <div className="max-w-md space-y-4">
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!s.startupVaultPicker}
-              onChange={(e) => update('startupVaultPicker', e.target.checked)}
-              className="mt-0.5 accent-[var(--accent)]"
-            />
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)] leading-relaxed">
               每次启动选择仓库
               <span className="block text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
                 进入应用时先显示仓库选择页，可从已有仓库一键进入；关闭后直连上次的仓库。
               </span>
             </span>
+            <SettingSwitch checked={!!s.startupVaultPicker} onChange={(v) => update('startupVaultPicker', v)} />
           </label>
         </div>
       </div>
@@ -55,19 +51,14 @@ export function GeneralView() {
       <div className="mb-8" data-setting-anchor="advanced.workbench">
         <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">外壳布局</h3>
         <div className="max-w-md space-y-4">
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!s.uiWorkbench}
-              onChange={(e) => update('uiWorkbench', e.target.checked)}
-              className="mt-0.5 accent-[var(--accent)]"
-            />
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
             <span className="text-[13px] text-[var(--text-primary)] leading-relaxed">
               启用 Workbench 布局
               <span className="block text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
                 实验性 VS Code 外壳布局，可随时切回。
               </span>
             </span>
+            <SettingSwitch checked={!!s.uiWorkbench} onChange={(v) => update('uiWorkbench', v)} />
           </label>
         </div>
       </div>

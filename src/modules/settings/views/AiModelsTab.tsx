@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Bot, Gauge, Plus, Trash2, RefreshCw, Loader2, Star, Pencil, Import } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
   llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel, llmTestModel,
@@ -196,8 +197,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
         <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)]">{TYPE_LABEL[p.type]}</span>
         {p.isDefault && <Star size={12} className="text-yellow-400 fill-yellow-400" />}
         <label className="ml-auto flex items-center cursor-pointer">
-          <input type="checkbox" checked={p.enabled} onChange={() => { void llmToggleProvider(p.id, !p.enabled).then(onChanged) }}
-            className="accent-[var(--accent)] w-4 h-4" />
+          <SettingSwitch checked={p.enabled} onChange={() => { void llmToggleProvider(p.id, !p.enabled).then(onChanged) }} />
         </label>
       </div>
       <p className="text-[11px] text-[var(--text-muted)] mt-1 truncate font-mono">{p.baseUrl}</p>

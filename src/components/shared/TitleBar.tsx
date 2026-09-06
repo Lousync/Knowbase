@@ -10,7 +10,6 @@ import {
   updateFailKind, updateFailMessage,
 } from '../../lib/updateStore'
 import { MarkdownPreview } from './MarkdownPreview'
-import { VaultSwitcher } from './VaultSwitcher'
 import { openExternal } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 
@@ -135,8 +134,7 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
           </span>
         ) : null}
 
-        {/* P8（D8）：仓库切换器——标题栏左侧当前仓库名下拉（最近/打开/新建/重命名） */}
-        <VaultSwitcher />
+        {/* UI 打磨点1：仓库切换器已迁至编辑器侧栏底部（editor/index.tsx treeColumn） */}
 
         {/* 窗口级操作：更新入口 / 日程侧边栏开关 / 置顶 */}
         {showEntry && (

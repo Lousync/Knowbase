@@ -12,6 +12,7 @@ import {
   workspacePickImages, workspaceSaveImage,
 } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
+import { VaultSwitcher } from '../../components/shared/VaultSwitcher'
 import { showToast } from '../../lib/toast'
 import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
@@ -890,6 +891,10 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                   setCtxMenu({ x: e.clientX, y: e.clientY, node: n })
                 }}
               />
+              {/* UI 打磨点1：仓库切换器停靠侧栏底部（portal 与自绘列两种模式共用本列）；面板向上弹出 */}
+              <div className="mt-auto border-t border-[var(--border-color)] p-1.5 shrink-0">
+                <VaultSwitcher />
+              </div>
             </>
           )
           if (sidebarEl) {

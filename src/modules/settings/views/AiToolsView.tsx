@@ -8,6 +8,7 @@ import {
   aiToolsListSkills, aiToolsCopySkillPrompt, aiToolsInstallSkill, aiToolsInstallSkillFromFile, aiToolsUninstallSkill, aiToolsToggleSkill,
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 import { AiPermissionsTab } from './AiPermissionsTab'
 import { CollapseList } from '../components/CollapseList'
 import { SettingListPanel } from '../components/SettingListPanel'
@@ -320,7 +321,7 @@ function McpServersTab({ onInvoked }: { onInvoked: () => void }) {
               </span>
               <span className="text-[11px] text-[var(--text-muted)]">{sv.toolCount} 个工具</span>
               <label className="ml-auto flex items-center cursor-pointer">
-                <input type="checkbox" checked={sv.enabled} onChange={() => { void handleToggle(sv) }} className="accent-[var(--accent)] w-4 h-4" />
+                <SettingSwitch checked={sv.enabled} onChange={() => { void handleToggle(sv) }} />
               </label>
             </div>
             <p className="text-[11px] text-[var(--text-muted)] mt-1 truncate font-mono" title={sv.endpointPreview}>{sv.endpointPreview}</p>
@@ -712,9 +713,9 @@ function SkillsTab() {
                   ))}
                 </span>
               )}
-              <label className="ml-auto flex items-center gap-1.5 cursor-pointer shrink-0" title={s.disabled ? '启用该 Skill' : '停用该 Skill（AI 不再使用，文件保留）'}>
-                <input type="checkbox" checked={!s.disabled} onChange={() => { void handleToggle(s) }} className="accent-[var(--accent)] w-4 h-4" />
+              <label className="ml-auto flex items-center gap-2 cursor-pointer shrink-0" title={s.disabled ? '启用该 Skill' : '停用该 Skill（AI 不再使用，文件保留）'}>
                 <span className="text-[11px] text-[var(--text-muted)]">{s.disabled ? '停用' : '启用'}</span>
+                <SettingSwitch checked={!s.disabled} onChange={() => { void handleToggle(s) }} />
               </label>
             </div>
             {s.description && (

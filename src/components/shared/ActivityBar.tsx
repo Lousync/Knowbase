@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { TabName } from '../../types'
 import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, LifeBuoy, Trash2, Sparkles } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
@@ -6,13 +6,13 @@ import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
 import { BlogIcon, ScheduleIcon, KnowledgeIcon, MomentsIcon, ToolboxIcon, UserIcon, SettingsIcon, PluginIcon, EditorIcon } from './ModuleIcons'
 
-/** All draggable module tabs (excluding user/settings; 帮助已在用户菜单内,侧边栏不再单列) */
+/** All draggable module tabs (excluding user/settings; 帮助已在用户菜单内,侧边栏不再单列; UI 打磨点4：editor 提首位与 activityBarOrder 新默认对齐) */
 const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.ReactNode }[] = [
+  { id: 'editor',    label: '编辑器', icon: s => <EditorIcon size={s} /> },
   { id: 'blog',      label: '博客',   icon: s => <BlogIcon size={s} /> },
   { id: 'schedule',  label: '日程',   icon: s => <ScheduleIcon size={s} /> },
   { id: 'knowledge', label: '知识库', icon: s => <KnowledgeIcon size={s} /> },
   { id: 'moments',   label: '说说',   icon: s => <MomentsIcon size={s} /> },
-  { id: 'editor',    label: '编辑器', icon: s => <EditorIcon size={s} /> },
   { id: 'immersive', label: 'Agent',  icon: s => <Sparkles size={s} /> },
   { id: 'toolbox',   label: '工具箱', icon: s => <ToolboxIcon size={s} /> },
   { id: 'plugins',   label: '插件',   icon: s => <PluginIcon size={s} /> },
@@ -44,7 +44,19 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
   const barRef = useRef<HTMLDivElement>(null)
   const { s, update } = useSettings()
 
-  const allOrder: string[] = safeParse(s.activityBarOrder, ['blog','schedule','knowledge','toolbox'])
+  // UI 打磨点4：activityBarOrder 一次性迁移——editor 提到第一位（全员，决策 4.4-1）。
+  // 旧默认串/定制序一律归一为 editor 居首、其余相对顺序不变（缺失则补到首位）；
+  // 归一结果写回后条件自然不再成立，迁移只发生一次；用户后续拖拽写回属预期覆盖。
+  const allOrder = useMemo(() => {
+    const arr = safeParse(String(s.activityBarOrder ?? ''), ['blog', 'schedule', 'knowledge', 'toolbox'])
+    const idx = arr.indexOf('editor')
+    if (idx === 0) return arr
+    return idx > 0 ? ['editor', ...arr.filter((x) => x !== 'editor')] : ['editor', ...arr]
+  }, [s.activityBarOrder])
+  useEffect(() => {
+    const raw = String(s.activityBarOrder ?? '')
+    if (raw !== JSON.stringify(allOrder)) update('activityBarOrder', JSON.stringify(allOrder))
+  }, [allOrder]) // eslint-disable-line react-hooks/exhaustive-deps
   const hidden: string[] = safeParse(s.activityBarHidden, [])
 
   // Compute ordered visible modules
@@ -141,7 +153,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
             onDrop={e => handleDrop(e, tabId)}
             onClick={() => {
               if (isActive && onToggleSidebar) onToggleSidebar()
-              else onChange(tabId)
+              else onChange(tabId as TabName)
             }}
             title={`${mod.label}${dragId && dragId !== tabId ? ' — 拖放到此处排序' : ''}`}
             className={`
