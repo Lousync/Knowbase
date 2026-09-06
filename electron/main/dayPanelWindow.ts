@@ -327,7 +327,12 @@ function createPopout(): void {
     },
   })
 
-  popout.webContents.on('will-navigate', (e) => e.preventDefault())
+  // 同 URL reload 放行（仓库切换等正常刷新），其余导航一律阻断
+  popout.webContents.on('will-navigate', (e, url) => {
+    const w = popout
+    if (w && url === w.webContents.getURL()) return
+    e.preventDefault()
+  })
   popout.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

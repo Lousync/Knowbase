@@ -241,8 +241,12 @@ function createWindow(): void {
     }
   })
 
-  // 安全：主窗口自身永不导航(应用为单页,任何导航请求均为异常/注入行为)
-  mainWindow.webContents.on('will-navigate', (event) => {
+  // 安全：主窗口自身永不导航(应用为单页,任何导航请求均为异常/注入行为)。
+  // 例外：同 URL 的 reload——Electron 把 location.reload() 也当导航触发本事件，
+  // 无差别 preventDefault 会静默吞掉它（P8 仓库切换整窗重载失效、UI 卡旧仓库的根因）。
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const win = mainWindow
+    if (win && url === win.webContents.getURL()) return
     event.preventDefault()
   })
 
