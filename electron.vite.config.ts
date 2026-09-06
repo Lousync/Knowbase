@@ -49,6 +49,14 @@ export default defineConfig({
       host: '127.0.0.1',
       port: 7173,          // 6173 会落入 Windows Hyper-V/winnat 排除端口段导致 EACCES
       strictPort: false,
+      watch: {
+        // Windows 下原子写（编辑工具/脚本）会产生 `.xx.tmpdir/` 临时目录与 `.uuid.tmp`
+        // 文件，rename 完成即消失；chokidar 原生 watcher 恰以这一瞬为竞态捕获它们
+        // → EBUSY 未捕获异常直接杀死 dev 进程（本机 dev 实测崩溃）。
+        // 一并忽略非源码目录：tmp/（基线与冒烟产物，写入不再触发无谓 full-reload）、
+        // .AGENT/（worktree 嵌套副本）、out_prev_*/（历史构建 dumps）。
+        ignored: ['**/.*.tmp', '**/.*.tmpdir', '**/.*.tmpdir/**', '**/tmp/**', '**/.AGENT/**', '**/out_prev_*/**']
+      },
       fs: {
         allow: [resolve(__dirname), mainProjectRoot]
       }
