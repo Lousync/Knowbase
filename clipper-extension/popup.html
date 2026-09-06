@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    :root { color-scheme: light dark; font: 13px/1.5 system-ui, "Segoe UI", sans-serif; }
+    body { width: 320px; margin: 0; padding: 14px; background: Canvas; color: CanvasText; }
+    h1 { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: GrayText; flex: none; }
+    .dot.on { background: #2fbf71; } .dot.err { background: #e5484d; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .muted { color: GrayText; font-size: 11.5px; }
+    input, button, textarea { font: inherit; border-radius: 6px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); background: Field; color: FieldText; padding: 5px 8px; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .45; cursor: default; }
+    button.primary { background: AccentColor; color: AccentForeground; border-color: transparent; }
+    #vault { margin-top: 2px; }
+    #receipt { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, #2fbf71 14%, Canvas); font-size: 12px; word-break: break-all; display: none; }
+    #pair { display: none; margin-top: 8px; }
+    #pair input { width: 100%; box-sizing: border-box; margin: 6px 0; }
+    .hidden { display: none !important; }
+    #actions .row { margin-top: 10px; }
+    #errline { color: #e5484d; font-size: 11.5px; margin-top: 6px; display: none; }
+  </style>
+</head>
+<body>
+  <h1><span class="dot" id="dot"></span>Knowbase 剪藏</h1>
+  <div class="muted" id="status">连接桌面端…</div>
+  <div class="muted" id="vault"></div>
+
+  <div id="pair">
+    <div class="muted">首次使用：粘贴 Knowbase 工具箱「网页剪藏」面板里的配对令牌</div>
+    <input id="tokenInput" type="password" placeholder="配对令牌" autocomplete="off" />
+    <button id="pairBtn" class="primary">配对</button>
+  </div>
+
+  <div id="actions" class="hidden">
+    <div class="row">
+      <button id="clipBtn" class="primary" style="flex:1">✂️ 剪藏整页</button>
+      <button id="linkBtn" title="只存标题和链接">仅存链接</button>
+    </div>
+    <div class="muted" id="pagetitle" style="margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+  </div>
+
+  <div id="errline"></div>
+  <div id="receipt"></div>
+  <div class="row" style="margin-top:10px;justify-content:space-between">
+    <button id="retryBtn" class="muted hidden">重试连接</button>
+    <span class="muted" id="portline"></span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

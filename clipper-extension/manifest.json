@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Knowbase Web Clipper",
+  "version": "0.1.0",
+  "description": "把当前网页一键剪藏到本地 Knowbase 仓库（全程仅本机 127.0.0.1，内容不出设备）",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "剪藏到 Knowbase"
+  }
+}
