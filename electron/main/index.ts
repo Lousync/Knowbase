@@ -134,6 +134,11 @@ function loadSettingsFromDisk(): Record<string, unknown> {
   for (const k of ['storageData', 'storageKnowledge', 'storageBlog'] as const) {
     if (raw[k] === undefined) raw[k] = 'vault'
   }
+  // 仓库状态键唯一属主是 vaultContext（直写文件）：主进程缓存绝不能持有其快照，
+  // 否则任何一次 flush（含退出前）都会把 currentVaultId/recentVaults 覆盖回启动时
+  // 的旧值——用户表现为「切换仓库重启后被打回原仓库」。
+  delete raw['currentVaultId']
+  delete raw['recentVaults']
   return raw
 }
 
