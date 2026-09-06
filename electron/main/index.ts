@@ -474,6 +474,8 @@ function registerWindowHandlers(): void {
       flushSettingsToDisk()
 
       // 4) 重建 sqlite schema（残留表结构，数据为空）
+      //    必须先清 _migrations 记账：否则所有迁移被视为「已应用」而全部跳过，表建不回来（历史回归）
+      try { db.run('DELETE FROM _migrations') } catch { /* 记账表可能不存在 */ }
       runMigrations()
       saveToDisk()
       return { success: true }
@@ -771,7 +773,7 @@ app.whenReady().then(async () => {
   startSuperviseScheduler()
 
   // MCP：恢复上次启用状态的外部服务器连接（异步，不阻断首帧）
-  void restoreMcpConnections()
+  void restoreMcpConnections().catch((e) => console.warn('[MCP] 启动恢复连接异常（不阻断）:', (e as Error)?.message || e))
 
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()

@@ -105,6 +105,20 @@ export function runMigrations(): void {
     }
   }
 
+  // 自愈：记账表有记录、但首张核心表（migration 001 建的 entries）却不存在
+  // = 曾有代码 DROP 了业务表却没同步清记账（如早期 clearAllData 回归），
+  // 导致 runMigrations 误判「全部已应用」而永不重建。检测到该特征 → 清记账，让下面循环重建全部空表。
+  if (applied.size > 0) {
+    const hasCore = database.exec(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='entries'"
+    ).length > 0
+    if (!hasCore) {
+      console.warn('[DB] 检测到记账与表结构不一致（迁移已记录但核心表缺失），重置 _migrations 以重建 schema')
+      database.run('DELETE FROM _migrations')
+      applied.clear()
+    }
+  }
+
   // 整个迁移过程包在事务中:DDL 与 _migrations 标记同生共死,
   // 崩溃/断电不会留下"已 ALTER 但未记标记"(下次重复执行报 duplicate column 永远起不来)的中间态
   database.run('BEGIN')
