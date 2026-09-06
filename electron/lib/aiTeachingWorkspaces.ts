@@ -101,7 +101,7 @@ function countDocs(dirAbs: string): number {
     for (const e of entries) {
       if (e.name.startsWith('.') || e.name === '_templates') continue
       if (e.isDir) { stack.push(join(cur, e.name)); continue }
-      if (e.name.toLowerCase().endsWith('.md') && e.name !== 'CONSTRAINTS.md' && e.name !== 'SOURCE.md') n++
+      if (e.name.toLowerCase().endsWith('.md') && e.name !== 'CONSTRAINTS.md' && e.name !== 'SOURCE.md' && e.name !== 'PROFILE.md') n++
     }
   }
   return n

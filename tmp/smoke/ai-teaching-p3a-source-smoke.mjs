@@ -20,7 +20,7 @@ function ok(name, cond, extra = '') {
 console.log('P3a 断言：标题规则注入（主进程）')
 ok('AgentChatRequest 增 source 字段', SVC.includes('source?: string'))
 ok('source=aiTeaching 注入回答标题规则（### 标题）', SVC.includes("source === 'aiTeaching'") && SVC.includes('### 这里写标题'))
-ok('titleRuleHint 拼入 system', SVC.includes('buildSystemPrompt(context) + instHint + titleRuleHint'))
+ok('titleRuleHint 拼入 system', SVC.includes('buildSystemPrompt(context) + instHint + profileHint + titleRuleHint'))
 ok('runAgentLoop 签名带 source 且三处调用透传 req.source（P3b 后追加 llmOpts 实参）',
   /runAgentLoop\([\s\S]*?trace: AgentTraceStep\[\],\s*source\?: string/.test(SVC) && (SVC.match(/req\.source/g) || []).length === 3)
 
@@ -32,7 +32,7 @@ ok('模块 send 传 aiTeaching', MOD.includes("agentChat(sid, raw, undefined, ci
 console.log('P3a 断言：中栏去气泡 + 快速定位条 + 文档地图')
 ok('视图切换退役（timeline/doc state 删除）', !MOD.includes("useState<'timeline'") && !MOD.includes("'文档视图'"))
 ok('中栏三态优先级链 reader/docView 接管（P4 语义：docView > reader > 对话流恒定）', MOD.includes(') : !reader ? (') && !MOD.includes(') : reader ? ('))
-ok('用户消息保留气泡 + assistant 平铺', MOD.includes('bg-[var(--accent)] text-white rounded-xl') && /<MarkdownPreview content=\{m\.content\} \/>/.test(MOD))
+ok('用户消息保留气泡 + assistant 平铺', MOD.includes('bg-[var(--accent)] text-white rounded-xl') && /<MarkdownPreview content=\{m\.content\.replace\(/.test(MOD))
 ok('定位条刻度 + 标题提取回退链（标题→首行→回答N）',
   MOD.includes('msgAnchorTitle') && MOD.includes('#{1,6}') && MOD.includes('`回答 ${n + 1}`'))
 ok('定位条 hover 预览 title + 点击 jumpToAnchor + 当前高亮 activeAnchor',

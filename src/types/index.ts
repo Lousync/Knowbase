@@ -1326,6 +1326,10 @@ export interface ElectronAPI {
   aiTeachSrcRemove: (id: string, no: number) => Promise<AiTeachSourcesResult>
   aiTeachSrcExtract: (id: string, no: number) => Promise<{ ok: boolean; relPath?: string; error?: string }>
   aiTeachSrcPick: () => Promise<{ ok: boolean; path: string | null; error?: string }>
+  aiTeachProfileReadGlobal: () => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
+  aiTeachProfileWriteGlobal: (text: string) => Promise<{ ok: boolean; error?: string }>
+  aiTeachProfileReadSession: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
+  aiTeachProfileWriteSession: (id: string, text: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void

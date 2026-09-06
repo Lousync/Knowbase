@@ -11,6 +11,7 @@ import {
 } from './agentSessionRepo'
 import { resolveConstraintsForInjection } from './aiTeachingFolders'
 import { resolveSourcesForInjection } from './aiTeachingSources'
+import { resolveProfilesForInjection } from './aiTeachingProfile'
 
 /**
  * 最小 AgentRunner —— 「用户消息 → LLM 决策 → ToolRegistry 执行 → 结果回喂」循环。
@@ -258,8 +259,10 @@ async function runAgentLoop(
     const cat = resolveSourcesForInjection(sessionId, getSettingReader())
     return cat ? `\n\n${cat}` : ''
   })() : ''
+  // P8（§3.14）：两层学习者画像注入（全局 userData + 会话 PROFILE.md）+ 更新建议协议（3-33 Plan B）
+  const profileHint = source === 'aiTeaching' ? resolveProfilesForInjection(sessionId, getSettingReader()) : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + instHint + titleRuleHint + quizRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + instHint + profileHint + titleRuleHint + quizRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0

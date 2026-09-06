@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search, User } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
@@ -7,6 +7,7 @@ import {
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachSetLastWorkspace,
   aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick,
+  aiTeachProfileReadGlobal, aiTeachProfileWriteGlobal, aiTeachProfileReadSession, aiTeachProfileWriteSession,
 } from '../../lib/ipc'
 import { AiTeachFileTree } from './AiTeachFileTree'
 import { QuizMode } from '../../components/shared/QuizMode'
@@ -38,7 +39,9 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * P6 素材库（§3.13 结构 v3）：右栏「素材库」展示 SOURCE.md 条目（工作区 SOURCES/{对话夹}/），「＋素材」表单登记
  * （类型/存放/页码区间仅 pdf·pptx 拆起止，3-28 程序解析写入）、pdf/pptx 一键区间提取为同级可编辑提取稿（3-20/3-26），
  * SOURCE.md 与提取稿经 AgentRunner 素材目录注入供 AI 编号引用（3-29，每轮重读）。
- * 占位（P8）：用户画像（§3.14 两层 PROFILE.md）。
+ * P8 用户画像（§3.14）：全局画像（userData/AI教学/PROFILE.md）+ 会话 PROFILE.md 两层每轮注入；
+ * 更新走 Plan B——AI 输出 ```profile 建议块 → 输入框上方建议卡片「接受（本主题/全局）/忽略」，接受才写文件（3-33）；
+ * 「🩺 诊断问答」模板（3-34）答完生成初稿；入口=选择页「全局画像」chip + 顶栏「画像」chip（3-35）。
  */
 
 /** P5：工作区卡片「最近活跃」相对时间（updated_at 'YYYY-MM-DD HH:MM:SS' 本地串） */
@@ -114,6 +117,13 @@ const TEMPLATES: Template[] = [
     goal: '总结我指定的一段时间：成就、回落与下周建议，产出周报草稿。',
     steps: ['读取模块数据', '生成周报草稿', '确认写入'],
     opening: '【复盘任务】请读取我的日程待办、日记、习惯打卡与番茄钟统计，生成一份复盘报告草稿（成就/回落/下周建议），等待我确认后写入周总结。',
+  },
+  {
+    id: 'profile-diagnose', label: '画像诊断', icon: <User size={13} />,
+    desc: '答几道题生成初始学习者画像',
+    goal: '通过诊断问答了解我的身份/基础/薄弱点/目标/偏好，产出学习者画像初稿待确认。',
+    steps: ['AI 出 3~5 道诊断题', '我作答', 'AI 产出画像初稿', '确认写入 PROFILE.md'],
+    opening: '【画像诊断】请一次出 3~5 道诊断问题，了解我的身份/学科背景、当前水平、薄弱点、学习目标与偏好（一次列全，附简短示例）。等我回答后，据我的回答产出一份学习者画像初稿（Markdown，含身份背景/已知基础/当前水平/薄弱点/学习目标/偏好），作为 ```profile 围栏代码块输出，等待我确认后再写入画像文件——先不要直接写文件。',
   },
 ]
 
@@ -560,6 +570,44 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     else showToast({ type: 'error', message: `移除失败：${(r as { error?: string })?.error ?? ''}` })
   }
 
+  // ---------- P8 用户画像（§3.14：全局 userData + 会话 PROFILE.md 两层；Plan B 确认式维护 3-33） ----------
+  const [profileModal, setProfileModal] = useState<null | { layer: 'global' | 'session'; text: string; draft: string; rel: string | null; skeleton: string }>(null)
+  const [profDismissed, setProfDismissed] = useState(false)
+  useEffect(() => { setProfDismissed(false) }, [messages])
+  /** 最新一条 assistant 回答里的 ```profile 围栏 = 画像更新建议（接受才写文件） */
+  const profileSuggestion = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role !== 'assistant') continue
+      const mt = /```profile[^\n]*\n([\s\S]*?)```/.exec(m.content)
+      return mt ? { text: mt[1].trim() } : null
+    }
+    return null
+  }, [messages])
+  const openProfile = useCallback(async (layer: 'global' | 'session') => {
+    if (layer === 'session' && !activeId) { showToast({ type: 'warning', message: '先选择一个对话' }); return }
+    const r = layer === 'global' ? await aiTeachProfileReadGlobal().catch(() => null) : await aiTeachProfileReadSession(activeId!).catch(() => null)
+    if (!r?.ok) { showToast({ type: 'error', message: `画像读取失败${r?.error ? `：${r.error}` : ''}` }); return }
+    setProfileModal({ layer, text: r.text ?? '', draft: r.text ?? '', rel: r.relPath ?? null, skeleton: r.skeleton ?? '' })
+  }, [activeId])
+  const saveProfile = useCallback(async () => {
+    if (!profileModal) return
+    const r = profileModal.layer === 'global'
+      ? await aiTeachProfileWriteGlobal(profileModal.draft).catch(() => null)
+      : activeId ? await aiTeachProfileWriteSession(activeId, profileModal.draft).catch(() => null) : null
+    if (r?.ok) { setProfileModal({ ...profileModal, text: profileModal.draft }); showToast({ type: 'info', message: '画像已保存 · 下轮对话即注入' }) }
+    else showToast({ type: 'error', message: `保存失败${r && 'error' in r && r.error ? `：${r.error}` : ''}` })
+  }, [profileModal, activeId])
+  const acceptProfileSuggestion = useCallback(async (target: 'global' | 'session') => {
+    if (!profileSuggestion) return
+    if (target === 'session' && !activeId) return
+    const r = target === 'global'
+      ? await aiTeachProfileWriteGlobal(profileSuggestion.text).catch(() => null)
+      : await aiTeachProfileWriteSession(activeId!, profileSuggestion.text).catch(() => null)
+    if (r?.ok) { setProfDismissed(true); showToast({ type: 'info', message: `已写入${target === 'global' ? '全局' : '本主题'}画像 · 下轮生效` }) }
+    else showToast({ type: 'error', message: '画像写入失败' })
+  }, [profileSuggestion, activeId])
+
   /** P2（2-6）：保存会话要求 = 写会话文件夹 CONSTRAINTS.md（懒建兜底）；清掉旧 DB 字段残留防双真相源 */
   const saveInstr = async (): Promise<void> => {
     const sid = activeIdRef.current
@@ -839,6 +887,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         </div>
         <div className="shrink-0 flex items-center gap-0.5">
 
+          {/* P8（§3.14/3-35）：本主题画像（会话文件夹 PROFILE.md，叠加在全局画像之上） */}
+          <button
+            onClick={() => { void openProfile('session') }}
+            disabled={!activeId} title="学习者画像 · 本主题：AI 每轮注入（全局+本主题），更新建议须你确认才写入；文件在会话文件夹 PROFILE.md 可直接编辑"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors">
+            <User size={11} />
+            <span className="max-w-[64px] truncate">画像</span>
+            {profileSuggestion && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
+          </button>
           {/* 会话要求（仅本会话生效的全局约束） */}
           <div className="relative shrink-0">
             <button
@@ -1107,7 +1164,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                     ) : (
                       /* P3a 去气泡：助手回复平铺 markdown 原生排版；P3b 轻量操作条（§3.8-3：整理成文档/复制/轨迹折叠） */
                       <div className="min-w-0">
-                        <MarkdownPreview content={m.content} />
+                        {/* P8：```profile 建议块不直显（收敛为输入框上方的「画像更新建议」卡片） */}
+                        <MarkdownPreview content={m.content.replace(/```profile[^\n]*\n[\s\S]*?```/g, '')} />
                         <div className="text-[10px] text-[var(--text-muted)] mt-1 flex items-center gap-2.5">
                           <button onClick={() => { void organizeDocFor(m.content, idx, m.id) }}
                             className={`hover:underline ${organized[m.id ?? `idx${idx}`] ? 'text-[var(--accent)]' : ''}`}>
@@ -1168,6 +1226,27 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 )}
               </div>
 
+              {profileSuggestion && !profDismissed && (
+                /* P8（3-33 Plan B）：AI 画像更新建议——接受才写文件，下轮注入生效 */
+                <div className="shrink-0 mx-2 mb-1.5 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/8 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <User size={12} className="shrink-0 text-[var(--accent)]" />
+                    <span className="text-[12px] text-[var(--text-primary)]">AI 提议更新学习者画像（{profileSuggestion.text.length} 字）</span>
+                    <button onClick={() => { void acceptProfileSuggestion('session') }} title="写入当前会话文件夹 PROFILE.md"
+                      className="ml-auto shrink-0 px-2 py-0.5 rounded-md bg-[var(--accent)] text-white text-[11px] hover:opacity-90 transition-opacity">接受（本主题）</button>
+                    <button onClick={() => { void acceptProfileSuggestion('global') }} title="写入全局画像（userData，跨主题共享）"
+                      className="shrink-0 px-2 py-0.5 rounded-md border border-[var(--accent)]/50 text-[var(--accent)] text-[11px] hover:bg-[var(--accent)]/10 transition-colors">接受（全局）</button>
+                    <button onClick={() => setProfDismissed(true)} title="忽略（不写入；下条回答会重新提议）"
+                      className="shrink-0 px-1.5 py-0.5 rounded-md text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] transition-colors">忽略</button>
+                    <button onClick={() => { const pre = document.querySelector('[data-profile-suggestion]') as HTMLElement | null; pre?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}
+                      title="查看建议内容（下方代码块）" className="shrink-0 px-1.5 py-0.5 rounded-md text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] transition-colors">预览</button>
+                  </div>
+                  <details data-profile-suggestion className="mt-1.5 max-h-40 overflow-y-auto">
+                    <summary className="cursor-pointer text-[10.5px] text-[var(--text-muted)] select-none">建议内容全文</summary>
+                    <pre className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--text-secondary)] font-[var(--font-mono,var(--font-family))]">{profileSuggestion.text}</pre>
+                  </details>
+                </div>
+              )}
               <div className="shrink-0 border-t border-[var(--border-color)] p-2 bg-[var(--bg-secondary)]">
                 <textarea value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void doSend() } }}
@@ -1483,6 +1562,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           <div className="flex items-center gap-2 text-[var(--text-muted)]">
             <Sparkles size={16} className="text-[var(--accent)]" />
             <span className="text-[12px] tracking-wide">AI教学</span>
+            <button onClick={() => { void openProfile('global') }} title="全局学习者画像（跨工作区/跨仓库，存 userData）"
+              className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded-md border border-[var(--border-color)] text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              <User size={11} /> 全局画像
+            </button>
           </div>
           <h1 className="mt-3 text-[22px] font-semibold text-[var(--text-primary)]">选择工作区</h1>
           <p className="mt-1.5 text-[12.5px] text-[var(--text-muted)] leading-relaxed">一个工作区 = 一门课程或一个主题，内含多个对话。工作区跟随当前仓库，元数据存仓库 <code className="px-1 rounded bg-[var(--bg-hover)] text-[11.5px]">.knowbase/modules/aiTeaching/</code>。</p>
@@ -1611,6 +1694,41 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   <button onClick={() => void submitSrcForm()} disabled={!srcForm.name.trim()}
                     className="rounded-md bg-[var(--accent)] px-3 py-1 text-[12.5px] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">确定登记</button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* P8（§3.14/3-35）：画像弹层——两层各一入口；textarea 直编 + 诊断问答生成 */}
+        {profileModal && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setProfileModal(null)}>
+            <div className="w-[560px] max-w-[94vw] max-h-[86vh] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="shrink-0 px-4 pt-3.5 pb-2">
+                <div className="flex items-center gap-2">
+                  <User size={14} className="text-[var(--accent)]" />
+                  <span className="text-[13px] font-medium text-[var(--text-primary)]">{profileModal.layer === 'global' ? '全局学习者画像' : '本主题画像（对话级）'}</span>
+                  {profileModal.layer === 'session' && (
+                    <button onClick={() => { void openProfile('global') }} className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">编辑全局画像 →</button>
+                  )}
+                </div>
+                <div className="mt-1 truncate text-[10.5px] text-[var(--text-muted)]" title={profileModal.rel ?? ''}>
+                  {profileModal.rel ?? '（读取失败）'}{!profileModal.text && profileModal.skeleton ? ' · 尚未生成' : ''}
+                </div>
+              </div>
+              <textarea value={profileModal.draft} onChange={e => setProfileModal({ ...profileModal, draft: e.target.value })}
+                placeholder={profileModal.skeleton} spellCheck={false}
+                className="flex-1 min-h-[240px] mx-4 px-3 py-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[12.5px] leading-relaxed text-[var(--text-primary)] outline-none focus:border-[var(--accent)] font-[var(--font-mono,var(--font-family))] resize-none" />
+              <div className="shrink-0 flex items-center gap-2 px-4 py-3">
+                {!profileModal.draft.trim() && profileModal.skeleton && (
+                  <button onClick={() => setProfileModal({ ...profileModal, draft: profileModal.skeleton })}
+                    className="text-[11.5px] px-2.5 py-1 rounded-md border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">载入骨架</button>
+                )}
+                <button onClick={() => { const tpl = TEMPLATES.find(t => t.id === 'profile-diagnose'); if (tpl) { setProfileModal(null); void newTask(tpl) } }}
+                  title="新建「画像诊断」对话：AI 出 3~5 个诊断问题，答完产出画像建议，接受即写入"
+                  className="text-[11.5px] px-2.5 py-1 rounded-md border border-[var(--accent)]/50 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors">🩺 诊断问答生成</button>
+                <span className="ml-auto text-[10px] text-[var(--text-muted)]">保存即下轮注入 · AI 建议须确认后写入（3-33）</span>
+                <button onClick={() => setProfileModal(null)} className="rounded-md px-3 py-1 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]">关闭</button>
+                <button onClick={() => void saveProfile()} disabled={!activeId && profileModal.layer === 'session'}
+                  className="rounded-md bg-[var(--accent)] px-3 py-1 text-[12.5px] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">保存</button>
               </div>
             </div>
           </div>

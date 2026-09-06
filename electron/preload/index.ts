@@ -250,6 +250,10 @@ const api = {
   aiTeachSrcRemove: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:remove', id, no),
   aiTeachSrcExtract: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:extract', id, no),
   aiTeachSrcPick: () => ipcRenderer.invoke('aiTeachSrc:pick'),
+  aiTeachProfileReadGlobal: () => ipcRenderer.invoke('aiTeachProfile:readGlobal'),
+  aiTeachProfileWriteGlobal: (text: string) => ipcRenderer.invoke('aiTeachProfile:writeGlobal', text),
+  aiTeachProfileReadSession: (id: string) => ipcRenderer.invoke('aiTeachProfile:readSession', id),
+  aiTeachProfileWriteSession: (id: string, text: string) => ipcRenderer.invoke('aiTeachProfile:writeSession', id, text),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

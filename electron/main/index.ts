@@ -46,6 +46,7 @@ import { registerAgentHandlers } from '../lib/agentService'
 import { registerAiTeachingFolderHandlers, migrateRootDir as migrateAiTeachRootDir } from '../lib/aiTeachingFolders'
 import { registerAiTeachingWorkspaceHandlers } from '../lib/aiTeachingWorkspaces'
 import { registerAiTeachingSourceHandlers } from '../lib/aiTeachingSources'
+import { registerAiTeachingProfileHandlers } from '../lib/aiTeachingProfile'
 import { registerTranslateHandlers } from '../lib/translateService'
 import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
@@ -758,6 +759,8 @@ app.whenReady().then(async () => {
     registerAiTeachingWorkspaceHandlers((key) => settingsCache[key])
     // AI教学 P6：素材库（SOURCES/{对话夹}/SOURCE.md 登记+区间提取，§3.13 结构 v3）
     registerAiTeachingSourceHandlers((key) => settingsCache[key])
+    // AI教学 P8：用户画像（全局 userData + 会话 PROFILE.md 两层，§3.14）
+    registerAiTeachingProfileHandlers((key) => settingsCache[key])
     // 划词翻译:离线词典 + LLM 翻译/AI 精讲
     registerTranslateHandlers()
     // 单词本:生词本 + 每日队列 SRS + 词书

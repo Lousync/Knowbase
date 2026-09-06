@@ -508,6 +508,11 @@ export const aiTeachSrcAdd = (id: string, input: AiTeachSourceInput) => a().aiTe
 export const aiTeachSrcRemove = (id: string, no: number) => a().aiTeachSrcRemove(id, no)
 export const aiTeachSrcExtract = (id: string, no: number) => a().aiTeachSrcExtract(id, no)
 export const aiTeachSrcPick = () => a().aiTeachSrcPick()
+// P8 用户画像（§3.14 两层 PROFILE.md）
+export const aiTeachProfileReadGlobal = () => a().aiTeachProfileReadGlobal()
+export const aiTeachProfileWriteGlobal = (text: string) => a().aiTeachProfileWriteGlobal(text)
+export const aiTeachProfileReadSession = (id: string) => a().aiTeachProfileReadSession(id)
+export const aiTeachProfileWriteSession = (id: string, text: string) => a().aiTeachProfileWriteSession(id, text)
 /** P3b：模型是否支持思考强度（主进程单一真相源正则） */
 export const llmReasoningCapable = (model: string): Promise<boolean> => a().llmReasoningCapable(model)
 export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)
