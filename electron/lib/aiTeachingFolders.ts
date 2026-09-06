@@ -289,6 +289,37 @@ export function migrateRootDir(oldName: string, newName: string): { ok: boolean;
   }
 }
 
+/**
+ * P3b「整理成文档」（§3.8-2，3-14 默认纯 markdown 直出）：把一条 AI 回答落盘为会话文件夹内
+ * `讲义·{标题}.md`。写路径经 ensure 懒建文件夹（2-5 旧会话首次整理即补建）；
+ * 幂等：同名同内容直接返回既有路径（前端「已生成文档 →」跳转），同名不同内容加 (n) 后缀不覆盖。
+ */
+export function organizeDoc(sessionId: string, title: string, content: string, getSetting: (key: string) => unknown): FolderResult {
+  try {
+    const ensured = ensureSessionFolder(sessionId, getSetting)
+    if (!ensured.ok || !ensured.relPath) return { ok: false, error: ensured.error ?? '会话文件夹不可用' }
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const body = String(content ?? '').replace(/\r\n/g, '\n')
+    const base = `讲义·${sanitizeTitle(title)}`
+    const dirAbs = join(vault.rootPath, ensured.relPath)
+    let name = `${base}.md`
+    for (let n = 1; n < 50; n++) {
+      const abs = join(dirAbs, name)
+      if (!existsSync(abs)) break
+      try {
+        if (readFileSync(abs, 'utf-8') === body) return { ok: true, relPath: `${ensured.relPath}/${name}` } // 内容未变 = 幂等
+      } catch { /* 读取失败按占用处理，换后缀 */ }
+      name = `${base} (${n}).md`
+    }
+    writeFileSync(join(dirAbs, name), body, 'utf-8')
+    broadcastTreeRefresh(rootDirName(getSetting))
+    return { ok: true, relPath: `${ensured.relPath}/${name}` }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
 export function registerAiTeachingFolderHandlers(getSetting: (key: string) => unknown): void {
   ipcMain.handle('aiTeach:ensureSessionFolder', (_e, sessionId: string) => ensureSessionFolder(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeach:sessionFolder', (_e, sessionId: string) => sessionFolder(String(sessionId ?? ''), getSetting))
@@ -297,4 +328,6 @@ export function registerAiTeachingFolderHandlers(getSetting: (key: string) => un
   // P2：会话约束文件（CONSTRAINTS.md）读写
   ipcMain.handle('aiTeach:readConstraints', (_e, sessionId: string) => readConstraints(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeach:writeConstraints', (_e, sessionId: string, text: string) => writeConstraints(String(sessionId ?? ''), String(text ?? ''), getSetting))
+  // P3b：整理成文档（回答 md 落盘会话文件夹，幂等）
+  ipcMain.handle('aiTeach:organizeDoc', (_e, sessionId: string, title: string, content: string) => organizeDoc(String(sessionId ?? ''), String(title ?? '讲义'), String(content ?? ''), getSetting))
 }

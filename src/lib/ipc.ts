@@ -462,7 +462,7 @@ export const pdfExport = (payload: { data: Uint8Array; defaultName: string; kind
 /** 界面逐页阅读：当前仓库内 .pptx → [{n,text}] */
 export const docsPptxPages = (relPath: string): Promise<{ ok: boolean; pages?: Array<{ n: number; text: string }>; total?: number; error?: string }> => a().docsPptxPages(relPath)
 
-export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string, source?: string): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId, source })
+export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string, source?: string, modelId?: string, effort?: 'off' | 'low' | 'medium' | 'high'): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId, source, modelId, effort })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
 export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
@@ -492,6 +492,10 @@ export interface AiTeachConstraintsResult { ok: boolean; text?: string; relPath?
 export const aiTeachReadConstraints = (id: string): Promise<AiTeachConstraintsResult> => a().aiTeachReadConstraints(id)
 /** 写会话 CONSTRAINTS.md（懒建文件夹；不再写 DB sessionInstructions） */
 export const aiTeachWriteConstraints = (id: string, text: string): Promise<AiTeachConstraintsResult> => a().aiTeachWriteConstraints(id, text)
+/** P3b：整理成文档——回答 md 落盘会话文件夹（懒建夹 + 幂等），返回产物相对路径 */
+export const aiTeachOrganizeDoc = (id: string, title: string, content: string): Promise<AiTeachFolderResult> => a().aiTeachOrganizeDoc(id, title, content)
+/** P3b：模型是否支持思考强度（主进程单一真相源正则） */
+export const llmReasoningCapable = (model: string): Promise<boolean> => a().llmReasoningCapable(model)
 export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)
 export const onAiTeachNotice = (cb: (msg: string) => void) => a().onAiTeachNotice(cb)
 export const llmCcSwitchList = (): Promise<CcSwitchScanResult> => a().llmCcSwitchList()

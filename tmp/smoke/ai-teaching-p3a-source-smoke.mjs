@@ -21,13 +21,13 @@ console.log('P3a 断言：标题规则注入（主进程）')
 ok('AgentChatRequest 增 source 字段', SVC.includes('source?: string'))
 ok('source=aiTeaching 注入回答标题规则（### 标题）', SVC.includes("source === 'aiTeaching'") && SVC.includes('### 这里写标题'))
 ok('titleRuleHint 拼入 system', SVC.includes('buildSystemPrompt(context) + instHint + titleRuleHint'))
-ok('runAgentLoop 签名带 source 且三处调用传 req.source',
-  /runAgentLoop\([\s\S]*?trace: AgentTraceStep\[\],\s*source\?: string/.test(SVC) && (SVC.match(/req\.source\)/g) || []).length === 3)
+ok('runAgentLoop 签名带 source 且三处调用透传 req.source（P3b 后追加 llmOpts 实参）',
+  /runAgentLoop\([\s\S]*?trace: AgentTraceStep\[\],\s*source\?: string/.test(SVC) && (SVC.match(/req\.source/g) || []).length === 3)
 
 console.log('P3a 断言：source 三层透传')
-ok('ipc.ts agentChat 透传 source', IPC.includes('source?: string') && IPC.includes('chatId, source }'))
+ok('ipc.ts agentChat 透传 source', IPC.includes('source?: string') && IPC.includes('source, modelId, effort }'))
 ok('ElectronAPI 类型带 source', TY.includes('chatId?: string; source?: string'))
-ok('模块 send 传 aiTeaching', MOD.includes("agentChat(sid, raw, undefined, cid, 'aiTeaching')"))
+ok('模块 send 传 aiTeaching', MOD.includes("agentChat(sid, raw, undefined, cid, 'aiTeaching',"))
 
 console.log('P3a 断言：中栏去气泡 + 快速定位条 + 文档地图')
 ok('视图切换退役（timeline/doc state 删除）', !MOD.includes("useState<'timeline'") && !MOD.includes("'文档视图'"))
@@ -39,8 +39,8 @@ ok('定位条 hover 预览 title + 点击 jumpToAnchor + 当前高亮 activeAnch
   MOD.includes('jumpToAnchor') && MOD.includes('title={a.title}') && MOD.includes('i === activeAnchor'))
 ok('scroll 容器 scrollRef + onScroll 追踪 + data-msg-idx',
   MOD.includes('scrollRef') && MOD.includes('onScroll={onConvScroll}') && MOD.includes('data-msg-idx={idx}'))
-ok('文档地图：扫描会话文件夹产物 + kb-open-in-editor 跳转',
-  MOD.includes('toggleDocMap') && MOD.includes('aiTeachSessionFolder(sid)') && MOD.includes('文档地图') && MOD.includes("a.endsWith('.md')"))
+ok('产物导航（P3b 起）：文档地图按钮退役 → 逐条整理成文档 + kb-open-in-editor 跳转',
+  !MOD.includes('toggleDocMap') && MOD.includes("new CustomEvent('kb-open-in-editor'") && MOD.includes('organizeDocFor'))
 
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

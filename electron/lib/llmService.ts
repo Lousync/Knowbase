@@ -47,6 +47,8 @@ interface ChatRequest {
   maxTokens: number
   /** 外部中断信号（用户点击停止） */
   signal?: AbortSignal
+  /** P3b 思考强度（§3.8 第五轮）：仅推理型模型透传 reasoning_effort，off/未设 = 不发 */
+  effort?: 'off' | 'low' | 'medium' | 'high'
 }
 
 interface ChatResult {
@@ -161,6 +163,9 @@ function normalizeOpenAiToolCalls(raw: any[]): ToolCallNormalized[] {
   })).filter(tc => tc.name)
 }
 
+/** P3b 推理/思考能力启发式：仅这些模型接受 reasoning_effort（跟随模型能力）。渲染层可用同口径判断是否置灰。 */
+export const REASONING_MODEL_RE = /(reasoner|r1|qwq|qwen3|o[134]-|o[134]$|thinking|research|smart|deepthink)/i
+
 const openAiCompatibleAdapter: Adapter = {
   async listModels(p): Promise<string[]> {
     const { status, json } = await httpJson(`${p.baseUrl}/models`, { method: 'GET', headers: authHeaders(p) })
@@ -177,6 +182,10 @@ const openAiCompatibleAdapter: Adapter = {
     if (req.tools && req.tools.length > 0) {
       body.tools = req.tools
       body.tool_choice = 'auto'
+    }
+    // P3b：思考强度仅在模型具备能力时透传，避免不认该参数的供应商报错
+    if (req.effort && req.effort !== 'off' && REASONING_MODEL_RE.test(req.model)) {
+      body.reasoning_effort = req.effort
     }
     const started = Date.now()
     const { status, json } = await httpJson(`${p.baseUrl}/chat/completions`, {
@@ -361,6 +370,8 @@ export interface LlmInvokeRequest {
   tools?: unknown[]
   /** 外部中断信号（用户点击停止） */
   signal?: AbortSignal
+  /** P3b：思考强度（本对话生效，由调用方透传） */
+  effort?: 'off' | 'low' | 'medium' | 'high'
 }
 
 export type LlmInvokeResponse = {
@@ -407,6 +418,7 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       messages: req.messages,
       tools: req.tools,
       maxTokens,
+      effort: req.effort,
       signal: req.signal,
     })
     appendAudit(provider.id, 'llm.invoke', {
@@ -557,6 +569,9 @@ export function registerLlmHandlers(deps: {
       return { ok: false, latencyMs: Date.now() - started, error: String((err as Error)?.message ?? err) }
     }
   })
+
+  // P3b：模型思考强度能力探测（正则单一真相源在主进程，渲染层据此置灰菜单）
+  ipcMain.handle('llm:reasoningCapable', (_e, model: string) => REASONING_MODEL_RE.test(String(model ?? '')))
 
   ipcMain.handle('llm:refreshModels', async (_e, id: string) => {
     const list = getProviders()

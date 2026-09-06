@@ -70,6 +70,10 @@ export interface AgentChatRequest {
   chatId?: string
   /** 调用来源（P3a §3.8-2）：'aiTeaching' 时附加「每条回答带标题」等模块专属规则；轻问答不传 */
   source?: string
+  /** P3b §3.8 第五轮：本对话临时换模（'providerId:modelId' 串，与 defaultChatModel 同格式；不传=全局默认） */
+  modelId?: string
+  /** P3b：思考强度（仅推理型模型实际透传 reasoning_effort，主进程侧守卫） */
+  effort?: 'off' | 'low' | 'medium' | 'high'
 }
 
 /** 单次请求对用户数据的写改动（供 UI 列出「本次改了哪些文件/条目」） */
@@ -197,7 +201,7 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, _chatId: st
   appendAgentMessage(sessionId, 'user', message)
   ensureSessionTitle(sessionId, message)
 
-  return runAgentLoop(sessionId, req.context, signal, trace, req.source)
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
 
 /** 从会话库当前内容直接推理（不追加新用户消息）——重新生成/编辑重推共用 */
@@ -206,7 +210,8 @@ async function runAgentLoop(
   context: AgentContextInfo | undefined,
   signal: AbortSignal,
   trace: AgentTraceStep[],
-  source?: string
+  source?: string,
+  llmOpts?: { modelId?: string; effort?: 'off' | 'low' | 'medium' | 'high' }
 ): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
   const history = getAgentMessages(sessionId)
@@ -249,12 +254,20 @@ async function runAgentLoop(
   ]
   let sessionWrites = 0
   const changes: AgentChange[] = []
+  // P3b：本对话模型覆盖（'pid:mid' 串拆分）——解析一次，全轮次复用
+  let providerId: string | undefined
+  let modelOverride: string | undefined
+  if (llmOpts?.modelId) {
+    const ci = llmOpts.modelId.indexOf(':')
+    providerId = ci > 0 ? llmOpts.modelId.slice(0, ci) : undefined
+    modelOverride = ci > 0 ? llmOpts.modelId.slice(ci + 1) : llmOpts.modelId
+  }
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // ---- LLM 轮 ----
     if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
     const t0 = Date.now()
-    const r = await invokeLlmInternal({ messages: convo, tools: toolPayload, signal })
+    const r = await invokeLlmInternal({ messages: convo, tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort })
     const llmStep: AgentTraceStep = {
       kind: 'llm',
       ok: r.ok,
@@ -349,7 +362,7 @@ async function agentRegenerate(req: AgentChatRequest, signal: AbortSignal): Prom
   const lastUser = [...msgs].reverse().find(m => m.role === 'user')
   if (!lastUser) return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
   deleteMessagesAfter(sessionId, lastUser.id)
-  return runAgentLoop(sessionId, req.context, signal, trace, req.source)
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
 
 /** 改写某条用户消息并重新生成其后的回复 */
@@ -364,7 +377,7 @@ async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, 
   if (msg.role !== 'user') return { ok: false, sessionId, error: '只能编辑用户消息', trace }
   updateMessageContent(msg.id, content)
   deleteMessagesAfter(sessionId, msg.id)
-  return runAgentLoop(sessionId, req.context, signal, trace, req.source)
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
 
 export function registerAgentHandlers(): void {

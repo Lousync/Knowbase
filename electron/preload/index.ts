@@ -179,6 +179,7 @@ const api = {
   llmSetDefaultModel: (value: string) => ipcRenderer.invoke('llm:setDefaultModel', value),
   llmTestModel: (providerId: string, model: string) => ipcRenderer.invoke('llm:testModel', { providerId, model }),
   llmGetUsage: () => ipcRenderer.invoke('llm:getUsage'),
+  llmReasoningCapable: (model: string) => ipcRenderer.invoke('llm:reasoningCapable', model),
   // 划词翻译 / 离线词典
   dictLookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),
   dictStatus: () => ipcRenderer.invoke('dict:status'),
@@ -211,7 +212,7 @@ const api = {
   pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => ipcRenderer.invoke('pdf:organize', payload),
   pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => ipcRenderer.invoke('pdf:export', payload),
   docsPptxPages: (relPath: string) => ipcRenderer.invoke('docs:pptxPages', relPath),
-  agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:chat', req),
+  agentChat: (req: { sessionId: string; message: string; context?: unknown; chatId?: string; source?: string; modelId?: string; effort?: string }) => ipcRenderer.invoke('agent:chat', req),
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),
   agentDeleteMessage: (messageId: string) => ipcRenderer.invoke('agent:deleteMessage', messageId),
@@ -235,6 +236,7 @@ const api = {
   aiTeachDeleteSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:deleteSessionFolder', id),
   aiTeachReadConstraints: (id: string) => ipcRenderer.invoke('aiTeach:readConstraints', id),
   aiTeachWriteConstraints: (id: string, text: string) => ipcRenderer.invoke('aiTeach:writeConstraints', id, text),
+  aiTeachOrganizeDoc: (id: string, title: string, content: string) => ipcRenderer.invoke('aiTeach:organizeDoc', id, title, content),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

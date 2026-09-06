@@ -37,15 +37,15 @@ ok('三场景模板（教学/研读/复盘）各带目标/步骤/开场指令',
 ok('会话：列表/新建任务/删除/切换（复用 AgentRunner 会话库）',
   IM.includes('agentSessions()') && IM.includes('agentNewSession') && IM.includes('agentDeleteSession'))
 ok('真实对话闭环：发送→agentChat(带 aiTeaching 来源)→refreshMessages',
-  IM.includes("await agentChat(sid, raw, undefined, cid, 'aiTeaching')") && IM.includes('await refreshMessages(sid)'))
+  IM.includes("agentChat(sid, raw, undefined, cid, 'aiTeaching',") && IM.includes('await refreshMessages(sid)'))
 ok('实时步骤（onAgentStep 按 chatId 过滤）+ 停止',
   IM.includes('return onAgentStep(') && IM.includes('chatId !== chatIdRef.current') && IM.includes('agentAbort'))
 ok('改动清单 → 点击跳编辑器（kb-open-in-editor + c.file）',
   IM.includes("new CustomEvent('kb-open-in-editor'") && IM.includes('c.file'))
 ok('工具名中文映射 + 调用轨迹折叠（details）',
   IM.includes("'builtin.vault.read': '读笔记文件'") && IM.includes('<details') && IM.includes('调用轨迹'))
-ok('P3a 视图改版：文档视图/切换退役 → 恒对话流 + 快速定位条 + 文档地图',
-  !IM.includes("['timeline', 'doc']") && IM.includes('anchors') && IM.includes('msgAnchorTitle') && IM.includes('jumpToAnchor') && IM.includes('toggleDocMap'))
+ok('P3a/P3b 视图改版：文档视图/切换退役 → 恒对话流 + 快速定位条（文档地图后续退役由逐条整理承接）',
+  !IM.includes("['timeline', 'doc']") && IM.includes('anchors') && IM.includes('msgAnchorTitle') && IM.includes('jumpToAnchor') && IM.includes('scrollRef'))
 ok('素材/产物为 M1 占位（头部注释标注）',
   IM.includes('占位（M1）：素材管理、产物草稿与写入'))
 

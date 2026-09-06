@@ -2,24 +2,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, Feather } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions,
+  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
   workspaceGetCurrent, workspaceListDir, docsPptxPages,
-  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, onAiTeachNotice,
+  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo } from '../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo, LlmProviderInfo } from '../../types'
 
 /**
  * 「AI教学」模块（原 id immersive / 沉浸式 Agent；总纲 docs/ai-teaching-module-rework.md，
  * 历史设计 docs/agent-immersive-mode-design.md M0 骨架）
  * 独立全屏 Tab（五区布局），与轻问答共用 AgentRunner 会话库与 agent:step 推送。
- * 已实现：会话列表/新建任务（场景模板）/发送/回复渲染/实时步骤/轨迹折叠/改动清单可跳编辑器/文档视图；
+ * 已实现：会话列表/新建任务（场景模板）/发送/回复渲染/实时步骤/轨迹折叠/改动清单可跳编辑器；
  * P1 会话⇄文件夹绑定：新建对话即建 `{MM-DD} 标题` 文件夹（.session.json 锚点）、重命名同步改夹、
  * 删除会话按 aiTeachDeleteSessionFolder（ask/keep/delete）处理文件夹（进系统回收站）。
- * 占位（M1）：素材管理、产物草稿与写入、步骤引擎自动推进、diff 视图。
+ * P2 约束文件化：会话要求唯一真相源 = 会话文件夹 CONSTRAINTS.md（弹层读写文件，主进程每轮重读注入）。
+ * P3 中栏改版：AI 回答去气泡平铺 + 逐条操作条（整理成文档/复制/轨迹）；右缘快速定位条（标题锚点）；
+ * 输入区流式停止键 + 本对话模型/思考强度合一菜单（仅本对话生效）；顶栏收敛（时间线/文档视图/文档地图退役）。
+ * 占位（P4~P7）：左侧栏 VS Code 化、工作区两层、素材库 SOURCES v3、题目视图。
  */
+
+/** P3b：思考强度档位（与主进程 LlmInvokeRequest.effort 同口径） */
+type Effort = 'off' | 'low' | 'medium' | 'high'
+const EFFORT_LABEL: Record<Effort, string> = { off: '关闭', low: '低', medium: '中', high: '高' }
 
 /** P3a（3-13）：回答锚点标题——取首行 markdown 标题（主进程已注入标题规则）；无标题退首行截断，再退「回答N」 */
 function msgAnchorTitle(content: string, n: number): string {
@@ -106,9 +113,14 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [pending, setPending] = useState(false)
   const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
   const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
-  // P3a（§3.7/3.8）：视图切换退役——中栏恒为对话流，reader 激活时占用中栏；顶栏改「文档地图」
-  const [mapOpen, setMapOpen] = useState(false)
-  const [mapFiles, setMapFiles] = useState<string[]>([])
+  // P3b（§3.8 第五轮 R12/R14）：本对话模型/思考强度覆盖（内存级，仅本对话生效）+ 整理成文档状态
+  const convoLlm = useRef<Map<string, { modelId?: string; effort?: Effort }>>(new Map())
+  const [convoModel, setConvoModel] = useState('')
+  const [convoEffort, setConvoEffort] = useState<Effort>('off')
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [providerList, setProviderList] = useState<LlmProviderInfo[]>([])
+  const [modelCapable, setModelCapable] = useState(false)
+  const [organized, setOrganized] = useState<Record<string, string>>({})
   const [showNewMenu, setShowNewMenu] = useState(false)
   // ---- Token 消耗统计（月度走 llm:getUsage）----
   const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
@@ -224,7 +236,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     const sid = activeIdRef.current
     if (!sid) { setPending(false); return null }
     setMessages(prev => [...prev, { role: 'user', content: raw, createdAt: nowLocal() }])
-    const r = await agentChat(sid, raw, undefined, cid, 'aiTeaching')
+    const ov = convoLlm.current.get(sid)
+    const r = await agentChat(sid, raw, undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
     setLastChanges(r?.changes && r.changes.length ? r.changes : null)
     await refreshMessages(sid)
     setPending(false)
@@ -406,31 +419,63 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [anchors])
   useEffect(() => { setActiveAnchor(0) }, [activeId])
 
-  /** 文档地图（P3a，§3.7-3.12）：列当前会话文件夹内文件产物（锚点/约束文件除外），点击跳编辑器 */
-  const toggleDocMap = useCallback(async () => {
-    if (mapOpen) { setMapOpen(false); return }
-    setMapOpen(true)
-    setMapFiles([])
+  // P3b：切会话时同步模型/思考强度控件到该会话的覆盖值（未覆盖=跟随全局默认）
+  useEffect(() => {
+    const ov = activeId ? convoLlm.current.get(activeId) : undefined
+    setConvoModel(ov?.modelId ?? '')
+    setConvoEffort(ov?.effort ?? 'off')
+  }, [activeId])
+  const effModel = convoModel || defaultModel
+  const effModelBare = effModel.includes(':') ? effModel.slice(effModel.indexOf(':') + 1) : effModel
+  useEffect(() => {
+    if (!effModelBare) { setModelCapable(false); return }
+    void llmReasoningCapable(effModelBare).then(setModelCapable).catch(() => setModelCapable(false))
+  }, [effModelBare])
+  useEffect(() => {
+    // 换到不支持的模型 → 强度自动回「关闭」（整区禁用同屏已呈现）
+    if (!modelCapable && convoEffort !== 'off') {
+      setConvoEffort('off')
+      const sid = activeIdRef.current
+      const cur = sid ? convoLlm.current.get(sid) : undefined
+      if (cur && sid) convoLlm.current.set(sid, { ...cur, effort: 'off' })
+    }
+  }, [modelCapable, convoEffort])
+  const pickModel = (val: string): void => {
     const sid = activeIdRef.current
     if (!sid) return
-    const cur = await workspaceGetCurrent().catch(() => null)
-    const rootId = (cur as { rootId?: string } | null)?.rootId
-    const f = await aiTeachSessionFolder(sid).catch(() => null)
-    if (!rootId || !f?.ok || !f.relPath) return
-    const out: string[] = []
-    const walk = async (dir: string, depth: number) => {
-      if (depth > 2 || out.length > 100) return
-      const res = await workspaceListDir(rootId, dir).catch(() => null)
-      for (const e of res?.entries ?? []) {
-        const rel = `${dir}/${e.name}`
-        if (e.type === 'dir') await walk(rel, depth + 1)
-        else if (!e.name.startsWith('.')) out.push(rel)
-      }
+    convoLlm.current.set(sid, { ...(convoLlm.current.get(sid) ?? {}), modelId: val })
+    setConvoModel(val)
+  }
+  const pickEffort = (e: Effort): void => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    convoLlm.current.set(sid, { ...(convoLlm.current.get(sid) ?? {}), effort: e })
+    setConvoEffort(e)
+  }
+  const openModelMenu = (): void => {
+    if (!modelMenuOpen) void llmListProviders().then(res => setProviderList(res.providers ?? [])).catch(() => null)
+    setModelMenuOpen(v => !v)
+  }
+
+  /** P3b「整理成文档」（§3.8-2）：本条回答落盘会话文件夹（懒建夹 2-5 + 幂等跳转 3-14 默认直出） */
+  const organizeDocFor = async (content: string, idx: number, mid: string | undefined): Promise<void> => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    const key = mid ?? `idx${idx}`
+    const existing = organized[key]
+    if (existing) {
+      window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: existing } }))
+      return
     }
-    await walk(f.relPath, 0)
-    out.sort((a, b) => (a.endsWith('.md') === b.endsWith('.md') ? a.localeCompare(b) : a.endsWith('.md') ? -1 : 1))
-    if (activeIdRef.current === sid) setMapFiles(out)
-  }, [mapOpen])
+    const title = msgAnchorTitle(content, idx)
+    const r = await aiTeachOrganizeDoc(sid, title, content).catch(() => null)
+    if (r?.ok && r.relPath) {
+      setOrganized(prev => ({ ...prev, [key]: r.relPath as string }))
+      showToast({ type: 'info', message: `已生成文档：${r.relPath.split('/').pop()}（左栏/编辑器可见可改）` })
+    } else {
+      showToast({ type: 'error', message: `整理失败${r?.error ? `：${r.error}` : ''}` })
+    }
+  }
   const tokenStats = useMemo(() => {
     const all: AgentTraceStep[] = [...messages.flatMap(m => m.trace ?? []), ...liveSteps]
     let llmTokens = 0, llmRounds = 0, toolCalls = 0, durationMs = 0
@@ -541,29 +586,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             )}
           </div>
 
-          {/* 文档地图（P3a，§3.7-3.12）：会话文件夹内文件产物 → 跳编辑器打开 */}
-          <div className="relative shrink-0">
-            <button onClick={() => { void toggleDocMap() }}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${mapOpen ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}
-              title="文档地图：本会话文件夹内的文件产物，点击跳转编辑器打开">
-              <FileText size={12} />
-              <span>文档地图</span>
-            </button>
-            {mapOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-[340px] max-h-[360px] overflow-y-auto z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl select-text">
-                <div className="sticky top-0 px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11.5px] font-medium text-[var(--text-primary)]">本会话文件（{mapFiles.length}）</div>
-                {mapFiles.length === 0 ? (
-                  <div className="px-3 py-4 text-[11.5px] text-[var(--text-muted)]">尚无文件产物（本会话生成讲义/题目等后出现在这里）</div>
-                ) : mapFiles.map(rel => (
-                  <button key={rel} onClick={() => { setMapOpen(false); window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel } })) }}
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[11.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-                    <FileText size={11} className="shrink-0 text-[var(--accent)]" />
-                    <span className="truncate" title={rel}>{rel}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* P3b（§3.8-2/连锁）：顶栏「文档地图」退役——产物导航由逐条「整理成文档」+ P4 左栏资源管理器承接；
+              顶栏恒为：会话要求 + Token 仪表 +（P5 工作区 chip）+ 禅模式 */}
 
           {/* 禅模式（唯一作用域 = 本模块）：一键窗口全屏 + 隐壳（标题栏/活动栏隐藏）；再点或 Esc 退出 */}
           {onZenLevelChange && (
@@ -688,11 +712,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                       /* 用户消息保留右侧气泡（§3.8-3：仅 AI 回复去气泡） */
                       <div className="max-w-[86%] min-w-0 bg-[var(--accent)] text-white rounded-xl rounded-br-sm px-3.5 py-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap">{m.content}</div>
                     ) : (
-                      /* P3a 去气泡：助手回复平铺 markdown 原生排版，meta 行轻量化 */
+                      /* P3a 去气泡：助手回复平铺 markdown 原生排版；P3b 轻量操作条（§3.8-3：整理成文档/复制/轨迹折叠） */
                       <div className="min-w-0">
                         <MarkdownPreview content={m.content} />
-                        <div className="text-[10px] text-[var(--text-muted)] mt-1 flex items-center gap-3">
-                          <span>{fmtTime(m.createdAt)}</span>
+                        <div className="text-[10px] text-[var(--text-muted)] mt-1 flex items-center gap-2.5">
+                          <button onClick={() => { void organizeDocFor(m.content, idx, m.id) }}
+                            className={`hover:underline ${organized[m.id ?? `idx${idx}`] ? 'text-[var(--accent)]' : ''}`}>
+                            {organized[m.id ?? `idx${idx}`] ? '✓ 已生成文档 →' : '整理成文档'}
+                          </button>
+                          <button onClick={() => { void navigator.clipboard.writeText(m.content).then(() => showToast({ type: 'info', message: '已复制本条回答' })).catch(() => null) }}
+                            className="hover:underline">复制</button>
+                          <span className="text-[var(--text-muted)]">{fmtTime(m.createdAt)}</span>
                           {m.trace && m.trace.length > 0 && (
                             <details className="cursor-pointer select-none">
                               <summary className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">调用轨迹（{m.trace.length} 步）</summary>
@@ -726,10 +756,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                               : <>执行 {toolName(lastStep.name)} 失败，正在调整…</>)
                             : <>思考中…（已调用 {toolCount} 次工具）</>}
                       </span>
-                      <button onClick={() => { void agentAbort(chatIdRef.current) }}
-                        className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-red-400 transition-colors shrink-0">
-                        停止
-                      </button>
                     </div>
                   </div>
                 )}
@@ -756,10 +782,65 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   className="w-full px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] resize-none outline-none focus:border-[var(--accent)]" />
                 <div className="flex items-center gap-2 mt-1.5">
                   <div className="flex-1" />
-                  <button onClick={() => { void doSend() }} disabled={pending || !input.trim()}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors">
-                    {pending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} 发送
-                  </button>
+                  {/* 模型 + 思考强度合一菜单（P3b R12/R14）：仅本对话生效 */}
+                  <div className="relative">
+                    <button onClick={openModelMenu}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                      title="本对话模型与思考强度（仅本对话生效，默认跟随 设置→AI 默认模型）">
+                      <Bot size={11} />
+                      <span className="max-w-[140px] truncate">{effModelBare || '默认'}</span>
+                      {convoEffort !== 'off' && <span className="text-[var(--accent)]">· 🧠{EFFORT_LABEL[convoEffort]}</span>}
+                      <ChevronRight size={10} className="-rotate-90 shrink-0" />
+                    </button>
+                    {modelMenuOpen && (
+                      <div className="absolute bottom-full right-0 mb-1.5 w-[280px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden select-none">
+                        <div className="px-3 py-1.5 text-[10.5px] text-[var(--text-muted)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">模型 · 仅本对话生效</div>
+                        <div className="max-h-[220px] overflow-y-auto py-1">
+                          {providerList.filter(p => p.enabled && p.models.length > 0).flatMap(p =>
+                            p.models.map(mm => {
+                              const val = `${p.id}:${mm}`
+                              const sel = effModel === val
+                              return (
+                                <button key={val} onClick={() => pickModel(val)}
+                                  className={`w-full flex items-center gap-1.5 px-3 py-1 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors ${sel ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                                  <span className="text-[9.5px] text-[var(--text-muted)] shrink-0">{p.name}</span>
+                                  <span className="truncate flex-1">{mm}</span>
+                                  {sel && <span className="shrink-0">✓</span>}
+                                </button>
+                              )
+                            }))}
+                          {providerList.filter(p => p.enabled && p.models.length > 0).length === 0 && (
+                            <div className="px-3 py-3 text-[11px] text-[var(--text-muted)]">尚无启用的供应商（设置 → AI 模型中添加）</div>
+                          )}
+                        </div>
+                        <div className="px-3 pt-1.5 flex items-center justify-between border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                          <span className="text-[10.5px] text-[var(--text-muted)]">思考强度</span>
+                          {!modelCapable && <span className="text-[10px] text-[var(--text-muted)]">当前模型不支持</span>}
+                        </div>
+                        <div className={`flex gap-1 px-3 py-2 bg-[var(--bg-secondary)] ${modelCapable ? '' : 'opacity-40 pointer-events-none'}`}>
+                          {(['off', 'low', 'medium', 'high'] as const).map(e => (
+                            <button key={e} onClick={() => pickEffort(e)}
+                              className={`flex-1 px-1 py-0.5 rounded-md text-[11px] transition-colors ${convoEffort === e ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}>
+                              {EFFORT_LABEL[e]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* P3b（R12）：流式输出中发送键 → 停止键（深色底白方块），点击中断、保留已落库内容 */}
+                  {pending ? (
+                    <button onClick={() => { void agentAbort(chatIdRef.current) }}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--text-primary)] text-[var(--bg-primary)] hover:opacity-80 transition-opacity"
+                      title="停止生成（已完成的轮次保留）">
+                      <span className="w-2 h-2 rounded-[2px] bg-current shrink-0" /> 停止
+                    </button>
+                  ) : (
+                    <button onClick={() => { void doSend() }} disabled={!input.trim()}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors">
+                      <Send size={12} /> 发送
+                    </button>
+                  )}
                 </div>
               </div>
             </>

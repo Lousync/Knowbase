@@ -1245,7 +1245,7 @@ export interface ElectronAPI {
   pdfExport: (payload: { data: Uint8Array; defaultName: string; kind?: 'pdf' | 'txt' }) => Promise<PdfExportResult>
   /** 界面逐页阅读：当前仓库内 .pptx → [{n,text}] */
   docsPptxPages: (relPath: string) => Promise<{ ok: boolean; pages?: Array<{ n: number; text: string }>; total?: number; error?: string }>
-  agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string; source?: string }) => Promise<AgentChatResult>
+  agentChat: (req: { sessionId: string; message: string; context?: AgentContextInfo; chatId?: string; source?: string; modelId?: string; effort?: 'off' | 'low' | 'medium' | 'high' }) => Promise<AgentChatResult>
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentDeleteMessage: (messageId: string) => Promise<boolean>
@@ -1265,6 +1265,8 @@ export interface ElectronAPI {
   aiTeachDeleteSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachReadConstraints: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
   aiTeachWriteConstraints: (id: string, text: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
+  aiTeachOrganizeDoc: (id: string, title: string, content: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void
   llmCcSwitchList: () => Promise<CcSwitchScanResult>
