@@ -18,8 +18,8 @@ console.log('AI教学 P4 源码冒烟：')
 
 ok('资源管理器复用编辑器 FileTree 纯展示组件（跨模块零复制）',
   FT.includes("from '../editor/components/FileTree'") && FT.includes("from '../editor/types'"))
-ok('树根 = aiTeachRootDir 设置（产物根），IPC 调用统一拼 `${rootDir}/${rel}` 前缀',
-  FT.includes("getSettingRaw('aiTeachRootDir')") && FT.includes('${rootDir}/${rel') || FT.includes('`${rootDir}/${name}`') || (FT.match(/rootDir}\//g) ?? []).length >= 4)
+ok('树根 = aiTeachRootDir 设置（产物根 + P5 工作区子层），IPC 调用统一拼 `${base}/${rel}` 前缀',
+  FT.includes("getSettingRaw('aiTeachRootDir')") && FT.includes('const base = subRel') && (FT.match(/\$\{base\}\//g) ?? []).length >= 6)
 ok('全套文件操作走 ws:* IPC 现成通道（create/mkdir/rename/trash/list/read）',
   ['workspaceCreateFile', 'workspaceMkdir', 'workspaceRename', 'workspaceTrash', 'workspaceListDir', 'workspaceReadFile'].every(k => FT.includes(k)))
 ok('删除进系统回收站且有危险确认；锚点/隐藏文件禁删',

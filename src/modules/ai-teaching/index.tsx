@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search, Layers } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
   workspaceGetCurrent, workspaceListDir, workspaceReadFile, docsPptxPages,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice,
+  aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachSetLastWorkspace,
 } from '../../lib/ipc'
 import { AiTeachFileTree } from './AiTeachFileTree'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo, LlmProviderInfo } from '../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo, LlmProviderInfo, AiTeachWorkspaceInfo } from '../../types'
 
 /**
  * 「AI教学」模块（原 id immersive / 沉浸式 Agent；总纲 docs/ai-teaching-module-rework.md，
@@ -24,8 +25,23 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * 输入区流式停止键 + 本对话模型/思考强度合一菜单（仅本对话生效）；顶栏收敛（时间线/文档视图/文档地图退役）。
  * P4 左栏 VS Code 化（§3.7/3.9）：多分区侧栏（资源管理器=产物根文件树全套操作 / 会话 / 任务规划），
  * 折叠贴靠+状态记忆，左右侧栏整体收放记忆；md 点击 → 中栏文档阅读视图（方案 B：工具行+宽幅渲染+h2/h3 大纲+滚动记忆）。
- * 占位（P5~P7）：工作区两层、素材库 SOURCES v3、题目视图。
+ * P5 工作区两层（§3.2-6）：进入模块先见「工作区选择页」（卡片统计/搜索/新建/改名/删除=仅解归属）；
+ * 一个工作区=一门课程含多对话，元数据入仓库 .knowbase/modules/aiTeaching/workspaces.json；
+ * 顶栏页签=本工作区对话（会话列表区退役）、工作区 chip 返回选择页；左栏树挂工作区文件夹层；
+ * 新对话自动归属当前工作区，产物落 `AI教学/{工作区}/{MM-DD 标题}/`（存量扁平文件夹不迁移，锚点扫描双深度兼容）。
+ * 占位（P6~P8）：素材库 SOURCES v3、题目视图、用户画像。
  */
+
+/** P5：工作区卡片「最近活跃」相对时间（updated_at 'YYYY-MM-DD HH:MM:SS' 本地串） */
+function wsAgo(iso: string | null): string {
+  if (!iso) return '无'
+  const t = new Date(iso.replace(' ', 'T')).getTime()
+  if (Number.isNaN(t)) return '无'
+  const d = Date.now() - t
+  if (d < 86400000) return '今天'
+  if (d < 172800000) return '昨天'
+  return iso.slice(5, 10)
+}
 
 /** P4 §3.9-1：侧栏分区头（VS Code 式贴靠——收起只剩头，展开体占剩余高度） */
 function SectionHead({ open, title, onToggle, right }: { open: boolean; title: string; onToggle: () => void; right?: React.ReactNode }) {
@@ -175,6 +191,36 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     })
     return () => cancelAnimationFrame(raf)
   }, [docView])
+
+  // ---------- P5 工作区两层（§3.2-6；3-6/3-8 按建议：元数据入仓库 .knowbase、跟随当前激活仓库） ----------
+  const [wsList, setWsList] = useState<AiTeachWorkspaceInfo[]>([])
+  const [wsSessionMap, setWsSessionMap] = useState<Record<string, string>>({})
+  const [wsUnassigned, setWsUnassigned] = useState(0)
+  const [lastWsId, setLastWsId] = useState<string | null>(null)
+  const [activeWs, setActiveWs] = useState<string | null>(null) // null = 工作区选择页；'__none__' = 未归一会话视图
+  const activeWsRef = useRef<string | null>(null)
+  useEffect(() => { activeWsRef.current = activeWs }, [activeWs])
+  const wsMapRef = useRef<Record<string, string>>({})
+  useEffect(() => { wsMapRef.current = wsSessionMap }, [wsSessionMap])
+  const [wsSearch, setWsSearch] = useState('')
+  const [wsModal, setWsModal] = useState<{ mode: 'create' | 'rename'; id?: string; value: string } | null>(null)
+  const refreshWorkspaces = useCallback(async () => {
+    const r = await aiTeachListWorkspaces().catch(() => null)
+    if (!r) return
+    setWsList(r.workspaces); setWsSessionMap(r.sessionWs); setWsUnassigned(r.unassignedCount); setLastWsId(r.lastWorkspaceId)
+  }, [])
+  useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
+  const wsActive = activeWs && activeWs !== '__none__' ? wsList.find(w => w.id === activeWs) ?? null : null
+  const wsTreeSeg = (() => {
+    if (!wsActive) return ''
+    const p = `${aiTeachRoot}/`
+    return wsActive.folderRel.startsWith(p) ? wsActive.folderRel.slice(p.length) : wsActive.folderRel
+  })()
+  const treeBase = wsTreeSeg ? `${aiTeachRoot}/${wsTreeSeg}` : aiTeachRoot
+  const wsSessions = useMemo(
+    () => sessions.filter(s => (wsSessionMap[s.id] ?? '__none__') === (activeWs ?? '__none__')),
+    [sessions, wsSessionMap, activeWs],
+  )
   const [showNewMenu, setShowNewMenu] = useState(false)
   // ---- Token 消耗统计（月度走 llm:getUsage）----
   const [usage, setUsage] = useState<LlmUsageInfo | null>(null)
@@ -241,14 +287,18 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const refreshSessions = useCallback(async () => {
     const list = await agentSessions().catch(() => [])
     setSessions(list)
-    if (list.length > 0) {
-      const cur = activeIdRef.current ? list.find(s => s.id === activeIdRef.current) : undefined
-      const first = cur ?? list[0]
+    // P5：选择页状态（activeWs=null）不自动开会话；进工作区后只在本工作区会话里选
+    const cur = activeIdRef.current ? list.find(s => s.id === activeIdRef.current) : undefined
+    const pool = activeWsRef.current
+      ? list.filter(s => (wsMapRef.current[s.id] ?? '__none__') === activeWsRef.current)
+      : []
+    const first = activeWsRef.current ? (cur ?? pool[0]) : undefined
+    if (first) {
       setActiveId(first.id)
       setActiveTitle(first.title)
       setInstrDismiss(false)
       void loadConstraints(first.id, first.instructions ?? '')
-    } else {
+    } else if (!activeWsRef.current) {
       setActiveId(null)
       setActiveInstr(''); setInstrRel('')
     }
@@ -313,21 +363,80 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const newTask = useCallback(async (tpl: Template) => {
     const row = await agentNewSession(`${tpl.label}`).catch(() => null)
     if (!row) return
-    // P1（2-2）：新建对话确认即建会话文件夹（懒建语义下空会话也不删）
-    void aiTeachEnsureSessionFolder(row.id).then(r => {
+    // P5：先归属当前工作区（元数据真相源），再建夹——ensure 在主进程读归属决定两层路径
+    if (activeWs && activeWs !== '__none__') await aiTeachAssignSession(row.id, activeWs).catch(() => null)
+    // P1（2-2）：新建对话确认即建会话文件夹（懒建语义下空会话也不删）；P2 模板播种后载入展示
+    void aiTeachEnsureSessionFolder(row.id).then(async r => {
       if (r && !r.ok && r.error) showToast({ type: 'error', message: `会话文件夹创建失败：${r.error}` })
+      await loadConstraints(row.id, '')
+      await refreshWorkspaces()
     })
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
     setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false); setDocView(null)
-    // P2：模板播种（_templates/CONSTRAINTS.md 存在时）→ 建夹完成后立刻载入展示
-    void aiTeachEnsureSessionFolder(row.id).then(async () => { await loadConstraints(row.id, '') })
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     void sendText(tpl.opening, cid)
     void refreshSessions()
-  }, [sendText, refreshSessions, loadConstraints])
+  }, [sendText, refreshSessions, loadConstraints, activeWs, refreshWorkspaces])
+
+  // ---------- P5：工作区进出与管理 ----------
+  const enterWs = useCallback((id: string) => {
+    setActiveWs(id); activeWsRef.current = id
+    setWsSearch('')
+    if (id !== '__none__') void aiTeachSetLastWorkspace(id)
+    const own = sessions
+      .filter(s => (wsSessionMap[s.id] ?? '__none__') === id)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    if (own.length) {
+      void openSession(own[0].id, own[0].title)
+    } else {
+      activeIdRef.current = null
+      setActiveId(null); setActiveTitle(''); setMessages([]); setLastChanges(null); setLiveSteps([]); setDocView(null)
+      setActiveInstr(''); setInstrRel('')
+    }
+    void refreshSessions()
+  }, [sessions, wsSessionMap, openSession, refreshSessions])
+  const exitToPicker = useCallback(() => {
+    setActiveWs(null); activeWsRef.current = null
+    void refreshWorkspaces()
+  }, [refreshWorkspaces])
+  const submitWsModal = useCallback(async () => {
+    if (!wsModal) return
+    const name = wsModal.value.trim()
+    if (!name) { setWsModal(null); return }
+    if (wsModal.mode === 'create') {
+      const r = await aiTeachCreateWorkspace(name)
+      setWsModal(null)
+      if (!r.ok || !r.workspace) { showToast({ type: 'error', message: r.error ?? '创建工作区失败' }); return }
+      showToast({ type: 'info', message: `已创建工作区「${r.workspace.name}」` })
+      await refreshWorkspaces()
+      enterWs(r.workspace.id)
+    } else {
+      const r = await aiTeachRenameWorkspace(wsModal.id ?? '', name)
+      if (!r.ok) showToast({ type: 'error', message: r.error ?? '工作区改名失败' })
+      else showToast({ type: 'info', message: '工作区已改名（产物文件夹同步）' })
+      await refreshWorkspaces()
+      setWsModal(null)
+    }
+  }, [wsModal, refreshWorkspaces, enterWs])
+  const removeWs = useCallback(async (w: AiTeachWorkspaceInfo) => {
+    const okGo = await showGlobalConfirm({
+      title: `删除工作区「${w.name}」`,
+      message: '只删除工作区本身（归属元数据）：「AI教学」下的文件夹与其中对话都会保留，会显示在「未归一会话」里。',
+      confirmLabel: '删除工作区', variant: 'danger',
+    })
+    if (!okGo) return
+    const r = await aiTeachDeleteWorkspace(w.id)
+    if (!r.ok) { showToast({ type: 'error', message: r.error ?? '删除失败' }); return }
+    if (activeWs === w.id) { setActiveWs(null); activeWsRef.current = null }
+    await refreshWorkspaces()
+  }, [activeWs, refreshWorkspaces])
+  const wsFiltered = useMemo(() => {
+    const q = wsSearch.trim().toLowerCase()
+    return q ? wsList.filter(w => w.name.toLowerCase().includes(q)) : wsList
+  }, [wsList, wsSearch])
 
   /** P2（2-6）：保存会话要求 = 写会话文件夹 CONSTRAINTS.md（懒建兜底）；清掉旧 DB 字段残留防双真相源 */
   const saveInstr = async (): Promise<void> => {
@@ -542,12 +651,56 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--bg-primary)]">
-      {/* 顶栏：任务标题/模板 + 视图切换 */}
-      <div className="flex items-center gap-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1 shrink-0 select-none">
-        <Sparkles size={12} className="text-[var(--text-muted)] shrink-0" />
-        <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{activeTitle || 'AI教学'}</span>
-        <span className="text-[11.5px] text-[var(--text-muted)] px-1.5 py-0.5 rounded-md bg-[var(--bg-hover)] truncate">{template.label}</span>
-        <div className="ml-auto flex items-center gap-0.5">
+      {/* P5（§3.2-6/页签即会话切换器）：顶栏 = 工作区 chip（返回选择页）+ 对话页签 + 新建任务 + 工具组 */}
+      {activeWs ? (
+      <>
+      <div className="flex items-center gap-1 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1 shrink-0 select-none">
+        <button onClick={exitToPicker} title="返回工作区选择页"
+          className="shrink-0 flex items-center gap-1 max-w-[150px] px-1.5 py-0.5 rounded-md text-[11.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+          <Folder size={12} className="shrink-0 text-[var(--accent)]" />
+          <span className="truncate">{activeWs === '__none__' ? '未归一会话' : wsActive?.name ?? '工作区'}</span>
+          <ChevronDown size={11} className="shrink-0 opacity-60" />
+        </button>
+        <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto">
+          {wsSessions.map(s => (
+            <div key={s.id} onClick={() => { void openSession(s.id, s.title) }}
+              title={s.id === activeId ? `当前对话：${activeTitle}` : s.title}
+              className={`group shrink-0 flex items-center gap-1 px-2 h-[22px] rounded-md cursor-pointer text-[11.5px] transition-colors max-w-[160px] ${s.id === activeId ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] ring-1 ring-inset ring-[var(--accent)]/40' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}>
+              {renamingId === s.id ? (
+                <input autoFocus value={renameDraft} maxLength={40} onChange={e => setRenameDraft(e.target.value)}
+                  onBlur={() => void commitRename(s.id)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id) } else if (e.key === 'Escape') { e.stopPropagation(); setRenamingId(null) } }}
+                  onClick={e => e.stopPropagation()}
+                  className="w-24 px-1 py-0 rounded border border-[var(--accent)] bg-[var(--input-bg)] text-[11px] text-[var(--text-primary)] outline-none" />
+              ) : (
+                <>
+                  <span className="truncate" title={s.title} onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(s.id); setRenameDraft(s.title) }}>{s.title}</span>
+                  <button onClick={e => { e.stopPropagation(); void delSession(e, s.id, s.title) }} title="删除会话"
+                    className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-red-400 transition-opacity shrink-0"><X size={10} /></button>
+                </>
+              )}
+            </div>
+          ))}
+          <div className="relative shrink-0">
+            <button onClick={() => setShowNewMenu(v => !v)} title="新建任务"
+              className="flex items-center px-1 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><Plus size={13} /></button>
+            {showNewMenu && (
+              <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden">
+                {TEMPLATES.map(t => (
+                  <button key={t.id} onClick={() => void newTask(t)}
+                    className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
+                    <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
+                      <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 flex items-center gap-0.5">
 
           {/* 会话要求（仅本会话生效的全局约束） */}
           <div className="relative shrink-0">
@@ -673,77 +826,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               {!collapsedSec.explorer && (
                 <div className="flex-1 min-h-0 pb-1">
                   <AiTeachFileTree
-                    activeRel={docView && docView.rel.startsWith(`${aiTeachRoot}/`) ? docView.rel.slice(aiTeachRoot.length + 1) : null}
-                    onOpenMd={(rel) => { void openDocView(`${aiTeachRoot}/${rel}`) }}
-                    onOpenExternal={(rel) => { window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: `${aiTeachRoot}/${rel}` } })) }}
+                    subRel={wsTreeSeg}
+                    activeRel={docView && docView.rel.startsWith(`${treeBase}/`) ? docView.rel.slice(treeBase.length + 1) : null}
+                    onOpenMd={(rel) => { void openDocView(`${treeBase}/${rel}`) }}
+                    onOpenExternal={(rel) => { window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: `${treeBase}/${rel}` } })) }}
                   />
                 </div>
               )}
 
-              <SectionHead open={!collapsedSec.sessions} title={`会话（${sessions.length}）`} onToggle={() => toggleSec('sessions')}
-                right={
-                  <div className="relative">
-                    <button onClick={() => setShowNewMenu(v => !v)} title="新建任务"
-                      className="flex items-center gap-0.5 px-1 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                      <Plus size={12} />
-                    </button>
-                    {showNewMenu && (
-                      <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden">
-                        {TEMPLATES.map(t => (
-                          <button key={t.id} onClick={() => void newTask(t)}
-                            className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
-                            <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
-                            <span className="min-w-0">
-                              <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
-                              <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                } />
-              {!collapsedSec.sessions && (
-                <div className={`overflow-y-auto shrink-0 px-1.5 space-y-0.5 ${collapsedSec.plan ? 'flex-1 min-h-0 py-1' : 'max-h-[34%] py-1'}`}>
-                  {sessions.map(s => (
-                    <div key={s.id}
-                      onClick={() => { void openSession(s.id, s.title) }}
-                      className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${s.id === activeId ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
-                      <Bot size={12} className={s.id === activeId ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
-                      <span className="flex-1 min-w-0">
-                        {renamingId === s.id ? (
-                          <input
-                            autoFocus
-                            value={renameDraft}
-                            maxLength={40}
-                            onChange={e => setRenameDraft(e.target.value)}
-                            onBlur={() => void commitRename(s.id)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id) }
-                              else if (e.key === 'Escape') { e.stopPropagation(); setRenamingId(null) }
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            className="w-full px-1 py-0.5 rounded border border-[var(--accent)] bg-[var(--input-bg)] text-[12px] text-[var(--text-primary)] outline-none"
-                          />
-                        ) : (
-                          <span
-                            className="block text-[12px] truncate text-[var(--text-primary)]"
-                            title="双击重命名（会话文件夹同步改名）"
-                            onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(s.id); setRenameDraft(s.title) }}
-                          >{s.title}</span>
-                        )}
-                      </span>
-                      <button onClick={e => { void delSession(e, s.id, s.title) }}
-                        className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-red-400 transition-opacity">
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
-                  {sessions.length === 0 && (
-                    <div className="py-4 text-center text-[12px] text-[var(--text-muted)]">暂无会话</div>
-                  )}
-                </div>
-              )}
+              {/* P5：会话列表区退役（§3.7「页签即会话切换器」）——切会话走顶栏页签条 */}
 
               <SectionHead open={!collapsedSec.plan} title="任务规划" onToggle={() => toggleSec('plan')} />
               {!collapsedSec.plan && (
@@ -1136,6 +1227,89 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           )}
         </aside>
       </div>
+      </>
+      ) : (
+      /* P5：工作区选择页（进入模块首屏；3-7 未拍板 → 按验收条款每次先见选择页 + 「继续上次工作区」快捷入口） */
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[760px] px-6 py-12">
+          <div className="flex items-center gap-2 text-[var(--text-muted)]">
+            <Sparkles size={16} className="text-[var(--accent)]" />
+            <span className="text-[12px] tracking-wide">AI教学</span>
+          </div>
+          <h1 className="mt-3 text-[22px] font-semibold text-[var(--text-primary)]">选择工作区</h1>
+          <p className="mt-1.5 text-[12.5px] text-[var(--text-muted)] leading-relaxed">一个工作区 = 一门课程或一个主题，内含多个对话。工作区跟随当前仓库，元数据存仓库 <code className="px-1 rounded bg-[var(--bg-hover)] text-[11.5px]">.knowbase/modules/aiTeaching/</code>。</p>
+          {lastWsId && wsList.find(w => w.id === lastWsId) && (
+            <button onClick={() => enterWs(lastWsId)}
+              className="mt-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[12.5px] text-[var(--accent)] hover:bg-[var(--accent)]/20 transition-colors">
+              <ArrowLeft size={12} className="rotate-180" /> 继续上次工作区「{wsList.find(w => w.id === lastWsId)?.name}」
+            </button>
+          )}
+          <div className="mt-6 flex items-center gap-2">
+            <div className="flex-1 relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input value={wsSearch} onChange={e => setWsSearch(e.target.value)} placeholder="搜索工作区…"
+                className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--input-bg)] text-[12.5px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]" />
+            </div>
+            <button onClick={() => setWsModal({ mode: 'create', value: '' })}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[12.5px] hover:opacity-90 transition-opacity"><Plus size={12} /> 新建工作区</button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {wsFiltered.map(w => (
+              <div key={w.id} onClick={() => enterWs(w.id)}
+                className="group relative rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 cursor-pointer hover:border-[var(--accent)]/50 transition-colors"
+                title={w.folderRel}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Folder size={14} className="shrink-0 text-[var(--accent)]" />
+                  <span className="text-[14px] font-medium text-[var(--text-primary)] truncate">{w.name}</span>
+                  {w.id === lastWsId && <span className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent)]/15 text-[var(--accent)]">上次</span>}
+                </div>
+                <div className="mt-2 text-[11.5px] text-[var(--text-muted)]">{w.sessionCount} 个对话 · {w.docCount} 个产物 · 最近活跃 {wsAgo(w.lastActive)}</div>
+                <div className="mt-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setWsModal({ mode: 'rename', id: w.id, value: w.name })}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><PenLine size={11} /> 改名</button>
+                  <button onClick={() => void removeWs(w)}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] text-[var(--text-secondary)] hover:text-red-400 transition-colors"><Trash2 size={11} /> 删除</button>
+                </div>
+              </div>
+            ))}
+            {wsUnassigned > 0 && (
+              <div onClick={() => enterWs('__none__')}
+                className="rounded-xl border border-dashed border-[var(--border-color)] p-4 cursor-pointer hover:border-[var(--text-muted)] transition-colors"
+                title="未归属任何工作区的会话（含 P5 之前的存量）；产物文件夹原地不动">
+                <div className="flex items-center gap-2"><Layers size={14} className="text-[var(--text-muted)]" /><span className="text-[14px] font-medium text-[var(--text-secondary)]">未归一会话</span></div>
+                <div className="mt-2 text-[11.5px] text-[var(--text-muted)]">{wsUnassigned} 个对话待归属 · 可继续对话，新任务将落产物根</div>
+              </div>
+            )}
+            <button onClick={() => setWsModal({ mode: 'create', value: '' })}
+              className="rounded-xl border border-dashed border-[var(--border-color)] p-4 text-left cursor-pointer hover:border-[var(--accent)]/60 transition-colors">
+              <div className="flex items-center gap-2 text-[var(--text-muted)]"><Plus size={14} /><span className="text-[14px] font-medium">新建工作区</span></div>
+              <div className="mt-2 text-[11.5px] text-[var(--text-muted)]">如「数学冲刺」「英语精读」，一个课程/主题一个</div>
+            </button>
+            {wsFiltered.length === 0 && wsSearch.trim() && (
+              <div className="col-span-2 py-6 text-center text-[12px] text-[var(--text-muted)]">没有匹配「{wsSearch.trim()}」的工作区</div>
+            )}
+          </div>
+          <div className="mt-8 text-[11px] text-[var(--text-muted)] leading-relaxed">
+            对话产物目录：<code className="px-1 rounded bg-[var(--bg-hover)]">{treeBase}/{'{MM-DD 会话标题}'}/</code>；删除工作区只解除归属，文件夹与对话保留。
+          </div>
+        </div>
+        {wsModal && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setWsModal(null)}>
+            <div className="w-80 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="mb-2 text-[13px] font-medium text-[var(--text-primary)]">{wsModal.mode === 'create' ? '新建工作区' : '工作区改名'}</div>
+              <input autoFocus value={wsModal.value} maxLength={40} onChange={e => setWsModal({ ...wsModal, value: e.target.value })}
+                placeholder="课程或主题名，如：数学冲刺"
+                className="w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                onKeyDown={e => { if (e.key === 'Enter') void submitWsModal(); if (e.key === 'Escape') setWsModal(null) }} />
+              <div className="mt-3 flex justify-end gap-2">
+                <button onClick={() => setWsModal(null)} className="rounded-md px-3 py-1 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]">取消</button>
+                <button onClick={() => void submitWsModal()} className="rounded-md bg-[var(--accent)] px-3 py-1 text-[12.5px] text-white hover:opacity-90">{wsModal.mode === 'create' ? '创建并进入' : '改名'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
     </div>
   )
 }

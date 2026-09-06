@@ -4,6 +4,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { getAgentSession } from './agentSessionRepo'
 import { renameWorkspacePath, trashWorkspacePath, uniqueFileName } from './workspaceManager'
+import { getWorkspaceOfSession, workspaceFolderRel } from './aiTeachingWorkspaces'
 
 /**
  * AI教学模块 · 会话 ⇄ 文件夹绑定（总纲 docs/ai-teaching-module-rework.md §二，P1）
@@ -30,6 +31,8 @@ export interface SessionFolderAnchor {
   createdAt: string
   /** 结构版本，字段演进时用于识别兼容 */
   v: 1
+  /** P5：归属工作区快照（真相源在 .knowbase 元数据，此处仅供人读/溯源） */
+  workspaceId?: string
 }
 
 export interface FolderResult {
@@ -85,24 +88,36 @@ function broadcastTreeRefresh(dirRel: string): void {
   broadcast('aiTeach:tree-refresh', { dirRel })
 }
 
-/** 扫描根目录，按锚点定位会话文件夹；返回相对仓库根的路径或 null */
+function anchorMatches(abs: string, sessionId: string): boolean {
+  const p = join(abs, ANCHOR_FILE)
+  if (!existsSync(p)) return false
+  try {
+    const data = JSON.parse(readFileSync(p, 'utf-8')) as Partial<SessionFolderAnchor>
+    return !!(data && data.sessionId === sessionId)
+  } catch { return false } // 锚点损坏跳过（视为无主文件夹，不删）
+}
+
+/** 扫描根目录定位会话文件夹；P5 起兼容两种布局：`{root}/{会话}` 与 `{root}/{工作区}/{会话}`（深度≤2） */
 function findSessionFolderRel(rootPath: string, rootDir: string, sessionId: string): string | null {
   const rootAbs = join(rootPath, rootDir)
   if (!existsSync(rootAbs)) return null
   let names: string[] = []
   try { names = readdirSync(rootAbs) } catch { return null }
   for (const name of names) {
-    const anchorAbs = join(rootAbs, name, ANCHOR_FILE)
-    if (!existsSync(anchorAbs)) continue
+    const abs = join(rootAbs, name)
+    if (anchorMatches(abs, sessionId)) return `${rootDir}/${name}`
+    if (name.startsWith('.') || name === '_templates') continue
     try {
-      const data = JSON.parse(readFileSync(anchorAbs, 'utf-8')) as Partial<SessionFolderAnchor>
-      if (data && data.sessionId === sessionId) return `${rootDir}/${name}`
-    } catch { /* 锚点损坏跳过（视为无主文件夹，不删） */ }
+      for (const sub of readdirSync(abs)) {
+        if (anchorMatches(join(abs, sub), sessionId)) return `${rootDir}/${name}/${sub}`
+      }
+    } catch { /* 非目录（如普通产物文件）忽略 */ }
   }
   return null
 }
 
-/** 幂等确保会话文件夹存在：新建对话确认后调用（2-2），P3 产物落盘/旧会话懒创建（2-5）共用 */
+/** 幂等确保会话文件夹存在：新建对话确认后调用（2-2），P3 产物落盘/旧会话懒创建（2-5）共用。
+ *  P5 两层：归属工作区的会话落 `AI教学/{工作区}/`（新夹；存量扁平文件夹不迁移，find 双深度兼容） */
 export function ensureSessionFolder(sessionId: string, getSetting: (key: string) => unknown): FolderResult {
   try {
     if (typeof sessionId !== 'string' || !sessionId) return { ok: false, error: '会话 id 非法' }
@@ -113,28 +128,35 @@ export function ensureSessionFolder(sessionId: string, getSetting: (key: string)
     const rootDir = rootDirName(getSetting)
     const existing = findSessionFolderRel(vault.rootPath, rootDir, sessionId)
     if (existing) return { ok: true, relPath: existing }
-    const rootAbs = join(vault.rootPath, rootDir)
-    mkdirSync(rootAbs, { recursive: true })
-    const name = uniqueFileName(rootAbs, folderBaseName(session.created_at, session.title))
-    const folderAbs = join(rootAbs, name)
+    const wsId = getWorkspaceOfSession(sessionId)
+    const baseRel = (wsId && workspaceFolderRel(wsId, getSetting)) || rootDir
+    const baseAbs = join(vault.rootPath, baseRel)
+    mkdirSync(baseAbs, { recursive: true })
+    const name = uniqueFileName(baseAbs, folderBaseName(session.created_at, session.title))
+    const folderAbs = join(baseAbs, name)
     mkdirSync(folderAbs)
-    const anchor: SessionFolderAnchor = { sessionId, title: session.title, createdAt: session.created_at, v: 1 }
+    const anchor: SessionFolderAnchor = { sessionId, title: session.title, createdAt: session.created_at, v: 1, ...(wsId ? { workspaceId: wsId } : {}) }
     writeFileSync(join(folderAbs, ANCHOR_FILE), JSON.stringify(anchor, null, 2), 'utf-8')
-    // P2（§2.3）：建夹即从模板播种一份会话专属 CONSTRAINTS.md（模板缺失则跳过，用户可后建）
-    seedConstraintsFromTemplate(folderAbs, join(rootAbs, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS))
-    broadcastTreeRefresh(rootDir)
-    return { ok: true, relPath: `${rootDir}/${name}` }
+    // P2（§2.3）建夹即播种会话专属 CONSTRAINTS.md；P5 起优先工作区层模板，回退产物根层
+    seedConstraintsFromTemplate(folderAbs, wsId && join(vault.rootPath, baseRel, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS), join(vault.rootPath, rootDir, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS))
+    broadcastTreeRefresh(baseRel)
+    return { ok: true, relPath: `${baseRel}/${name}` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
 }
 
-/** 模板播种：把根层 `_templates/CONSTRAINTS.md` 复制进会话文件夹（目标已存在不覆盖） */
-function seedConstraintsFromTemplate(folderAbs: string, templateAbs: string): void {
+/** 模板播种：按优先级取第一个存在的模板复制进会话文件夹（目标已存在不覆盖；全无模板则跳过） */
+function seedConstraintsFromTemplate(folderAbs: string, ...templateAbsCandidates: Array<string | false | null | undefined>): void {
   try {
     const dest = join(folderAbs, CONSTRAINTS_FILE)
-    if (existsSync(dest) || !existsSync(templateAbs)) return
-    writeFileSync(dest, readFileSync(templateAbs, 'utf-8'), 'utf-8')
+    if (existsSync(dest)) return
+    for (const t of templateAbsCandidates) {
+      if (t && existsSync(t)) {
+        writeFileSync(dest, readFileSync(t, 'utf-8'), 'utf-8')
+        return
+      }
+    }
   } catch { /* 播种失败不阻断建夹 */ }
 }
 
@@ -210,27 +232,29 @@ export function renameSessionFolder(sessionId: string, newTitle: string, getSett
       // 从未产生过文件夹的会话：不主动建（懒创建 2-5），标题在真正建夹时生效
       return { ok: true, relPath: null }
     }
-    const oldName = rel.slice(rootDir.length + 1)
+    const lastSlash = rel.lastIndexOf('/')
+    const parentRel = lastSlash > 0 ? rel.slice(0, lastSlash) : rootDir
+    const oldName = lastSlash > 0 ? rel.slice(lastSlash + 1) : rel
     const session = getAgentSession(sessionId)
     const created = session?.created_at ?? ''
     const m = /^(\d{2}-\d{2})\s/.exec(oldName)
     const prefix = m ? m[1] : datePrefix(created)
     const nextBase = `${prefix} ${sanitizeTitle(newTitle)}`
     if (nextBase === oldName) return { ok: true, relPath: rel }
-    const parentAbs = join(vault.rootPath, rootDir)
+    const parentAbs = join(vault.rootPath, parentRel)
     const finalName = uniqueFileName(parentAbs, nextBase)
-    renameWorkspacePath(vault.rootId, rel, `${rootDir}/${finalName}`)
+    renameWorkspacePath(vault.rootId, rel, `${parentRel}/${finalName}`)
     // 锚点标题同步（尽力而为，失败不阻断——锚点以 sessionId 为准）
     try {
-      const p = join(vault.rootPath, rootDir, finalName, ANCHOR_FILE)
+      const p = join(vault.rootPath, parentRel, finalName, ANCHOR_FILE)
       if (existsSync(p)) {
         const data = JSON.parse(readFileSync(p, 'utf-8')) as SessionFolderAnchor
         data.title = String(newTitle ?? '')
         writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8')
       }
     } catch { /* ignore */ }
-    broadcastTreeRefresh(rootDir)
-    return { ok: true, relPath: `${rootDir}/${finalName}` }
+    broadcastTreeRefresh(parentRel)
+    return { ok: true, relPath: `${parentRel}/${finalName}` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }

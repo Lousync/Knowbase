@@ -237,6 +237,14 @@ const api = {
   aiTeachReadConstraints: (id: string) => ipcRenderer.invoke('aiTeach:readConstraints', id),
   aiTeachWriteConstraints: (id: string, text: string) => ipcRenderer.invoke('aiTeach:writeConstraints', id, text),
   aiTeachOrganizeDoc: (id: string, title: string, content: string) => ipcRenderer.invoke('aiTeach:organizeDoc', id, title, content),
+  // AI教学 P5：工作区两层（§3.2-6）
+  aiTeachListWorkspaces: () => ipcRenderer.invoke('aiTeach:listWorkspaces'),
+  aiTeachCreateWorkspace: (name: string) => ipcRenderer.invoke('aiTeach:createWorkspace', name),
+  aiTeachRenameWorkspace: (id: string, name: string) => ipcRenderer.invoke('aiTeach:renameWorkspace', id, name),
+  aiTeachDeleteWorkspace: (id: string) => ipcRenderer.invoke('aiTeach:deleteWorkspace', id),
+  aiTeachAssignSession: (id: string, wsId: string) => ipcRenderer.invoke('aiTeach:assignSession', id, wsId),
+  aiTeachUnassignSession: (id: string) => ipcRenderer.invoke('aiTeach:unassignSession', id),
+  aiTeachSetLastWorkspace: (wsId: null | string) => ipcRenderer.invoke('aiTeach:setLastWorkspace', wsId),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

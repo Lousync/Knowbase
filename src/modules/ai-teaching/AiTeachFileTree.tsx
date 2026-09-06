@@ -15,12 +15,14 @@ import type { DirCache, TreeNode } from '../editor/types'
  * - 树根 = 当前仓库产物根目录（`aiTeachRootDir` 设置，默认「AI教学」；P5 工作区两层后改挂工作区目录）；
  * - 复用编辑区 FileTree 纯展示组件 + ws:* IPC 全套操作（新建/重命名/复制(副本)/删除进回收站/路径复制）；
  * - md 点击 → 中栏阅读视图（§3.9-2 方案 B）；非 md → 跳编辑器打开；
- * - 树数据里 relPath 一律为**产物根相对路径**，调 IPC 时拼 `${rootDir}/${rel}`。
+ * - 树数据里 relPath 一律为**产物根相对路径**，调 IPC 时拼 `${base}/${rel}`。
  */
 
 interface Props {
   /** 当前阅读/高亮的文件（产物根相对路径） */
   activeRel: string | null
+  /** P5：产物根下的子层（工作区文件夹段；空=根层，未归一/无工作区视图） */
+  subRel?: string
   onOpenMd: (rel: string) => void
   onOpenExternal: (rel: string) => void
 }
@@ -28,7 +30,7 @@ interface Props {
 interface CtxState { x: number; y: number; node: TreeNode | null }
 interface InputModal { title: string; placeholder: string; initial: string; submitLabel: string; onSubmit: (v: string) => void }
 
-export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) {
+export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenExternal }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [rootDir, setRootDir] = useState('AI教学')
   const [dirCache, setDirCache] = useState<DirCache>({})
@@ -57,13 +59,22 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
   }, [])
 
   const loadedDirsRef = useRef<Set<string>>(new Set(['']))
+  // 树根 = 产物根（+ P5 工作区子层）；树内 relPath 都相对该根，调 IPC 时拼 base 前缀
+  const base = subRel ? rootDir + '/' + subRel : rootDir
   const loadDir = useCallback(async (rel: string) => {
     if (!rootId) return
     loadedDirsRef.current.add(rel)
-    const r = await workspaceListDir(rootId, rel ? `${rootDir}/${rel}` : rootDir).catch(() => null)
+    const r = await workspaceListDir(rootId, rel ? `${base}/${rel}` : base).catch(() => null)
     const entries = (r?.entries ?? []).map(e => ({ ...e, relPath: rel ? `${rel}/${e.name}` : e.name }))
     setDirCache(prev => ({ ...prev, [rel]: entries }))
-  }, [rootId, rootDir])
+  }, [rootId, base])
+
+  // 工作区/树根切换：重置缓存与展开集（P5）
+  useEffect(() => {
+    loadedDirsRef.current = new Set([''])
+    setDirCache({})
+    setExpanded(new Set(['']))
+  }, [base])
 
   useEffect(() => { void loadDir('') }, [loadDir])
   // AI 产物落盘/整理联动即时可见（§3.7-1）：广播 → 重扫已展开目录
@@ -98,7 +109,7 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
       setModal(null)
       if (!name || !rootId) return
       const rel = dirRel ? `${dirRel}/${name}` : name
-      const full = `${rootDir}/${rel}`
+      const full = `${base}/${rel}`
       const r = type === 'file'
         ? await workspaceCreateFile(rootId, full).catch(() => null)
         : await workspaceMkdir(rootId, full).catch(() => null)
@@ -113,8 +124,8 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
       setModal(null)
       if (!name || name === n.name || !rootId) return
       const parent = n.relPath.includes('/') ? n.relPath.slice(0, n.relPath.lastIndexOf('/')) : ''
-      const to = `${rootDir}/${parent ? `${parent}/` : ''}${name}`
-      const r = await workspaceRename(rootId, `${rootDir}/${n.relPath}`, to).catch(() => null)
+      const to = `${base}/${parent ? `${parent}/` : ''}${name}`
+      const r = await workspaceRename(rootId, `${base}/${n.relPath}`, to).catch(() => null)
       if (r && r.ok === false) { showToast({ type: 'error', message: `改名失败：${r.error ?? ''}` }); return }
       void loadDir(parent)
     })
@@ -122,16 +133,16 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
   const doDuplicate = async (rel: string, isDir: boolean) => {
     if (!rootId) return
     if (isDir) { showToast({ type: 'warning', message: '暂不支持复制文件夹（P4 范围）' }); return }
-    const src = `${rootDir}/${rel}`
+    const src = `${base}/${rel}`
     const read = await workspaceReadFile(rootId, src).catch(() => null)
     if (!read || typeof read.content !== 'string') { showToast({ type: 'error', message: '读取源文件失败' }); return }
     const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
     const dot = rel.lastIndexOf('.')
-    const base = dot > 0 ? rel.slice(0, dot) : rel
+    const stem = dot > 0 ? rel.slice(0, dot) : rel
     const ext = dot > 0 ? rel.slice(dot) : ''
-    let cand = `${dir ? `${dir}/` : ''}${base} 副本${ext}`
-    for (let i = 2; (dirCache[dir] ?? []).some(e => e.name === cand.split('/').pop()); i++) cand = `${dir ? `${dir}/` : ''}${base} 副本 ${i}${ext}`
-    const r = await workspaceCreateFile(rootId, `${rootDir}/${cand}`, read.content).catch(() => null)
+    let cand = `${dir ? `${dir}/` : ''}${stem} 副本${ext}`
+    for (let i = 2; (dirCache[dir] ?? []).some(e => e.name === cand.split('/').pop()); i++) cand = `${dir ? `${dir}/` : ''}${stem} 副本 ${i}${ext}`
+    const r = await workspaceCreateFile(rootId, `${base}/${cand}`, read.content).catch(() => null)
     if (r && r.ok === false) { showToast({ type: 'error', message: `副本创建失败：${r.error ?? ''}` }); return }
     void loadDir(dir)
     showToast({ type: 'info', message: `已生成副本 ${cand.split('/').pop()}` })
@@ -141,7 +152,7 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
     if (n.relPath.split('/').some(seg => seg.startsWith('.'))) { showToast({ type: 'warning', message: '锚点/隐藏文件不可在此删除' }); return }
     const okGo = await showGlobalConfirm({ title: `删除「${n.name}」`, message: `将把 ${rootDir}/${n.relPath} 移入系统回收站（可在回收站找回）。`, confirmLabel: '删除', variant: 'danger' })
     if (!okGo) return
-    const r = await workspaceTrash(rootId, `${rootDir}/${n.relPath}`).catch(() => null)
+    const r = await workspaceTrash(rootId, `${base}/${n.relPath}`).catch(() => null)
     if (r && r.ok === false) { showToast({ type: 'error', message: `删除失败：${r.error ?? ''}` }); return }
     const parent = n.relPath.includes('/') ? n.relPath.slice(0, n.relPath.lastIndexOf('/')) : ''
     void loadDir(parent)
@@ -163,7 +174,7 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
     items.push({ label: '重命名', run: () => doRename(node) })
     items.push({ label: '复制（到剪贴板）', run: () => { setClip({ rel: node.relPath, name: node.name, isDir: node.type === 'dir' }); showToast({ type: 'info', message: `已复制「${node.name}」，到目标目录右键粘贴（仅文件）` }) } })
     items.push({ label: '创建副本', run: () => void doDuplicate(node.relPath, node.type === 'dir') })
-    items.push({ label: '复制路径', run: () => { void navigator.clipboard.writeText(`${rootDir}/${node.relPath}`).catch(() => null) } })
+    items.push({ label: '复制路径', run: () => { void navigator.clipboard.writeText(`${base}/${node.relPath}`).catch(() => null) } })
     void dirRel
     items.push({ label: '删除（回收站）', run: () => void doDelete(node), danger: true })
     return items
@@ -184,8 +195,8 @@ export function AiTeachFileTree({ activeRel, onOpenMd, onOpenExternal }: Props) 
             void (async () => {
               if (!rootId) return
               const name = src.split('/').pop() ?? src
-              const to = dstDir ? `${rootDir}/${dstDir}/${name}` : `${rootDir}/${name}`
-              const r = await workspaceRename(rootId, `${rootDir}/${src}`, to).catch(() => null)
+              const to = dstDir ? `${base}/${dstDir}/${name}` : `${base}/${name}`
+              const r = await workspaceRename(rootId, `${base}/${src}`, to).catch(() => null)
               if (r && r.ok === false) showToast({ type: 'error', message: `移动失败：${r.error ?? ''}` })
               const srcParent = src.includes('/') ? src.slice(0, src.lastIndexOf('/')) : ''
               void loadDir(srcParent); void loadDir(dstDir)

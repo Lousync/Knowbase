@@ -494,6 +494,14 @@ export const aiTeachReadConstraints = (id: string): Promise<AiTeachConstraintsRe
 export const aiTeachWriteConstraints = (id: string, text: string): Promise<AiTeachConstraintsResult> => a().aiTeachWriteConstraints(id, text)
 /** P3b：整理成文档——回答 md 落盘会话文件夹（懒建夹 + 幂等），返回产物相对路径 */
 export const aiTeachOrganizeDoc = (id: string, title: string, content: string): Promise<AiTeachFolderResult> => a().aiTeachOrganizeDoc(id, title, content)
+// P5 工作区两层（§3.2-6）
+export const aiTeachListWorkspaces = () => a().aiTeachListWorkspaces()
+export const aiTeachCreateWorkspace = (name: string) => a().aiTeachCreateWorkspace(name)
+export const aiTeachRenameWorkspace = (id: string, name: string) => a().aiTeachRenameWorkspace(id, name)
+export const aiTeachDeleteWorkspace = (id: string) => a().aiTeachDeleteWorkspace(id)
+export const aiTeachAssignSession = (id: string, wsId: string) => a().aiTeachAssignSession(id, wsId)
+export const aiTeachUnassignSession = (id: string) => a().aiTeachUnassignSession(id)
+export const aiTeachSetLastWorkspace = (wsId: string | null) => a().aiTeachSetLastWorkspace(wsId)
 /** P3b：模型是否支持思考强度（主进程单一真相源正则） */
 export const llmReasoningCapable = (model: string): Promise<boolean> => a().llmReasoningCapable(model)
 export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)

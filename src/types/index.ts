@@ -680,6 +680,17 @@ export interface AgentSessionInfo {
   updatedAt: string
 }
 
+/** P5 工作区（AI教学两层结构；主进程 aiTeachingWorkspaces.ts 同构） */
+export interface AiTeachWorkspaceInfo {
+  id: string
+  name: string
+  createdAt: string
+  sessionCount: number
+  docCount: number
+  folderRel: string
+  lastActive: string | null
+}
+
 /** 会话内消息（trace 仅 assistant 消息携带） */
 export interface AgentStoredMessage {
   id: string
@@ -1266,6 +1277,14 @@ export interface ElectronAPI {
   aiTeachReadConstraints: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
   aiTeachWriteConstraints: (id: string, text: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
   aiTeachOrganizeDoc: (id: string, title: string, content: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  // P5 工作区两层（§3.2-6；元数据入 .knowbase/modules/aiTeaching/workspaces.json）
+  aiTeachListWorkspaces: () => Promise<{ workspaces: AiTeachWorkspaceInfo[]; sessionWs: Record<string, string>; unassignedCount: number; lastWorkspaceId: string | null }>
+  aiTeachCreateWorkspace: (name: string) => Promise<{ ok: boolean; workspace?: AiTeachWorkspaceInfo; error?: string }>
+  aiTeachRenameWorkspace: (id: string, name: string) => Promise<{ ok: boolean; error?: string }>
+  aiTeachDeleteWorkspace: (id: string) => Promise<{ ok: boolean; error?: string }>
+  aiTeachAssignSession: (id: string, wsId: string) => Promise<{ ok: boolean; error?: string }>
+  aiTeachUnassignSession: (id: string) => Promise<{ ok: boolean; error?: string }>
+  aiTeachSetLastWorkspace: (wsId: string | null) => Promise<{ ok: boolean; error?: string }>
   llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void
