@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
-  Pencil, Trash2, ChevronRight, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2, ImagePlus,
+  Pencil, Trash2, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2, ImagePlus,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
 import {
@@ -51,7 +51,6 @@ interface InputBoxState {
 
 export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
-  const [rootName, setRootName] = useState('')
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
   /** R5：分栏预览开关（左侧 Monaco 编辑 / 右侧 MarkdownPreview 实时渲染），localStorage 记忆 */
@@ -142,7 +141,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     setDirCache((prev) => ({ ...prev, [dirRel]: nodes }))
   }, [])
 
-  const enterWorkspace = useCallback(async (rid: string, name: string) => {
+  const enterWorkspace = useCallback(async (rid: string, _name?: string) => {
     // ISS-2026-09-04-07 修复：同仓库重入保护。知识库跳转链路中，挂载自动进入（:142 effect）
     // 与 openRelFromJump（:248）会先后触发两次 enterWorkspace；后到的一次若仓库未变，
     // 其 setOpenFiles({}) 会把 openFile 刚落地的新文档清掉（表现为「跳过去但不打开文件」）。
@@ -150,7 +149,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
     if (rootIdRef.current === rid) return
     rootIdRef.current = rid
     setRootId(rid)
-    setRootName(name)
     setDirCache({})
     setExpanded(new Set())
     setOpenFiles({})
@@ -800,15 +798,6 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         <FileText size={12} className="text-[var(--text-muted)]" />
         <span className="text-[11.5px] font-medium text-[var(--text-muted)]">编辑区</span>
         <div className="ml-auto flex items-center gap-0.5">
-          <button
-            onClick={() => void handleOpenDir()}
-            title="切换仓库"
-            className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-          >
-            <FolderOpen size={12} className="shrink-0" />
-            <span className="truncate">{rootName}</span>
-            <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />
-          </button>
           {activeDoc?.language === 'markdown' && (
             <>
               <button
