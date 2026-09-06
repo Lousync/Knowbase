@@ -3,6 +3,7 @@ import { Sun, Moon, RotateCcw, Folder } from 'lucide-react'
 import { setSetting, getAllSettings, openDirDialog } from '../../../lib/ipc'
 import { THEME_OPTIONS, FONT_OPTIONS, FONT_CSS_MAP, ENCODING_OPTIONS, applyThemeClass } from '../../../lib/settings'
 import type { AppSettings } from '../../../lib/settings'
+import { SettingSwitch } from './SettingSwitch'
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   dark:  <Moon size={16} />,
@@ -86,9 +87,7 @@ export function SettingsDropdown() {
         {/* Line numbers */}
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">显示行号</span>
-          <input type="checkbox" checked={s.showLineNumbers}
-            onChange={() => update('showLineNumbers', !s.showLineNumbers)}
-            className="accent-[var(--accent)]" />
+          <SettingSwitch size="sm" checked={s.showLineNumbers} onChange={(v) => update('showLineNumbers', v)} />
         </label>
 
         {/* Zoom */}
@@ -103,21 +102,15 @@ export function SettingsDropdown() {
         {/* Skip delete confirm */}
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">跳过博客删除确认</span>
-          <input type="checkbox" checked={s.skipDeleteConfirm_blog}
-            onChange={() => update('skipDeleteConfirm_blog', !s.skipDeleteConfirm_blog)}
-            className="accent-[var(--accent)]" />
+          <SettingSwitch size="sm" checked={s.skipDeleteConfirm_blog} onChange={(v) => update('skipDeleteConfirm_blog', v)} />
         </label>
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">跳过知识库页面删除确认</span>
-          <input type="checkbox" checked={s.skipDeleteConfirm_knowledge}
-            onChange={() => update('skipDeleteConfirm_knowledge', !s.skipDeleteConfirm_knowledge)}
-            className="accent-[var(--accent)]" />
+          <SettingSwitch size="sm" checked={s.skipDeleteConfirm_knowledge} onChange={(v) => update('skipDeleteConfirm_knowledge', v)} />
         </label>
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-[11px] text-[var(--text-primary)]">跳过目录/笔记本删除确认</span>
-          <input type="checkbox" checked={s.skipDeleteConfirm_knowledgeCategory}
-            onChange={() => update('skipDeleteConfirm_knowledgeCategory', !s.skipDeleteConfirm_knowledgeCategory)}
-            className="accent-[var(--accent)]" />
+          <SettingSwitch size="sm" checked={s.skipDeleteConfirm_knowledgeCategory} onChange={(v) => update('skipDeleteConfirm_knowledgeCategory', v)} />
         </label>
 
         {/* Trash export dir */}

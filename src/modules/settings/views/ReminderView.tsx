@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BellRing } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
+import { SettingSwitch } from '../components/SettingSwitch'
 
 /** 设置 → 提醒：应用内提醒类功能开关 */
 export function ReminderView() {
@@ -23,12 +24,7 @@ export function ReminderView() {
               <BellRing size={14} className={s.checkinReminderEnabled ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
               启用打卡提醒
             </span>
-            <input
-              type="checkbox"
-              checked={s.checkinReminderEnabled}
-              onChange={e => update('checkinReminderEnabled', e.target.checked)}
-              className="accent-[var(--accent)] w-4 h-4"
-            />
+            <SettingSwitch checked={s.checkinReminderEnabled} onChange={(v) => update('checkinReminderEnabled', v)} />
           </label>
 
           <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]" data-setting-anchor="reminder.time">
