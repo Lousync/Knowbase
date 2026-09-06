@@ -13,7 +13,7 @@ const ALL_MODULES: { id: TabName; label: string; icon: (size: number) => React.R
   { id: 'schedule',  label: '日程',   icon: s => <ScheduleIcon size={s} /> },
   { id: 'knowledge', label: '知识库', icon: s => <KnowledgeIcon size={s} /> },
   { id: 'moments',   label: '说说',   icon: s => <MomentsIcon size={s} /> },
-  { id: 'immersive', label: 'Agent',  icon: s => <Sparkles size={s} /> },
+  { id: 'aiTeaching', label: 'AI教学', icon: s => <Sparkles size={s} /> },
   { id: 'toolbox',   label: '工具箱', icon: s => <ToolboxIcon size={s} /> },
   { id: 'plugins',   label: '插件',   icon: s => <PluginIcon size={s} /> },
 ]
@@ -47,8 +47,9 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
   // UI 打磨点4：activityBarOrder 一次性迁移——editor 提到第一位（全员，决策 4.4-1）。
   // 旧默认串/定制序一律归一为 editor 居首、其余相对顺序不变（缺失则补到首位）；
   // 归一结果写回后条件自然不再成立，迁移只发生一次；用户后续拖拽写回属预期覆盖。
+  // AI教学 P0：activityBarOrder 内 immersive → aiTeaching（模块 id 改名，位置原地替换不丢失）。
   const allOrder = useMemo(() => {
-    const arr = safeParse(String(s.activityBarOrder ?? ''), ['blog', 'schedule', 'knowledge', 'toolbox'])
+    const arr = safeParse(String(s.activityBarOrder ?? ''), ['blog', 'schedule', 'knowledge', 'toolbox']).map((x) => (x === 'immersive' ? 'aiTeaching' : x))
     const idx = arr.indexOf('editor')
     if (idx === 0) return arr
     return idx > 0 ? ['editor', ...arr.filter((x) => x !== 'editor')] : ['editor', ...arr]
@@ -57,7 +58,15 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
     const raw = String(s.activityBarOrder ?? '')
     if (raw !== JSON.stringify(allOrder)) update('activityBarOrder', JSON.stringify(allOrder))
   }, [allOrder]) // eslint-disable-line react-hooks/exhaustive-deps
-  const hidden: string[] = safeParse(s.activityBarHidden, [])
+  // AI教学 P0：activityBarHidden 同步一次性迁移 immersive → aiTeaching（隐藏的旧 Agent 迁移后仍隐藏）
+  const hidden: string[] = useMemo(
+    () => safeParse(s.activityBarHidden, []).map((x) => (x === 'immersive' ? 'aiTeaching' : x)),
+    [s.activityBarHidden],
+  )
+  useEffect(() => {
+    const raw = String(s.activityBarHidden ?? '')
+    if (raw && raw !== JSON.stringify(hidden)) update('activityBarHidden', JSON.stringify(hidden))
+  }, [hidden]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute ordered visible modules
   const order = allOrder.filter(id => ALL_MODULES.some(m => m.id === id))

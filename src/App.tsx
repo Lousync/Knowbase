@@ -41,7 +41,7 @@ import { UserModule } from './modules/user'
 import { ToolboxModule } from './modules/toolbox'
 import { PluginsModule } from './modules/plugins'
 import { EditorModule } from './modules/editor'
-import { ImModule } from './modules/immersive'
+import { AiTeachingModule } from './modules/ai-teaching'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { WelcomeOverlay } from './components/shared/WelcomeOverlay'
 import { VaultPicker } from './components/shared/VaultPicker'
@@ -146,7 +146,7 @@ export default function App() {
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
 
-  // 禅模式档位统一出口：内存 + 持久化。唯一入口在 AI 教学模块（immersive 顶栏按钮），
+  // 禅模式档位统一出口：内存 + 持久化。唯一入口在 AI 教学模块（aiTeaching 顶栏按钮），
   // 该模块 Esc/离开 Tab 自动退出；顶部热区退出也走这里保持持久化一致
   const changeZen = useCallback((n: number) => { setZenLevel(n); update('zenLevel', n) }, [update])
 
@@ -225,6 +225,7 @@ export default function App() {
     const tabs: Array<{ id: TabName; label: string; hint?: string }> = [
       { id: 'editor', label: '打开 编辑器', hint: 'Vault 文件' },
       { id: 'knowledge', label: '打开 知识库', hint: '阅读 / 导航' },
+      { id: 'aiTeaching', label: '打开 AI教学', hint: '讲义 / 研读 / 出题' },
       { id: 'blog', label: '打开 博客' },
       { id: 'schedule', label: '打开 日程' },
       { id: 'moments', label: '打开 说说' },
@@ -573,7 +574,7 @@ export default function App() {
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
       case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
-      case 'immersive': return <ImModule isActive={on} zenLevel={zenLevel} onZenLevelChange={changeZen} />
+      case 'aiTeaching': return <AiTeachingModule isActive={on} zenLevel={zenLevel} onZenLevelChange={changeZen} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
       case 'toolbox': return <ToolboxModule />
@@ -657,8 +658,8 @@ export default function App() {
                     )}
                   </div>
                   {/* AI 助手入口：归属主体卡片，任务栏展开/收起不影响其相对位置。
-                      沉浸式 Agent 工作台（immersive）激活时隐藏——全屏 AI 界面不再需要右下浮钮 */}
-                  {activeTab !== 'immersive' && secondaryTab !== 'immersive' && (
+                      AI 教学工作台（aiTeaching）激活时隐藏——全屏 AI 界面不再需要右下浮钮 */}
+                  {activeTab !== 'aiTeaching' && secondaryTab !== 'aiTeaching' && (
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
                       title="AI 助手 (Ctrl+J)"

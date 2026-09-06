@@ -10,7 +10,8 @@ import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo } from '../../types'
 
 /**
- * 沉浸式 Agent 模式（docs/agent-immersive-mode-design.md，M0 骨架）
+ * 「AI教学」模块（原 id immersive / 沉浸式 Agent；总纲 docs/ai-teaching-module-rework.md，
+ * 历史设计 docs/agent-immersive-mode-design.md M0 骨架）
  * 独立全屏 Tab（五区布局），与轻问答共用 AgentRunner 会话库与 agent:step 推送。
  * 已实现：会话列表/新建任务（场景模板）/发送/回复渲染/实时步骤/轨迹折叠/改动清单可跳编辑器/文档视图。
  * 占位（M1）：素材管理、产物草稿与写入、步骤引擎自动推进、diff 视图。
@@ -79,7 +80,7 @@ function nowLocal(): string { return new Date().toLocaleString('zh-CN', { hour: 
 function fmtTime(iso: string): string { try { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return '' } }
 function fmtTok(n: number): string { return n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n) }
 
-export function ImModule({ isActive, zenLevel = 0, onZenLevelChange }: { isActive?: boolean; zenLevel?: number; onZenLevelChange?: (n: number) => void }) {
+export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: { isActive?: boolean; zenLevel?: number; onZenLevelChange?: (n: number) => void }) {
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeTitle, setActiveTitle] = useState('')
@@ -164,7 +165,7 @@ export function ImModule({ isActive, zenLevel = 0, onZenLevelChange }: { isActiv
     })))
   }, [])
 
-  // 打开沉浸 Tab 时同步会话
+  // 打开 AI教学 Tab 时同步会话
   useEffect(() => { void refreshSessions() }, [refreshSessions, isActive])
 
   // 实时步骤（agent:step，按 chatId 过滤）
@@ -329,7 +330,7 @@ export function ImModule({ isActive, zenLevel = 0, onZenLevelChange }: { isActiv
       {/* 顶栏：任务标题/模板 + 视图切换 */}
       <div className="flex items-center gap-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1 shrink-0 select-none">
         <Sparkles size={12} className="text-[var(--text-muted)] shrink-0" />
-        <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{activeTitle || '沉浸式 Agent'}</span>
+        <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{activeTitle || 'AI教学'}</span>
         <span className="text-[11.5px] text-[var(--text-muted)] px-1.5 py-0.5 rounded-md bg-[var(--bg-hover)] truncate">{template.label}</span>
         <div className="ml-auto flex items-center gap-0.5">
 
