@@ -1,5 +1,25 @@
 import { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
+// Vite 官方 Monaco 配方：显式注册各语言 worker（?worker 语法交给 Vite 打包）。
+// 缺这段时 Monaco 每次初始化都 throw「You must define MonacoEnvironment.getWorker」，
+// dev 下主线程回退链断裂 → 编辑器挂不起来（表现为点开文件后不能编辑）。
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+
+;(self as unknown as { MonacoEnvironment: monaco.Environment }).MonacoEnvironment = {
+  getWorker(_workerId: string, label: string): Worker {
+    switch (label) {
+      case 'json': return new JsonWorker()
+      case 'css': case 'scss': case 'less': return new CssWorker()
+      case 'html': case 'handlebars': case 'razor': return new HtmlWorker()
+      case 'typescript': case 'javascript': return new TsWorker()
+      default: return new EditorWorker()
+    }
+  },
+}
 
 // Electron 环境下必须从本地 node_modules 加载，禁用 CDN
 loader.config({ monaco })
