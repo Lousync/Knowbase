@@ -539,6 +539,12 @@ const api = {
   vaultArchiveImportStart: () => ipcRenderer.invoke('va:importStart'),
   vaultArchiveImportDecide: (decisions: Array<{ relPath: string; action: 'overwrite' | 'skip' | 'rename' }>) => ipcRenderer.invoke('va:importDecide', decisions),
   vaultArchiveImportCancel: () => ipcRenderer.invoke('va:importCancel'),
+  // Web 剪藏（工具箱入口；服务在主进程，面板只做状态展示与配对管理）
+  clipperStatus: () => ipcRenderer.invoke('clipper:status'),
+  clipperResetToken: () => ipcRenderer.invoke('clipper:resetToken'),
+  clipperOpenFolder: () => ipcRenderer.invoke('clipper:openFolder'),
+  clipperSelfPing: () => ipcRenderer.invoke('clipper:selfPing'),
+  clipperCheckToken: (candidate: string) => ipcRenderer.invoke('clipper:checkToken', candidate),
 }
 
 contextBridge.exposeInMainWorld('api', api)

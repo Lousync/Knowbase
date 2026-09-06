@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft } from 'lucide-react'
+import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft, Scissors } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
@@ -9,6 +9,7 @@ import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
 import { ExportTool } from './components/export/ExportTool'
 import { LanShare } from './components/lan-share'
+import { WebClipper } from './components/web-clipper'
 import { getPluginTools, type PluginTool } from '../../lib/pluginService'
 import { showToast } from '../../lib/toast'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
@@ -51,6 +52,12 @@ const DATA_TOOLS: ToolDefinition[] = [
     id: 'lan-share',
     name: '设备传输',
     icon: <Wifi size={20} strokeWidth={1.5} />,
+    available: true,
+  },
+  {
+    id: 'web-clipper',
+    name: '网页剪藏',
+    icon: <Scissors size={20} strokeWidth={1.5} />,
     available: true,
   },
 ]
@@ -138,6 +145,8 @@ export function ToolboxModule() {
         return <ExportTool onBack={() => setActiveTool(null)} />
       case 'lan-share':
         return <LanShare onBack={() => setActiveTool(null)} />
+      case 'web-clipper':
+        return <WebClipper onBack={() => setActiveTool(null)} />
       default:
         return null
     }

@@ -272,6 +272,12 @@ export const vaultArchiveExport = () => a().vaultArchiveExport()
 export const vaultArchiveImportStart = () => a().vaultArchiveImportStart()
 export const vaultArchiveImportDecide = (decisions: Array<{ relPath: string; action: 'overwrite' | 'skip' | 'rename' }>) => a().vaultArchiveImportDecide(decisions)
 export const vaultArchiveImportCancel = () => a().vaultArchiveImportCancel()
+// Web 剪藏（主进程 127.0.0.1 服务；面板读状态 + token 配对管理）
+export const clipperStatus = () => a().clipperStatus()
+export const clipperResetToken = () => a().clipperResetToken()
+export const clipperOpenFolder = () => a().clipperOpenFolder()
+export const clipperSelfPing = () => a().clipperSelfPing()
+export const clipperCheckToken = (candidate: string) => a().clipperCheckToken(candidate)
 // 旧数据 → 当前仓库迁移（去库化 P0）
 export const vaultLegacySummary = () => a().vaultLegacySummary()
 export const vaultImportLegacy = (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => a().vaultImportLegacy(opts)

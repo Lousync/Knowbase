@@ -724,6 +724,18 @@ export interface LanShareStatus {
   remainingMs: number
   startedAt: number
 }
+// Web 剪藏服务状态（工具箱「网页剪藏」面板）
+export interface ClipperStatus {
+  running: boolean
+  port: number
+  portDrifted: boolean
+  error: string
+  token: string
+  tokenHint: string
+  vault: { name: string; saveDir: string } | null
+  extensionDir: string
+  clips: { available: boolean; dir: string; items: Array<{ name: string; size: number; mtimeMs: number }> }
+}
 export interface LanShareInboxFile {
   name: string
   size: number
@@ -1025,6 +1037,22 @@ export interface ElectronAPI {
   vaultArchiveImportStart: () => Promise<VaultArchiveImportResult>
   vaultArchiveImportDecide: (decisions: VaultArchiveDecision[]) => Promise<{ ok?: boolean; written?: number; skipped?: number; renamed?: number; registered?: string; canceled?: boolean; error?: string }>
   vaultArchiveImportCancel: () => Promise<{ ok: boolean }>
+  // Web 剪藏（工具箱「网页剪藏」面板）
+  clipperStatus: () => Promise<{
+    running: boolean
+    port: number
+    portDrifted: boolean
+    error: string
+    token: string
+    tokenHint: string
+    vault: { name: string; saveDir: string } | null
+    extensionDir: string
+    clips: { available: boolean; dir: string; items: Array<{ name: string; size: number; mtimeMs: number }> }
+  }>
+  clipperResetToken: () => Promise<{ ok: boolean; token: string }>
+  clipperOpenFolder: () => Promise<{ ok: boolean; error?: string }>
+  clipperSelfPing: () => Promise<{ ok: boolean; status?: number; vault?: string | null; error?: string }>
+  clipperCheckToken: (candidate: string) => Promise<{ ok: boolean }>
   vaultLegacySummary: () => Promise<{ hasLegacy: boolean; categories: number; pages: number; pagesEmpty: number; blogEntries: number; attachments: number; attachmentBytes: number; error?: string }>
   vaultImportLegacy: (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => Promise<{ started: boolean; error?: string }>
   onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => () => void
