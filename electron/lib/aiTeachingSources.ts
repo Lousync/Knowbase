@@ -1,10 +1,11 @@
-import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'fs'
 import { join, basename, isAbsolute } from 'path'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder } from './aiTeachingFolders'
 import { uniqueFileName } from './workspaceManager'
 import { extractPdfRange, extractPptxPages } from './docsReader'
+import { visionChat } from './llmService'
 
 /**
  * AI教学模块 · 素材库（总纲 docs/ai-teaching-module-rework.md §3.13 结构 v3，P6）
@@ -310,6 +311,82 @@ export async function extractRange(sessionId: string, no: number, getSetting: (k
 }
 
 /**
+ * ── 3-21 视觉转写（手动档，后续增强）──────────────────────────────
+ * 页位图由渲染层 pdf.js 栅格化（主进程无 canvas），主进程负责：
+ * ① 把已入库/引用的 pdf 原件字节交给渲染层；② 逐页喂视觉模型转写；③ **非破坏式并入提取稿**
+ *（已有 `## p{n}` 文本小节保留，转写块追补在文末「视觉转写」节；无提取稿则以转写新建并回写 已提取 ✓）。
+ */
+export function readSourceBytes(sessionId: string, no: number, getSetting: (key: string) => unknown): { ok: boolean; base64?: string; error?: string } {
+  try {
+    const l = layout(sessionId, getSetting, false)
+    if ('error' in l) return { ok: false, error: l.error }
+    const e = readEntries(l).find(x => x.no === no)
+    if (!e) return { ok: false, error: `没有编号为 ${no} 的素材条目` }
+    if (e.type !== 'pdf') return { ok: false, error: '视觉转写当前仅支持 pdf 原件（pptx 页渲染需 Office 引擎）' }
+    const abs = resolveMaterialAbs(l, e.path)
+    if (!e.path || e.path === '-' || !existsSync(abs)) return { ok: false, error: `素材原件不可用：${e.path || '（未登记路径）'}` }
+    const st = statSync(abs)
+    if (st.size > 80 * 1024 * 1024) return { ok: false, error: `原件过大（${Math.round(st.size / 1048576)}MB > 80MB），请缩小区间` }
+    return { ok: true, base64: readFileSync(abs).toString('base64') }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+const VISION_SYSTEM = '你是教材视觉转写助手。把你收到的教材页面图片**逐元素忠实转写**为结构化 Markdown：'
+  + '公式一律用 LaTeX（行内 $…$，独立公式 $$…$$）；表格转 Markdown 表格；图片/几何图给一句【图：…】客观描述；'
+  '保留标题层级与题号。只转写页面上实际可见的内容，看不清就标注（不清晰），**严禁编造或补全**。直接输出该页 Markdown，不要任何开场白或评论。'
+
+/** 逐页转写并并入提取稿。pages = 渲染层栅格化的 {n 页码, dataUrl}（≤12 页，单页失败不中断其余） */
+export async function transcribeVision(sessionId: string, no: number, pages: { n: number; dataUrl: string }[], getSetting: (key: string) => unknown): Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; failed?: number[]; error?: string }> {
+  try {
+    const l = layout(sessionId, getSetting, false)
+    if ('error' in l) return { ok: false, error: l.error }
+    const entries = readEntries(l)
+    const e = entries.find(x => x.no === no)
+    if (!e) return { ok: false, error: `没有编号为 ${no} 的素材条目` }
+    const list = (Array.isArray(pages) ? pages : []).filter(p => Number.isFinite(p.n) && typeof p.dataUrl === 'string' && p.dataUrl.startsWith('data:image/')).slice(0, 12)
+    if (list.length === 0) return { ok: false, error: '没有可用的页面位图（渲染失败？请重试）' }
+    const done: { n: number; md: string }[] = []
+    const failed: number[] = []
+    let model = ''
+    for (const p of list) {
+      const r = await visionChat({ system: VISION_SYSTEM, prompt: `这是教材第 ${p.n} 页，请转写整页。`, images: [p.dataUrl] })
+      const t = (r.text ?? '').trim()
+      if (r.ok && t) { done.push({ n: p.n, md: t }); model = r.model ?? model }
+      else failed.push(p.n)
+    }
+    if (done.length === 0) return { ok: false, failed, error: failed.length ? `全部页转写失败（视觉模型不可用或不支持图片输入）：${model || ''}` : '转写失败' }
+    // 并入提取稿：已有则文末追补「视觉转写」节（保留文本层与用户手工修正）；没有则以转写新建提取稿并回写 ✓ 指针
+    const ext = /^✓\s*→\s*(.+)$/.exec(e.extracted)
+    let extName = ext ? ext[1].trim() : ''
+    const block = ['', `## 视觉转写（${model} · ${today()} · 3-21）`, '', ...done.flatMap(d => [`### p${d.n}`, '', d.md, ''])].join('\n')
+    if (extName && existsSync(join(l.dirAbs, extName))) {
+      const old = readFileSync(join(l.dirAbs, extName), 'utf-8')
+      writeFileSync(join(l.dirAbs, extName), `${old.replace(/\s+$/, '')}\n\n${block}`, 'utf-8')
+    } else {
+      const rg = { from: Math.min(...done.map(d => d.n)), to: Math.max(...done.map(d => d.n)) }
+      extName = uniqueFileName(l.dirAbs, `${sanitizeTitle(e.name)}-p${rg.from}-${rg.to}.md`)
+      const body = [
+        `# ${e.name} · 第 ${rg.from}-${rg.to} 页提取稿（视觉转写）`,
+        '',
+        `> 来源：${SOURCE_FILE} 素材 #${e.no}（${e.path}） · ${today()} · 由视觉模型逐页转写（3-21），文本层缺失/失真时的忠实版`,
+        '> 本页**可直接编辑修正**，AI 后续按修正版引用。',
+        '',
+        ...done.flatMap(d => [`## p${d.n}`, '', d.md, '']),
+      ].join('\n')
+      writeFileSync(join(l.dirAbs, extName), body, 'utf-8')
+      const w = rewriteEntries(l, entries.map(x => x.no === e.no ? { ...x, extracted: `✓ → ${extName}` } : x))
+      if (!w.ok) return { ok: false, error: w.error }
+    }
+    broadcastTreeRefresh(l.dirRel)
+    return { ok: true, relPath: `${l.dirRel}/${extName}`, model, done: done.map(d => d.n), failed }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/**
  * AgentRunner 注入（每轮重读，与 CONSTRAINTS 同哲学）：素材目录 + 编号制引用规则（3-29）。
  * 无登记文件/零条目 → 空串（零注入，存量会话不受扰）。
  */
@@ -346,6 +423,12 @@ export function registerAiTeachingSourceHandlers(getSetting: (key: string) => un
   ipcMain.handle('aiTeachSrc:add', (_e, sessionId: string, input: AddSourceInput) => addSource(String(sessionId ?? ''), input, getSetting))
   ipcMain.handle('aiTeachSrc:remove', (_e, sessionId: string, no: number) => removeSource(String(sessionId ?? ''), Number(no), getSetting))
   ipcMain.handle('aiTeachSrc:extract', (_e, sessionId: string, no: number) => extractRange(String(sessionId ?? ''), Number(no), getSetting))
+  // 3-21 视觉转写（手动档）：原件字节交给渲染层栅格化；转写结果并入提取稿
+  ipcMain.handle('aiTeachSrc:pdfBytes', (_e, sessionId: string, no: number) => readSourceBytes(String(sessionId ?? ''), Number(no), getSetting))
+  ipcMain.handle('aiTeachSrc:transcribe', async (_e, sessionId: string, no: number, pages: { n: number; dataUrl: string }[]) => {
+    const list = Array.isArray(pages) ? pages.map(p => ({ n: Number(p?.n), dataUrl: String(p?.dataUrl ?? '') })) : []
+    return transcribeVision(String(sessionId ?? ''), Number(no), list, getSetting)
+  })
   // 入库浏览：系统文件选择器（表单「已入库」用；返回绝对路径给 add 拷贝）
   ipcMain.handle('aiTeachSrc:pick', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null

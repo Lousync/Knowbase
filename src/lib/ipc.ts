@@ -508,6 +508,9 @@ export const aiTeachSrcAdd = (id: string, input: AiTeachSourceInput) => a().aiTe
 export const aiTeachSrcRemove = (id: string, no: number) => a().aiTeachSrcRemove(id, no)
 export const aiTeachSrcExtract = (id: string, no: number) => a().aiTeachSrcExtract(id, no)
 export const aiTeachSrcPick = () => a().aiTeachSrcPick()
+// 3-21 视觉转写（手动档）
+export const aiTeachSrcPdfBytes = (id: string, no: number) => a().aiTeachSrcPdfBytes(id, no)
+export const aiTeachSrcTranscribe = (id: string, no: number, pages: { n: number; dataUrl: string }[]) => a().aiTeachSrcTranscribe(id, no, pages)
 // P8 用户画像（§3.14 两层 PROFILE.md）
 export const aiTeachProfileReadGlobal = () => a().aiTeachProfileReadGlobal()
 export const aiTeachProfileWriteGlobal = (text: string) => a().aiTeachProfileWriteGlobal(text)

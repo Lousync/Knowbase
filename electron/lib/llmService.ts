@@ -573,6 +573,8 @@ export function registerLlmHandlers(deps: {
   // P3b：模型思考强度能力探测（正则单一真相源在主进程，渲染层据此置灰菜单）
   ipcMain.handle('llm:reasoningCapable', (_e, model: string) => REASONING_MODEL_RE.test(String(model ?? '')))
 
+  ipcMain.handle('llm:visionCapable', (_e, model: string) => VISION_MODEL_RE.test(String(model ?? '')))
+
   ipcMain.handle('llm:refreshModels', async (_e, id: string) => {
     const list = getProviders()
     const p = list.find(x => x.id === id)
@@ -614,4 +616,63 @@ export function registerLlmHandlers(deps: {
 /** 供 agentService 复用（不经 IPC） */
 export function invokeLlmInternal(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
   return llmInvoke(req)
+}
+
+// ===== 视觉转写（AI教学 3-21）：多模态一次性调用，不经过会话消息管线 =====
+
+/** 视觉能力启发式（同 reasoningCapable 哲学：名字猜测，真不支持由 API 报错兜底） */
+export const VISION_MODEL_RE = /(vision|\bvl\b|-vl[-._]|vl[-._]?\d|4o|omni|multimodal|glm-4v|gemini|claude-(|\d)|kimi.*vision)/i
+
+export interface VisionChatRequest {
+  /** 'providerId:modelId'；缺省 = 自动在启用的 openai-compatible 供应商里找视觉模型 */
+  modelSpec?: string
+  system: string
+  prompt: string
+  /** 页面位图（dataURL, image/jpeg|png） */
+  images: string[]
+  maxTokens?: number
+  signal?: AbortSignal
+}
+
+export interface VisionChatResponse { ok: boolean; text?: string; model?: string; providerName?: string; error?: string }
+
+/** 找一个疑似支持图片的模型（仅 openai-compatible——visionChat 的线格式为 OpenAI 多模态） */
+export function findVisionModel(preferredSpec?: string): { provider: ProviderConfig; model: string } | null {
+  const providers = getProviders().filter(p => p.enabled && p.type === 'openai-compatible')
+  if (preferredSpec) {
+    const [pid, mid] = preferredSpec.split(':')
+    const p = providers.find(x => x.id === pid)
+    if (p && mid) return { provider: p, model: mid }
+  }
+  for (const p of providers) {
+    const m = p.models.find(x => VISION_MODEL_RE.test(x))
+    if (m) return { provider: p, model: m }
+  }
+  return null
+}
+
+/** 视觉转写主进程入口（AI教学素材库）：OpenAI 多模态 content 数组直通 adapter */
+export async function visionChat(req: VisionChatRequest): Promise<VisionChatResponse> {
+  const found = findVisionModel(req.modelSpec)
+  if (!found) return { ok: false, error: '未找到可用的视觉模型：请在设置→模型供应商 配置支持图片的模型（如 qwen-vl / glm-4v / gpt-4o / kimi-latest，openai-compatible 类型）' }
+  const content: unknown[] = [
+    { type: 'text', text: `${req.prompt}\n（共 ${req.images.length} 页图片，按给出顺序对应页码列表）` },
+    ...req.images.map(u => ({ type: 'image_url', image_url: { url: u } })),
+  ]
+  const messages: { role: 'system' | 'user'; content: unknown }[] = [
+    { role: 'system', content: req.system },
+    { role: 'user', content },
+  ]
+  try {
+    const r = await getAdapter(found.provider.type).chat(found.provider, {
+      model: found.model,
+      // OpenAI 多模态 content 数组（image_url 部件）：adapter 原样透传线上格式，类型面在此收口
+      messages: messages as unknown as ChatMessage[],
+      maxTokens: Math.max(1024, Math.min(16384, Math.floor(req.maxTokens ?? 8192))),
+      signal: req.signal,
+    })
+    return { ok: true, text: String(r.content ?? ''), model: found.model, providerName: found.provider.name }
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e), model: found.model }
+  }
 }

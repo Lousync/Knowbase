@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search, User } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search, User, Eye } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
@@ -7,6 +7,7 @@ import {
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachSetLastWorkspace,
   aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick,
+  aiTeachSrcPdfBytes, aiTeachSrcTranscribe,
   aiTeachProfileReadGlobal, aiTeachProfileWriteGlobal, aiTeachProfileReadSession, aiTeachProfileWriteSession,
 } from '../../lib/ipc'
 import { AiTeachFileTree } from './AiTeachFileTree'
@@ -39,6 +40,7 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * P6 素材库（§3.13 结构 v3）：右栏「素材库」展示 SOURCE.md 条目（工作区 SOURCES/{对话夹}/），「＋素材」表单登记
  * （类型/存放/页码区间仅 pdf·pptx 拆起止，3-28 程序解析写入）、pdf/pptx 一键区间提取为同级可编辑提取稿（3-20/3-26），
  * SOURCE.md 与提取稿经 AgentRunner 素材目录注入供 AI 编号引用（3-29，每轮重读）。
+ * 3-21 视觉转写（手动档）：pdf 条目「转写」按钮→渲染层 pdf.js 区间栅格化→视觉模型逐页转写→并入提取稿。
  * P8 用户画像（§3.14）：全局画像（userData/AI教学/PROFILE.md）+ 会话 PROFILE.md 两层每轮注入；
  * 更新走 Plan B——AI 输出 ```profile 建议块 → 输入框上方建议卡片「接受（本主题/全局）/忽略」，接受才写文件（3-33）；
  * 「🩺 诊断问答」模板（3-34）答完生成初稿；入口=选择页「全局画像」chip + 顶栏「画像」chip（3-35）。
@@ -530,6 +532,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [srcFileRel, setSrcFileRel] = useState<string | null>(null)
   const [srcForm, setSrcForm] = useState<null | { name: string; type: string; path: string; storage: '已入库' | '仅引用'; rangeFrom: string; rangeTo: string; note: string }>(null)
   const [srcBusy, setSrcBusy] = useState<number | null>(null)
+  const [visionBusy, setVisionBusy] = useState<null | { no: number; label: string }>(null)
   const refreshSources = useCallback(async (sid: string | null) => {
     if (!sid) { setSrcEntries([]); setSrcFileRel(null); return }
     const r = await aiTeachSrcRead(sid).catch(() => null)
@@ -560,6 +563,55 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setSrcBusy(null)
     if (r.ok && r.relPath) { await refreshSources(activeId); showToast({ type: 'info', message: `提取完成：${r.relPath.split('/').pop()}` }); openSrcFile(r.relPath) }
     else showToast({ type: 'error', message: `提取失败：${(r as { error?: string }).error ?? '未知错误'}` })
+  }
+  /** 3-21 视觉转写（手动档）：pdf 原件页区间 → 渲染层 pdf.js 栅格化 → 视觉模型逐页转写 → 并入提取稿（非破坏） */
+  const doTranscribe = async (no: number) => {
+    if (!activeId || visionBusy) return
+    const e = srcEntries.find(x => x.no === no)
+    if (!e) return
+    setVisionBusy({ no, label: '读取原件…' })
+    try {
+      const b = await aiTeachSrcPdfBytes(activeId, no)
+      if (!b?.ok || !b.base64) { showToast({ type: 'error', message: `视觉转写失败：${b?.error ?? '原件不可读'}` }); return }
+      const pdfjs = await import('pdfjs-dist')
+      const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.js?url')).default
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+      const bytes = Uint8Array.from(atob(b.base64), c => c.charCodeAt(0))
+      const doc = await pdfjs.getDocument({ data: bytes }).promise
+      const m = /^(\d+)\s*(?:-\s*(\d+))?$/.exec(e.range.trim())
+      let from = m ? Math.max(1, parseInt(m[1], 10)) : 1
+      let to = m?.[2] ? parseInt(m[2], 10) : (e.range.trim() === '-' || !m ? Math.min(doc.numPages, 12) : from)
+      to = Math.min(doc.numPages, Math.max(from, to))
+      if (to - from + 1 > 12) { to = from + 11; showToast({ type: 'warning', message: '单次转写上限 12 页，已截取前 12 页' }) }
+      const pages: { n: number; dataUrl: string }[] = []
+      for (let n = from; n <= to; n++) {
+        setVisionBusy({ no, label: `栅格化 p${n}/${to}` })
+        const page = await doc.getPage(n)
+        const vp = page.getViewport({ scale: 2 })
+        const cvs = document.createElement('canvas')
+        cvs.width = Math.floor(vp.width); cvs.height = Math.floor(vp.height)
+        const ctx = cvs.getContext('2d')
+        if (!ctx) { page.cleanup(); continue }
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cvs.width, cvs.height)
+        await page.render({ canvasContext: ctx, viewport: vp }).promise
+        pages.push({ n, dataUrl: cvs.toDataURL('image/jpeg', 0.82) })
+        page.cleanup()
+      }
+      void doc.destroy()
+      if (pages.length === 0) { showToast({ type: 'error', message: '页面栅格化失败' }); return }
+      setVisionBusy({ no, label: `视觉模型转写 ${pages.length} 页…` })
+      const r = await aiTeachSrcTranscribe(activeId, no, pages).catch((err: Error) => ({ ok: false as const, error: err.message }))
+      if (r?.ok) {
+        await refreshSources(activeId)
+        if (r.relPath) openDocView(r.relPath)
+        const fail = r.failed?.length ? ` · ${r.failed.length} 页失败` : ''
+        showToast({ type: 'info', message: `👁 视觉转写完成（${r.model ?? '视觉模型'}）：${r.done?.length ?? 0} 页已并入提取稿${fail}` })
+      } else showToast({ type: 'error', message: `视觉转写失败：${(r as { error?: string }).error ?? ''}` })
+    } catch (err) {
+      showToast({ type: 'error', message: `视觉转写失败：${(err as Error).message}` })
+    } finally {
+      setVisionBusy(null)
+    }
   }
   const doRemoveSrc = async (no: number, nm: string) => {
     if (!activeId) return
@@ -1423,6 +1475,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                             <button onClick={() => { void doExtract(e.no) }} disabled={srcBusy === e.no}
                               className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
                               {srcBusy === e.no ? <Loader2 size={9} className="animate-spin" /> : <BookOpen size={9} />}{srcBusy === e.no ? '提取中…' : '提取'}
+                            </button>
+                          )}
+                          {e.type === 'pdf' && e.path && e.path !== '-' && (
+                            /* 3-21 手动档：区间页栅格化→视觉模型忠实转写（公式/图形/扫描件），结果非破坏并入提取稿 */
+                            <button onClick={() => { void doTranscribe(e.no) }} disabled={!!visionBusy}
+                              title={visionBusy?.no === e.no ? visionBusy.label : '视觉转写：把登记区间的页面交给视觉模型转写（公式/图形/扫描件兜底），并入提取稿后可编辑'}
+                              className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
+                              {visionBusy?.no === e.no ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
+                              {visionBusy?.no === e.no ? '转写中…' : '转写'}
                             </button>
                           )}
                           {inRepo && e.path.startsWith('./') && dirRel && e.type === 'pptx' && (
