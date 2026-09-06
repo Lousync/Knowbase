@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog, app } from 'electron'
+import { ipcMain, BrowserWindow, dialog, app, shell } from 'electron'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
@@ -821,6 +821,15 @@ export function registerWorkspaceHandlers(): void {
   ipcMain.handle('ws:getCurrent', () => {
     const cur = getCurrentVault()
     return cur ? { rootId: cur.rootId, name: cur.name, path: cur.rootPath } : null
+  })
+
+  // 在系统文件管理器中打开当前仓库文件夹（资源管理器/Finder；标题栏仓库菜单入口）
+  ipcMain.handle('ws:revealVault', async () => {
+    const cur = getCurrentVault()
+    if (!cur) return { ok: false, error: '当前没有打开的仓库' }
+    if (!existsSync(cur.rootPath)) return { ok: false, error: '仓库文件夹不存在（可能已被移动或删除）' }
+    const err = await shell.openPath(cur.rootPath)
+    return err ? { ok: false, error: err } : { ok: true }
   })
 
   // 移除授权（从 roots 与 vaults 表）

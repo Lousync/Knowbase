@@ -1028,6 +1028,8 @@ export interface ElectronAPI {
   workspaceGetRecent: () => Promise<WorkspaceRecent[]>
   workspaceOpenById: (rootId: string) => Promise<{ rootId: string; name: string; path: string } & { error?: string }>
   workspaceGetCurrent: () => Promise<{ rootId: string; name: string; path: string } | null>
+  // 在系统文件管理器中打开当前仓库文件夹（标题栏仓库菜单入口）
+  workspaceRevealVault: () => Promise<{ ok: boolean; error?: string }>
   // P8（D8）：重命名当前仓库展示名（roots/登记表/meta.json/最近列表同步，不动磁盘目录名）
   workspaceRenameVault: (name: string) => Promise<{ ok?: boolean; name?: string; error?: string }>
   workspaceForget: (rootId: string) => Promise<{ ok: boolean }>

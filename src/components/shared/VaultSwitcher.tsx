@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, FolderOpen, FolderPlus, Pencil, Layers } from 'lucide-react'
-import { workspaceCreateVault, workspaceGetCurrent, workspaceGetRecent, workspaceOpenById, workspaceRenameVault } from '../../lib/ipc'
+import { Check, ChevronDown, ExternalLink, FolderOpen, FolderPlus, Pencil, Layers } from 'lucide-react'
+import { workspaceCreateVault, workspaceGetCurrent, workspaceGetRecent, workspaceOpenById, workspaceRenameVault, workspaceRevealVault } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { showToast } from '../../lib/toast'
 import type { WorkspaceRecent } from '../../types'
@@ -56,6 +56,15 @@ export function VaultSwitcher() {
       const opened = await openVaultWithGuide()
       if (opened) reloadInto(opened.name)
     } finally { setOpen(false); setBusy(false) }
+  }
+
+  // 在系统文件管理器中打开当前仓库文件夹（成功不打扰，失败才提示）
+  const revealVault = async () => {
+    setOpen(false)
+    try {
+      const res = await workspaceRevealVault()
+      if (!res.ok) showToast({ type: 'error', message: res.error || '打开文件管理器失败' })
+    } catch { /* 桥接异常静默：无仓库时菜单项本就隐藏 */ }
   }
 
   const submitName = async () => {
@@ -116,6 +125,7 @@ export function VaultSwitcher() {
               ))}
               <div className="my-1 border-t border-[var(--border-color)]" />
               <MenuItem icon={<FolderOpen size={13} />} label="打开其他文件夹…" onClick={() => void openOther()} />
+              {cur && <MenuItem icon={<ExternalLink size={13} />} label="在文件管理器中打开仓库" onClick={() => void revealVault()} />}
               {cur && <MenuItem icon={<Pencil size={13} />} label="重命名当前仓库" onClick={() => { setMode('rename'); setInput(cur.name) }} />}
               <MenuItem icon={<FolderPlus size={13} />} label="新建仓库" onClick={() => { setMode('create'); setInput('') }} />
             </>

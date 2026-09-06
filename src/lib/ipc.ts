@@ -264,6 +264,8 @@ export const workspaceOpenById = (rootId: string) => a().workspaceOpenById(rootI
 // P8（D8）：重命名当前仓库（只改展示名，不动文件夹名）
 export const workspaceRenameVault = (name: string): Promise<{ ok?: boolean; name?: string; error?: string }> => a().workspaceRenameVault(name)
 export const workspaceGetCurrent = () => a().workspaceGetCurrent()
+// 在系统文件管理器中打开当前仓库文件夹（标题栏仓库菜单）
+export const workspaceRevealVault = (): Promise<{ ok: boolean; error?: string }> => a().workspaceRevealVault()
 export const workspaceForget = (rootId: string) => a().workspaceForget(rootId)
 // P7（D6）：删除当前仓库 = 整仓进 OS 回收站（不弹提醒窗，回收站可还原兜底）
 export const workspaceDeleteVault = (rootId: string): Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }> => a().workspaceDeleteVault(rootId)
