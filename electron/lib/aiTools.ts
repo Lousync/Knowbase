@@ -18,6 +18,8 @@ export interface ToolJsonSchema {
     minimum?: number
     maximum?: number
     enum?: string[]
+    /** required 字符串参数显式允许空串（如 edit.newText：'' = 删除片段）。缺省空串按缺失拒，防 AI 漏参 */
+    allowEmpty?: boolean
   }>
   required?: string[]
 }
@@ -118,7 +120,8 @@ export function validateArgs(schema: ToolJsonSchema, args: Record<string, unknow
   const props = schema.properties ?? {}
   for (const key of schema.required ?? []) {
     const v = args[key]
-    if (v === undefined || v === null || v === '') return `缺少必填参数: ${key}`
+    // 空串默认按缺失拒（防漏参）；schema 标 allowEmpty 的参数放行（如 edit.newText='' 表删除）
+    if (v === undefined || v === null || (v === '' && props[key]?.allowEmpty !== true)) return `缺少必填参数: ${key}`
   }
   for (const [key, spec] of Object.entries(props)) {
     const v = args[key]

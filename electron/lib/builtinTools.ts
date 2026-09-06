@@ -1051,13 +1051,13 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.vault.edit',
     title: '精确替换文件片段',
-    description: '在仓库内 .md/.txt 中做一次精确替换（oldText 必须在文中唯一命中）。改动局部内容请用本工具而非 vault.write。需带 vault.read 返回的 expectedMtimeMs 防冲突',
+    description: '在仓库内 .md/.txt 中做一次精确替换（oldText 必须在文中唯一命中；newText 传空串即删除该片段，可用于解除 [[双链]]）。改动局部内容请用本工具而非 vault.write。需带 vault.read 返回的 expectedMtimeMs 防冲突',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: '仓库内相对文件路径' },
         oldText: { type: 'string', description: '要被替换的原文片段（必须唯一命中）' },
-        newText: { type: 'string', description: '替换后的文本' },
+        newText: { type: 'string', description: '替换后的文本；传空串 "" 即删除该片段（如解除 [[双链]] 引用）', allowEmpty: true },
         expectedMtimeMs: { type: 'number', description: 'mtime 基线（来自 vault.read）' },
       },
       required: ['path', 'oldText', 'newText'],
