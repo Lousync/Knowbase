@@ -100,7 +100,7 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
 
   return (
     <div
-      className="relative flex items-center h-9 bg-[color-mix(in_srgb,var(--bg-tertiary)_72%,transparent)] backdrop-blur-md border-b border-[var(--border-color)] select-none shrink-0 drag-region"
+      className="relative z-[75] flex items-center h-9 bg-[color-mix(in_srgb,var(--bg-tertiary)_72%,transparent)] backdrop-blur-md border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
       {/* 左：macOS 红绿灯窗控 + 开发版角标 + 窗口级操作（锚定主内容区，不随抽屉外扩漂移） */}
       <div className="flex items-center h-full pl-3 no-drag group/traffic">

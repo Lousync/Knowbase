@@ -87,7 +87,7 @@ export function VaultSwitcher() {
       <button
         onClick={() => setOpen((o) => !o)}
         title={cur ? `当前仓库：${cur.name}\n${cur.path}` : '打开仓库'}
-        className={`flex items-center gap-1 h-full max-w-[180px] px-2 rounded-md text-[12px] transition-colors no-drag ${open ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'} text-[var(--text-secondary)]`}
+        className={`flex items-center gap-1 h-full max-w-[180px] px-2 rounded-md text-[12px] transition-colors no-drag ${open ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'} text-[var(--text-primary)]`}
       >
         <Layers size={13} className="shrink-0 text-[var(--accent)]" />
         <span className="truncate font-medium">{cur ? cur.name : '未打开仓库'}</span>
@@ -95,11 +95,11 @@ export function VaultSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-[280px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-xl py-1 z-[130] no-drag text-[var(--text-primary)]">
+        <div className="absolute left-0 top-full mt-1 w-[280px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-2xl py-1 z-[130] no-drag text-[var(--text-primary)]">
           {mode === 'list' && (
             <>
-              <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-disabled)]">最近仓库</div>
-              {recent.length === 0 && <div className="px-3 py-1.5 text-[11.5px] text-[var(--text-muted)]">暂无记录</div>}
+              <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">最近仓库</div>
+              {recent.length === 0 && <div className="px-3 py-1.5 text-[11.5px] text-[var(--text-secondary)]">暂无记录</div>}
               {recent.map((v) => (
                 <button
                   key={v.rootId}
@@ -110,7 +110,7 @@ export function VaultSwitcher() {
                   <span className="w-4 shrink-0">{v.rootId === cur?.rootId && <Check size={13} />}</span>
                   <span className="min-w-0">
                     <span className="block truncate">{v.name}</span>
-                    <span className="block truncate text-[10px] text-[var(--text-disabled)]">{v.path}</span>
+                    <span className="block truncate text-[10px] text-[var(--text-muted)]">{v.path}</span>
                   </span>
                 </button>
               ))}
@@ -138,8 +138,8 @@ export function VaultSwitcher() {
                   {mode === 'create' ? '创建' : '保存'}
                 </button>
               </div>
-              <button onClick={() => setMode('list')} className="mt-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">← 返回</button>
-              {mode === 'rename' && <p className="mt-1 text-[10px] text-[var(--text-disabled)] leading-snug">只改显示名称，不改磁盘上的文件夹名</p>}
+              <button onClick={() => setMode('list')} className="mt-1.5 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">← 返回</button>
+              {mode === 'rename' && <p className="mt-1 text-[10px] text-[var(--text-muted)] leading-snug">只改显示名称，不改磁盘上的文件夹名</p>}
             </div>
           )}
         </div>
@@ -150,8 +150,8 @@ export function VaultSwitcher() {
 
 function MenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-      <span className="w-4 shrink-0 text-[var(--text-muted)]">{icon}</span>
+    <button onClick={onClick} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+      <span className="w-4 shrink-0 text-[var(--text-secondary)]">{icon}</span>
       {label}
     </button>
   )
