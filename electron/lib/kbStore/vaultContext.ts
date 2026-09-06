@@ -72,12 +72,41 @@ export function readCurrentVaultId(): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null
 }
 
-/** 设置当前仓库（内存态 + 持久化 currentVaultId） */
+/** P8（D8）：设备级最近仓库列表（settings.json.recentVaults，切换器/注册自愈的数据源） */
+export interface RecentVault {
+  rootId: string
+  name: string
+  path: string
+  updatedAt: string
+}
+
+export function readRecentVaults(): RecentVault[] {
+  const raw = readSettingsFile()['recentVaults']
+  if (!Array.isArray(raw)) return []
+  return raw.filter((x): x is RecentVault => !!x && typeof x === 'object' && typeof (x as RecentVault).rootId === 'string' && typeof (x as RecentVault).path === 'string')
+}
+
+/** 把仓库从最近列表移除（删除仓库时调用，防切换器列出死条目） */
+export function forgetRecentVault(rootId: string): void {
+  writeSettingsFile((s) => {
+    if (Array.isArray(s['recentVaults'])) s['recentVaults'] = (s['recentVaults'] as RecentVault[]).filter((x) => x.rootId !== rootId)
+  })
+}
+
+/** 设置当前仓库（内存态 + 持久化 currentVaultId + 刷新最近列表置顶） */
 export function setCurrentVault(v: VaultInfo | null): void {
   current = v
   writeSettingsFile((s) => {
-    if (v) s['currentVaultId'] = v.rootId
-    else delete s['currentVaultId']
+    if (v) {
+      s['currentVaultId'] = v.rootId
+      const rest = (Array.isArray(s['recentVaults']) ? (s['recentVaults'] as RecentVault[]) : []).filter((x) => x.rootId !== v.rootId)
+      s['recentVaults'] = [
+        { rootId: v.rootId, name: v.name, path: v.rootPath, updatedAt: new Date().toISOString() },
+        ...rest,
+      ].slice(0, 8)
+    } else {
+      delete s['currentVaultId']
+    }
   })
 }
 
@@ -108,10 +137,10 @@ export function ensureAttachmentsDir(): boolean {
 }
 
 /**
- * 确保当前仓库的 .knowbase 存在并写入 meta.json。
+ * 确保当前仓库的 .knowbase 存在并写入 meta.json（P8：name = 仓库展示名，默认文件夹名由调用方给）。
  * 返回是否就绪。目录树天然隐藏「.」开头目录，无需额外处理。
  */
-export function ensureKbRoot(): boolean {
+export function ensureKbRoot(name?: string): boolean {
   const root = getVaultKbRoot()
   if (!root) return false
   try {
@@ -120,12 +149,32 @@ export function ensureKbRoot(): boolean {
     if (!existsSync(metaPath)) {
       writeFileSync(
         metaPath,
-        JSON.stringify({ schemaVersion: KB_SCHEMA_VERSION, createdAt: new Date().toISOString() }, null, 2),
+        JSON.stringify({ schemaVersion: KB_SCHEMA_VERSION, name: name || undefined, createdAt: new Date().toISOString() }, null, 2),
         'utf-8'
       )
+    } else if (name) {
+      // 存量 meta 无 name → 回填一次（幂等：已有不覆盖）
+      try {
+        const meta = JSON.parse(readFileSync(metaPath, 'utf-8')) as Record<string, unknown>
+        if (typeof meta.name !== 'string' || !meta.name) {
+          meta.name = name
+          writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
+        }
+      } catch { /* meta 损坏不重写（读路径各自有兜底） */ }
     }
     return true
   } catch {
     return false
   }
+}
+
+/** P8 改名：写仓库根 .knowbase/meta.json 的 name（存在即改，不新建） */
+export function setVaultMetaName(rootPath: string, name: string): void {
+  try {
+    const metaPath = join(rootPath, '.knowbase', 'meta.json')
+    if (!existsSync(metaPath)) return
+    const meta = JSON.parse(readFileSync(metaPath, 'utf-8')) as Record<string, unknown>
+    meta.name = name
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
+  } catch { /* ignore */ }
 }

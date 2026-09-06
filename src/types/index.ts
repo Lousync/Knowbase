@@ -1016,6 +1016,8 @@ export interface ElectronAPI {
   workspaceGetRecent: () => Promise<WorkspaceRecent[]>
   workspaceOpenById: (rootId: string) => Promise<{ rootId: string; name: string; path: string } & { error?: string }>
   workspaceGetCurrent: () => Promise<{ rootId: string; name: string; path: string } | null>
+  // P8（D8）：重命名当前仓库展示名（roots/登记表/meta.json/最近列表同步，不动磁盘目录名）
+  workspaceRenameVault: (name: string) => Promise<{ ok?: boolean; name?: string; error?: string }>
   workspaceForget: (rootId: string) => Promise<{ ok: boolean }>
   workspaceDeleteVault: (rootId: string) => Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }>
   // P6 整仓归档（zip 全量导出/导入；冲突逐条决策：覆盖/跳过/重命名）

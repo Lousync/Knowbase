@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSy
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../database/connection'
-import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR } from './kbStore/vaultContext'
+import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, setVaultMetaName } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
@@ -292,6 +292,17 @@ export function writeWorkspaceFile(absPath: string, content: string): void {
 // ===== 仓库登记与持久化 =====
 
 function loadVaults(): void {
+  // P8 设备级自愈：settings.json.recentVaults 有而登记表没有的条目（库缺/损坏），
+  // 磁盘上确实存在且含 .knowbase → 回登记（最近列表即第二注册表）。独立 try：DB 不可用不影响此路径。
+  try {
+    for (const rv of readRecentVaults()) {
+      if (roots.has(rv.rootId)) continue
+      if (existsSync(rv.path) && existsSync(join(rv.path, '.knowbase'))) {
+        roots.set(rv.rootId, { id: rv.rootId, name: rv.name, rootPath: rv.path })
+        upsertVault(rv.rootId, rv.name, rv.path)
+      }
+    }
+  } catch { /* ignore */ }
   try {
     const db = getDatabase()
     const res = db.exec('SELECT id, name, path FROM vaults')
@@ -306,7 +317,7 @@ function loadVaults(): void {
     const cur = curId ? roots.get(curId) : undefined
     if (cur) {
       setCurrentVault({ rootId: cur.id, name: cur.name, rootPath: cur.rootPath })
-      ensureKbRoot()
+      ensureKbRoot(cur.name)
       // 启动恢复也过一遍一次性布局迁移（P4 博客收拢；幂等）
       runLayoutMigrations(cur.rootPath)
     }
@@ -386,7 +397,7 @@ function adoptVaultDirectory(rootPath: string, name?: string): { rootId: string;
   roots.set(id, { id, name: vaultName, rootPath })
   upsertVault(id, vaultName, rootPath)
   setCurrentVault({ rootId: id, name: vaultName, rootPath })
-  ensureKbRoot()
+  ensureKbRoot(vaultName)
   runLayoutMigrations(rootPath)
   return { rootId: id, name: vaultName, path: rootPath }
 }
@@ -792,7 +803,7 @@ export function registerWorkspaceHandlers(): void {
       const r = roots.get(rootId)
       if (!r) throw new Error('工作区不存在或已被移除')
       setCurrentVault({ rootId: r.id, name: r.name, rootPath: r.rootPath })
-      ensureKbRoot()
+      ensureKbRoot(r.name)
       runLayoutMigrations(r.rootPath)
       // 切换仓库后失效新仓库缓存（多仓库陈旧兜底，与 ws:openDir 同策略）
       invalidateIndexIfCurrentVault(r.id)
@@ -816,6 +827,22 @@ export function registerWorkspaceHandlers(): void {
     return { ok: true }
   })
 
+  // P8（D8）：重命名当前仓库——改展示名（roots 内存 + vaults 表 + .knowbase/meta.json + 最近列表），
+  // 不动文件夹名（路径即身份；改磁盘目录名会破坏全部登记，风险不对称）
+  ipcMain.handle('ws:renameVault', (_e, name: unknown) => {
+    const cur = getCurrentVault()
+    if (!cur) return { error: '当前没有打开的仓库' }
+    const trimmed = String(name ?? '').trim()
+    if (!trimmed) return { error: '请输入仓库名称' }
+    if (/[\\/:*?"<>|]/.test(trimmed) || trimmed.startsWith('.')) return { error: '名称不能含 \\ / : * ? " < > | 且不能以 . 开头' }
+    const r = roots.get(cur.rootId)
+    if (r) r.name = trimmed
+    upsertVault(cur.rootId, trimmed, cur.rootPath)
+    setCurrentVault({ ...cur, name: trimmed })
+    setVaultMetaName(cur.rootPath, trimmed)
+    return { ok: true, name: trimmed }
+  })
+
   // P7（D6）：删除仓库 = 整仓进 OS 回收站（不弹提醒窗；注册表移除与当前态清理由本 handler 完成）
   // 入口在设置深处（R4）；护栏 isAllowedClearRoot 防配置损坏误删整盘；回收站可还原兜底。
   ipcMain.handle('ws:deleteVault', async (_e, rootId: string) => {
@@ -829,6 +856,7 @@ export function registerWorkspaceHandlers(): void {
     }
     roots.delete(rootId)
     try { removeVault(rootId) } catch { /* 登记表行可能已不在，忽略 */ }
+    forgetRecentVault(rootId)
     const wasCurrent = getCurrentVault()?.rootId === rootId
     if (wasCurrent) {
       setCurrentVault(null)
@@ -853,6 +881,7 @@ export async function trashAllRegisteredVaults(): Promise<{ trashed: number; err
       trashed++
       roots.delete(id)
       try { removeVault(id) } catch { /* ignore */ }
+      forgetRecentVault(id)
     } catch (e) {
       errors.push(`${r.name}：${(e as Error).message}`)
     }

@@ -529,6 +529,8 @@ const api = {
   workspaceGetRecent: () => ipcRenderer.invoke('ws:getRecent'),
   workspaceOpenById: (rootId: string) => ipcRenderer.invoke('ws:openById', rootId),
   workspaceGetCurrent: () => ipcRenderer.invoke('ws:getCurrent'),
+  // P8（D8）：重命名当前仓库（展示名同步 登记表/meta/最近列表，不改文件夹名）
+  workspaceRenameVault: (name: string) => ipcRenderer.invoke('ws:renameVault', name),
   workspaceForget: (rootId: string) => ipcRenderer.invoke('ws:forget', rootId),
   // P7（D6）：删除仓库 = 整仓进 OS 回收站（主进程护栏校验；无提醒弹窗）
   workspaceDeleteVault: (rootId: string) => ipcRenderer.invoke('ws:deleteVault', rootId),
