@@ -48,6 +48,7 @@ import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
 import { registerDocsReadHandlers } from '../lib/docsIpc'
 import { registerLanShareHandlers } from '../lib/lanShare'
+import { registerClipperHandlers, startClipperServer, stopClipperServer } from '../lib/clipperServer'
 import { registerWorkspaceHandlers, trashAllRegisteredVaults } from '../lib/workspaceManager'
 import { registerVaultArchiveHandlers } from '../lib/vaultArchive'
 import { getCurrentVault, setCurrentVault } from '../lib/kbStore/vaultContext'
@@ -804,6 +805,18 @@ app.whenReady().then(async () => {
 
   createTray()
 
+  // Web 剪藏服务（工具箱「网页剪藏」入口的数据面；127.0.0.1 常驻，随应用启停）
+  registerClipperHandlers({
+    getSetting: (key) => settingsCache[key],
+    setSetting: (key, value) => {
+      settingsCache[key] = value
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(flushSettingsToDisk, 500)
+      return true
+    },
+  })
+  startClipperServer()
+
   app.on('activate', () => {
     // macOS: 点击 dock 图标时重建窗口
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -837,6 +850,7 @@ app.on('before-quit', () => {
   destroyPasswordFiller()
   stopSuperviseScheduler()
   disposeDayPanel()
+  stopClipperServer()
   // Flush pending settings writes
   if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
   closeDatabase()

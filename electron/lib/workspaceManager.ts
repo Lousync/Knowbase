@@ -426,7 +426,8 @@ function yearMonthDir(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function sanitizeFileName(name: string): string {
+/** 文件名净化：Windows 非法字符与控制符 → `_`（导出供 Web 剪藏标题净化复用，全应用同一口径） */
+export function sanitizeFileName(name: string): string {
   const n = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim()
   return n || 'image'
 }
