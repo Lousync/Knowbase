@@ -460,8 +460,10 @@ function requireInside(rootId: string, relPath: unknown): string {
   return abs
 }
 
-/** 知识索引失效：仅当被改动的根就是当前仓库时才有缓存可失效（P0 懒重建，只删缓存 JSON） */
-function invalidateIndexIfCurrentVault(rootId: string): void {
+/** 知识索引失效：仅当被改动的根就是当前仓库时才有缓存可失效（P0 懒重建，只删缓存 JSON）。
+ *  ws:writeFile/ws:createFile 与 AI vault.write/edit 共用——任何 .md 落盘后必须过这里，
+ *  否则知识列表/图谱/反链读到旧缓存（AI 写页 UI 不可见的根因，2026-09 修复）。 */
+export function invalidateIndexIfCurrentVault(rootId: string): void {
   if (getCurrentVault()?.rootId !== rootId) return
   invalidateKnowledgeIndex()
   invalidateGraphIndex()

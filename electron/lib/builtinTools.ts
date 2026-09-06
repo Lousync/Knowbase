@@ -4,7 +4,7 @@ import { join, relative, extname, sep, dirname } from 'path'
 import { getDatabase, saveToDisk } from '../database/connection'
 import { registerTool, getSettingReader } from './aiTools'
 import { webSearch, webReadPage } from './webSearch'
-import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath } from './workspaceManager'
+import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
@@ -1010,7 +1010,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.vault.write',
     title: '写入仓库文件',
-    description: '新建或整文件覆写仓库内 .md/.txt（原子写）。覆写已有文件时需带 vault.read 返回的 expectedMtimeMs 防冲突。不可写 .knowbase 内部数据。建议优先用 vault.edit 做小改动',
+    description: '新建或整文件覆写仓库内 .md/.txt（原子写）。覆写已有文件时需带 vault.read 返回的 expectedMtimeMs 防冲突。不可写 .knowbase 内部数据。建议优先用 vault.edit 做小改动。注意：要在知识库列表/图谱中出现的知识页，内容必须以 frontmatter 开头并含 id:（稳定唯一标识，缺失则仅作为普通文件存在），格式可先 vault.read 一个既有 .md 参考',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1041,6 +1041,7 @@ export function registerBuiltinTools(): void {
       try { mkdirSync(dirname(abs), { recursive: true }) } catch { /* 目录已存在 */ }
     }
     writeWorkspaceFile(abs, content)
+    if (rel.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '') // 与 ws:writeFile 同规则：.md 落盘即失效，知识列表/图谱立即可见
     const st = statSync(abs)
     broadcastExternalWrite(rel, st.mtimeMs)
     return { ok: true, path: rel, created: !existing, size: st.size, mtimeMs: st.mtimeMs }
@@ -1084,6 +1085,7 @@ export function registerBuiltinTools(): void {
     if (text.indexOf(oldText, first + oldText.length) >= 0) throw new Error('待替换片段在文件中出现多处，请提供更长更精确的 oldText（本工具一次只替换一处）')
     const next = text.slice(0, first) + newText + text.slice(first + oldText.length)
     writeWorkspaceFile(abs, next)
+    if (rel.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '') // 同上：edit 后索引/图谱同步刷新
     const after = statSync(abs)
     broadcastExternalWrite(rel, after.mtimeMs)
     return {
