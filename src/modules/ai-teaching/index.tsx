@@ -4,7 +4,7 @@ import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions,
   workspaceGetCurrent, workspaceListDir, docsPptxPages,
-  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, onAiTeachNotice,
+  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, onAiTeachNotice,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
@@ -106,8 +106,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [])
   // P1：主进程侧不可静默的提示（根目录改名迁移失败/目标占用等）
   useEffect(() => onAiTeachNotice((msg) => { if (msg) showToast({ type: 'warning', message: msg }) }), [])
-  // 会话级全局要求（仅本会话；056 迁移 + agent:setSessionInstructions）
+  // 会话级全局要求（P2 §2.3：唯一真相源=会话文件夹 CONSTRAINTS.md；DB 字段仅旧会话读兼容）
   const [activeInstr, setActiveInstr] = useState('')
+  const [instrRel, setInstrRel] = useState('')
   const [instrOpen, setInstrOpen] = useState(false)
   const [instrDraft, setInstrDraft] = useState('')
   const [instrDismiss, setInstrDismiss] = useState(false)
@@ -147,6 +148,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (!isActive && zenLevel > 0) onZenLevelChange?.(0)
   }, [isActive, zenLevel, onZenLevelChange])
 
+  // P2（§2.3/2-6）：会话约束读取——文件唯一真相源；无文件夹的旧会话读兼容回退 DB 字段一次
+  const loadConstraints = useCallback(async (sid: string, dbFallback: string): Promise<void> => {
+    const r = await aiTeachReadConstraints(sid).catch(() => null)
+    const text = r && r.ok ? (r.relPath ? (r.text ?? '').trim() : dbFallback) : dbFallback
+    if (activeIdRef.current === sid) { setActiveInstr(text); setInstrRel(r?.relPath ?? '') }
+  }, [])
+
   const refreshSessions = useCallback(async () => {
     const list = await agentSessions().catch(() => [])
     setSessions(list)
@@ -155,13 +163,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       const first = cur ?? list[0]
       setActiveId(first.id)
       setActiveTitle(first.title)
-      setActiveInstr(first.instructions ?? '')
       setInstrDismiss(false)
+      void loadConstraints(first.id, first.instructions ?? '')
     } else {
       setActiveId(null)
-      setActiveInstr('')
+      setActiveInstr(''); setInstrRel('')
     }
-  }, [])
+  }, [loadConstraints])
 
   const refreshMessages = useCallback(async (sid: string) => {
     const rows = await agentMessages(sid).catch(() => [] as AgentStoredMessage[])
@@ -189,10 +197,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
     const row = sessions.find(s => s.id === sid)
-    setActiveInstr(row?.instructions ?? '')
     setInstrDismiss(false)
+    void loadConstraints(sid, row?.instructions ?? '')
     await refreshMessages(sid)
-  }, [refreshMessages, sessions])
+  }, [refreshMessages, sessions, loadConstraints])
 
   const sendText = useCallback(async (raw: string, cid: string): Promise<AgentChatResult | null> => {
     setPending(true); setLiveSteps([])
@@ -227,25 +235,28 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
-    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrDismiss(false)
+    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false)
+    // P2：模板播种（_templates/CONSTRAINTS.md 存在时）→ 建夹完成后立刻载入展示
+    void aiTeachEnsureSessionFolder(row.id).then(async () => { await loadConstraints(row.id, '') })
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
     void sendText(tpl.opening, cid)
     void refreshSessions()
-  }, [sendText, refreshSessions])
+  }, [sendText, refreshSessions, loadConstraints])
 
-  /** 保存/清除当前会话的全局要求（仅本会话后续轮次生效） */
+  /** P2（2-6）：保存会话要求 = 写会话文件夹 CONSTRAINTS.md（懒建兜底）；清掉旧 DB 字段残留防双真相源 */
   const saveInstr = async (): Promise<void> => {
     const sid = activeIdRef.current
     if (!sid) return
-    const text = instrDraft.trim().slice(0, 800)
-    const r = await agentSetSessionInstructions(sid, text).catch(() => null)
+    const text = instrDraft.trim().slice(0, 2000)
+    const r = await aiTeachWriteConstraints(sid, text).catch(() => null)
     if (r && r.ok) {
-      setActiveInstr(text); setInstrDismiss(false); setInstrOpen(false)
-      setSessions(prev => prev.map(s => (s.id === sid ? { ...s, instructions: text } : s)))
-      showToast({ type: 'info', message: text ? '已设置本会话要求（仅本会话生效）' : '已清除本会话要求' })
+      const hadDb = !!sessions.find(s => s.id === sid)?.instructions
+      if (hadDb) void agentSetSessionInstructions(sid, '').catch(() => null)
+      setActiveInstr(text); setInstrRel(r.relPath ?? ''); setInstrDismiss(false); setInstrOpen(false)
+      showToast({ type: 'info', message: text ? '已保存到 CONSTRAINTS.md（编辑器里可直接改，AI 每轮发送时重读）' : '已清除本会话约束' })
     } else {
-      showToast({ type: 'error', message: '保存失败，请重试' })
+      showToast({ type: 'error', message: `约束保存失败${r?.error ? `：${r.error}` : ''}` })
     }
   }
 
@@ -387,7 +398,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             <button
               onClick={() => { setInstrDraft(activeInstr); setInstrOpen(v => !v) }}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] transition-colors ${activeInstr ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'} ${instrOpen ? 'bg-[var(--bg-hover)]' : ''}`}
-              title="本会话要求：给这个对话挂一条只对它生效的全局要求（如：只用中文 / 只聊这个主题 / 先结论后理由）">
+              title="会话约束：写入本会话文件夹的 CONSTRAINTS.md，AI 每轮发送时重读（编辑器里可直接改）">
               <PenLine size={12} />
               <span className="max-w-[120px] truncate">会话要求</span>
               {activeInstr && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
@@ -395,17 +406,18 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             {instrOpen && (
               <div className="absolute right-0 top-full mt-1.5 w-[340px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden select-text">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                  <span className="text-[11.5px] font-medium text-[var(--text-primary)]">本会话要求</span>
+                  <span className="text-[11.5px] font-medium text-[var(--text-primary)]">本会话约束 · CONSTRAINTS.md</span>
                   <button onClick={() => setInstrOpen(false)} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><X size={12} /></button>
                 </div>
                 <div className="p-3 space-y-2">
                   <textarea
                     value={instrDraft}
                     onChange={e => setInstrDraft(e.target.value)}
-                    rows={4} maxLength={800}
+                    rows={4} maxLength={2000}
                     placeholder={'例如：\n· 只用中文回答\n· 这个对话只聊 Linux 内核\n· 每次先给结论再展开\n（留空保存 = 清除）'}
                     className="w-full px-2.5 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] resize-none outline-none focus:border-[var(--accent)]"
                   />
+                  {instrRel && <div className="text-[10.5px] text-[var(--text-muted)] px-0.5 truncate" title={instrRel}>落盘于：{instrRel}</div>}
                   <div className="flex gap-1 justify-end">
                     {activeInstr && (
                       <button onClick={() => { setInstrDraft(''); void saveInstr() }}

@@ -19,6 +19,10 @@ import { renameWorkspacePath, trashWorkspacePath, uniqueFileName } from './works
 
 const ANCHOR_FILE = '.session.json'
 const DEFAULT_ROOT_DIR = 'AI教学'
+/** 会话约束文件（P2 §2.3）：AI 注入的唯一真相源，用户可在编辑器直接改 */
+const CONSTRAINTS_FILE = 'CONSTRAINTS.md'
+/** 约束模板（P2 先行落产物根层；P5 工作区两层落地后改读工作区目录，层级语义不变） */
+const CONSTRAINTS_TEMPLATE_REL_SEGMENTS = ['_templates', CONSTRAINTS_FILE]
 
 export interface SessionFolderAnchor {
   sessionId: string
@@ -116,10 +120,81 @@ export function ensureSessionFolder(sessionId: string, getSetting: (key: string)
     mkdirSync(folderAbs)
     const anchor: SessionFolderAnchor = { sessionId, title: session.title, createdAt: session.created_at, v: 1 }
     writeFileSync(join(folderAbs, ANCHOR_FILE), JSON.stringify(anchor, null, 2), 'utf-8')
+    // P2（§2.3）：建夹即从模板播种一份会话专属 CONSTRAINTS.md（模板缺失则跳过，用户可后建）
+    seedConstraintsFromTemplate(folderAbs, join(rootAbs, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS))
     broadcastTreeRefresh(rootDir)
     return { ok: true, relPath: `${rootDir}/${name}` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 模板播种：把根层 `_templates/CONSTRAINTS.md` 复制进会话文件夹（目标已存在不覆盖） */
+function seedConstraintsFromTemplate(folderAbs: string, templateAbs: string): void {
+  try {
+    const dest = join(folderAbs, CONSTRAINTS_FILE)
+    if (existsSync(dest) || !existsSync(templateAbs)) return
+    writeFileSync(dest, readFileSync(templateAbs, 'utf-8'), 'utf-8')
+  } catch { /* 播种失败不阻断建夹 */ }
+}
+
+/**
+ * P2 约束读写（§2.3 文件为唯一真相源）：
+ * - 写路径懒建文件夹（2-5）后落 CONSTRAINTS.md，不再写 DB 字段（2-6 写只写文件）；
+ * - 读路径只认文件。旧 DB sessionInstructions 的兼容回退只发生在注入解析处（见下）。
+ */
+export interface ConstraintsResult { ok: boolean; text?: string; relPath?: string | null; error?: string }
+
+export function readConstraints(sessionId: string, getSetting: (key: string) => unknown): ConstraintsResult {
+  try {
+    if (typeof sessionId !== 'string' || !sessionId) return { ok: false, error: '会话 id 非法' }
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const rootDir = rootDirName(getSetting)
+    const rel = findSessionFolderRel(vault.rootPath, rootDir, sessionId)
+    if (!rel) return { ok: true, text: '', relPath: null } // 无文件夹：无约束文件
+    const p = join(vault.rootPath, rel, CONSTRAINTS_FILE)
+    const text = existsSync(p) ? readFileSync(p, 'utf-8') : ''
+    return { ok: true, text, relPath: `${rel}/${CONSTRAINTS_FILE}` }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 写会话 CONSTRAINTS.md（懒建文件夹后落盘；空文本=写空文件保留编辑入口） */
+export function writeConstraints(sessionId: string, text: string, getSetting: (key: string) => unknown): ConstraintsResult {
+  try {
+    const ensured = ensureSessionFolder(sessionId, getSetting)
+    if (!ensured.ok || !ensured.relPath) return { ok: false, error: ensured.error ?? '会话文件夹不可用' }
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const body = String(text ?? '').replace(/\r\n/g, '\n')
+    writeFileSync(join(vault.rootPath, ensured.relPath, CONSTRAINTS_FILE), body, 'utf-8')
+    broadcastTreeRefresh(rootDirName(getSetting))
+    return { ok: true, text: body, relPath: `${ensured.relPath}/${CONSTRAINTS_FILE}` }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/**
+ * AgentRunner 注入解析（§2.3 / 2-6）：CONSTRAINTS.md 文件是唯一真相源；
+ * 旧会话从未落过文件夹 → 读兼容回退 DB sessionInstructions 一次；
+ * 已有文件夹但无/空约束文件 → 视为用户已清空，不再回退。
+ */
+export function resolveConstraintsForInjection(sessionId: string, getSetting: (key: string) => unknown): string {
+  try {
+    const vault = getCurrentVault()
+    if (!vault) return getAgentSession(sessionId)?.instructions?.trim() || ''
+    const rootDir = rootDirName(getSetting)
+    const rel = findSessionFolderRel(vault.rootPath, rootDir, sessionId)
+    if (rel) {
+      const p = join(vault.rootPath, rel, CONSTRAINTS_FILE)
+      return existsSync(p) ? readFileSync(p, 'utf-8').trim() : ''
+    }
+    return getAgentSession(sessionId)?.instructions?.trim() || ''
+  } catch {
+    return ''
   }
 }
 
@@ -219,4 +294,7 @@ export function registerAiTeachingFolderHandlers(getSetting: (key: string) => un
   ipcMain.handle('aiTeach:sessionFolder', (_e, sessionId: string) => sessionFolder(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeach:renameSessionFolder', (_e, sessionId: string, title: string) => renameSessionFolder(String(sessionId ?? ''), String(title ?? ''), getSetting))
   ipcMain.handle('aiTeach:deleteSessionFolder', (_e, sessionId: string) => deleteSessionFolder(String(sessionId ?? ''), getSetting))
+  // P2：会话约束文件（CONSTRAINTS.md）读写
+  ipcMain.handle('aiTeach:readConstraints', (_e, sessionId: string) => readConstraints(String(sessionId ?? ''), getSetting))
+  ipcMain.handle('aiTeach:writeConstraints', (_e, sessionId: string, text: string) => writeConstraints(String(sessionId ?? ''), String(text ?? ''), getSetting))
 }

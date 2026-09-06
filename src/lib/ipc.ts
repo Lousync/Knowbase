@@ -486,6 +486,12 @@ export const aiTeachSessionFolder = (id: string): Promise<AiTeachFolderResult> =
 export const aiTeachRenameSessionFolder = (id: string, title: string): Promise<AiTeachFolderResult> => a().aiTeachRenameSessionFolder(id, title)
 /** 会话文件夹移入系统回收站 */
 export const aiTeachDeleteSessionFolder = (id: string): Promise<AiTeachFolderResult> => a().aiTeachDeleteSessionFolder(id)
+// ===== AI教学 P2：会话约束文件 CONSTRAINTS.md =====
+export interface AiTeachConstraintsResult { ok: boolean; text?: string; relPath?: string | null; error?: string }
+/** 读会话 CONSTRAINTS.md（无文件夹/无文件 → text 空串） */
+export const aiTeachReadConstraints = (id: string): Promise<AiTeachConstraintsResult> => a().aiTeachReadConstraints(id)
+/** 写会话 CONSTRAINTS.md（懒建文件夹；不再写 DB sessionInstructions） */
+export const aiTeachWriteConstraints = (id: string, text: string): Promise<AiTeachConstraintsResult> => a().aiTeachWriteConstraints(id, text)
 export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)
 export const onAiTeachNotice = (cb: (msg: string) => void) => a().onAiTeachNotice(cb)
 export const llmCcSwitchList = (): Promise<CcSwitchScanResult> => a().llmCcSwitchList()

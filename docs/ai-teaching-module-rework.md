@@ -8,8 +8,8 @@
 
 | 类别 | 内容 |
 |---|---|
-| ✅ 已完成 | **P0** id/命名迁移（2026-09-06 落地：`immersive`→`aiTeaching`、目录 `src/modules/ai-teaching/`、活动栏 label「AI教学」、order/hidden 一次性迁移、命令面板补「打开 AI教学」；见 R10） · **P1** 会话⇄文件夹绑定（2026-09-06 落地：`aiTeachRootDir`/`aiTeachDeleteSessionFolder` 设置 + 改名迁移、新建对话建 `{MM-DD} 标题/` + `.session.json` 锚点、双击重命名同步改夹、删除 ask/keep/delete 进回收站、编辑区树联动；见 R13） |
-| ✅ 可立即开工 | **P2** CONSTRAINTS.md · **P3** 中栏改版 · **P4** 侧栏 VS Code 化 · **P5** 工作区两层 · **P7** 题目视图（详见 §六） |
+| ✅ 已完成 | **P0** id/命名迁移（2026-09-06 落地：`immersive`→`aiTeaching`、目录 `src/modules/ai-teaching/`、活动栏 label「AI教学」、order/hidden 一次性迁移、命令面板补「打开 AI教学」；见 R10） · **P1** 会话⇄文件夹绑定（2026-09-06 落地：`aiTeachRootDir`/`aiTeachDeleteSessionFolder` 设置 + 改名迁移、新建对话建 `{MM-DD} 标题/` + `.session.json` 锚点、双击重命名同步改夹、删除 ask/keep/delete 进回收站、编辑区树联动；见 R13） · **P2** CONSTRAINTS.md（2026-09-06 落地：约束从 DB 字段升级为会话文件夹 `CONSTRAINTS.md` 唯一真相源、每轮发送重读注入 + 4000 截断、建夹从 `_templates/CONSTRAINTS.md` 播种、会话要求弹层改读写文件并展示落盘路径、旧 DB 字段读兼容且写时清除防双源；见 R15） |
+| ✅ 可立即开工 | **P3** 中栏改版 · **P4** 侧栏 VS Code 化 · **P5** 工作区两层 · **P7** 题目视图（详见 §六） |
 | ✅ 可立即开工 | **P6** 素材库（结构 v3 + SOURCE.md 模板 YAML 版已定 §3.13，3-28~3-31 全部拍板） |
 | ⏳ 待拍板疑问 | 3-7 工作区选择页是否每次进入都显示 · 3-8/3-10/3-11 按 §3.5 建议执行（未正式拍板）。**其余全部关闭（3-24~3-31 已拍板，见 §3.12/3.13）** |
 | 📦 交付物 | 总纲（本文）· 整体交互原型 `ai-teaching-prototype.html` · 原型拼装台 `ai-teaching-layout-builder.html` · 用户布局存档 `ai-teaching-layout-user-v1.json` |
@@ -346,7 +346,7 @@ updated: 2026-09-06
 - 顶栏只剩：会话要求（CONSTRAINTS.md 入口）+ Token 仪表 + 工作区 chip + 禅模式，时间线/文档两按钮随功能形态变化移除（原决策点 3-12 就此解决）；
 - 中栏顶部「对话 ⇄ 题目」切换器保留；
 - 决策点更新：3-12 关闭；新增 3-13（快速定位条 hover 预览的内容深度：仅首行 / 前 40 字 / 含步骤摘要）与 3-14（「整理成文档」是否允许选模板排版，还是默认纯 markdown）。
-- **输入区交互（第五轮补充）**：①AI 流式输出时**发送键变为停止键**（深色底 + 白色方块 + 「停止」，点击中断生成、已输出内容保留），完成后恢复——与其他 AI 工具一致；②发送键旁增加**模型选择器**（🤖 当前模型 ▾ 下拉，标注「默认/本地」），对话中随时切换、仅本对话生效；两者均已在原型实现。
+- **输入区交互（第五轮补充）**：①AI 流式输出时**发送键变为停止键**（深色底 + 白色方块 + 「停止」，点击中断生成、已输出内容保留），完成后恢复——与其他 AI 工具一致；②发送键旁**模型选择器**（🤖 模型 ▾），思考强度**合并进同一菜单**（模型分区 + 思考强度分区；不支持的模型思考区整区禁用），chip 上同时显示「模型 · 🧠 档位」；对话中随时切换、仅本对话生效。均已在原型实现。
 - **思考强度选择器（第五轮补充）**：发送键旁「🧠 思考:中 ▾」下拉（关闭/低/中/高，高=更深但更慢更耗 token）；**跟随模型能力**——不支持思考的模型（如 DeepSeek V3）自动禁用并提示，仅思考型模型可选；选择本对话生效。已入原型。
 
 ---
@@ -478,4 +478,7 @@ P0 ─→ P1 ─→ P2
 | 2026-09-06 · R13 | **P1 实施完成**：新增 `electron/lib/aiTeachingFolders.ts`（锚点扫描定位 / `{MM-DD} 清洗标题` 命名 / ensure·rename·delete / 根目录改名迁移 3-15）；`aiTeach:*` IPC 三层接线 + `aiTeach:tree-refresh`/`aiTeach:notice` 推送；设置项 `aiTeachRootDir`（改名触发迁移）与 `aiTeachDeleteSessionFolder`（ask/keep/delete，ask 弹全局确认）并新增设置页 AI教学区块；模块 UI：新建任务确认即建文件夹（2-2）、双击会话行重命名同步改夹（无夹旧会话不补建，2-5）、删除按设置（回收站复用 ws:trash 语义）；编辑区文件树收广播自动刷新。冒烟 `tmp/smoke/ai-teaching-p1-source-smoke.mjs` 21/21 绿；tsc 双门禁与基线逐行一致零新增 |
 
 | 2026-09-06 · R13 | 输入区新增思考强度选择器（关闭/低/中/高，跟随模型能力自动禁用）；原型已实现 |
+
+| 2026-09-06 · R14 | 思考强度并入模型选择器菜单（模型分区 + 思考强度分区，跟随模型能力禁用）；chip 显示「模型 · 🧠 档位」 |
+| 2026-09-06 · R15 | **P2 实施完成（CONSTRAINTS.md 约束文件化，§2.3/2-6）**：`aiTeachingFolders.ts` 增 readConstraints/writeConstraints（写路径懒建文件夹后落盘，仅存文件）+ 建夹时从 `{根}/_templates/CONSTRAINTS.md` 播种（P5 工作区两层后改读工作区级）；AgentRunner 注入改 `resolveConstraintsForInjection`——文件是唯一真相源（每轮重读，编辑器改动即时生效），无文件夹的旧会话读兼容回退 DB 一次，注入超 4000 字符截断提示；`aiTeach:read/writeConstraints` 三层接线；模块「会话要求」弹层改读写文件（展示落盘路径 instrRel、maxLength 800→2000），保存成功后清除旧 DB `sessionInstructions` 残留防双真相源；`agent:setSessionInstructions` 通道保留作退役缓冲。冒烟 `tmp/smoke/ai-teaching-p2-source-smoke.mjs` 18/18 绿；tsc node=7/web=29 行与基线一致零新增 |
 

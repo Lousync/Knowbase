@@ -1263,6 +1263,8 @@ export interface ElectronAPI {
   aiTeachSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachRenameSessionFolder: (id: string, title: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachDeleteSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachReadConstraints: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
+  aiTeachWriteConstraints: (id: string, text: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void
   llmCcSwitchList: () => Promise<CcSwitchScanResult>

@@ -233,6 +233,8 @@ const api = {
   aiTeachSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:sessionFolder', id),
   aiTeachRenameSessionFolder: (id: string, title: string) => ipcRenderer.invoke('aiTeach:renameSessionFolder', id, title),
   aiTeachDeleteSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:deleteSessionFolder', id),
+  aiTeachReadConstraints: (id: string) => ipcRenderer.invoke('aiTeach:readConstraints', id),
+  aiTeachWriteConstraints: (id: string, text: string) => ipcRenderer.invoke('aiTeach:writeConstraints', id, text),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

@@ -9,6 +9,7 @@ import {
   getMessageById, updateMessageContent, deleteMessage, deleteMessagesAfter,
   getAgentSession, updateAgentSessionInstructions,
 } from './agentSessionRepo'
+import { resolveConstraintsForInjection } from './aiTeachingFolders'
 
 /**
  * 最小 AgentRunner —— 「用户消息 → LLM 决策 → ToolRegistry 执行 → 结果回喂」循环。
@@ -226,10 +227,14 @@ async function runAgentLoop(
       skills.map(s => `- ${s.title}（${s.registryName}）：${s.description.slice(0, 120)}`).join('\n') +
       '\nSkill 是声明式提示词资产。当用户请求恰好对应某个 Skill 的能力时，调用该 skill 工具获取提示词并遵循执行；不确定时优先用通用内置工具。'
     : ''
-  // 会话级全局要求（056）：本会话附加的持久约束，注入最靠前的 system 位置、贯穿全部轮次
-  const sessionInst = getAgentSession(sessionId)?.instructions?.trim()
+  // P2（§2.3）：会话约束唯一真相源 = 会话文件夹 CONSTRAINTS.md，每轮发送即时重读（编辑器改动即刻生效）；
+  // 2-6 读兼容：仅旧会话未落文件夹时回退 DB sessionInstructions。注入截断防 token 失控。
+  const rawConstraints = resolveConstraintsForInjection(sessionId, getSettingReader())
+  const sessionInst = rawConstraints.length > 4000
+    ? rawConstraints.slice(0, 4000) + '\n…（约束文件过长已截断，全文见会话文件夹 CONSTRAINTS.md）'
+    : rawConstraints
   const instHint = sessionInst
-    ? `\n\n【本会话全局要求】（用户为此对话单独设定，最高优先级，必须严格遵守；与用户冲突时以本要求为准）\n${sessionInst}`
+    ? `\n\n【本会话全局要求】（用户为此对话单独设定于 CONSTRAINTS.md，最高优先级，必须严格遵守；与用户消息冲突时以用户当下消息为准）\n${sessionInst}`
     : ''
   const convo: AgentMessage[] = [
     { role: 'system', content: buildSystemPrompt(context) + instHint + deniedHint + vaultFileHint + skillHint },
