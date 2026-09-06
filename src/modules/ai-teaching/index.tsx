@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search, Layers } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, Gauge, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ArrowLeft, ExternalLink, Folder, Search } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
@@ -28,7 +28,7 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * 输入区流式停止键 + 本对话模型/思考强度合一菜单（仅本对话生效）；顶栏收敛（时间线/文档视图/文档地图退役）。
  * P4 左栏 VS Code 化（§3.7/3.9）：多分区侧栏（资源管理器=产物根文件树全套操作 / 会话 / 任务规划），
  * 折叠贴靠+状态记忆，左右侧栏整体收放记忆；md 点击 → 中栏文档阅读视图（方案 B：工具行+宽幅渲染+h2/h3 大纲+滚动记忆）。
- * P5 工作区两层（§3.2-6）：进入模块先见「工作区选择页」（卡片统计/搜索/新建/改名/删除=仅解归属）；
+ * P5 工作区两层（§3.2-6）：记住上次工作区直接进（3-38），顶栏工作区 chip 回「工作区选择页」（卡片统计/搜索/新建/改名/删除=仅解归属）；
  * 一个工作区=一门课程含多对话，元数据入仓库 .knowbase/modules/aiTeaching/workspaces.json；
  * 顶栏页签=本工作区对话（会话列表区退役）、工作区 chip 返回选择页；左栏树挂工作区文件夹层；
  * 新对话自动归属当前工作区，产物落 `AI教学/{工作区}/{MM-DD 标题}/`（存量扁平文件夹不迁移，锚点扫描双深度兼容）。
@@ -204,9 +204,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // ---------- P5 工作区两层（§3.2-6；3-6/3-8 按建议：元数据入仓库 .knowbase、跟随当前激活仓库） ----------
   const [wsList, setWsList] = useState<AiTeachWorkspaceInfo[]>([])
   const [wsSessionMap, setWsSessionMap] = useState<Record<string, string>>({})
-  const [wsUnassigned, setWsUnassigned] = useState(0)
   const [lastWsId, setLastWsId] = useState<string | null>(null)
-  const [activeWs, setActiveWs] = useState<string | null>(null) // null = 工作区选择页；'__none__' = 未归一会话视图
+  const [activeWs, setActiveWs] = useState<string | null>(null) // null = 工作区选择页（3-38：默认记住上次直接进，仅首次/无记忆时可见）
   const activeWsRef = useRef<string | null>(null)
   useEffect(() => { activeWsRef.current = activeWs }, [activeWs])
   const wsMapRef = useRef<Record<string, string>>({})
@@ -216,7 +215,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const refreshWorkspaces = useCallback(async () => {
     const r = await aiTeachListWorkspaces().catch(() => null)
     if (!r) return
-    setWsList(r.workspaces); setWsSessionMap(r.sessionWs); setWsUnassigned(r.unassignedCount); setLastWsId(r.lastWorkspaceId)
+    setWsList(r.workspaces); setWsSessionMap(r.sessionWs); setLastWsId(r.lastWorkspaceId)
   }, [])
   useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
   const wsActive = activeWs && activeWs !== '__none__' ? wsList.find(w => w.id === activeWs) ?? null : null
@@ -418,6 +417,14 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     }
     void refreshSessions()
   }, [sessions, wsSessionMap, openSession, refreshSessions])
+  // 3-38（已拍板）：记住上次工作区，进模块直接回到上次的对话；换区走顶栏工作区 chip 回选择页。
+  // 只在选择页态（用户未手动退出过：boot 尝试仅一次）且记忆有效时自动进入；首次使用停留在选择页。
+  const wsBootRef = useRef(false)
+  useEffect(() => {
+    if (wsBootRef.current || wsList.length === 0) return
+    wsBootRef.current = true
+    if (activeWs === null && lastWsId && wsList.some(w => w.id === lastWsId)) enterWs(lastWsId)
+  }, [wsList, lastWsId, activeWs, enterWs])
   const exitToPicker = useCallback(() => {
     setActiveWs(null); activeWsRef.current = null
     void refreshWorkspaces()
@@ -444,7 +451,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const removeWs = useCallback(async (w: AiTeachWorkspaceInfo) => {
     const okGo = await showGlobalConfirm({
       title: `删除工作区「${w.name}」`,
-      message: '只删除工作区本身（归属元数据）：「AI教学」下的文件夹与其中对话都会保留，会显示在「未归一会话」里。',
+      message: '只删除工作区本身（归属元数据）：「AI教学」下的文件夹与其中对话都保留在原处（3-39：不迁移、也不再显示在界面中），产物文件不删。',
       confirmLabel: '删除工作区', variant: 'danger',
     })
     if (!okGo) return
@@ -788,7 +795,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         <button onClick={exitToPicker} title="返回工作区选择页"
           className="shrink-0 flex items-center gap-1 max-w-[150px] px-1.5 py-0.5 rounded-md text-[11.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
           <Folder size={12} className="shrink-0 text-[var(--accent)]" />
-          <span className="truncate">{activeWs === '__none__' ? '未归一会话' : wsActive?.name ?? '工作区'}</span>
+          <span className="truncate">{wsActive?.name ?? '工作区'}</span>
           <ChevronDown size={11} className="shrink-0 opacity-60" />
         </button>
         <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto">
@@ -1513,14 +1520,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 </div>
               </div>
             ))}
-            {wsUnassigned > 0 && (
-              <div onClick={() => enterWs('__none__')}
-                className="rounded-xl border border-dashed border-[var(--border-color)] p-4 cursor-pointer hover:border-[var(--text-muted)] transition-colors"
-                title="未归属任何工作区的会话（含 P5 之前的存量）；产物文件夹原地不动">
-                <div className="flex items-center gap-2"><Layers size={14} className="text-[var(--text-muted)]" /><span className="text-[14px] font-medium text-[var(--text-secondary)]">未归一会话</span></div>
-                <div className="mt-2 text-[11.5px] text-[var(--text-muted)]">{wsUnassigned} 个对话待归属 · 可继续对话，新任务将落产物根</div>
-              </div>
-            )}
             <button onClick={() => setWsModal({ mode: 'create', value: '' })}
               className="rounded-xl border border-dashed border-[var(--border-color)] p-4 text-left cursor-pointer hover:border-[var(--accent)]/60 transition-colors">
               <div className="flex items-center gap-2 text-[var(--text-muted)]"><Plus size={14} /><span className="text-[14px] font-medium">新建工作区</span></div>

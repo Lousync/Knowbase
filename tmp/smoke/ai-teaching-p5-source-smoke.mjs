@@ -56,8 +56,10 @@ ok('记住上次工作区（setLastWorkspace + 选择页「继续上次工作区
   MOD.includes('aiTeachSetLastWorkspace') && MOD.includes('继续上次工作区') && MOD.includes('lastWsId'))
 ok('工作区卡片统计渲染 + 搜索 + 新建/改名/删除入口',
   MOD.includes('个对话 · ') && MOD.includes('wsFiltered') && MOD.includes('新建工作区') && MOD.includes('removeWs'))
-ok('未归一会话伪工作区入口（存量会话不强行迁移）',
-  MOD.includes("'__none__'") && MOD.includes('未归一会话') && MOD.includes('wsUnassigned > 0'))
+ok('3-38 已拍板：记住上次工作区直接进（挂载一次性自动 enterWs(lastWsId)）',
+  MOD.includes('wsBootRef') && MOD.includes('if (activeWs === null && lastWsId && wsList.some(w => w.id === lastWsId)) enterWs(lastWsId)'))
+ok('3-39 已拍板：无「未归一会话」入口（卡片退役，无主会话不展示不迁移）',
+  !MOD.includes('enterWs(\'__none__\')') && !MOD.includes('个对话待归属'))
 ok('顶栏页签=本工作区对话（会话列表区退役 §3.7）',
   MOD.includes('wsSessions.map') && MOD.includes('页签即会话切换器') && !MOD.includes('会话（${sessions.length}）'))
 ok('工作区 chip 返回选择页',
