@@ -691,6 +691,42 @@ export interface AiTeachWorkspaceInfo {
   lastActive: string | null
 }
 
+/** P6 素材库：SOURCE.md 解析条目（§3.13 模板 v2，字段行与模板一一对应） */
+export interface AiTeachSourceEntry {
+  no: number
+  name: string
+  /** url / pptx / pdf / image / md / other（3-27 枚举） */
+  type: string
+  /** ./文件名（已入库）/ 仓库相对 / 绝对路径 / URL */
+  path: string
+  /** '12-34' | '12' | '-' */
+  range: string
+  /** 已入库 | 仅引用（3-22） */
+  storage: string
+  /** '-' 或 '✓ → 提取稿文件名'（3-26 程序维护） */
+  extracted: string
+  note: string
+}
+
+/** P6 素材库：登记表单入参（storage=已入库 时 path 为待拷贝原件的来源路径） */
+export interface AiTeachSourceInput {
+  name: string
+  type: string
+  path: string
+  rangeFrom?: string
+  rangeTo?: string
+  storage: '已入库' | '仅引用'
+  note?: string
+}
+
+export interface AiTeachSourcesResult {
+  ok: boolean
+  relPath?: string | null
+  entries?: AiTeachSourceEntry[]
+  no?: number
+  error?: string
+}
+
 /** 会话内消息（trace 仅 assistant 消息携带） */
 export interface AgentStoredMessage {
   id: string
@@ -1285,6 +1321,11 @@ export interface ElectronAPI {
   aiTeachAssignSession: (id: string, wsId: string) => Promise<{ ok: boolean; error?: string }>
   aiTeachUnassignSession: (id: string) => Promise<{ ok: boolean; error?: string }>
   aiTeachSetLastWorkspace: (wsId: string | null) => Promise<{ ok: boolean; error?: string }>
+  aiTeachSrcRead: (id: string) => Promise<AiTeachSourcesResult>
+  aiTeachSrcAdd: (id: string, input: AiTeachSourceInput) => Promise<AiTeachSourcesResult>
+  aiTeachSrcRemove: (id: string, no: number) => Promise<AiTeachSourcesResult>
+  aiTeachSrcExtract: (id: string, no: number) => Promise<{ ok: boolean; relPath?: string; error?: string }>
+  aiTeachSrcPick: () => Promise<{ ok: boolean; path: string | null; error?: string }>
   llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void

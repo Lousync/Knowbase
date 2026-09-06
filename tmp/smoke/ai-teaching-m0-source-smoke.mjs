@@ -46,8 +46,8 @@ ok('工具名中文映射 + 调用轨迹折叠（details）',
   IM.includes("'builtin.vault.read': '读笔记文件'") && IM.includes('<details') && IM.includes('调用轨迹'))
 ok('P3a/P3b 视图改版：文档视图/切换退役 → 恒对话流 + 快速定位条（文档地图后续退役由逐条整理承接）',
   !IM.includes("['timeline', 'doc']") && IM.includes('anchors') && IM.includes('msgAnchorTitle') && IM.includes('jumpToAnchor') && IM.includes('scrollRef'))
-ok('占位区按阶段推进标注（P7 后剩余 P6/P8）',
-  IM.includes('占位（P6/P8）') && !IM.includes('占位（M1）'))
+ok('占位区按阶段推进标注（P6 后仅剩 P8 画像）',
+  IM.includes('占位（P8）') && !IM.includes('占位（M1）'))
 
 console.log('AI教学 Token 面板断言')
 ok('Token 面板：收起 chip（Gauge ≈ tokens）+ 展开明细',

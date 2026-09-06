@@ -41,8 +41,8 @@ export interface FolderResult {
   error?: string
 }
 
-/** 设置注入（main/index.ts settingsCache）；aiTeachRootDir 空/非法时回退默认 */
-function rootDirName(getSetting: (key: string) => unknown): string {
+/** 设置注入（main/index.ts settingsCache）；aiTeachRootDir 空/非法时回退默认（P6 起素材库服务共用） */
+export function rootDirName(getSetting: (key: string) => unknown): string {
   const v = getSetting('aiTeachRootDir')
   const name = typeof v === 'string' ? v.trim() : ''
   return name && isSingleSegment(name) ? name : DEFAULT_ROOT_DIR
@@ -244,6 +244,12 @@ export function renameSessionFolder(sessionId: string, newTitle: string, getSett
     const parentAbs = join(vault.rootPath, parentRel)
     const finalName = uniqueFileName(parentAbs, nextBase)
     renameWorkspacePath(vault.rootId, rel, `${parentRel}/${finalName}`)
+    // P6（§3.13）：对话重命名 → 同名素材文件夹 SOURCES/{对话名} 同步重命名（存在才动，失败不阻断）
+    try {
+      const srcOld = join(parentAbs, 'SOURCES', oldName)
+      const srcNew = join(parentAbs, 'SOURCES', finalName)
+      if (existsSync(srcOld) && !existsSync(srcNew)) renameSync(srcOld, srcNew)
+    } catch { /* 素材夹同步失败不阻断会话改名 */ }
     // 锚点标题同步（尽力而为，失败不阻断——锚点以 sessionId 为准）
     try {
       const p = join(vault.rootPath, parentRel, finalName, ANCHOR_FILE)
@@ -277,6 +283,14 @@ export async function deleteSessionFolder(sessionId: string, getSetting: (key: s
     const rel = findSessionFolderRel(vault.rootPath, rootDir, String(sessionId ?? ''))
     if (!rel) return { ok: true, relPath: null }
     await trashWorkspacePath(vault.rootId, rel)
+    // P6（3-31 拍板：跟随同一设置，不另立开关）：delete 模式下对话同名素材文件夹一并进回收站
+    const lastSlash = rel.lastIndexOf('/')
+    if (lastSlash > 0) {
+      const srcRel = `${rel.slice(0, lastSlash)}/SOURCES/${rel.slice(lastSlash + 1)}`
+      if (existsSync(join(vault.rootPath, srcRel))) {
+        try { await trashWorkspacePath(vault.rootId, srcRel) } catch { /* 素材夹处理失败不阻断会话删除 */ }
+      }
+    }
     broadcastTreeRefresh(rootDir)
     return { ok: true, relPath: rel }
   } catch (e) {

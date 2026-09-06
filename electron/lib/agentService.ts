@@ -10,6 +10,7 @@ import {
   getAgentSession, updateAgentSessionInstructions,
 } from './agentSessionRepo'
 import { resolveConstraintsForInjection } from './aiTeachingFolders'
+import { resolveSourcesForInjection } from './aiTeachingSources'
 
 /**
  * 最小 AgentRunner —— 「用户消息 → LLM 决策 → ToolRegistry 执行 → 结果回喂」循环。
@@ -252,8 +253,13 @@ async function runAgentLoop(
   const quizRuleHint = source === 'aiTeaching'
     ? '\n\n【出题格式规则（AI教学）】当用户要求出题/测验/练习时，除开场说明与收尾提示外，每道题单独输出一个 ```quiz 围栏代码块，块内是一个 JSON 对象（不要注释、不要多个对象）：{"no":1,"points":"2分","question":"题干（支持 markdown）","options":[{"key":"A","text":"选项一"},{"key":"B","text":"选项二"},{"key":"C","text":"选项三"},{"key":"D","text":"选项四"}],"answer":"A","explanation":"答案解析（支持 markdown）"}。answer 的值必须是 options 中某个 key；默认四选一。围栏块之间可换行连续排列，客户端会自动收集进「题目」视图供答题。'
     : ''
+  // P6（§3.13/3-29）：素材目录实时注入（SOURCE.md 条目+提取稿路径+编号引用规则）；无登记则零注入
+  const sourcesHint = source === 'aiTeaching' ? (() => {
+    const cat = resolveSourcesForInjection(sessionId, getSettingReader())
+    return cat ? `\n\n${cat}` : ''
+  })() : ''
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + instHint + titleRuleHint + quizRuleHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: buildSystemPrompt(context) + instHint + titleRuleHint + quizRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0

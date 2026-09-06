@@ -245,6 +245,11 @@ const api = {
   aiTeachAssignSession: (id: string, wsId: string) => ipcRenderer.invoke('aiTeach:assignSession', id, wsId),
   aiTeachUnassignSession: (id: string) => ipcRenderer.invoke('aiTeach:unassignSession', id),
   aiTeachSetLastWorkspace: (wsId: null | string) => ipcRenderer.invoke('aiTeach:setLastWorkspace', wsId),
+  aiTeachSrcRead: (id: string) => ipcRenderer.invoke('aiTeachSrc:read', id),
+  aiTeachSrcAdd: (id: string, input: unknown) => ipcRenderer.invoke('aiTeachSrc:add', id, input),
+  aiTeachSrcRemove: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:remove', id, no),
+  aiTeachSrcExtract: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:extract', id, no),
+  aiTeachSrcPick: () => ipcRenderer.invoke('aiTeachSrc:pick'),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

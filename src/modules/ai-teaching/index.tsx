@@ -6,6 +6,7 @@ import {
   workspaceGetCurrent, workspaceListDir, workspaceReadFile, docsPptxPages,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachSetLastWorkspace,
+  aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick,
 } from '../../lib/ipc'
 import { AiTeachFileTree } from './AiTeachFileTree'
 import { QuizMode } from '../../components/shared/QuizMode'
@@ -13,7 +14,7 @@ import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo, LlmProviderInfo, AiTeachWorkspaceInfo } from '../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, LlmUsageInfo, LlmProviderInfo, AiTeachWorkspaceInfo, AiTeachSourceEntry } from '../../types'
 
 /**
  * 「AI教学」模块（原 id immersive / 沉浸式 Agent；总纲 docs/ai-teaching-module-rework.md，
@@ -34,7 +35,10 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * P7 题目视图（§3.2-7/3-9）：中栏「对话 ⇄ 题目」切换器；AI 按 quiz 围栏协议出题（注入格式规则），
  * 题目自动收录进题目视图，答题复用知识库 QuizMode（判分/解析/错题），交卷后成绩报告落会话文件夹 `测验·*.md`，
  * 逐题记录经 quizRecord:report（aiTeach: 命名空间）入知识库错题体系（3-10）。
- * 占位（P6/P8）：素材库 SOURCES v3、用户画像。
+ * P6 素材库（§3.13 结构 v3）：右栏「素材库」展示 SOURCE.md 条目（工作区 SOURCES/{对话夹}/），「＋素材」表单登记
+ * （类型/存放/页码区间仅 pdf·pptx 拆起止，3-28 程序解析写入）、pdf/pptx 一键区间提取为同级可编辑提取稿（3-20/3-26），
+ * SOURCE.md 与提取稿经 AgentRunner 素材目录注入供 AI 编号引用（3-29，每轮重读）。
+ * 占位（P8）：用户画像（§3.14 两层 PROFILE.md）。
  */
 
 /** P5：工作区卡片「最近活跃」相对时间（updated_at 'YYYY-MM-DD HH:MM:SS' 本地串） */
@@ -503,6 +507,51 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       showToast({ type: 'error', message: `测验报告落盘失败${r?.error ? `：${r.error}` : ''}` })
     }
   }, [quizItems, activeTitle, refreshWorkspaces])
+
+  // ---------- P6 素材库（§3.13 结构 v3：SOURCE.md 登记 + 区间提取稿） ----------
+  const [srcEntries, setSrcEntries] = useState<AiTeachSourceEntry[]>([])
+  const [srcFileRel, setSrcFileRel] = useState<string | null>(null)
+  const [srcForm, setSrcForm] = useState<null | { name: string; type: string; path: string; storage: '已入库' | '仅引用'; rangeFrom: string; rangeTo: string; note: string }>(null)
+  const [srcBusy, setSrcBusy] = useState<number | null>(null)
+  const refreshSources = useCallback(async (sid: string | null) => {
+    if (!sid) { setSrcEntries([]); setSrcFileRel(null); return }
+    const r = await aiTeachSrcRead(sid).catch(() => null)
+    if (r?.ok) { setSrcEntries(r.entries ?? []); setSrcFileRel(r.relPath ?? null) }
+    else { setSrcEntries([]); setSrcFileRel(null) }
+  }, [])
+  useEffect(() => { void refreshSources(activeId) }, [activeId, refreshSources])
+  const openSrcFile = (rel: string) => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel } }))
+  const submitSrcForm = async () => {
+    if (!activeId || !srcForm) return
+    const name = srcForm.name.trim()
+    if (!name) { showToast({ type: 'warning', message: '素材名称必填' }); return }
+    const r = await aiTeachSrcAdd(activeId, {
+      name, type: srcForm.type, path: srcForm.path.trim(), storage: srcForm.storage,
+      rangeFrom: srcForm.rangeFrom.trim() || undefined, rangeTo: srcForm.rangeTo.trim() || undefined, note: srcForm.note.trim(),
+    }).catch((e: Error) => ({ ok: false as const, error: e.message }))
+    if (r.ok) { await refreshSources(activeId); setSrcForm(null); showToast({ type: 'info', message: '✓ 已写入 SOURCE.md' }) }
+    else showToast({ type: 'error', message: `登记失败：${r.error ?? '未知错误'}` })
+  }
+  const pickSrcFile = async () => {
+    const r = await aiTeachSrcPick().catch(() => null)
+    if (r?.ok && r.path) setSrcForm(f => (f ? { ...f, path: r.path as string, storage: '已入库' } : f))
+  }
+  const doExtract = async (no: number) => {
+    if (!activeId) return
+    setSrcBusy(no)
+    const r = await aiTeachSrcExtract(activeId, no).catch((e: Error) => ({ ok: false as const, error: e.message }))
+    setSrcBusy(null)
+    if (r.ok && r.relPath) { await refreshSources(activeId); showToast({ type: 'info', message: `提取完成：${r.relPath.split('/').pop()}` }); openSrcFile(r.relPath) }
+    else showToast({ type: 'error', message: `提取失败：${(r as { error?: string }).error ?? '未知错误'}` })
+  }
+  const doRemoveSrc = async (no: number, nm: string) => {
+    if (!activeId) return
+    const yes = await showGlobalConfirm({ title: '移除素材登记', message: `从 SOURCE.md 删除条目 #${no}「${nm}」？素材原件与提取稿文件不会被删除。`, confirmLabel: '移除', variant: 'danger' })
+    if (!yes) return
+    const r = await aiTeachSrcRemove(activeId, no).catch((e: Error) => ({ ok: false as const, error: e.message }))
+    if (r?.ok) { await refreshSources(activeId); showToast({ type: 'info', message: '已移除登记' }) }
+    else showToast({ type: 'error', message: `移除失败：${(r as { error?: string })?.error ?? ''}` })
+  }
 
   /** P2（2-6）：保存会话要求 = 写会话文件夹 CONSTRAINTS.md（懒建兜底）；清掉旧 DB 字段残留防双真相源 */
   const saveInstr = async (): Promise<void> => {
@@ -1249,6 +1298,67 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           <>
           <div className="shrink-0">
             <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
+              <span title="工作区 SOURCES/{对话}/SOURCE.md（§3.13 素材库结构 v3）">素材库{srcEntries.length > 0 ? `（${srcEntries.length}）` : ''}</span>
+              <div className="ml-auto flex items-center gap-1">
+                {srcFileRel && (
+                  <button onClick={() => { void openDocView(srcFileRel) }} title="中栏阅读 SOURCE.md"
+                    className="px-1 py-0.5 rounded-md hover:bg-[var(--bg-hover)] transition-colors">SOURCE</button>
+                )}
+                <button onClick={() => activeId && setSrcForm({ name: '', type: 'pdf', path: '', storage: '已入库', rangeFrom: '', rangeTo: '', note: '' })}
+                  disabled={!activeId} title={activeId ? '添加素材（写入 SOURCE.md）' : '先选择对话'}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors">
+                  <Plus size={11} /> 素材
+                </button>
+              </div>
+            </div>
+            {srcEntries.length > 0 ? (
+              <div className="p-2 space-y-1">
+                {srcEntries.map(e => {
+                  const extMatch = /^✓\s*→\s*(.+)$/.exec(e.extracted)
+                  const dirRel = srcFileRel ? srcFileRel.slice(0, srcFileRel.lastIndexOf('/')) : ''
+                  const extractable = (e.type === 'pdf' || e.type === 'pptx') && !extMatch && e.range && e.range !== '-'
+                  const inRepo = e.path.startsWith('./') || (srcFileRel && !/^[a-zA-Z]:|^https?:|^\//.test(e.path))
+                  return (
+                    <div key={e.no} className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="shrink-0 text-[10px] font-medium text-[var(--text-muted)]">#{e.no}</span>
+                        <span className="flex-1 min-w-0 truncate text-[11.5px] text-[var(--text-primary)]" title={e.note || e.name}>{e.name}</span>
+                        <span className="shrink-0 px-1 rounded text-[9.5px] uppercase text-[var(--text-muted)] border border-[var(--border-color)]">{e.type}</span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-[10.5px] text-[var(--text-muted)]">
+                        {e.range && e.range !== '-' && <span title="页码区间">p{e.range}</span>}
+                        <span title={e.path}>{e.storage === '已入库' ? '已入库' : (e.path.startsWith('http') ? '链接' : '引用')}</span>
+                        <div className="ml-auto flex items-center gap-1.5">
+                          {extMatch && dirRel && (
+                            <button onClick={() => { void openDocView(`${dirRel}/${extMatch[1].trim()}`) }} title="阅读提取稿（可编辑）"
+                              className="text-[var(--accent)] hover:opacity-80 transition-opacity">提取稿 ✓</button>
+                          )}
+                          {extractable && (
+                            <button onClick={() => { void doExtract(e.no) }} disabled={srcBusy === e.no}
+                              className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
+                              {srcBusy === e.no ? <Loader2 size={9} className="animate-spin" /> : <BookOpen size={9} />}{srcBusy === e.no ? '提取中…' : '提取'}
+                            </button>
+                          )}
+                          {inRepo && e.path.startsWith('./') && dirRel && e.type === 'pptx' && (
+                            <button onClick={() => { void openPptxReader(`${dirRel}/${e.path.slice(2)}`, e.name) }} title="逐页阅读原件"
+                              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">原件</button>
+                          )}
+                          <button onClick={() => { void doRemoveSrc(e.no, e.name) }} title="移除登记（不删文件）"
+                            className="text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={10} /></button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-4 text-center text-[11px] text-[var(--text-muted)] leading-relaxed">
+                {activeId ? '本对话还没登记素材。\n点右上「＋ 素材」登记，或在对话里让 AI 按 SOURCE.md 模板登记。' : '先选择一个对话。'}
+              </div>
+            )}
+          </div>
+          <div className="shrink-0">
+            <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
               <span>资料来源{sources.length > 0 ? `（${sources.length}）` : ''}</span>
               <div className="ml-auto flex items-center gap-0.5">
                 <span className="relative">
@@ -1435,6 +1545,73 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               <div className="mt-3 flex justify-end gap-2">
                 <button onClick={() => setWsModal(null)} className="rounded-md px-3 py-1 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]">取消</button>
                 <button onClick={() => void submitWsModal()} className="rounded-md bg-[var(--accent)] px-3 py-1 text-[12.5px] text-white hover:opacity-90">{wsModal.mode === 'create' ? '创建并进入' : '改名'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* P6 添加素材表单（§3.13 拍板：字段对齐模板；页码区间仅 pdf/pptx 且拆起止双输入） */}
+        {srcForm && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setSrcForm(null)}>
+            <div className="w-[430px] max-w-[92vw] rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="mb-1 text-[13px] font-medium text-[var(--text-primary)]">添加素材（登记进 SOURCE.md）</div>
+              <div className="mb-3 truncate text-[10.5px] text-[var(--text-muted)]" title={srcFileRel ?? ''}>{srcFileRel ?? '首次登记时自动创建于工作区 SOURCES/ 下'}</div>
+              <div className="space-y-2.5 text-[12.5px] text-[var(--text-primary)]">
+                <div className="flex items-center gap-2">
+                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">名称 *</label>
+                  <input autoFocus value={srcForm.name} maxLength={60} onChange={e => setSrcForm({ ...srcForm, name: e.target.value })} placeholder="如：一次函数课件"
+                    className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]"
+                    onKeyDown={e => { if (e.key === 'Escape') setSrcForm(null) }} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">类型</label>
+                  <select value={srcForm.type} onChange={e => setSrcForm({ ...srcForm, type: e.target.value })}
+                    className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
+                    {['pdf', 'pptx', 'url', 'image', 'md', 'other'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
+                  <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
+                    className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
+                    <option value="已入库">已入库（拷贝原件）</option>
+                    <option value="仅引用">仅引用（记路径）</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">{srcForm.storage === '已入库' ? '文件' : '地址'}</label>
+                  {srcForm.storage === '已入库' ? (
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <button onClick={() => void pickSrcFile()} className="shrink-0 rounded-md border border-[var(--border-color)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">浏览…</button>
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-muted)]" title={srcForm.path}>{srcForm.path || '未选择文件'}</span>
+                    </div>
+                  ) : (
+                    <input value={srcForm.path} onChange={e => setSrcForm({ ...srcForm, path: e.target.value })} placeholder={srcForm.type === 'url' ? 'https://…' : '仓库内相对路径 / 绝对路径'}
+                      className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]" />
+                  )}
+                </div>
+                {(srcForm.type === 'pdf' || srcForm.type === 'pptx') && (
+                  <div className="flex items-center gap-2">
+                    <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">页码</label>
+                    <input value={srcForm.rangeFrom} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeFrom: e.target.value.replace(/\D/g, '') })} placeholder="起始页"
+                      className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
+                    <span className="text-[var(--text-muted)]">–</span>
+                    <input value={srcForm.rangeTo} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeTo: e.target.value.replace(/\D/g, '') })} placeholder="结束页"
+                      className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
+                    <span className="text-[10.5px] text-[var(--text-muted)]">登记后可一键出提取稿</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">备注</label>
+                  <input value={srcForm.note} maxLength={80} onChange={e => setSrcForm({ ...srcForm, note: e.target.value })} placeholder="可选（如章节说明）"
+                    className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]"
+                    onKeyDown={e => { if (e.key === 'Enter') void submitSrcForm() }} />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-[10px] text-[var(--text-muted)]">确定=程序解析模板写入文件（3-28）</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setSrcForm(null)} className="rounded-md px-3 py-1 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]">取消</button>
+                  <button onClick={() => void submitSrcForm()} disabled={!srcForm.name.trim()}
+                    className="rounded-md bg-[var(--accent)] px-3 py-1 text-[12.5px] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">确定登记</button>
+                </div>
               </div>
             </div>
           </div>

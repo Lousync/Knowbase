@@ -54,13 +54,15 @@ function loadPdfjs() {
   return pdfjsPromise
 }
 
-async function extractPdf(absPath: string): Promise<{ text: string; pages: number }> {
+async function extractPdfPages(absPath: string, from = 1, to?: number): Promise<{ pageTexts: string[]; total: number }> {
   const pdfjs = await loadPdfjs()
   const data = new Uint8Array(readFileSync(absPath))
   const doc = await pdfjs.getDocument({ data }).promise
-  const pageCount = Math.min(doc.numPages, MAX_PDF_PAGES)
+  const total = doc.numPages
+  const start = Math.max(1, from)
+  const end = Math.min(to ?? total, total, start + MAX_PDF_PAGES - 1) // 单次提取仍受页数上限保护
   const chunks: string[] = []
-  for (let i = 1; i <= pageCount; i++) {
+  for (let i = start; i <= end; i++) {
     try {
       const page = await doc.getPage(i)
       const tc = await page.getTextContent()
@@ -70,7 +72,14 @@ async function extractPdf(absPath: string): Promise<{ text: string; pages: numbe
     }
   }
   try { await doc.destroy?.() } catch { /* ignore */ }
-  return { text: chunks.join('\n'), pages: doc.numPages }
+  return { pageTexts: chunks, total }
+}
+
+/** P6 素材库：按 1-based 页码区间提取 PDF 文本（两端含）；返回逐页文本与文档总页数 */
+export async function extractPdfRange(absPath: string, from: number, to: number): Promise<{ pages: { n: number; text: string }[]; total: number }> {
+  const r = await extractPdfPages(absPath, from, to)
+  const start = Math.max(1, from)
+  return { pages: r.pageTexts.map((text, i) => ({ n: start + i, text })), total: r.total }
 }
 
 // ===== pptx（zip + XML）=====
@@ -124,8 +133,8 @@ export async function extractDocText(absPath: string): Promise<DocTextOutput> {
   if (st.size > MAX_DOC_SIZE) throw new Error(`文件过大（${st.size} 字节 > 80MB）`)
   const ext = extname(absPath).slice(1).toLowerCase()
   if (ext === 'pdf') {
-    const r = await extractPdf(absPath)
-    return { kind: 'pdf', text: r.text, pages: r.pages, totalChars: r.text.length }
+    const r = await extractPdfPages(absPath)
+    return { kind: 'pdf', text: r.pageTexts.join('\n'), pages: r.total, totalChars: r.pageTexts.join('\n').length }
   }
   if (ext === 'pptx') {
     const r = extractPptx(absPath)
