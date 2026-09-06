@@ -8,6 +8,7 @@ import { AvatarUpload } from './components/AvatarUpload'
 import { PasswordSection } from './components/PasswordSection'
 import { StatsPanel } from './components/StatsPanel'
 import { DataClearSection } from './components/DataClearSection'
+import { VaultArchiveSection } from './components/VaultArchiveSection'
 
 export function UserModule() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -128,6 +129,9 @@ export function UserModule() {
 
           {/* Divider */}
           <div className="border-t border-[var(--border-color)]" />
+
+          {/* 整仓归档（P6：导出/导入 zip + 冲突逐条决策） */}
+          <VaultArchiveSection />
 
           {/* Danger zone: clear all data */}
           <DataClearSection />

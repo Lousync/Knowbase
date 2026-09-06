@@ -263,6 +263,13 @@ export const workspaceGetRecent = () => a().workspaceGetRecent()
 export const workspaceOpenById = (rootId: string) => a().workspaceOpenById(rootId)
 export const workspaceGetCurrent = () => a().workspaceGetCurrent()
 export const workspaceForget = (rootId: string) => a().workspaceForget(rootId)
+// P7（D6）：删除当前仓库 = 整仓进 OS 回收站（不弹提醒窗，回收站可还原兜底）
+export const workspaceDeleteVault = (rootId: string): Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }> => a().workspaceDeleteVault(rootId)
+// P6：整仓归档（导出 zip / 导入 + 冲突逐条决策）
+export const vaultArchiveExport = () => a().vaultArchiveExport()
+export const vaultArchiveImportStart = () => a().vaultArchiveImportStart()
+export const vaultArchiveImportDecide = (decisions: Array<{ relPath: string; action: 'overwrite' | 'skip' | 'rename' }>) => a().vaultArchiveImportDecide(decisions)
+export const vaultArchiveImportCancel = () => a().vaultArchiveImportCancel()
 // 旧数据 → 当前仓库迁移（去库化 P0）
 export const vaultLegacySummary = () => a().vaultLegacySummary()
 export const vaultImportLegacy = (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => a().vaultImportLegacy(opts)

@@ -789,6 +789,20 @@ export interface VaultStagedImage {
   name: string
   relPath: string
 }
+/** P6 整仓归档：冲突项（zip 内路径 + 两侧尺寸）与逐条决策 */
+export interface VaultArchiveConflictItem {
+  relPath: string
+  zipSize: number
+  existingSize: number
+}
+export interface VaultArchiveDecision {
+  relPath: string
+  action: 'overwrite' | 'skip' | 'rename'
+}
+/** P6 导入第一步返回：直接完成，或返回冲突列表等待逐条决策（pending） */
+export type VaultArchiveImportResult =
+  | { pending: true; target: string; totalFiles: number; conflicts: VaultArchiveConflictItem[] }
+  | { pending?: false; ok?: boolean; canceled?: boolean; written?: number; skipped?: number; renamed?: number; registered?: string; rootId?: string; name?: string; path?: string; error?: string }
 
 export interface ElectronAPI {
   getPathForFile: (file: File) => string
@@ -1004,6 +1018,11 @@ export interface ElectronAPI {
   workspaceGetCurrent: () => Promise<{ rootId: string; name: string; path: string } | null>
   workspaceForget: (rootId: string) => Promise<{ ok: boolean }>
   workspaceDeleteVault: (rootId: string) => Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }>
+  // P6 整仓归档（zip 全量导出/导入；冲突逐条决策：覆盖/跳过/重命名）
+  vaultArchiveExport: () => Promise<{ ok?: boolean; canceled?: boolean; path?: string; files?: number; bytes?: number; error?: string }>
+  vaultArchiveImportStart: () => Promise<VaultArchiveImportResult>
+  vaultArchiveImportDecide: (decisions: VaultArchiveDecision[]) => Promise<{ ok?: boolean; written?: number; skipped?: number; renamed?: number; registered?: string; canceled?: boolean; error?: string }>
+  vaultArchiveImportCancel: () => Promise<{ ok: boolean }>
   vaultLegacySummary: () => Promise<{ hasLegacy: boolean; categories: number; pages: number; pagesEmpty: number; blogEntries: number; attachments: number; attachmentBytes: number; error?: string }>
   vaultImportLegacy: (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => Promise<{ started: boolean; error?: string }>
   onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => () => void

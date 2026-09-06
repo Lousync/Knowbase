@@ -49,6 +49,7 @@ import { registerPdfHandlers } from '../lib/pdfService'
 import { registerDocsReadHandlers } from '../lib/docsIpc'
 import { registerLanShareHandlers } from '../lib/lanShare'
 import { registerWorkspaceHandlers, trashAllRegisteredVaults } from '../lib/workspaceManager'
+import { registerVaultArchiveHandlers } from '../lib/vaultArchive'
 import { getCurrentVault, setCurrentVault } from '../lib/kbStore/vaultContext'
 import { SETTINGS } from '../../src/lib/settings'
 
@@ -688,6 +689,8 @@ app.whenReady().then(async () => {
   registerLanShareHandlers()
   // 编辑器工作区（Vault 仓库）：文件服务 + 授权根管理
   registerWorkspaceHandlers()
+  // 整仓归档：导出 zip / 导入（剥壳→校验→冲突逐条决策→登记重建，P6）
+  registerVaultArchiveHandlers()
   registerPluginHandlers({ getSettingValue: (key) => settingsCache[key] })
   // AI 工具注册表（M1 地基）：内置只读工具 + 审计 + 月度调用上限
   registerAiToolHandlers({ getSettingValue: (key) => settingsCache[key] })

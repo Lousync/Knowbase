@@ -532,6 +532,11 @@ const api = {
   workspaceForget: (rootId: string) => ipcRenderer.invoke('ws:forget', rootId),
   // P7（D6）：删除仓库 = 整仓进 OS 回收站（主进程护栏校验；无提醒弹窗）
   workspaceDeleteVault: (rootId: string) => ipcRenderer.invoke('ws:deleteVault', rootId),
+  // P6：整仓导出 / 导入（冲突逐条决策：覆盖/跳过/重命名）
+  vaultArchiveExport: () => ipcRenderer.invoke('va:export'),
+  vaultArchiveImportStart: () => ipcRenderer.invoke('va:importStart'),
+  vaultArchiveImportDecide: (decisions: Array<{ relPath: string; action: 'overwrite' | 'skip' | 'rename' }>) => ipcRenderer.invoke('va:importDecide', decisions),
+  vaultArchiveImportCancel: () => ipcRenderer.invoke('va:importCancel'),
 }
 
 contextBridge.exposeInMainWorld('api', api)

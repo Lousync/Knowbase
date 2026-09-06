@@ -391,6 +391,11 @@ function adoptVaultDirectory(rootPath: string, name?: string): { rootId: string;
   return { rootId: id, name: vaultName, path: rootPath }
 }
 
+/** P6 导入收尾用：把已落盘内容的目录登记为仓库（与 openDir 确认流同一实现） */
+export function adoptImportedVault(rootPath: string, name?: string): { rootId: string; name: string; path: string } {
+  return adoptVaultDirectory(rootPath, name)
+}
+
 /** 打开/创建/恢复仓库时的一次性布局迁移（P4 起 = 博客收拢；失败不阻断进入） */
 function runLayoutMigrations(rootPath: string): void {
   try {

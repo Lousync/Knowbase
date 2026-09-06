@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
-import { clearAllData, reloadWindow } from '../../../lib/ipc'
+import { clearAllData, reloadWindow, workspaceDeleteVault, workspaceGetCurrent } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
 
 const CONFIRM_PHRASE = '永久清空全部数据'
@@ -28,6 +28,23 @@ export function DataClearSection() {
     }
   }
 
+  // P7（D6）：删除当前仓库 = 整仓进 OS 回收站。按定稿不弹提醒窗（回收站即兜底），点击即执行。
+  const [deleting, setDeleting] = useState(false)
+  const handleDeleteVault = async () => {
+    if (deleting) return
+    const cur = await workspaceGetCurrent()
+    if (!cur) { showToast({ type: 'error', message: '当前没有打开的仓库' }); return }
+    setDeleting(true)
+    const res = await workspaceDeleteVault(cur.rootId)
+    if (res && res.ok) {
+      showToast({ type: 'info', message: '仓库已移入系统回收站（可还原）。即将返回仓库选择页...' })
+      setTimeout(() => { reloadWindow() }, 1200)
+    } else {
+      showToast({ type: 'error', message: (res && res.error) || '删除失败' })
+      setDeleting(false)
+    }
+  }
+
   return (
     <>
       {/* Red danger button */}
@@ -45,6 +62,21 @@ export function DataClearSection() {
             className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors"
           >
             清空全部数据
+          </button>
+        </div>
+
+        {/* 删除当前仓库（P7/D6：整仓进系统回收站，可还原；不弹提醒窗） */}
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--border-color)]">
+          <div>
+            <span className="text-[12px] font-medium text-[var(--text-secondary)]">删除当前仓库</span>
+            <p className="text-[10px] text-[var(--text-disabled)]">整个仓库文件夹移入系统回收站（可还原），应用返回仓库选择页</p>
+          </div>
+          <button
+            onClick={handleDeleteVault}
+            disabled={deleting}
+            className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-40"
+          >
+            {deleting ? '移入回收站...' : '删除仓库'}
           </button>
         </div>
       </div>
@@ -70,16 +102,11 @@ export function DataClearSection() {
                 <div className="space-y-4">
                   <div className="bg-[var(--danger)]/10 border border-[var(--danger)]/30 rounded-lg p-4">
                     <p className="text-[12px] text-[var(--text-primary)] leading-relaxed">
-                      此操作将<strong className="text-[var(--danger)]">永久删除</strong>以下全部数据：
+                      此操作将<strong className="text-[var(--danger)]">删除以下全部数据</strong>（仓库文件夹移入系统回收站，其余不可撤销）：
                     </p>
                     <ul className="mt-2 space-y-1 text-[12px] text-[var(--text-secondary)] list-disc list-inside">
-                      <li>当前仓库内的全部内容文件（知识 .md / 博客 / 附件等，磁盘文件一并删除）</li>
-                      <li>仓库模块数据与索引/图谱缓存（.knowbase/ 重建为骨架）</li>
-                      <li>所有日程待办事项</li>
-                      <li>所有知识库页面、分类、标签</li>
-                      <li>所有回收站内容</li>
-                      <li>所有工具箱脚本</li>
-                      <li>用户信息与头像</li>
+                      <li>全部已登记仓库的整个文件夹（内容 + .knowbase 一并进回收站，可在回收站还原）</li>
+                      <li>回收站、工具箱脚本、用户信息等残留库数据（直接删除）</li>
                       <li>仓库注册与所有偏好设置（恢复默认，回首启引导）</li>
                     </ul>
                   </div>
