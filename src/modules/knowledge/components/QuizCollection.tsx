@@ -91,7 +91,7 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
   const [newTagDraft, setTagDraft] = useState('')
   const [newTagKind, setNewTagKind] = useState<string>('topic')
   const [showBulkTag, setShowBulkTag] = useState(false)
-  /** 数据迁移面板（P2：主表 ⇄ 插件命名空间表） */
+  /** 错题本插件数据面板（JSON 通道：状态/导出/清空） */
   const [showMigrate, setShowMigrate] = useState(false)
 
   /** 保存备注（本地立即更新 + 落库） */
@@ -582,11 +582,11 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
         )}
         <button
           onClick={() => setShowMigrate(true)}
-          title="错题本数据迁移（P2：主表 ⇄ 插件表）"
+          title="错题本插件数据（状态 / 导出备份 / 清空）"
           className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
         >
           <Database size={13} />
-          迁移
+          数据
         </button>
         <button
           onClick={onClose}
@@ -905,7 +905,7 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
         </div>
       </div>
 
-      {/* 数据迁移面板（P2） */}
+      {/* 错题本插件数据面板（JSON 版） */}
       {showMigrate && <QuizMigratePanel onClose={() => setShowMigrate(false)} />}
     </div>
   )

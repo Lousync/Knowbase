@@ -12,7 +12,7 @@ import { NumberField } from '../components/fields/NumberField'
 import { ExportSettingsView } from './ExportSettingsView'
 
 /**
- * 设置 → 数据与仓库：存储读源 + 整仓备份恢复 + 导出。
+ * 设置 → 数据与仓库：博客读源（灰度）+ 整仓备份恢复 + 数据导出。
  * R6 去库化收尾：旧库一次性迁移器（vaultLegacySummary/vaultImportLegacy）与
  * sqlite 快照还原（vaultBackupGetState/vaultBackupRestoreDb）已删除，
  * 备份 = 当前仓库 .knowbase/ 目录整包 zip。
@@ -55,7 +55,7 @@ export function DataView() {
   return (
     <div>
       <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">数据与仓库</h2>
-      <p className="text-[12px] text-[var(--text-muted)] mb-6">存储形态、迁移、备份与导出</p>
+      <p className="text-[12px] text-[var(--text-muted)] mb-6">博客读源、整仓备份恢复与数据导出</p>
 
       {/* 博客读源（storageKnowledge / storageData 两键已随 sqlite 读源退役） */}
       <div className="mb-8" data-setting-anchor="advanced.storage">
