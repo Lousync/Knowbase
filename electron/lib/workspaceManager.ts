@@ -6,6 +6,7 @@ import { getDatabase, saveToDisk } from '../database/connection'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, setVaultMetaName } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
+import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
 import { migrateBlogLayoutIntoKnowbase } from './vaultMigration'
 import { isAllowedClearRoot, trashVaultFolder } from './vaultDelete'
@@ -470,6 +471,13 @@ export function invalidateIndexIfCurrentVault(rootId: string): void {
   invalidateGraphIndex()
 }
 
+/** 知识索引敏感文件：知识页 .md 与过滤规则 .ignore（docs/ignore-filter-design.md）。
+ *  .ignore 规则一变，知识索引的可见集（列表/搜索/图谱/AI 检索）整体变化，必须与 .md 同等失效。 */
+function isKnowledgeIndexSensitive(relPath: string): boolean {
+  const name = relPath.replace(/\\/g, '/').split('/').pop() ?? ''
+  const lower = name.toLowerCase()
+  return lower.endsWith('.md') || lower === IGNORE_FILE_NAME
+}
 /** 重命名/移动（跨目录；ws:rename 与 AI vault.rename 共用同一语义，成功后失效索引） */
 export function renameWorkspacePath(rootId: string, oldRel: string, newRel: string): void {
   const from = requireInside(rootId, oldRel)
@@ -682,7 +690,7 @@ export function registerWorkspaceHandlers(): void {
         return { ok: false, conflict: true, diskMtimeMs: chk.diskMtimeMs, diskSize: chk.diskSize, missing: chk.missing === true }
       }
       writeWorkspaceFile(abs, content)
-      if (relPath.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(rootId)
+      if (isKnowledgeIndexSensitive(relPath)) invalidateIndexIfCurrentVault(rootId)
       const st = statSync(abs)
       return { ok: true, mtimeMs: st.mtimeMs, size: st.size }
     } catch (e) {
@@ -704,7 +712,7 @@ export function registerWorkspaceHandlers(): void {
       } else {
         writeFileSync(finalAbs, '', 'utf-8')
       }
-      if (finalAbs.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(rootId)
+      if (isKnowledgeIndexSensitive(finalAbs)) invalidateIndexIfCurrentVault(rootId)
       const finalRel = finalName === requestedName ? relPath : relPath.replace(/[^\\/]+$/, finalName)
       return { ok: true, relPath: finalRel, renamed: finalName !== requestedName }
     } catch (e) {
