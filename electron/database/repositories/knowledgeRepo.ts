@@ -15,6 +15,7 @@ import {
 } from '../../lib/kbStore/knowledgeVaultRepo'
 import { getCurrentVault } from '../../lib/kbStore/vaultContext'
 import { getGraphIndex } from '../../lib/kbStore/graphIndex'
+import { recycleBinAdd } from './recycleBinRepo'
 
 // ---- row types (snake_case matching SQLite columns) ----
 interface CategoryRow { id: string; name: string; parent_id: string | null; sort_order: number; category_type: string }
@@ -374,12 +375,7 @@ export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unk
     })
 
     // ---- 3) 存入回收站 ----
-    const binId = randomUUID()
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data)
-       VALUES (?, ?, 'knowledge_category', ?, ?)`,
-      [binId, id, cat.name, snapshot]
-    )
+    recycleBinAdd({ id: randomUUID(), original_id: id, module: 'knowledge_category', title: cat.name, data: snapshot })
 
     // ---- 4) 删除所有页面 ----
     for (const cid of allCatIds) {
@@ -610,11 +606,7 @@ kHandle('knowledge:getPages', (_e, categoryId?: string | null) => {
     const binId = randomUUID()
     const inlineAttachmentIds = parseInlineAttachmentIds(page.content_md)
     if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, binId)
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data)
-       VALUES (?, ?, 'knowledge', ?, ?)`,
-      [binId, id, page.title, data]
-    )
+    recycleBinAdd({ id: binId, original_id: id, module: 'knowledge', title: page.title, data: data })
 
     // 从原表删除（CASCADE 自动清理 knowledge_links + knowledge_page_tags）
     run('DELETE FROM knowledge_pages WHERE id = ?', [id])

@@ -1,3 +1,4 @@
+// R6 去库化：真相源 = .knowbase/modules/recycle-bin.json（sql.js 路径已移除，D9）
 import { ipcMain } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -7,8 +8,8 @@ import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
 import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 import { encryptPassword } from './passwordRepo'
-import { isVaultDataSource } from '../dataSourceMode'
 import { vaultPasswordsAll, vaultPasswordsSave } from '../../lib/kbStore/secretVaultRepo'
+import { readJson, writeJson } from '../../lib/kbStore/jsonStore'
 
 function getSettingsRetentionDays(): number {
   try {
@@ -16,7 +17,7 @@ function getSettingsRetentionDays(): number {
     if (!existsSync(path)) return 30
     const s = JSON.parse(readFileSync(path, 'utf-8'))
     const raw = typeof s.recycleBinRetentionDays === 'number' ? s.recycleBinRetentionDays : 30
-    // NaN/非法值兜底并夹取到合理区间,避免拼出 "-NaN days" 非法 SQL 修饰符
+    // NaN/非法值兜底并夹取到合理区间
     if (!Number.isFinite(raw)) return 30
     return Math.min(3650, Math.max(1, Math.round(raw)))
   } catch { return 30 }
@@ -37,7 +38,7 @@ interface TagRow {
   color: string
 }
 
-// ---- helpers (mirror entryRepo / knowledgeRepo patterns) ----
+// ---- sqlite 辅助（仅剩恢复目标模块的写入在使用，属各模块 R6 范围） ----
 function queryAll<T>(sql: string, params: unknown[] = []): T[] {
   const db = getDatabase()
   const stmt = db.prepare(sql)
@@ -91,16 +92,76 @@ function resolveCategoryParent(categoryType: unknown, parentId: string | null | 
   return getOrCreateDefaultSpaceId()
 }
 
+// ---- 回收站 JSON 存取（.knowbase/modules/recycle-bin.json，原子写） ----
+const RB_MODULE = 'modules'
+const RB_KEY = 'recycle-bin.json'
+
+function readBin(): RecycleBinRow[] {
+  return readJson<RecycleBinRow[]>(RB_MODULE, RB_KEY, [])
+}
+
+function writeBin(rows: RecycleBinRow[]): void {
+  writeJson(RB_MODULE, RB_KEY, rows)
+}
+
+function findBin(rows: RecycleBinRow[], id: string): RecycleBinRow | undefined {
+  return rows.find(r => r.id === id)
+}
+
+function removeBin(rows: RecycleBinRow[], id: string): RecycleBinRow[] {
+  return rows.filter(r => r.id !== id)
+}
+
+function sortByDeletedAtDesc(rows: RecycleBinRow[]): void {
+  rows.sort((a, b) => (a.deleted_at > b.deleted_at ? -1 : a.deleted_at < b.deleted_at ? 1 : 0))
+}
+
+/** 本地时间 'YYYY-MM-DD HH:MM:SS'（与原表 datetime 默认值语义一致） */
+function formatLocalDateTime(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/** 过期判断：兼容历史 ISO('...T...Z') 与 'YYYY-MM-DD HH:MM:SS' 两种格式，统一到秒级字符串比较 */
+function isExpired(deletedAt: string, cutoff: string): boolean {
+  return deletedAt.replace('T', ' ').slice(0, 19) < cutoff
+}
+
+/** 清理过期项并返回清理后的列表（有变更才落盘） */
+function purgeExpiredRows(): RecycleBinRow[] {
+  const retentionDays = getSettingsRetentionDays()
+  const cutoff = formatLocalDateTime(new Date(Date.now() - retentionDays * 86400000))
+  const rows = readBin()
+  const kept = rows.filter(r => !isExpired(r.deleted_at, cutoff))
+  if (kept.length !== rows.length) writeBin(kept)
+  return kept
+}
+
+/** 统一写 API：其它模块删除条目入回收站时调用（替代散布的 INSERT INTO recycle_bin 直写 SQL） */
+export function recycleBinAdd(entry: { id: string; original_id: string; module: string; title: string; data: string; deleted_at?: string }): void {
+  const rows = readBin()
+  rows.push({
+    id: entry.id,
+    original_id: entry.original_id,
+    module: entry.module,
+    title: entry.title,
+    data: entry.data,
+    deleted_at: entry.deleted_at ?? formatLocalDateTime(new Date()),
+  })
+  writeBin(rows)
+}
+
+/** 统一读 API：导出/导入去重等读侧使用（替代散布的 SELECT * FROM recycle_bin 直查 SQL） */
+export function recycleBinGetAll(): RecycleBinRow[] {
+  return readBin()
+}
+
 export function registerRecycleBinHandlers(): void {
   // ---- 获取回收站列表（自动清除过期项） ----
   ipcMain.handle('recycleBin:getItems', () => {
     // 清除过期数据
-    const retentionDays = getSettingsRetentionDays()
-    run(`DELETE FROM recycle_bin WHERE deleted_at < datetime('now', '-${retentionDays} days')`)
-
-    const rows = queryAll<RecycleBinRow>(
-      'SELECT * FROM recycle_bin ORDER BY deleted_at DESC'
-    )
+    const rows = purgeExpiredRows()
+    sortByDeletedAtDesc(rows)
 
     // 逐条容错:单条快照损坏只跳过该条,不拖垮整个回收站列表
     const items: unknown[] = []
@@ -121,12 +182,9 @@ export function registerRecycleBinHandlers(): void {
 
   // ---- 恢复回收站项目 ----
   ipcMain.handle('recycleBin:restoreItem', (_e, id: string): { success: boolean; message?: string } | undefined => {
-    const rows = queryAll<RecycleBinRow>(
-      'SELECT * FROM recycle_bin WHERE id = ?', [id]
-    )
-    if (rows.length === 0) return
+    const item = findBin(readBin(), id)
+    if (!item) return
 
-    const item = rows[0]
     let record: any
     try { record = JSON.parse(item.data) } catch {
       return { success: false, message: '该条目数据已损坏,无法恢复(可直接删除)' }
@@ -239,32 +297,17 @@ export function registerRecycleBinHandlers(): void {
       }
     } else if (item.module === 'passwordVault') {
       // 恢复密码条目(新快照中密码为密文,直接插回;旧明文快照插入后由加密清理统一处理)
-      if (isVaultDataSource()) {
-        // P5b：vault 模式恢复进 .knowbase/secret/passwords.json（密文原样，明文快照补加密）
-        const vrows = vaultPasswordsAll()
-        if (vrows.some((r) => r.id === record.id)) return { success: false, message: '仓库中已存在同一条目' }
-        const storedPwd = typeof record.password === 'string' && !record.password.startsWith('enc1:') ? encryptPassword(record.password) : record.password
-        const nextOrder = vrows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0)
-        vrows.push({
-          id: record.id, title: record.title || '', url: record.url || null, username: record.username || null,
-          account: record.account || null, password: storedPwd, notes: record.notes || null,
-          sort_order: nextOrder, created_at: record.createdAt, updated_at: record.updatedAt,
-        })
-        vaultPasswordsSave(vrows)
-      } else {
-        const maxRow = queryAll<{ m: number }>(
-          'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_passwords'
-        )
-        run(
-          `INSERT INTO toolbox_passwords (id, title, url, account, username, password, notes, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            record.id, record.title, record.url || '', record.account || '',
-            record.username || '', record.password, record.notes || '',
-            (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
-          ]
-        )
-      }
+      // P5b：vault 恢复进 .knowbase/secret/passwords.json（密文原样，明文快照补加密）
+      const vrows = vaultPasswordsAll()
+      if (vrows.some((r) => r.id === record.id)) return { success: false, message: '仓库中已存在同一条目' }
+      const storedPwd = typeof record.password === 'string' && !record.password.startsWith('enc1:') ? encryptPassword(record.password) : record.password
+      const nextOrder = vrows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0)
+      vrows.push({
+        id: record.id, title: record.title || '', url: record.url || null, username: record.username || null,
+        account: record.account || null, password: storedPwd, notes: record.notes || null,
+        sort_order: nextOrder, created_at: record.createdAt, updated_at: record.updatedAt,
+      })
+      vaultPasswordsSave(vrows)
     } else if (item.module === 'moments') {
       const images = Array.isArray(record.imageDataUrls)
         ? record.imageDataUrls
@@ -288,16 +331,14 @@ export function registerRecycleBinHandlers(): void {
     }
 
     // 从回收站移除
-    run('DELETE FROM recycle_bin WHERE id = ?', [id])
+    writeBin(removeBin(readBin(), id))
   })
 
   // ---- 部分恢复（从知识目录快照中恢复单个页面/子目录） ----
   ipcMain.handle('recycleBin:restorePartial', (_e, binId: string, path: string) => {
-    const rows = queryAll<RecycleBinRow>(
-      'SELECT * FROM recycle_bin WHERE id = ?', [binId]
-    )
-    if (rows.length === 0) return
-    const item = rows[0]
+    const rows = readBin()
+    const item = findBin(rows, binId)
+    if (!item) return
     if (item.module !== 'knowledge_category') return
     const record = JSON.parse(item.data)
 
@@ -337,9 +378,10 @@ export function registerRecycleBinHandlers(): void {
       delete record.category
       const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || record.category
       if (!hasContent) {
-        run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+        writeBin(removeBin(rows, binId))
       } else {
-        run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+        item.data = JSON.stringify(record)
+        writeBin(rows)
       }
       return
     }
@@ -422,9 +464,10 @@ export function registerRecycleBinHandlers(): void {
     // Check if snapshot is now empty (no pages, no children)
     const hasContent = (record.pages?.length > 0) || (record.children?.length > 0)
     if (!hasContent) {
-      run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+      writeBin(removeBin(rows, binId))
     } else {
-      run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+      item.data = JSON.stringify(record)
+      writeBin(rows)
     }
   })
 
@@ -445,9 +488,9 @@ export function registerRecycleBinHandlers(): void {
   }
 
   ipcMain.handle('recycleBin:permanentlyDeletePartial', (_e, binId: string, path: string) => {
-    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin WHERE id = ?', [binId])
-    if (rows.length === 0) return
-    const item = rows[0]
+    const rows = readBin()
+    const item = findBin(rows, binId)
+    if (!item) return
     if (item.module !== 'knowledge_category') return
     const record = JSON.parse(item.data)
 
@@ -459,36 +502,37 @@ export function registerRecycleBinHandlers(): void {
 
     const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || !!record.category
     if (!hasContent) {
-      run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+      writeBin(removeBin(rows, binId))
     } else {
-      run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+      item.data = JSON.stringify(record)
+      writeBin(rows)
     }
   })
 
   // ---- 移入系统回收站（单条） ----
   ipcMain.handle('recycleBin:trashToOS', async (_e, id: string) => {
-    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin WHERE id = ?', [id])
-    if (rows.length === 0) return
-    const item = rows[0]
+    const item = findBin(readBin(), id)
+    if (!item) return
     const record = { module: item.module, title: item.title, data: JSON.parse(item.data) }
     await trashItem(id, record)
-    run('DELETE FROM recycle_bin WHERE id = ?', [id])
+    writeBin(removeBin(readBin(), id))
   })
 
   // ---- 移入系统回收站（全部） ----
   ipcMain.handle('recycleBin:trashAllToOS', async () => {
-    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin ORDER BY deleted_at DESC')
+    const rows = readBin()
+    sortByDeletedAtDesc(rows)
     if (rows.length === 0) return
     const items = rows.map(r => ({ binId: r.id, module: r.module, title: r.title, data: JSON.parse(r.data) }))
     await trashAll(items)
-    run('DELETE FROM recycle_bin')
+    writeBin([])
   })
 
   // ---- 从快照中局部移入系统回收站 ----
   ipcMain.handle('recycleBin:trashPartialToOS', async (_e, binId: string, path: string) => {
-    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin WHERE id = ?', [binId])
-    if (rows.length === 0) return
-    const item = rows[0]
+    const rows = readBin()
+    const item = findBin(rows, binId)
+    if (!item) return
     if (item.module !== 'knowledge_category') return
     const record = JSON.parse(item.data)
 
@@ -518,25 +562,27 @@ export function registerRecycleBinHandlers(): void {
 
     const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || !!record.category
     if (!hasContent) {
-      run('DELETE FROM recycle_bin WHERE id = ?', [binId])
+      writeBin(removeBin(rows, binId))
     } else {
-      run('UPDATE recycle_bin SET data = ? WHERE id = ?', [JSON.stringify(record), binId])
+      item.data = JSON.stringify(record)
+      writeBin(rows)
     }
   })
 
   // ---- 永久删除单条（直接删库，不移入系统回收站） ----
   ipcMain.handle('recycleBin:permanentlyDelete', (_e, id: string) => {
-    run('DELETE FROM recycle_bin WHERE id = ?', [id])
+    writeBin(removeBin(readBin(), id))
   })
 
   // ---- 清空回收站（移入系统回收站） ----
   ipcMain.handle('recycleBin:emptyAll', async () => {
     // 1) Snapshot items before deleting — so we can write them to disk
-    const rows = queryAll<RecycleBinRow>('SELECT * FROM recycle_bin ORDER BY deleted_at DESC')
+    const rows = readBin()
+    sortByDeletedAtDesc(rows)
     const items = rows.map(r => ({ binId: r.id, module: r.module, title: r.title, data: JSON.parse(r.data) }))
 
-    // 2) Clear DB immediately — the frontend sees instant feedback
-    run('DELETE FROM recycle_bin')
+    // 2) Clear bin immediately — the frontend sees instant feedback
+    writeBin([])
 
     // 3) Write files + move to OS recycle bin in background (don't block the response)
     if (items.length > 0) {
@@ -546,7 +592,6 @@ export function registerRecycleBinHandlers(): void {
 
   // ---- 清除过期项（独立调用） ----
   ipcMain.handle('recycleBin:purgeExpired', () => {
-    const retentionDays = getSettingsRetentionDays()
-    run(`DELETE FROM recycle_bin WHERE deleted_at < datetime('now', '-${retentionDays} days')`)
+    purgeExpiredRows()
   })
 }

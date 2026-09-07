@@ -4,6 +4,7 @@ import { basename, extname, join } from 'path'
 import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs, validateDatabaseBuffer } from '../connection'
 import { randomUUID } from 'crypto'
 import { registerAttachment } from './attachmentRepo'
+import { recycleBinAdd, recycleBinGetAll } from './recycleBinRepo'
 import { vaultImportFolder } from '../../lib/kbStore/knowledgeVaultRepo'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
@@ -604,15 +605,12 @@ export function executeImportData(data: any): {
           imported++
         }
       }
-      // --- Recycle bin ---
+      // --- Recycle bin（R6 去库化：读侧去重与写入均走 recycleBinRepo） ---
       if (data.recycleBin) {
+        const existingBinIds = new Set(recycleBinGetAll().map(r => r.id))
         for (const item of data.recycleBin.items || []) {
-          if (exists('recycle_bin', item.id)) { skipped++; continue }
-          db.run(
-            `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [item.id, item.originalId, item.module, item.title, item.data || '', item.deletedAt || new Date().toISOString()]
-          )
+          if (existingBinIds.has(item.id)) { skipped++; continue }
+          recycleBinAdd({ id: item.id, original_id: item.originalId, module: item.module, title: item.title, data: item.data || '', deleted_at: item.deletedAt || new Date().toISOString() })
           imported++
         }
       }

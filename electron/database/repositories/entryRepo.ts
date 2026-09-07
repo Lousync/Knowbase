@@ -7,6 +7,7 @@ import {
   vaultListEntries, vaultGetEntryById, vaultCreateEntry, vaultUpdateEntry,
   vaultDeleteEntry, vaultSearchEntries,
 } from '../../lib/kbStore/blogVaultRepo'
+import { recycleBinAdd } from './recycleBinRepo'
 
 /** 博文字数:去空白后的字符数(中英混排统一口径,与 habitLinkService 一致) */
 function countWords(md: string): number {
@@ -290,16 +291,11 @@ export function registerEntryHandlers(getSettingValue?: (key: string) => unknown
 
   // 删除博文（软删除 → 回收站）
   ipcMain.handle('db:deleteEntry', (_event, id: string) => {
-    // vault：删 md 文件，回收站载荷（全文 JSON）仍写入 sqlite recycle_bin（恢复时经 create/update vault 路径回写文件）
+    // vault：删 md 文件，回收站载荷（全文 JSON）仍写入回收站（恢复时经 create/update vault 路径回写文件）
     if (isVault()) {
       const info = vaultDeleteEntry(id)
       if (!info) return
-      const binId = randomUUID()
-      run(
-        `INSERT INTO recycle_bin (id, original_id, module, title, data)
-         VALUES (?, ?, 'blog', ?, ?)`,
-        [binId, id, info.title, info.data]
-      )
+      recycleBinAdd({ id: randomUUID(), original_id: id, module: 'blog', title: info.title, data: info.data })
       return
     }
     // 读取完整条目
@@ -334,11 +330,7 @@ export function registerEntryHandlers(getSettingValue?: (key: string) => unknown
     const binId = randomUUID()
     const inlineAttachmentIds = parseInlineAttachmentIds(entry.content_md)
     if (inlineAttachmentIds.length > 0) trashAttachments(inlineAttachmentIds, binId)
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data)
-       VALUES (?, ?, 'blog', ?, ?)`,
-      [binId, id, entry.title, data]
-    )
+    recycleBinAdd({ id: binId, original_id: id, module: 'blog', title: entry.title, data: data })
 
     // 从原表删除（CASCADE 自动清理 entry_tags）
     run('DELETE FROM entries WHERE id = ?', [id])

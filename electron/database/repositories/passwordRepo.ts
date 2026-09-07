@@ -1,8 +1,8 @@
 // R6 去库化：真相源 = .knowbase/secret/passwords.json（DPAPI，sql.js 路径已移除，D9）
 import { ipcMain, safeStorage } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
 import { vaultPasswordsAll, vaultPasswordsSave, type SecretPwdRow } from '../../lib/kbStore/secretVaultRepo'
+import { recycleBinAdd } from './recycleBinRepo'
 
 // ---- types ----
 interface PasswordRow {
@@ -42,12 +42,6 @@ function rowToPassword(row: PasswordRow) {
     password: decryptPassword(row.password), notes: row.notes || '',
     sortOrder: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at
   }
-}
-
-// ---- helpers ----
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
 }
 
 // 行结构与表一致（snake_case），password 字段沿用 enc1: 密文格式，回收站快照跨模式兼容。
@@ -119,11 +113,7 @@ export function registerPasswordHandlers(): void {
     const entry = rowToPassword(hit)
     const binId = randomUUID()
     const snapshot = JSON.stringify({ ...entry, password: encryptPassword(entry.password) })
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [binId, id, 'passwordVault', entry.title || '未命名', snapshot, new Date().toISOString()]
-    )
+    recycleBinAdd({ id: binId, original_id: id, module: 'passwordVault', title: entry.title || '未命名', data: snapshot, deleted_at: new Date().toISOString() })
     vaultPasswordsSave(rows.filter((r) => r.id !== id) as unknown as SecretPwdRow[])
   })
 }

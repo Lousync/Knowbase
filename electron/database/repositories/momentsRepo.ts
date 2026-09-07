@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
 import { getAttachmentsForIds, claimAttachments, trashAttachments, deleteAttachments, AttachmentMeta } from './attachmentRepo'
+import { recycleBinAdd } from './recycleBinRepo'
 import {
   vaultPostsAll, vaultPostsSave, vaultAlbumsAll, vaultAlbumsSave,
   type MomentsRow, type AlbumRow,
@@ -12,8 +12,8 @@ import {
  * 说说（posts + albums）读写 .knowbase/modules/moments/{posts,albums}.json。
  * 行结构=表行 snake_case 原样，列内 JSON 字符串（images_data_urls/tags/attachment_ids）
  * 保持字符串不反序列化。
- * attachments / recycle_bin 尚未去库化，继续走 attachmentRepo 与
- * recycle_bin 表（与 passwordVault P5b 同口径）。
+ * attachments / recycle_bin：附件走 attachmentRepo，回收站统一走 recycleBinRepo
+ * （R6 去库化，recycle_bin 真相源 = .knowbase/modules/recycle-bin.json）。
  */
 
 function parseImages(row: MomentsRow): string[] {
@@ -67,11 +67,6 @@ function rowToMoments(row: MomentsRow, attachmentMeta: AttachmentMeta[] = []) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
 }
 
 function camelToSnake(s: string): string {
@@ -236,12 +231,8 @@ export function registerMomentsHandlers(): void {
     const row = rowToMoments(hit, getAttachmentsForIds(attachmentIds))
     const binId = randomUUID()
     if (attachmentIds.length > 0) trashAttachments(attachmentIds, binId)
-    // 回收站表仍在 sqlite（与 passwordVault P5b 同口径）
-    run(
-      `INSERT INTO recycle_bin (id, original_id, module, title, data, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [binId, id, 'moments', '单机说说', JSON.stringify(row), new Date().toISOString()]
-    )
+    // 回收站统一写 API（R6 去库化，与 passwordVault 同口径）
+    recycleBinAdd({ id: binId, original_id: id, module: 'moments', title: '单机说说', data: JSON.stringify(row), deleted_at: new Date().toISOString() })
     vaultPostsSave(rows.filter(r => r.id !== id))
   })
 
