@@ -1,6 +1,6 @@
 import { ipcMain, app, dialog, BrowserWindow } from 'electron'
 import { randomBytes, pbkdf2Sync } from 'crypto'
-import { getAttachmentsDir } from '../connection'
+import { getAttachmentsDir } from '../../lib/globalPaths'
 import { join } from 'path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, unlinkSync } from 'fs'
 import { registerAttachment, deleteAttachments } from './attachmentRepo'

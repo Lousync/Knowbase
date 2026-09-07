@@ -76,7 +76,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
   const { s: settings } = useSettings()
   /** 数据形态 = vault：知识库为只读导航，一切写收口到编辑器模块（后端也已白名单拒绝，这里给前端护栏+明确提示） */
-  const vaultReadonly = settings.storageKnowledge === 'vault'
+  const vaultReadonly = true // R6 D9 后恒 vault：知识库只读导航，写收口编辑器（sqlite 读源已退役）
   const writeBlocked = (action: string): boolean => {
     if (!vaultReadonly) return false
     showToast({ type: 'warning', message: '仓库文件模式为只读，请到编辑器模块操作' })
@@ -1489,7 +1489,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onMarkDirty={handleMarkDirty}
               onClearDirty={handleClearDirty}
               onRequestReading={enterReading}
-              vaultMode={settings.storageKnowledge === 'vault'}
+              vaultMode={true} // R6 D9 后恒 vault
               onOpenInEditor={() => handleOpenInEditor(activePageId)}
             />
           ) : (

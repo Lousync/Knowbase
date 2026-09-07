@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 import * as V from '../../lib/kbStore/quizVaultRepo'
-import { migrationStatus, exportQuizData, migrateToPlugin, migrateFromPlugin, dropPluginData, pluginReportRecord, pluginToggleFavoriteRecord, QUIZBOOK_PLUGIN_ID } from '../../lib/quizMigration'
+import { migrationStatus, exportQuizData, dropPluginData, pluginReportRecord, pluginToggleFavoriteRecord, QUIZBOOK_PLUGIN_ID } from '../../lib/quizMigration'
 
 /**
  * R6 去库化：真相源 = .knowbase/modules/quiz/*.json（sql.js 路径已移除，D9）
@@ -500,14 +500,12 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
     V.writeQuizCollections(V.readQuizCollections().filter((c) => c.id !== id))
   })
 
-  // ===== 数据迁移（主表 ⇄ 插件命名空间表） =====
-  // 以下 quizMigrate:* / quiz:plugin* handler 全部作用于插件命名空间表
-  // （quizMigration.ts 管辖），不属于主表 vault 数据层，故保持原样。
+  // ===== 错题本插件数据通道（JSON 版，quizMigration.ts 管辖） =====
+  // 原「主表 ⇄ 插件表」迁移通道已随 sql.js 主表退役删除（R6 D9），
+  // 剩余：状态/导出备份/清空 + 插件模式判题上报与收藏切换。
 
   ipcMain.handle('quizMigrate:status', () => migrationStatus())
   ipcMain.handle('quizMigrate:export', () => exportQuizData())
-  ipcMain.handle('quizMigrate:toPlugin', (_e, opts?: { dryRun?: boolean; backup?: boolean }) => migrateToPlugin(opts))
-  ipcMain.handle('quizMigrate:fromPlugin', () => migrateFromPlugin())
   ipcMain.handle('quizMigrate:dropPluginData', () => dropPluginData())
 
   // 插件模式判题上报 / 收藏切换（写入插件命名空间表）

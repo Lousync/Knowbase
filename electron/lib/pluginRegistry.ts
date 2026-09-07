@@ -1037,16 +1037,15 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     if (idx[pluginId] && !idx[pluginId].enabled) {
       return { ok: true, state: 'disabled', message: '插件已禁用,请先在插件页启用' }
     }
-    return getPackState(pluginId, pluginSettingReader('storageKnowledge') === 'vault')
+    // 知识库恒 vault（R6 D9 后 sqlite 读源已退役）
+    return getPackState(pluginId, true)
   })
   ipcMain.handle('knowledgePack:importPack', (_e, pluginId: string, overwriteModified: boolean, forceExternalIds?: unknown) => {
     const idx = readIndex()
     if (idx[pluginId] && !idx[pluginId].enabled) {
       return { ok: false, message: '插件已禁用,请先启用后再导入' }
     }
-    const vault = pluginSettingReader('storageKnowledge') === 'vault'
-    const r = importPack(pluginId, Boolean(overwriteModified), Array.isArray(forceExternalIds) ? forceExternalIds.map(String) : undefined, vault)
-    return r
+    return importPack(pluginId, Boolean(overwriteModified), Array.isArray(forceExternalIds) ? forceExternalIds.map(String) : undefined, true)
   })
 
   // 内置插件落位:随应用分发的官方插件,首次运行(或目录缺失)时复制到插件目录

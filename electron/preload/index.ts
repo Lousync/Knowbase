@@ -437,11 +437,9 @@ const api = {
   quizCollectionCreate: (name: string) => ipcRenderer.invoke('quizCollection:create', name),
   quizCollectionRename: (id: string, name: string) => ipcRenderer.invoke('quizCollection:rename', id, name),
   quizCollectionDelete: (id: string) => ipcRenderer.invoke('quizCollection:delete', id),
-  // quiz data migration (P2: main tables ⇄ plugin namespace tables)
+  // quiz plugin data (JSON 通道：状态/导出备份/清空；主表迁移通道已随 sql.js 退役删除)
   quizMigrateStatus: () => ipcRenderer.invoke('quizMigrate:status'),
   quizMigrateExport: () => ipcRenderer.invoke('quizMigrate:export'),
-  quizMigrateToPlugin: (opts: unknown) => ipcRenderer.invoke('quizMigrate:toPlugin', opts),
-  quizMigrateFromPlugin: () => ipcRenderer.invoke('quizMigrate:fromPlugin'),
   quizMigrateDropPluginData: () => ipcRenderer.invoke('quizMigrate:dropPluginData'),
   // plugin-mode quiz report (write to plugin namespace tables)
   quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta: unknown) => ipcRenderer.invoke('quiz:pluginReport', pluginId, pageId, quizNo, correct, meta),

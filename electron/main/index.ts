@@ -4,7 +4,7 @@ import { app, BrowserWindow, dialog, ipcMain, screen, shell, protocol, clipboard
 import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
-import { getAttachmentsDir } from '../database/paths'
+import { getAttachmentsDir } from '../lib/globalPaths'
 import { registerPomodoroBroadcast } from './pomodoroState'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
@@ -130,10 +130,10 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 function loadSettingsFromDisk(): Record<string, unknown> {
   let raw: Record<string, unknown> = {}
   try { raw = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} } catch { raw = {} }
-  // 数据源默认值兜底（对齐渲染层 settings.ts default）：旧 settings.json 缺失键时
-  // 主进程曾判定为 sqlite（undefined !== 'vault'）→ 知识包导入/写通道误走 sqlite。
-  // 2026-09-03 修复：storageData / storageKnowledge / storageBlog 缺省一律 vault（仓库文件）。
-  for (const k of ['storageData', 'storageKnowledge', 'storageBlog'] as const) {
+  // 数据源默认值兜底（对齐渲染层 settings.ts default）。R6 D9 后 storageData /
+  // storageKnowledge 两键已随 sqlite 读源退役（知识库/结构化模块恒 vault），
+  // 仅存 storageBlog（博客读源灰度开关）仍需缺省兜底。
+  for (const k of ['storageBlog'] as const) {
     if (raw[k] === undefined) raw[k] = 'vault'
   }
   // 仓库状态键唯一属主是 vaultContext（直写文件）：主进程缓存绝不能持有其快照，

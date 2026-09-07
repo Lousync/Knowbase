@@ -247,7 +247,6 @@ export default function App() {
     }))
     items.push(
       { id: 'toggle-workbench', label: workbench ? '布局：切回 旧布局' : '布局：启用 Workbench 外壳（实验）', group: '界面设置', run: () => { update('uiWorkbench', !workbench); setPalette(null) } },
-      { id: 'toggle-readsrc', label: s.storageKnowledge === 'vault' ? '知识库数据：切换到 数据库 sqlite（过渡）' : '知识库数据：切换到 仓库文件 vault（默认）', group: '界面设置', run: () => { update('storageKnowledge', s.storageKnowledge === 'vault' ? 'sqlite' : 'vault'); setPalette(null) } },
       { id: 'toggle-lineno', label: s.showLineNumbers ? '编辑器：隐藏行号' : '编辑器：显示行号', group: '界面设置', run: () => { update('showLineNumbers', !s.showLineNumbers); setPalette(null) } },
     )
     // W3 · 分屏命令（Editor Groups）：开/关副栏 + 选副栏模块（排除当前主栏，避免同模块双实例）

@@ -79,18 +79,11 @@ export interface QuizStatsDto {
   todayWrong: number
   correctRate: number
 }
-/** 错题本数据迁移（主表 ⇄ 插件命名空间表）状态与结果 */
+/** 错题本插件数据通道（JSON 版）状态；主表迁移语义已随 sql.js 退役 */
 export interface QuizMigrateStatus {
   main: Record<string, number>
   plugin: Record<string, number>
   pluginTablesExist: boolean
-}
-export interface QuizMigrateResult {
-  ok: boolean
-  dryRun?: boolean
-  moved?: Record<string, number>
-  backupPath?: string
-  error?: string
 }
 export interface QuizCollectionDto {
   id: string
@@ -1195,11 +1188,9 @@ export interface ElectronAPI {
   quizCollectionCreate: (name: string) => Promise<QuizCollectionDto>
   quizCollectionRename: (id: string, name: string) => Promise<QuizCollectionDto>
   quizCollectionDelete: (id: string) => Promise<void>
-  // quiz data migration (P2)
+  // quiz plugin data（JSON 通道）
   quizMigrateStatus: () => Promise<QuizMigrateStatus>
   quizMigrateExport: () => Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }>
-  quizMigrateToPlugin: (opts?: { dryRun?: boolean; backup?: boolean }) => Promise<QuizMigrateResult>
-  quizMigrateFromPlugin: () => Promise<QuizMigrateResult>
   quizMigrateDropPluginData: () => Promise<{ ok: boolean; error?: string }>
   quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }) => Promise<{ ok: boolean; error?: string }>
   quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => Promise<{ ok: boolean; favorite: boolean }>

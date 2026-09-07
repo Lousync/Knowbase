@@ -57,24 +57,10 @@ export function DataView() {
       <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">数据与仓库</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-6">存储形态、迁移、备份与导出</p>
 
-      {/* 存储与迁移（去库化） */}
+      {/* 博客读源（storageKnowledge / storageData 两键已随 sqlite 读源退役） */}
       <div className="mb-8" data-setting-anchor="advanced.storage">
-        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">存储与迁移</h3>
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">读源与备份</h3>
         <div className="max-w-md space-y-4">
-          <div>
-            <label className="block text-[12px] text-[var(--text-secondary)] mb-1">知识库读源</label>
-            <select
-              value={s.storageKnowledge}
-              onChange={(e) => update('storageKnowledge', e.target.value)}
-              className="w-full px-2.5 py-1.5 text-[12px] bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-            >
-              <option value="vault">仓库文件（默认 · 页面为 .md + 索引 .json，编辑在编辑器模块）</option>
-              <option value="sqlite">数据库（过渡期 · 知识库内直接编辑，迁完后删除）</option>
-            </select>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-              数据以仓库文件存放，页面编辑在编辑器模块进行。
-            </p>
-          </div>
           <div>
             <label className="block text-[12px] text-[var(--text-secondary)] mb-1">博客读源</label>
             <select
@@ -87,20 +73,6 @@ export function DataView() {
             </select>
             <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
               vault 读源：博文改读当前仓库 blog/*.md（每天一篇，标签/收藏/置顶存 frontmatter），编辑保存直接写文件；验证稳定后切默认
-            </p>
-          </div>
-          <div>
-            <label className="block text-[12px] text-[var(--text-secondary)] mb-1">结构化模块数据（书签等）</label>
-            <select
-              value={s.storageData}
-              onChange={(e) => update('storageData', e.target.value)}
-              className="w-full px-2.5 py-1.5 text-[12px] bg-[var(--input-bg)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-            >
-              <option value="sqlite">数据库（当前形态 · 默认）</option>
-              <option value="vault">仓库文件（灰度 · .knowbase/modules/*.json）</option>
-            </select>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-              已接入：书签（书签/收藏）.knowbase/modules/bookmarks/*.json；其余打卡/体重/习惯等模块将陆续接入同一开关
             </p>
           </div>
           <div>
