@@ -1,8 +1,9 @@
+// R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../database/connection'
 import { encryptSecret } from './secretBox'
-import { McpManager, MAX_CONNECTIONS } from './mcpManager'
+import { McpManager, MAX_CONNECTIONS, readMcpServerRows, writeMcpServerRows } from './mcpManager'
+import type { McpServerRow } from './mcpManager'
 import { appendAudit } from './pluginAudit'
 
 /**
@@ -12,16 +13,11 @@ import { appendAudit } from './pluginAudit'
  *   且新条目一律默认禁用，需手动启用
  * - sse/http 仅允许 http(s) URL
  * - 环境变量值 DPAPI 加密落盘；渲染层只回传键名，永远拿不到明文
+ * 存储：mcp_servers 表 → userData/data/mcp.json（行结构对齐原表，数组顺序 = 创建顺序）
  */
 
 const TRANSPORTS = ['stdio', 'sse', 'http'] as const
 type Transport = typeof TRANSPORTS[number]
-
-interface McpServerRow {
-  id: string; name: string; transport: string
-  endpoint: string; args_json: string
-  enabled: number; status: string; last_error: string | null
-}
 
 interface ServerDraft {
   name: string
@@ -37,22 +33,7 @@ interface ServerDraft {
   confirmCommand?: boolean
 }
 
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
-/** 草稿 → 库内存储形态；校验失败直接抛错（消息面向用户） */
+/** 草稿 → 存储形态；校验失败直接抛错（消息面向用户） */
 function buildStoredFields(draft: ServerDraft): { endpoint: string; argsJson: string } {
   if (!draft.name || typeof draft.name !== 'string') throw new Error('名称不能为空')
   if (!TRANSPORTS.includes(draft.transport)) throw new Error(`不支持的传输类型: ${draft.transport}`)
@@ -108,9 +89,9 @@ function rowToInfo(row: McpServerRow) {
 }
 
 function getRow(id: string): McpServerRow {
-  const rows = queryAll<McpServerRow>('SELECT * FROM mcp_servers WHERE id = ?', [id])
-  if (rows.length === 0) throw new Error('服务器不存在')
-  return rows[0]
+  const row = readMcpServerRows().find(r => r.id === id)
+  if (!row) throw new Error('服务器不存在')
+  return row
 }
 
 async function connectWithRegistrySync(row: McpServerRow) {
@@ -126,16 +107,16 @@ async function connectWithRegistrySync(row: McpServerRow) {
 
 export function registerMcpHandlers(): void {
 
-  ipcMain.handle('mcp:listServers', () => queryAll<McpServerRow>('SELECT * FROM mcp_servers ORDER BY created_at ASC').map(rowToInfo))
+  ipcMain.handle('mcp:listServers', () => readMcpServerRows().map(rowToInfo))
 
   ipcMain.handle('mcp:addServer', (_e, draft: ServerDraft) => {
     const { endpoint, argsJson } = buildStoredFields(draft)
     const id = randomUUID()
-    run(
-      `INSERT INTO mcp_servers (id, name, transport, endpoint, args_json, enabled, status)
-       VALUES (?, ?, ?, ?, ?, 0, 'untested')`,
-      [id, draft.name.trim(), draft.transport, endpoint, argsJson]
-    )
+    const row: McpServerRow = {
+      id, name: draft.name.trim(), transport: draft.transport,
+      endpoint, args_json: argsJson, enabled: 0, status: 'untested', last_error: '',
+    }
+    writeMcpServerRows([...readMcpServerRows(), row])
     appendAudit('', 'mcp.server.add', { server: draft.name, transport: draft.transport })
     return rowToInfo(getRow(id))
   })
@@ -160,8 +141,15 @@ export function registerMcpHandlers(): void {
     const { endpoint, argsJson } = buildStoredFields(merged)
     // 配置变更后断开旧连接，由用户重新启用以生效
     McpManager.disconnect(id)
-    run('UPDATE mcp_servers SET name = ?, transport = ?, endpoint = ?, args_json = ?, status = ? WHERE id = ?',
-      [merged.name!.trim(), merged.transport, endpoint, argsJson, 'untested', id])
+    const rows = readMcpServerRows()
+    const target = rows.find(r => r.id === id)
+    if (!target) throw new Error('服务器不存在')
+    target.name = merged.name!.trim()
+    target.transport = merged.transport
+    target.endpoint = endpoint
+    target.args_json = argsJson
+    target.status = 'untested'
+    writeMcpServerRows(rows)
     appendAudit('', 'mcp.server.update', { server: merged.name })
     return rowToInfo(getRow(id))
   })
@@ -169,7 +157,7 @@ export function registerMcpHandlers(): void {
   ipcMain.handle('mcp:removeServer', (_e, id: string) => {
     const row = getRow(id)
     McpManager.disconnect(id)
-    run('DELETE FROM mcp_servers WHERE id = ?', [id])
+    writeMcpServerRows(readMcpServerRows().filter(r => r.id !== id))
     appendAudit('', 'mcp.server.remove', { server: row.name })
     return true
   })
@@ -177,13 +165,15 @@ export function registerMcpHandlers(): void {
   ipcMain.handle('mcp:toggleServer', async (_e, id: string, enabled: boolean) => {
     const row = getRow(id)
     if (enabled) {
-      run('UPDATE mcp_servers SET enabled = 1 WHERE id = ?', [id])
+      row.enabled = 1
+      writeMcpServerRows(readMcpServerRows().map(r => (r.id === id ? row : r)))
       const r = await connectWithRegistrySync({ ...row, enabled: 1 })
       if (!r.ok) return { ok: false, error: r.error, ...rowToInfo(getRow(id)) }
       return { ok: true, ...rowToInfo(getRow(id)) }
     }
     McpManager.disconnect(id)
-    run('UPDATE mcp_servers SET enabled = 0 WHERE id = ?', [id])
+    row.enabled = 0
+    writeMcpServerRows(readMcpServerRows().map(r => (r.id === id ? row : r)))
     return { ok: true, ...rowToInfo(getRow(id)) }
   })
 
@@ -218,7 +208,7 @@ export function registerMcpHandlers(): void {
 
 /** 启动恢复：把上次处于启用状态的 server 重连（逐个尝试，失败仅记录不阻断启动） */
 export async function restoreMcpConnections(): Promise<void> {
-  const rows = queryAll<McpServerRow>('SELECT * FROM mcp_servers WHERE enabled = 1')
+  const rows = readMcpServerRows().filter(r => r.enabled === 1)
   for (const row of rows) {
     const r = await connectWithRegistrySync(row)
     if (!r.ok) console.warn(`[MCP] 恢复连接失败 ${row.name}:`, r.error)

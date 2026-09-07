@@ -1,18 +1,50 @@
-import { getDatabase, saveToDisk } from '../database/connection'
+// R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
+import { globalReadJson, globalWriteJson } from './globalJsonStore'
 
 /**
  * 插件数据表存储（C 级插件能力 `data`）。
  *
  * 设计原则：
- * 1) 命名空间隔离：物理表名固定为 plugin_<safePluginId>_<safeTable>，插件只能访问自己声明的表
+ * 1) 命名空间隔离：逻辑表名固定为 plugin_<safePluginId>_<safeTable>，插件只能访问自己声明的表
  * 2) 不暴露任意 SQL：只提供结构化 CRUD（insert / update / delete / query），
- *    表名与列名一律白名单校验 + 参数绑定，杜绝注入与越权
+ *    表名与列名一律白名单校验，杜绝注入与越权
  * 3) 行数上限：查询默认 200 行、硬上限 1000 行，防止拖垮主进程
+ *
+ * 存储：userData/data/plugin-data.json —— 按物理表名分桶，桶内 rows 每行携带 rowid
+ * （对齐原 sqlite rowid 语义），next_rowid 单调递增保证删除后不复用。
  */
 
 const SAFE_NAME_RE = /^[a-z][a-z0-9_]{0,40}$/
 const MAX_LIMIT = 1000
 const DEFAULT_LIMIT = 200
+
+const DATA_FILE = 'plugin-data.json'
+
+/** 单张插件表的存储桶 */
+interface PluginTableData {
+  next_rowid: number
+  rows: Record<string, unknown>[]
+}
+
+type PluginDataFile = Record<string, PluginTableData>
+
+function readAllData(): PluginDataFile {
+  return globalReadJson<PluginDataFile>(DATA_FILE, {})
+}
+
+function writeAllData(data: PluginDataFile): void {
+  globalWriteJson(DATA_FILE, data)
+}
+
+/** 去掉行内 rowid（原 SELECT * 不含 rowid） */
+function stripRowid(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(row)) {
+    if (k === 'rowid') continue
+    out[k] = v
+  }
+  return out
+}
 
 /** 插件表的列定义（manifest.contributes.tables[].columns[]） */
 export interface PluginColumnDef {
@@ -36,7 +68,7 @@ export interface PluginTableDef {
   indexes?: PluginIndexDef[]
 }
 
-/** 允许的列类型（白名单，禁止任意 SQL 片段进入 DDL） */
+/** 允许的列类型（白名单；仅作声明校验，JSON 存储按原值落盘） */
 const ALLOWED_TYPES = new Set(['TEXT', 'INTEGER', 'REAL', 'BLOB'])
 
 export function isSafeName(name: string): boolean {
@@ -48,25 +80,10 @@ export function safePluginId(pluginId: string): string {
   return pluginId.replace(/[^a-z0-9]/gi, '_').toLowerCase()
 }
 
-/** 物理表名：plugin_<id>_<table>；非法输入返回 null */
+/** 物理表名（= JSON 存储桶键）：plugin_<id>_<table>；非法输入返回 null */
 export function physicalTable(pluginId: string, table: string): string | null {
   if (!isSafeName(table)) return null
   return `plugin_${safePluginId(pluginId)}_${table}`
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
 }
 
 /** 校验表定义：表名/列名合法、列类型在白名单内 */
@@ -94,59 +111,75 @@ export function validateTableDef(def: unknown): { ok: true; table: PluginTableDe
   return { ok: true, table: { name: d.name!, columns, indexes } }
 }
 
-/** 建表（幂等，安装/启用时调用） */
+/** 建表（JSON 存储按需自动建桶，无需预建结构；保留幂等签名供安装/启用时调用） */
 export function ensurePluginTables(pluginId: string, tables: PluginTableDef[]): void {
-  for (const t of tables) {
-    const phys = physicalTable(pluginId, t.name)
-    if (!phys) continue
-    const cols = t.columns.map(c => {
-      const nn = c.notNull ? ' NOT NULL' : ''
-      const dv = c.default !== undefined && c.default !== '' ? ` DEFAULT ${c.default}` : ''
-      return `"${c.name}" ${c.type}${nn}${dv}`
-    })
-    try {
-      run(`CREATE TABLE IF NOT EXISTS ${phys} (${cols.join(', ')})`)
-    } catch { /* 建表失败不阻断安装 */ }
-    for (const idx of t.indexes ?? []) {
-      const idxName = `"idx_${phys}_${(idx.name && isSafeName(idx.name) ? idx.name : idx.columns.join('_'))}"`
-      try {
-        run(`CREATE ${idx.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${idxName} ON ${phys} (${idx.columns.map(c => `"${c}"`).join(', ')})`)
-      } catch { /* ignore */ }
-    }
-  }
+  void pluginId
+  void tables
 }
 
-/** 删表（卸载时调用） */
+/** 删表（卸载时调用）：移除存储桶 */
 export function dropPluginTables(pluginId: string, tables: PluginTableDef[]): void {
+  const data = readAllData()
+  let changed = false
   for (const t of tables) {
     const phys = physicalTable(pluginId, t.name)
-    if (!phys) continue
-    try { run(`DROP TABLE IF EXISTS ${phys} `) } catch { /* ignore */ }
+    if (!phys || !(phys in data)) continue
+    delete data[phys]
+    changed = true
   }
+  if (changed) writeAllData(data)
 }
 
 /** 插件声明的表结构（用于列名白名单） */
 function tableDefOf(pluginId: string, tables: PluginTableDef[], logicalTable: string): PluginTableDef | null {
+  void pluginId
   return tables.find(t => t.name === logicalTable) ?? null
 }
 
 export type WhereCond = { column: string; op?: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'like'; value: unknown }
 
-function buildWhere(def: PluginTableDef, where: WhereCond[] | undefined): { sql: string; params: unknown[] } {
-  if (!where || where.length === 0) return { sql: '', params: [] }
-  const colNames = new Set(def.columns.map(c => c.name))
-  const parts: string[] = []
-  const params: unknown[] = []
-  for (const w of where.slice(0, 8)) {
-    if (!w || typeof w.column !== 'string' || !colNames.has(w.column)) continue
-    const op = (['=', '!=', '>', '<', '>=', '<=', 'like'].includes(w.op ?? '=') ? w.op : '=') as string
-    parts.push(`"${w.column}" ${op === 'like' ? 'LIKE' : op} ?`)
-    params.push(w.value)
-  }
-  return { sql: parts.length > 0 ? ` WHERE ${parts.join(' AND ')}` : '', params }
+/** LIKE 模式匹配：% 任意串、_ 单字符（对齐 SQLite LIKE，ASCII 不区分大小写） */
+function likeMatch(value: unknown, pattern: unknown): boolean {
+  const s = String(value ?? '')
+  const p = String(pattern ?? '')
+  const re = new RegExp(
+    '^' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '[\\s\\S]*').replace(/_/g, '[\\s\\S]') + '$',
+    'i'
+  )
+  return re.test(s)
 }
 
-/** 查询（结构化，列名白名单 + 参数绑定 + 行数上限） */
+/** 值比较：同为数字按数值序，否则按字符串序（近似原 SQL 比较语义） */
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  const as = String(a ?? '')
+  const bs = String(b ?? '')
+  return as < bs ? -1 : as > bs ? 1 : 0
+}
+
+/** 构造行过滤器（列名白名单 + 条数上限 8） */
+function buildRowFilter(def: PluginTableDef, where: WhereCond[] | undefined): ((row: Record<string, unknown>) => boolean) | null {
+  if (!where || where.length === 0) return null
+  const colNames = new Set(def.columns.map(c => c.name))
+  const conds = where.slice(0, 8).filter(w => w && typeof w.column === 'string' && colNames.has(w.column))
+  if (conds.length === 0) return null
+  return (row) => conds.every(w => {
+    const v = row[w.column] ?? null
+    const target = w.value ?? null
+    switch (w.op ?? '=') {
+      case '=': return v === target
+      case '!=': return v !== target
+      case '>': return compareValues(v, target) > 0
+      case '<': return compareValues(v, target) < 0
+      case '>=': return compareValues(v, target) >= 0
+      case '<=': return compareValues(v, target) <= 0
+      case 'like': return likeMatch(v, target)
+      default: return v === target
+    }
+  })
+}
+
+/** 查询（结构化，列名白名单 + 行数上限） */
 export function pluginQuery(pluginId: string, tables: PluginTableDef[], logicalTable: string, opts?: {
   where?: WhereCond[]
   orderBy?: string
@@ -156,15 +189,18 @@ export function pluginQuery(pluginId: string, tables: PluginTableDef[], logicalT
   const def = tableDefOf(pluginId, tables, logicalTable)
   const phys = physicalTable(pluginId, logicalTable)
   if (!def || !phys) return []
-  const { sql: whereSql, params } = buildWhere(def, opts?.where)
-  let sql = `SELECT * FROM ${phys}${whereSql}`
+  const td = readAllData()[phys]
+  if (!td) return []
   const colNames = new Set(def.columns.map(c => c.name))
+  const filter = buildRowFilter(def, opts?.where)
+  let rows = filter ? td.rows.filter(filter) : [...td.rows]
   if (opts?.orderBy && colNames.has(opts.orderBy)) {
-    sql += ` ORDER BY "${opts.orderBy}" ${opts.desc ? 'DESC' : 'ASC'}`
+    const key = opts.orderBy
+    const dir = opts.desc ? -1 : 1
+    rows.sort((a, b) => compareValues(a[key], b[key]) * dir)
   }
   const limit = Math.min(Math.max(Number(opts?.limit) || DEFAULT_LIMIT, 1), MAX_LIMIT)
-  sql += ` LIMIT ${limit}`
-  try { return queryAll(sql, params) } catch { return [] }
+  return rows.slice(0, limit).map(stripRowid)
 }
 
 /** 插入一行（列名白名单，只写声明过的列） */
@@ -175,12 +211,15 @@ export function pluginInsert(pluginId: string, tables: PluginTableDef[], logical
   const colNames = new Set(def.columns.map(c => c.name))
   const keys = Object.keys(row || {}).filter(k => colNames.has(k))
   if (keys.length === 0) return { ok: false }
-  const sql = `INSERT INTO ${phys} (${keys.map(k => `"${k}"`).join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`
-  try {
-    run(sql, keys.map(k => row[k] ?? null))
-    const last = queryAll<{ id: string }>(`SELECT rowid AS id FROM ${phys} ORDER BY rowid DESC LIMIT 1`)
-    return { ok: true, id: last[0]?.id }
-  } catch { return { ok: false } }
+  const data = readAllData()
+  const td = data[phys] ?? { next_rowid: 1, rows: [] }
+  const rowid = td.next_rowid
+  const stored: Record<string, unknown> = { rowid }
+  for (const k of keys) stored[k] = row[k] ?? null
+  td.rows.push(stored)
+  data[phys] = { next_rowid: rowid + 1, rows: td.rows }
+  writeAllData(data)
+  return { ok: true, id: String(rowid) }
 }
 
 /** 按 rowid 更新 */
@@ -191,20 +230,37 @@ export function pluginUpdate(pluginId: string, tables: PluginTableDef[], logical
   const colNames = new Set(def.columns.map(c => c.name))
   const keys = Object.keys(patch || {}).filter(k => colNames.has(k))
   if (keys.length === 0) return { ok: false }
-  const sql = `UPDATE ${phys} SET ${keys.map(k => `"${k}" = ?`).join(', ')} WHERE rowid = ?`
-  try { run(sql, [...keys.map(k => patch[k] ?? null), Number(rowId)]); return { ok: true } } catch { return { ok: false } }
+  const rid = Number(rowId)
+  const data = readAllData()
+  const td = data[phys]
+  const row = td?.rows.find(r => r.rowid === rid)
+  if (!td || !row) return { ok: false }
+  for (const k of keys) row[k] = patch[k] ?? null
+  writeAllData(data)
+  return { ok: true }
 }
 
 /** 按 rowid 删除 */
 export function pluginDelete(pluginId: string, tables: PluginTableDef[], logicalTable: string, rowId: string | number): { ok: boolean } {
   const phys = physicalTable(pluginId, logicalTable)
   if (!tableDefOf(pluginId, tables, logicalTable) || !phys) return { ok: false }
-  try { run(`DELETE FROM ${phys} WHERE rowid = ?`, [Number(rowId)]); return { ok: true } } catch { return { ok: false } }
+  const rid = Number(rowId)
+  const data = readAllData()
+  const td = data[phys]
+  if (!td) return { ok: false }
+  const before = td.rows.length
+  const rows = td.rows.filter(r => r.rowid !== rid)
+  if (rows.length === before) return { ok: false }
+  data[phys] = { next_rowid: td.next_rowid, rows }
+  writeAllData(data)
+  return { ok: true }
 }
 
-/** 导出整表（卸载前备份用） */
+/** 导出整表（卸载前备份用；含 rowid，对齐原 SELECT rowid AS rowid, * 语义） */
 export function pluginDumpTable(pluginId: string, tables: PluginTableDef[], logicalTable: string): unknown[] {
   const phys = physicalTable(pluginId, logicalTable)
   if (!tableDefOf(pluginId, tables, logicalTable) || !phys) return []
-  try { return queryAll(`SELECT rowid AS rowid, * FROM ${phys} LIMIT ${MAX_LIMIT}`) } catch { return [] }
+  const td = readAllData()[phys]
+  if (!td) return []
+  return td.rows.slice(0, MAX_LIMIT)
 }

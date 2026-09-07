@@ -58,7 +58,6 @@ export const searchEntries = (q: string) => a().searchEntries(q)
 export const getTags = () => a().getTags()
 export const createTag = (n: string, c?: string) => a().createTag(n, c)
 export const deleteTag = (id: string) => a().deleteTag(id)
-export const getDbPath = () => a().getDbPath()
 
 // schedule
 export const getScheduleTodos = (date: string) => a().getScheduleTodos(date)

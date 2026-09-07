@@ -5,7 +5,7 @@ import { exists, readJson, writeJson } from './jsonStore'
  *
  * 存储：`.knowbase/modules/schedule/{todos.json, tags.json}`
  * 行结构 = sql.js 表行原样（snake_case，字段名与 schedule_todos / schedule_tags 一致），
- * 与 vaultMigration 的 `planTable('schedule_todos', modules/schedule/todos.json)` 产物同格式，
+ * 与迁移器 `planTable('schedule_todos', modules/schedule/todos.json)` 产物同格式，
  * 因此「整表播种」「库→仓迁移器」「回收站快照」三者可互用，无第二套格式。
  *
  * 查询语义逐条复刻 scheduleRepo 里的 SQL（见各函数上方注释）：

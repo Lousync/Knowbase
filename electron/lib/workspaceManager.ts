@@ -1,13 +1,12 @@
 import { ipcMain, BrowserWindow, dialog, app, shell } from 'electron'
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../database/connection'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, setVaultMetaName } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
-import { migrateBlogLayoutIntoKnowbase } from './vaultMigration'
+import { globalReadJson, globalWriteJson } from './globalJsonStore'
 import { isAllowedClearRoot, trashVaultFolder } from './vaultDelete'
 
 /**
@@ -289,11 +288,25 @@ export function writeWorkspaceFile(absPath: string, content: string): void {
   }
 }
 
-// ===== 仓库登记与持久化 =====
+// ===== 仓库登记与持久化（R6 去库化：原 sqlite vaults 表 → userData/data/vaults.json） =====
+
+interface VaultRegistryRow { id: string; name: string; path: string; created_at: string; updated_at: string }
+
+function readVaultRegistry(): VaultRegistryRow[] {
+  return globalReadJson<VaultRegistryRow[]>('vaults.json', [])
+}
+
+function writeVaultRegistry(rows: VaultRegistryRow[]): void {
+  globalWriteJson('vaults.json', rows)
+}
+
+function registryNow(): string {
+  return new Date().toISOString()
+}
 
 function loadVaults(): void {
   // P8 设备级自愈：settings.json.recentVaults 有而登记表没有的条目（库缺/损坏），
-  // 磁盘上确实存在且含 .knowbase → 回登记（最近列表即第二注册表）。独立 try：DB 不可用不影响此路径。
+  // 磁盘上确实存在且含 .knowbase → 回登记（最近列表即第二注册表）。
   try {
     for (const rv of readRecentVaults()) {
       if (roots.has(rv.rootId)) continue
@@ -304,13 +317,10 @@ function loadVaults(): void {
     }
   } catch { /* ignore */ }
   try {
-    const db = getDatabase()
-    const res = db.exec('SELECT id, name, path FROM vaults')
-    for (const row of res[0]?.values ?? []) {
-      const id = String(row[0])
-      const name = String(row[1])
-      const p = String(row[2])
-      if (existsSync(p)) roots.set(id, { id, name, rootPath: p })
+    // 从 JSON 登记表恢复全部已授权仓库（磁盘上已不存在的跳过）
+    for (const row of readVaultRegistry()) {
+      if (roots.has(row.id)) continue
+      if (existsSync(row.path)) roots.set(row.id, { id: row.id, name: row.name, rootPath: row.path })
     }
     // 恢复当前仓库上下文（settings.json 记忆的 currentVaultId）
     const curId = readCurrentVaultId()
@@ -322,40 +332,35 @@ function loadVaults(): void {
       runLayoutMigrations(cur.rootPath)
     }
   } catch {
-    /* db 未就绪等：忽略，openDir 时重新登记 */
+    /* 登记表未就绪等：忽略，openDir 时重新登记 */
   }
 }
 
 function findVaultIdByPath(path: string): string | null {
-  try {
-    const db = getDatabase()
-    const res = db.exec('SELECT id FROM vaults WHERE path = ?', [path])
-    return res[0]?.values?.[0]?.[0] ? String(res[0].values[0][0]) : null
-  } catch {
-    return null
-  }
+  return readVaultRegistry().find((r) => r.path === path)?.id ?? null
 }
 
 function upsertVault(id: string, name: string, path: string): void {
   try {
-    const db = getDatabase()
-    db.run(
-      `INSERT INTO vaults (id, name, path, created_at, updated_at)
-       VALUES (?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))
-       ON CONFLICT(path) DO UPDATE SET name = excluded.name, updated_at = datetime('now','localtime')`,
-      [id, name, path]
-    )
-    saveToDisk()
+    const rows = readVaultRegistry()
+    const now = registryNow()
+    const row = rows.find((r) => r.path === path)
+    if (row) {
+      row.id = id
+      row.name = name
+      row.updated_at = now
+    } else {
+      rows.push({ id, name, path, created_at: now, updated_at: now })
+    }
+    writeVaultRegistry(rows)
   } catch {
-    /* vaults 表不存在（极端旧库）时静默 */
+    /* ignore */
   }
 }
 
 function removeVault(id: string): void {
   try {
-    const db = getDatabase()
-    db.run('DELETE FROM vaults WHERE id = ?', [id])
-    saveToDisk()
+    writeVaultRegistry(readVaultRegistry().filter((r) => r.id !== id))
   } catch {
     /* ignore */
   }
@@ -363,14 +368,10 @@ function removeVault(id: string): void {
 
 function listRecentVaults(): Array<{ rootId: string; name: string; path: string; updatedAt: string }> {
   try {
-    const db = getDatabase()
-    const res = db.exec('SELECT id, name, path, updated_at FROM vaults ORDER BY updated_at DESC')
-    return (res[0]?.values ?? []).map((r: Array<string | number | null>) => ({
-      rootId: String(r[0]),
-      name: String(r[1]),
-      path: String(r[2]),
-      updatedAt: String(r[3]),
-    }))
+    return readVaultRegistry()
+      .slice()
+      .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0))
+      .map((r) => ({ rootId: r.id, name: r.name, path: r.path, updatedAt: r.updated_at }))
   } catch {
     return []
   }
@@ -405,6 +406,54 @@ function adoptVaultDirectory(rootPath: string, name?: string): { rootId: string;
 /** P6 导入收尾用：把已落盘内容的目录登记为仓库（与 openDir 确认流同一实现） */
 export function adoptImportedVault(rootPath: string, name?: string): { rootId: string; name: string; path: string } {
   return adoptVaultDirectory(rootPath, name)
+}
+
+/** 递归删空目录（自底向上，只删空——冲突保留件所在的非空目录绝不触碰） */
+function cleanupEmptyDirsDeep(dir: string): void {
+  let names: string[] = []
+  try { names = readdirSync(dir) } catch { return }
+  for (const n of names) {
+    const p = join(dir, n)
+    try { if (statSync(p).isDirectory()) cleanupEmptyDirsDeep(p) } catch { /* ignore */ }
+  }
+  try { rmdirSync(dir) } catch { /* 非空/占用 → 原地保留 */ }
+}
+
+/**
+ * D3（P4）：博客整体迁入 .knowbase/blog/（幂等，frontmatter id 不变）。
+ * 原实现含 sqlite 附件落盘与 attachment:// 链接改写，随 connection.ts 删除一并移除；
+ * 现仅保留目录迁移：根 blog/*.md → .knowbase/blog/（目标已存在 = 迁过/重名 → 跳过，幂等可重跑）。
+ */
+function migrateBlogLayoutIntoKnowbase(rootPath: string): void {
+  const srcRoot = join(rootPath, 'blog')
+  const dstRoot = join(rootPath, '.knowbase', 'blog')
+  try {
+    if (!existsSync(srcRoot) || !statSync(srcRoot).isDirectory()) return
+    const files: string[] = []
+    const collect = (dir: string): void => {
+      let names: string[] = []
+      try { names = readdirSync(dir) } catch { return }
+      for (const n of names) {
+        const p = join(dir, n)
+        try {
+          if (statSync(p).isDirectory()) collect(p)
+          else if (n.toLowerCase().endsWith('.md')) files.push(p)
+        } catch { /* ignore */ }
+      }
+    }
+    collect(srcRoot)
+    let conflicts = 0
+    for (const f of files) {
+      const target = join(dstRoot, relative(srcRoot, f))
+      if (existsSync(target)) { conflicts++; continue }
+      try {
+        mkdirSync(dirname(target), { recursive: true })
+        renameSync(f, target)
+      } catch { /* 单文件失败原地保留 */ }
+    }
+    // 无冲突即清理空残留（只删空目录；重跑 moved=0 也能收掉上次留下的空壳）
+    if (conflicts === 0) cleanupEmptyDirsDeep(srcRoot)
+  } catch { /* 目录不可读：跳过 */ }
 }
 
 /** 打开/创建/恢复仓库时的一次性布局迁移（P4 起 = 博客收拢；失败不阻断进入） */
@@ -788,19 +837,14 @@ export function registerWorkspaceHandlers(): void {
   // 最近仓库
   ipcMain.handle('ws:getRecent', () => listRecentVaults())
 
-  // 恢复最近仓库：按 rootId 从 vaults 表取回路径（该根已获授权，无需重新弹框）
+  // 恢复最近仓库：按 rootId 从 JSON 登记表取回路径（该根已获授权，无需重新弹框）
   ipcMain.handle('ws:openById', (_e, rootId: string) => {
     try {
       if (typeof rootId !== 'string' || !rootId) throw new Error('非法工作区 id')
       if (!roots.has(rootId)) {
-        const db = getDatabase()
-        const res = db.exec('SELECT id, name, path FROM vaults WHERE id = ?', [rootId])
-        const row = res[0]?.values?.[0]
-        if (row) {
-          const id = String(row[0])
-          const name = String(row[1])
-          const p = String(row[2])
-          if (existsSync(p)) roots.set(id, { id, name, rootPath: p })
+        const row = readVaultRegistry().find((r) => r.id === rootId)
+        if (row && existsSync(row.path)) {
+          roots.set(row.id, { id: row.id, name: row.name, rootPath: row.path })
         }
       }
       const r = roots.get(rootId)
@@ -832,14 +876,14 @@ export function registerWorkspaceHandlers(): void {
     return err ? { ok: false, error: err } : { ok: true }
   })
 
-  // 移除授权（从 roots 与 vaults 表）
+  // 移除授权（从 roots 内存与 JSON 登记表）
   ipcMain.handle('ws:forget', (_e, rootId: string) => {
     roots.delete(rootId)
     removeVault(rootId)
     return { ok: true }
   })
 
-  // P8（D8）：重命名当前仓库——改展示名（roots 内存 + vaults 表 + .knowbase/meta.json + 最近列表），
+  // P8（D8）：重命名当前仓库——改展示名（roots 内存 + JSON 登记表 + .knowbase/meta.json + 最近列表），
   // 不动文件夹名（路径即身份；改磁盘目录名会破坏全部登记，风险不对称）
   ipcMain.handle('ws:renameVault', (_e, name: unknown) => {
     const cur = getCurrentVault()
@@ -902,4 +946,9 @@ export async function trashAllRegisteredVaults(): Promise<{ trashed: number; err
   invalidateKnowledgeIndex()
   invalidateGraphIndex()
   return { trashed, errors }
+}
+
+/** 全局重置兜底：清空 JSON 登记表（回首启引导重新选/建仓库） */
+export function clearVaultRegistry(): void {
+  writeVaultRegistry([])
 }

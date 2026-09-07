@@ -1,14 +1,13 @@
 import { randomUUID } from 'crypto'
 import { readdirSync, lstatSync, readFileSync, statSync, mkdirSync } from 'fs'
 import { join, relative, extname, sep, dirname } from 'path'
-import { getDatabase, saveToDisk } from '../database/connection'
-import { registerTool, getSettingReader } from './aiTools'
+import { registerTool } from './aiTools'
 import { webSearch, webReadPage } from './webSearch'
 import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
-import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
+import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
@@ -20,21 +19,13 @@ import type { ToolJsonSchema } from './aiTools'
  * 内置 AI 工具清单：给 AgentRunner 与外部 MCP 客户端的稳定契约。
  * 原则：输出面向 LLM 的紧凑结构（控制 token），不是 UI 数据结构直通。
  *
- * ⚠️ 数据归属约定（2026-09-03 B0 起强制）：
- * 工具按模块走「该模块当前的真相源」——已去库化模块（storageKnowledge/storageBlog/storageData=vault）
- * 的读工具必须调用对应 kbStore vault repo，写工具走该模块受控写层；严禁绕过模块分流直连 sql.js 旧表
- * （曾致 AI 建页写停更旧库、UI 不可见的静默分叉）。仍在 sqlite 的模块保持直查表。
+ * ⚠️ 数据归属约定（R6 去库化收口）：
+ * 全部模块数据已 vault/全局 JSON 化，工具一律走对应 kbStore vault repo
+ * （与 UI 同一份磁盘数据），严禁直连 sqlite 旧表。
  * 统计口径与渲染层 habit-tracker/dateUtils.ts 同源（本地时区 YYYY-MM-DD、计划日跳过逻辑一致）。
  */
 
-// ---- 模块读源开关：storageX=vault 表示该模块已去库化，工具走 vault repo ----
-
-function storageIs(kind: 'knowledge' | 'blog' | 'data'): boolean {
-  const key = kind === 'knowledge' ? 'storageKnowledge' : kind === 'blog' ? 'storageBlog' : 'storageData'
-  return getSettingReader()(key) === 'vault'
-}
-
-/** 习惯行按 sort_order ASC, created_at ASC（码位序）排序；vault/sqlite 读源共用（P5c 消费方接线） */
+// ---- 习惯行按 sort_order ASC, created_at ASC（码位序）排序（P5c 消费方接线） ----
 function sortHabitRows<T extends { sort_order?: number; created_at?: string }>(rows: T[]): T[] {
   const bin = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
   return rows.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || bin(String(a.created_at ?? ''), String(b.created_at ?? '')))
@@ -55,39 +46,8 @@ function addDays(d: Date, n: number): Date {
   return r
 }
 
-// ---- DB 访问 ----
-
-interface DbRow { [key: string]: unknown }
-
-function queryAll(sql: string, params: unknown[] = []): DbRow[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: DbRow[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as DbRow)
-  stmt.free()
-  return rows
-}
-
-/** 写操作统一入口（与 repo 层一致：写后立即持久化） */
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
 function todayLocal(): string {
   return formatLocalDate(new Date())
-}
-
-/** 粗剥 markdown 记号 → 纯文本（与 knowledgeRepo.mdToPlain 同源） */
-function mdToPlain(s: string): string {
-  return s
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-    .replace(/[>*`~_|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /** 定位首个命中词，取前后各 radius 字符的摘录 */
@@ -338,33 +298,17 @@ export function registerBuiltinTools(): void {
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 50)
     const terms = q.split(/\s+/).filter(Boolean)
     if (terms.length === 0) return []
-    if (storageIs('knowledge')) {
-      // vault 读源：与知识库 UI 同一份磁盘 .md（此前直查 sqlite 旧表导致 AI 搜不到 vault 页）
-      try {
-        return vaultSearchKnowledgePages(q).slice(0, limit).map(r => ({
-          id: r.id,
-          title: r.title,
-          excerpt: r.excerpt || r.title,
-          updatedAt: r.updatedAt,
-        }))
-      } catch (err) {
-        throw new Error(`知识库搜索失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
-      }
+    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）
+    try {
+      return vaultSearchKnowledgePages(q).slice(0, limit).map(r => ({
+        id: r.id,
+        title: r.title,
+        excerpt: r.excerpt || r.title,
+        updatedAt: r.updatedAt,
+      }))
+    } catch (err) {
+      throw new Error(`知识库搜索失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
     }
-    const conds = terms.map(() => '(title LIKE ? OR content_md LIKE ?)').join(' AND ')
-    const params: unknown[] = []
-    for (const t of terms) params.push(`%${t}%`, `%${t}%`)
-    const rows = queryAll(
-      `SELECT id, title, content_md, updated_at FROM knowledge_pages
-       WHERE ${conds} ORDER BY updated_at DESC LIMIT ${limit}`,
-      params
-    )
-    return rows.map(r => ({
-      id: str(r.id),
-      title: str(r.title),
-      excerpt: buildExcerpt(mdToPlain(str(r.content_md)), terms),
-      updatedAt: str(r.updated_at),
-    }))
   })
 
   // 2. builtin.knowledge.read —— 按 id 读页面全文
@@ -387,41 +331,23 @@ export function registerBuiltinTools(): void {
   }, args => {
     const id = str(args.id)
     const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
-    if (storageIs('knowledge')) {
-      // vault 读源：与知识库 UI 同一份磁盘 .md（id 为页面 frontmatter id，与 search 返回同体系）
-      let page
-      try {
-        page = vaultGetPageById(id)
-      } catch (err) {
-        throw new Error(`读取失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
-      }
-      if (!page) throw new Error(`页面不存在: ${id}`)
-      const content = page.contentMd
-      const truncated = content.length > maxChars
-      return {
-        id: page.id,
-        title: page.title,
-        contentMd: truncated ? content.slice(0, maxChars) : content,
-        truncated,
-        totalChars: content.length,
-        updatedAt: page.updatedAt,
-      }
+    // 与知识库 UI 同一份磁盘 .md（id 为页面 frontmatter id，与 search 返回同体系）
+    let page
+    try {
+      page = vaultGetPageById(id)
+    } catch (err) {
+      throw new Error(`读取失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
     }
-    const rows = queryAll(
-      'SELECT id, title, content_md, updated_at FROM knowledge_pages WHERE id = ?',
-      [id]
-    )
-    if (rows.length === 0) throw new Error(`页面不存在: ${id}`)
-    const r = rows[0]
-    const content = str(r.content_md)
+    if (!page) throw new Error(`页面不存在: ${id}`)
+    const content = page.contentMd
     const truncated = content.length > maxChars
     return {
-      id: str(r.id),
-      title: str(r.title),
+      id: page.id,
+      title: page.title,
       contentMd: truncated ? content.slice(0, maxChars) : content,
       truncated,
       totalChars: content.length,
-      updatedAt: str(r.updated_at),
+      updatedAt: page.updatedAt,
     }
   })
 
@@ -437,22 +363,18 @@ export function registerBuiltinTools(): void {
     module: 'checkin',
   }, () => {
     const today = formatLocalDate(new Date())
-    // P5c 消费方接线：storageData=vault → 读 .knowbase/modules/checkin/*.json（排序语义同 SQL）
-    const habits: DbRow[] = storageIs('data')
-      ? sortHabitRows(vaultHabitsAll()) as unknown as DbRow[]
-      : queryAll('SELECT id, name, rule_type, rule_days, weekly_target, archived FROM habits ORDER BY sort_order ASC, created_at ASC')
-    const checkedToday = storageIs('data')
-      ? new Set(vaultRecordsAll().filter(r => r.date === today).map(r => str(r.habit_id)))
-      : new Set(queryAll('SELECT habit_id, date FROM habit_records WHERE date = ?', [today]).map(r => str(r.habit_id)))
+    // 读 .knowbase/modules/checkin/*.json（排序语义同 SQL）
+    const habits = sortHabitRows(vaultHabitsAll())
+    const checkedToday = new Set(vaultRecordsAll().filter(r => r.date === today).map(r => r.habit_id))
     return habits.map(h => {
       const ruleType = str(h.rule_type, 'daily')
       const ruleDays = parseDays(str(h.rule_days, '[]'))
       return {
-        id: str(h.id),
-        name: str(h.name),
+        id: h.id,
+        name: h.name,
         rule: ruleSummary(ruleType, ruleDays, num(h.weekly_target, 3)),
         plannedToday: !h.archived && isPlannedOn(ruleType, ruleDays, new Date()),
-        checkedToday: checkedToday.has(str(h.id)),
+        checkedToday: checkedToday.has(h.id),
         archived: !!h.archived,
       }
     })
@@ -477,19 +399,14 @@ export function registerBuiltinTools(): void {
   }, args => {
     const windowDays = clamp(Math.floor(num(args.days, 30)), 1, 365)
     const wanted = typeof args.habitId === 'string' && args.habitId ? [args.habitId] : null
-    // P5c 消费方接线：vault 读源（含归档习惯，与 sqlite 路径一致）
-    const habits: DbRow[] = (storageIs('data')
-      ? sortHabitRows(vaultHabitsAll()) as unknown as DbRow[]
-      : queryAll('SELECT id, name, rule_type, rule_days, weekly_target FROM habits ORDER BY sort_order ASC')
-    ).filter(h => !wanted || wanted.includes(str(h.id)))
+    // 读 .knowbase/modules/checkin/*.json（含归档习惯）
+    const habits = sortHabitRows(vaultHabitsAll()).filter(h => !wanted || wanted.includes(h.id))
     if (wanted && habits.length === 0) throw new Error(`习惯不存在: ${str(args.habitId)}`)
-    const allRecords: DbRow[] = storageIs('data')
-      ? vaultRecordsAll() as unknown as DbRow[]
-      : queryAll('SELECT habit_id, date FROM habit_records')
+    const allRecords = vaultRecordsAll()
     return habits.map(h => {
       const done = new Set<string>()
       for (const rec of allRecords) {
-        if (str(rec.habit_id) === str(h.id)) done.add(str(rec.date))
+        if (rec.habit_id === h.id) done.add(rec.date)
       }
       const ruleType = str(h.rule_type, 'daily')
       const ruleDays = parseDays(str(h.rule_days, '[]'))
@@ -521,35 +438,18 @@ export function registerBuiltinTools(): void {
     const limit = clamp(Math.floor(num(args.limit, 10)), 1, 50)
     const terms = q.split(/\s+/).filter(Boolean)
     if (terms.length === 0) return []
-    if (storageIs('data')) {
-      // 结构化模块 vault 读源（灰度）：与 UI 同一份 .knowbase/modules/bookmarks/*.json，内存过滤
-      const all = vaultBookmarksAll()
-      const catName = new Map(all.categories.map(c => [c.id, c.name]))
-      const hits = all.bookmarks.filter(b => {
-        const hay = `${b.title} ${b.url} ${b.description} ${catName.get(b.categoryId) ?? ''}`.toLowerCase()
-        return terms.every(t => hay.includes(t.toLowerCase()))
-      }).slice(0, limit)
-      return hits.map(b => ({
-        title: b.title,
-        url: b.url,
-        description: b.description,
-        category: catName.get(b.categoryId) || '未分类',
-      }))
-    }
-    const conds = terms.map(() => '(b.title LIKE ? OR b.url LIKE ? OR b.description LIKE ?)').join(' AND ')
-    const params: unknown[] = []
-    for (const t of terms) { const p = `%${t}%`; params.push(p, p, p) }
-    const rows = queryAll(
-      `SELECT b.title, b.url, b.description, c.name AS category
-       FROM bookmarks b LEFT JOIN bookmark_categories c ON c.id = b.category_id
-       WHERE ${conds} ORDER BY b.sort_order ASC LIMIT ${limit}`,
-      params
-    )
-    return rows.map(r => ({
-      title: str(r.title),
-      url: str(r.url),
-      description: str(r.description),
-      category: str(r.category) || '未分类',
+    // 与 UI 同一份 .knowbase/modules/bookmarks/*.json，内存过滤
+    const all = vaultBookmarksAll()
+    const catName = new Map(all.categories.map(c => [c.id, c.name]))
+    const hits = all.bookmarks.filter(b => {
+      const hay = `${b.title} ${b.url} ${b.description} ${catName.get(b.categoryId) ?? ''}`.toLowerCase()
+      return terms.every(t => hay.includes(t.toLowerCase()))
+    }).slice(0, limit)
+    return hits.map(b => ({
+      title: b.title,
+      url: b.url,
+      description: b.description,
+      category: catName.get(b.categoryId) || '未分类',
     }))
   })
 
@@ -615,28 +515,19 @@ export function registerBuiltinTools(): void {
   }, args => {
     const start = /^\d{4}-\d{2}-\d{2}$/.test(str(args.start)) ? str(args.start) : todayLocal()
     const end = /^\d{4}-\d{2}-\d{2}$/.test(str(args.end)) ? str(args.end) : start
-    let rows: DbRow[]
-    if (storageIs('data')) {
-      // P5c 消费方接线：读 .knowbase/modules/schedule/todos.json（date BETWEEN + 排序 + LIMIT 100 同 SQL）
-      rows = vaultTodosAll()
-        .filter(r => typeof r.date === 'string' && r.date >= start && r.date <= end)
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.sort_order ?? 0) - (b.sort_order ?? 0)))
-        .slice(0, 100) as unknown as DbRow[]
-    } else {
-      rows = queryAll(
-        `SELECT id, title, date, time, quadrant, status FROM schedule_todos
-         WHERE date BETWEEN ? AND ? ORDER BY date ASC, sort_order ASC LIMIT 100`,
-        [start, end]
-      )
-    }
+    // 读 .knowbase/modules/schedule/todos.json（date BETWEEN + 排序 + LIMIT 100 同 SQL）
+    const rows = vaultTodosAll()
+      .filter(r => typeof r.date === 'string' && r.date >= start && r.date <= end)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.sort_order ?? 0) - (b.sort_order ?? 0)))
+      .slice(0, 100)
     const QUADRANT = ['紧急重要', '重要不紧急', '紧急不重要', '不重要不紧急']
     return rows.map(r => {
       const q = num(r.quadrant, 1)
       return {
-        id: str(r.id),
-        title: str(r.title),
-        date: str(r.date),
-        time: str(r.time),
+        id: r.id,
+        title: r.title,
+        date: r.date,
+        time: r.time ?? '',
         quadrant: q,
         quadrantLabel: QUADRANT[q] ?? '重要不紧急',
         status: str(r.status, 'pending'),
@@ -666,26 +557,19 @@ export function registerBuiltinTools(): void {
     requires: 'write',
     module: 'knowledge',
   }, args => {
-    if (storageIs('knowledge')) {
-      // vault 读源下知识内容=仓库文件、编辑器为唯一写入方：绝不静默写 sqlite 旧表（曾致 AI 建页 UI 不可见的分叉）
-      throw new Error('知识库内容现由仓库文件管理（编辑器为唯一写入方），AI 建页将在「vault 写工具」上线后开放；当前请用编辑器新建，或到 设置 → 通用 将知识库数据形态切回「数据库(sqlite)」')
-    }
     const title = str(args.title).trim()
     const contentMd = str(args.contentMd)
     if (!title) throw new Error('标题不能为空')
     let categoryId: string | null = null
     const catName = str(args.categoryName).trim()
     if (catName) {
-      const cat = queryAll("SELECT id FROM knowledge_categories WHERE name = ? AND category_type <> 'space' LIMIT 1", [catName])
-      if (cat.length === 0) throw new Error(`未找到分类「${catName}」，可省略 categoryName 存入未分类`)
-      categoryId = str(cat[0].id)
+      const cat = vaultGetCategories().find(c => c.name === catName && c.categoryType !== 'space')
+      if (!cat) throw new Error(`未找到分类「${catName}」，可省略 categoryName 存入未分类`)
+      categoryId = cat.id
     }
-    const id = randomUUID()
-    run(
-      `INSERT INTO knowledge_pages (id, title, content_md, category_id) VALUES (?, ?, ?, ?)`,
-      [id, title, contentMd, categoryId]
-    )
-    return { ok: true, id, title }
+    // 受控写层：与 UI 同一份磁盘 .md（frontmatter id 由 repo 生成并登记索引）
+    const page = vaultCreatePage({ title, contentMd, categoryId })
+    return { ok: true, id: page.id, title }
   })
 
   // 9. builtin.knowledge.append-page
@@ -708,22 +592,29 @@ export function registerBuiltinTools(): void {
     requires: 'write',
     module: 'knowledge',
   }, args => {
-    if (storageIs('knowledge')) {
-      throw new Error('知识库内容现由仓库文件管理（编辑器为唯一写入方），AI 追加内容将在「vault 写工具」上线后开放；当前请用编辑器修改，或到 设置 → 通用 将知识库数据形态切回「数据库(sqlite)」')
-    }
     const text = str(args.text)
     const id = str(args.id)
     const title = str(args.title)
-    let page: DbRow | undefined
-    if (id) page = queryAll('SELECT id, title FROM knowledge_pages WHERE id = ?', [id])[0]
-    else if (title) page = queryAll('SELECT id, title FROM knowledge_pages WHERE title = ? ORDER BY updated_at DESC LIMIT 1', [title])[0]
-    else throw new Error('需要提供 id 或 title 之一')
+    let page = null
+    if (id) page = vaultGetPageById(id)
+    else if (title) {
+      // 精确标题定位（仅 published 正式页；同 SQL 语义取最近更新的一篇）
+      const idxPages = getKnowledgeIndex().pages.filter(p => p.status !== 'draft' && p.title === title)
+      page = idxPages.length > 0 ? vaultGetPageById(idxPages[idxPages.length - 1].id) : null
+    } else throw new Error('需要提供 id 或 title 之一')
     if (!page) throw new Error('页面不存在')
-    run(
-      "UPDATE knowledge_pages SET content_md = content_md || char(10) || ?, updated_at = datetime('now') WHERE id = ?",
-      [text, str(page.id)]
-    )
-    return { ok: true, id: str(page.id), title: str(page.title), appendedChars: text.length }
+    // 页面=仓库文件：走受控写层追加（frontmatter 原样保留，写后失效索引立即可见）
+    const root = vaultRootPath()
+    const abs = resolveSafe(root, page.path)
+    if (!abs) throw new Error(`页面路径非法: ${page.path}`)
+    let raw = ''
+    try { raw = readFileSync(abs, 'utf-8') } catch { throw new Error(`页面文件读取失败: ${page.path}`) }
+    const next = raw.replace(/\s*$/, '') + '\n' + text + '\n'
+    writeWorkspaceFile(abs, next)
+    invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
+    const st = statSync(abs)
+    broadcastExternalWrite(page.path, st.mtimeMs)
+    return { ok: true, id: page.id, title: page.title, appendedChars: text.length }
   })
 
   // 10. builtin.blog.create-entry
@@ -749,20 +640,10 @@ export function registerBuiltinTools(): void {
     const contentMd = str(args.contentMd)
     if (!contentMd.trim()) throw new Error('正文不能为空')
     const date = /^\d{4}-\d{2}-\d{2}$/.test(str(args.date)) ? str(args.date) : todayLocal()
-    if (storageIs('blog')) {
-      // 博客 vault 读源（灰度）：与 UI 同一份 blog/*.md（vaultCreateEntry 自带每天一篇防重）
-      const e = vaultCreateEntry({ title: str(args.title).trim(), contentMd, date })
-      if (e.contentMd !== contentMd) throw new Error(`${date} 已存在日记（应用限制每天一篇），可改用其他日期`)
-      return { ok: true, id: e.id, date }
-    }
-    const dup = queryAll('SELECT id FROM entries WHERE date = ? LIMIT 1', [date])
-    if (dup.length > 0) throw new Error(`${date} 已存在日记（应用限制每天一篇），可改用其他日期`)
-    const id = randomUUID()
-    run(
-      `INSERT INTO entries (id, title, content_md, date, word_count) VALUES (?, ?, ?, ?, ?)`,
-      [id, str(args.title).trim(), contentMd, date, contentMd.replace(/\s/g, '').length]
-    )
-    return { ok: true, id, date }
+    // 与 UI 同一份 .knowbase/blog/*.md（vaultCreateEntry 自带每天一篇防重）
+    const e = vaultCreateEntry({ title: str(args.title).trim(), contentMd, date })
+    if (e.contentMd !== contentMd) throw new Error(`${date} 已存在日记（应用限制每天一篇），可改用其他日期`)
+    return { ok: true, id: e.id, date }
   })
 
   // 11. builtin.schedule.create-todo
@@ -792,20 +673,13 @@ export function registerBuiltinTools(): void {
     const quadrant = clamp(Math.floor(num(args.quadrant, 1)), 0, 3)
     const time = /^\d{1,2}:\d{2}$/.test(str(args.time)) ? str(args.time) : null
     const id = randomUUID()
-    if (storageIs('data')) {
-      // P5c 消费方接线：写 .knowbase/modules/schedule/todos.json（默认值同表列：plan/pending/sort 0）
-      const now = new Date().toISOString()
-      vaultCreateTodo({
-        id, title, description: '', date, time, quadrant,
-        task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
-        end_criteria: '', parent_id: null, created_at: now, updated_at: now,
-      })
-      return { ok: true, id, date, quadrant }
-    }
-    run(
-      `INSERT INTO schedule_todos (id, title, date, time, quadrant) VALUES (?, ?, ?, ?, ?)`,
-      [id, title, date, time, quadrant]
-    )
+    // 写 .knowbase/modules/schedule/todos.json（默认值同表列：plan/pending/sort 0）
+    const now = new Date().toISOString()
+    vaultCreateTodo({
+      id, title, description: '', date, time, quadrant,
+      task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
+      end_criteria: '', parent_id: null, created_at: now, updated_at: now,
+    })
     return { ok: true, id, date, quadrant }
   })
 
@@ -830,24 +704,14 @@ export function registerBuiltinTools(): void {
     const q = str(args.name).trim().toLowerCase()
     if (!q) throw new Error('习惯名称不能为空')
     const date = todayLocal()
-    if (storageIs('data')) {
-      // P5c 消费方接线：查/写 .knowbase/modules/checkin/*.json（幂等=UNIQUE(habit_id,date) 语义）
-      const hs = sortHabitRows(vaultHabitsAll().filter(h => !h.archived))
-      const hit = hs.find(h => h.name.toLowerCase() === q) ?? hs.find(h => h.name.toLowerCase().includes(q))
-      if (!hit) throw new Error(`未找到匹配的习惯「${str(args.name)}」`)
-      const isNew = vaultHabitRecordAddIfAbsent(hit.id, date, 'manual')
-      return isNew
-        ? { ok: true, habitId: hit.id, name: hit.name, checked: true }
-        : { ok: true, habitId: hit.id, name: hit.name, alreadyChecked: true }
-    }
-    const habits = queryAll('SELECT id, name FROM habits WHERE archived = 0')
-    let hit = habits.find(h => str(h.name).toLowerCase() === q)
-    if (!hit) hit = habits.find(h => str(h.name).toLowerCase().includes(q))
+    // 查/写 .knowbase/modules/checkin/*.json（幂等=UNIQUE(habit_id,date) 语义）
+    const hs = sortHabitRows(vaultHabitsAll().filter(h => !h.archived))
+    const hit = hs.find(h => h.name.toLowerCase() === q) ?? hs.find(h => h.name.toLowerCase().includes(q))
     if (!hit) throw new Error(`未找到匹配的习惯「${str(args.name)}」`)
-    const exist = queryAll('SELECT id FROM habit_records WHERE habit_id = ? AND date = ? LIMIT 1', [str(hit.id), date])
-    if (exist.length > 0) return { ok: true, habitId: str(hit.id), name: str(hit.name), alreadyChecked: true }
-    run('INSERT INTO habit_records (id, habit_id, date) VALUES (?, ?, ?)', [randomUUID(), str(hit.id), date])
-    return { ok: true, habitId: str(hit.id), name: str(hit.name), checked: true }
+    const isNew = vaultHabitRecordAddIfAbsent(hit.id, date, 'manual')
+    return isNew
+      ? { ok: true, habitId: hit.id, name: hit.name, checked: true }
+      : { ok: true, habitId: hit.id, name: hit.name, alreadyChecked: true }
   })
 
   // 13. builtin.web.search —— 联网搜索（跨模块通用能力，不设 module：不受 aiModulePermissions 限制）

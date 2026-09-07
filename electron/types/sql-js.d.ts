@@ -1,5 +1,5 @@
 /**
- * sql.js 无官方类型包；项目以宽松方式使用（见 database/connection.ts）。
+ * sql.js 无官方类型包；项目以宽松方式使用（quizMigration.ts 等历史通道）。
  * 导出连接处引用的类型名，避免 TS2709，同时保持 any 语义不与用法冲突。
  */
 declare module 'sql.js' {

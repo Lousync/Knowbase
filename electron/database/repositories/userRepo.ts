@@ -1,6 +1,6 @@
 import { ipcMain, app, dialog, BrowserWindow } from 'electron'
 import { randomBytes, pbkdf2Sync } from 'crypto'
-import { getAttachmentsDir, getDatabase } from '../connection'
+import { getAttachmentsDir } from '../connection'
 import { join } from 'path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, unlinkSync } from 'fs'
 import { registerAttachment, deleteAttachments } from './attachmentRepo'
@@ -9,7 +9,9 @@ import { vaultListEntries } from '../../lib/kbStore/blogVaultRepo'
 import { vaultGetTags } from '../../lib/kbStore/knowledgeVaultRepo'
 import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 import { vaultUserProfile, vaultUserProfileSave, type UserVaultRow } from '../../lib/kbStore/userVaultRepo'
+import { vaultAttachmentsAll } from '../../lib/kbStore/attachmentVaultRepo'
 
+// R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
 // R6 去库化：用户档案 = .knowbase/modules/user.json（登录密码 hash 同存；sql.js 路径已移除，D9）
 
 // ---- types ----
@@ -161,7 +163,7 @@ export function registerUserHandlers(): void {
       const oldPath = join(app.getPath('userData'), prev.avatar_path)
       try { if (existsSync(oldPath)) unlinkSync(oldPath) } catch { /* ignore */ }
     }
-    const oldAtts = queryAll<{ id: string }>("SELECT id FROM attachments WHERE owner_type = 'user_profile' AND owner_id = 'default'")
+    const oldAtts = vaultAttachmentsAll().filter(a => a.owner_type === 'user_profile' && a.owner_id === 'default')
     if (oldAtts.length > 0) deleteAttachments(oldAtts.map(a => a.id))
 
     const relativePath = `attachments/user_profile/default/${fileName}`
@@ -268,7 +270,7 @@ export function registerUserHandlers(): void {
         mkdirSync(destDir, { recursive: true })
         const destPath = join(destDir, fileName)
         writeFileSync(destPath, Buffer.from(match[2], 'base64'))
-        const oldAtts = queryAll<{ id: string }>("SELECT id FROM attachments WHERE owner_type = 'user_profile' AND owner_id = 'default'")
+        const oldAtts = vaultAttachmentsAll().filter(a => a.owner_type === 'user_profile' && a.owner_id === 'default')
         if (oldAtts.length > 0) deleteAttachments(oldAtts.map(a => a.id))
         const relativePath = `attachments/user_profile/default/${fileName}`
         registerAttachment({
@@ -285,15 +287,4 @@ export function registerUserHandlers(): void {
 
     return { success: true }
   })
-}
-
-// ---- attachments 表查询（附件记录仍走 sqlite，attachmentRepo 未去库化） ----
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
 }

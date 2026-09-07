@@ -1,8 +1,9 @@
+// R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { getDatabase, saveToDisk } from '../database/connection'
+import { globalReadJson, globalWriteJson } from './globalJsonStore'
 import { decryptSecret } from './secretBox'
 import { registerTool, unregisterToolsByPrefix } from './aiTools'
 import type { ToolJsonSchema } from './aiTools'
@@ -13,17 +14,32 @@ import type { ToolJsonSchema } from './aiTools'
  * - 三种传输：stdio（本机命令，添加时双重确认+默认禁用）/ sse / streamable http
  * - 同时连接数上限 5；单次调用超时 30s；单响应体积上限 256KB
  * - 连接成功 → 工具以 mcp.<serverId>.<toolName> 注册进 ToolRegistry；断开即整体下线
- * - 状态持久化到 mcp_servers 表（ok/error + last_error），渲染层永远接触不到密文
+ * - 状态持久化到 userData/data/mcp.json（ok/error + last_error），渲染层永远接触不到密文
  */
 
 export const MAX_CONNECTIONS = 5
 const CALL_TIMEOUT_MS = 30_000
 const MAX_RESPONSE_CHARS = 256 * 1024
 
-interface McpServerRow {
+/** MCP 服务器配置行（snake_case 结构对齐原 mcp_servers 表；created_at 为迁移兼容可选字段） */
+export interface McpServerRow {
   id: string; name: string; transport: string
   endpoint: string; args_json: string
   enabled: number; status: string; last_error: string | null
+  created_at?: string
+}
+
+/** MCP 服务器配置 = userData/data/mcp.json（数组顺序即原 created_at ASC 语义） */
+const MCP_SERVERS_FILE = 'mcp.json'
+
+/** 读取全部 MCP 服务器配置行 */
+export function readMcpServerRows(): McpServerRow[] {
+  return globalReadJson<McpServerRow[]>(MCP_SERVERS_FILE, [])
+}
+
+/** 全量写回 MCP 服务器配置 */
+export function writeMcpServerRows(rows: McpServerRow[]): void {
+  globalWriteJson(MCP_SERVERS_FILE, rows)
 }
 
 interface LiveConnection {
@@ -159,8 +175,12 @@ class McpManagerImpl {
   // ---- 状态持久化 ----
   private async markStatus(row: McpServerRow, status: string, lastError: string): Promise<void> {
     try {
-      getDatabase().run('UPDATE mcp_servers SET status = ?, last_error = ? WHERE id = ?', [status, lastError, row.id])
-      saveToDisk()
+      const rows = readMcpServerRows()
+      const target = rows.find(r => r.id === row.id)
+      if (!target) return
+      target.status = status
+      target.last_error = lastError
+      writeMcpServerRows(rows)
     } catch (err) {
       console.error('[MCP] 状态写入失败:', err)
     }

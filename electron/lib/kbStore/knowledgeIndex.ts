@@ -118,7 +118,7 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
 
 /**
  * 读取分类树。兼容两种落盘格式：
- *  - dict（vaultMigration / 迁移器产物）: { "<uuid>": { id,name,type,parent,sortOrder,...,path } }
+ *  - dict（迁移器产物）: { "<uuid>": { id,name,type,parent,sortOrder,...,path } }
  *  - array（早期/其它写入路径）: [{ id,name,categoryType,parentId,... }]
  * dict 优先——迁移产物是 dict 且带 path（graph 目录 scope 依赖）。
  */
@@ -127,7 +127,7 @@ interface ReadCategoriesResult {
   warnings: string[]
   /** 原始条目（按 id）：写回时以此为基底，避免丢掉迁移产物自带的 createdAt 等字段 */
   rawById: Map<string, Record<string, unknown>>
-  /** 落盘格式：false = dict（vaultMigration 产物），true = array */
+  /** 落盘格式：false = dict（迁移器产物），true = array */
   isArray: boolean
 }
 

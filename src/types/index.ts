@@ -910,7 +910,6 @@ export interface ElectronAPI {
   getTags: () => Promise<Tag[]>
   createTag: (n: string, c?: string) => Promise<Tag>
   deleteTag: (id: string) => Promise<void>
-  getDbPath: () => Promise<string>
   getScheduleTodos: (date: string) => Promise<ScheduleTodo[]>
   getScheduleDates: (yearMonth: string) => Promise<string[]>
   getScheduleMonthTodos: (yearMonth: string) => Promise<ScheduleTodo[]>

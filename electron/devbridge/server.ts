@@ -1,20 +1,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import { app, type BrowserWindow } from 'electron'
 import { guard, ok, fail, throwErr, BRIDGE_BOOT_AT } from './response'
-import { query, schema, migrations, dbInfo } from './db'
 import { logRing, netRing, ipcRing, aggregateErrors, getUiState } from './capture'
 import { parseListOptions } from './ring'
 import { runAction, listActions } from './actions'
 import { runSelfTest, listChecks, coverage } from './selftest'
-import { createSnapshot, listSnapshots, deleteSnapshot, diffSnapshots } from './dbdiff'
 import { buildReport } from './report'
-import { listVersions } from './compat'
 import { takeScreenshot, dumpUiTree, configureUiTarget } from './ui'
 
 /**
  * HTTP 调试桥 —— AI 用 curl 即可观测与驱动，无需冷启动应用、无需手写 CDP 协议。
  *
- * 安全：仅监听 127.0.0.1；SQL 只读；动作白名单；端口被占用时自动顺延。
+ * 安全：仅监听 127.0.0.1；动作白名单；端口被占用时自动顺延。
+ * R6 去库化：/db/* SQL 直查、快照/diff、compat 历史库端点随 connection.ts 移除。
  */
 
 export const DEFAULT_PORT = 7465
@@ -79,21 +77,15 @@ function indexDoc() {
     note: '仅开发/测试环境启用；生产构建不包含本模块',
     endpoints: [
       { method: 'GET', path: '/', desc: '端点清单' },
-      { method: 'GET', path: '/health', desc: '存活、版本、数据库路径、运行时长' },
+      { method: 'GET', path: '/health', desc: '存活、版本、运行时长' },
       { method: 'GET', path: '/state', desc: '应用状态：窗口、UI 状态、设置摘要' },
-      { method: 'GET', path: '/db/schema', desc: '全部表名与行数' },
-      { method: 'POST', path: '/db/query', desc: '只读 SQL，body: { sql, params?, maxRows? }' },
       { method: 'GET', path: '/logs', desc: '日志，query: since / limit / level / scope' },
       { method: 'GET', path: '/errors', desc: '聚合后的报错，query: warn=1 含警告' },
       { method: 'GET', path: '/net', desc: '网络请求，query: since / limit' },
       { method: 'GET', path: '/ipc', desc: 'IPC 调用，query: since / limit' },
       { method: 'POST', path: '/action', desc: '执行动作，body: { name, params }' },
       { method: 'GET', path: '/selftest', desc: '自检，query: only=<name>' },
-      { method: 'POST', path: '/db/snapshot', desc: '对当前库拍快照（内存上限 3 份）' },
-      { method: 'GET', path: '/db/snapshots', desc: '快照列表' },
-      { method: 'POST', path: '/db/snapshot/delete', desc: '删除快照，body: { id }' },
-      { method: 'GET', path: '/db/diff', desc: '两快照差异，query: from / to' },
-      { method: 'GET', path: '/report', desc: 'AI 体检报告（selftest+errors+慢IPC+schema）' },
+      { method: 'GET', path: '/report', desc: 'AI 体检报告（selftest+errors+慢IPC）' },
       { method: 'GET', path: '/coverage', desc: '需求↔断言覆盖率地图' },
       { method: 'GET', path: '/ui/screenshot', desc: '截取当前界面存为 PNG，返回文件路径；?window=main|day-panel' },
       { method: 'GET', path: '/ui/tree', desc: '可见可交互元素树（#N 索引 + 稳定选择器）；?window=main|day-panel' },
@@ -111,7 +103,6 @@ function health() {
     platform: process.platform,
     node: process.version,
     uptimeMs: Date.now() - BRIDGE_BOOT_AT,
-    db: dbInfo(),
   }
 }
 
@@ -127,7 +118,6 @@ function state() {
       bounds,
     },
     ui: getUiState(),
-    db: { tables: schema().tableCount, migrations: migrations().count },
     settingsSummary: {
       theme: deps.getSettingValue?.('theme') ?? null,
       startupTab: deps.getSettingValue?.('startupTab') ?? null,
@@ -159,18 +149,6 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     }
     if (path === '/state' && method === 'GET') {
       send(res, 200, ok(state(), startedAt))
-      return
-    }
-    if (path === '/db/schema' && method === 'GET') {
-      send(res, 200, ok(schema(), startedAt))
-      return
-    }
-    if (path === '/db/query' && method === 'POST') {
-      const body = parseJson(await readBody(req))
-      const sql = String(body.sql ?? '')
-      const params = Array.isArray(body.params) ? body.params : []
-      const maxRows = Number(body.maxRows ?? 500)
-      send(res, 200, ok(query(sql, params, maxRows), startedAt))
       return
     }
     if (path === '/logs' && method === 'GET') {
@@ -211,36 +189,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       send(res, 200, ok(report, startedAt))
       return
     }
-    if (path === '/db/snapshot' && method === 'POST') {
-      send(res, 200, ok(createSnapshot(), startedAt))
-      return
-    }
-    if (path === '/db/snapshots' && method === 'GET') {
-      send(res, 200, ok(listSnapshots(), startedAt))
-      return
-    }
-    if (path === '/db/snapshot/delete' && method === 'POST') {
-      const body = parseJson(await readBody(req))
-      send(res, 200, ok({ deleted: deleteSnapshot(String(body.id ?? '')) }, startedAt))
-      return
-    }
-    if (path === '/db/diff' && method === 'GET') {
-      const from = url.searchParams.get('from') ?? ''
-      const to = url.searchParams.get('to') ?? ''
-      if (!from || !to) throwErr('E_BAD_REQUEST', '缺少 from / to 参数')
-      send(res, 200, ok(diffSnapshots(from, to), startedAt))
-      return
-    }
     if (path === '/report' && method === 'GET') {
       send(res, 200, ok(await buildReport(), startedAt))
       return
     }
     if (path === '/coverage' && method === 'GET') {
       send(res, 200, ok(coverage(), startedAt))
-      return
-    }
-    if (path === '/compat/versions' && method === 'GET') {
-      send(res, 200, ok({ total: listVersions().length, versions: listVersions() }, startedAt))
       return
     }
     if (path === '/ui/screenshot' && method === 'GET') {

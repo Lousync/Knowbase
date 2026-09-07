@@ -1,6 +1,4 @@
-import { getDatabase } from '../database/connection'
 import { adaptPush, type SupervisePlatform, type SupervisePushConfig, type PushPayload } from './pushAdapters'
-import { isVaultDataSource } from '../database/dataSourceMode'
 import { vaultRecordsAll, vaultHabitsAll } from './kbStore/habitVaultRepo'
 import { readJson, writeJson } from './kbStore/jsonStore'
 
@@ -287,19 +285,9 @@ function todayStr(now = new Date()): string {
 
 /** 简化连续天数：从今天（无记录则从昨天）向前数连续有记录的天数 */
 function plainStreak(habitId: string): number {
-  let dates: Set<string>
-  if (isVaultDataSource()) {
-    // P5c 消费方接线：vault 模式打卡记录读 .knowbase/modules/checkin/records.json
-    // （不反手 ensureSeed：checkinRepo→pushService 有向依赖，避免环；文件未生成时按无记录处理）
-    dates = new Set(vaultRecordsAll().filter((r) => r.habit_id === habitId).map((r) => r.date))
-  } else {
-    const db = getDatabase()
-    const stmt = db.prepare('SELECT date FROM habit_records WHERE habit_id = ?')
-    stmt.bind([habitId])
-    dates = new Set<string>()
-    while (stmt.step()) dates.add((stmt.getAsObject() as { date: string }).date)
-    stmt.free()
-  }
+  // 读 .knowbase/modules/checkin/records.json
+  // （不反手 ensureSeed：checkinRepo→pushService 有向依赖，避免环；文件未生成时按无记录处理）
+  const dates = new Set(vaultRecordsAll().filter((r) => r.habit_id === habitId).map((r) => r.date))
   let streak = 0
   const cursor = new Date()
   if (!dates.has(todayStr(cursor))) cursor.setDate(cursor.getDate() - 1)
@@ -316,15 +304,7 @@ export async function notifyCheckin(habitId: string, date: string): Promise<void
     const cfg = getSuperviseConfig()
     if (!cfg.enabled || !cfg.instantPush || !cfg.webhookUrl) return
     let name = ''
-    if (isVaultDataSource()) {
-      name = vaultHabitsAll().find((h) => h.id === habitId)?.name ?? ''
-    } else {
-      const db = getDatabase()
-      const stmt = db.prepare('SELECT name FROM habits WHERE id = ?')
-      stmt.bind([habitId])
-      while (stmt.step()) name = (stmt.getAsObject() as { name: string }).name
-      stmt.free()
-    }
+    name = vaultHabitsAll().find((h) => h.id === habitId)?.name ?? ''
     if (!name) return
     const streak = plainStreak(habitId)
     const title = `✅ 打卡「${name}」`
@@ -351,26 +331,11 @@ export async function notifyCheckin(habitId: string, date: string): Promise<void
 interface HabitNameRow { id: string; name: string }
 
 async function buildDailySummary(date: string): Promise<PushPayload> {
-  let habits: HabitNameRow[]
-  let done: Set<string>
-  if (isVaultDataSource()) {
-    // P5c：vault 模式读 .knowbase/modules/checkin/{habits,records}.json（语义同 SQL：未归档、sort_order 升序）
-    habits = vaultHabitsAll()
-      .filter((h) => !h.archived)
-      .map((h) => ({ id: h.id, name: h.name }))
-    done = new Set(vaultRecordsAll().filter((r) => r.date === date).map((r) => r.habit_id))
-  } else {
-    const db = getDatabase()
-    habits = []
-    const stmt = db.prepare("SELECT id, name FROM habits WHERE archived = 0 ORDER BY sort_order ASC")
-    while (stmt.step()) habits.push(stmt.getAsObject() as HabitNameRow)
-    stmt.free()
-    done = new Set<string>()
-    const rstmt = db.prepare('SELECT habit_id FROM habit_records WHERE date = ?')
-    rstmt.bind([date])
-    while (rstmt.step()) done.add((rstmt.getAsObject() as { habit_id: string }).habit_id)
-    rstmt.free()
-  }
+  // 读 .knowbase/modules/checkin/{habits,records}.json（语义同 SQL：未归档、sort_order 升序）
+  const habits: HabitNameRow[] = vaultHabitsAll()
+    .filter((h) => !h.archived)
+    .map((h) => ({ id: h.id, name: h.name }))
+  const done = new Set(vaultRecordsAll().filter((r) => r.date === date).map((r) => r.habit_id))
 
   const lines = habits.map(h => `- ${done.has(h.id) ? '✅' : '⬜'} ${h.name}`)
   const count = habits.filter(h => done.has(h.id)).length

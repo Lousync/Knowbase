@@ -4,7 +4,7 @@ import { readJson, writeJson } from './jsonStore'
  * 附件台账 vault 数据仓库（去库化 R6 / D9）：`.knowbase/modules/attachments/registry.json`
  *
  * 行结构与 sqlite attachments 表一致（snake_case 原样保留，与迁移器
- * vaultMigration.planTable 产物、回收站快照兼容）；附件文件本体仍在 userData/attachments，
+ * 迁移器产物、回收站快照兼容）；附件文件本体仍在 userData/attachments，
  * 台账只记录相对路径（file_path / thumb_path / trash_path）。
  */
 export interface AttachmentRow {

@@ -4,10 +4,9 @@ import { app, BrowserWindow, dialog, ipcMain, screen, shell, protocol, clipboard
 import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
-import { initDatabase, getDatabase, getDbPath, closeDatabase, getAttachmentsDir, runMigrations, saveToDisk } from '../database/connection'
+import { getAttachmentsDir } from '../database/paths'
 import { registerPomodoroBroadcast } from './pomodoroState'
 import { registerEntryHandlers } from '../database/repositories/entryRepo'
-import { bindDataSourceGetter } from '../database/dataSourceMode'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
 import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRepo'
@@ -51,7 +50,7 @@ import { registerPdfHandlers } from '../lib/pdfService'
 import { registerDocsReadHandlers } from '../lib/docsIpc'
 import { registerLanShareHandlers } from '../lib/lanShare'
 import { registerClipperHandlers, startClipperServer, stopClipperServer } from '../lib/clipperServer'
-import { registerWorkspaceHandlers, trashAllRegisteredVaults } from '../lib/workspaceManager'
+import { registerWorkspaceHandlers, trashAllRegisteredVaults, clearVaultRegistry } from '../lib/workspaceManager'
 import { registerVaultArchiveHandlers } from '../lib/vaultArchive'
 import { getCurrentVault, setCurrentVault } from '../lib/kbStore/vaultContext'
 import { SETTINGS } from '../../src/lib/settings'
@@ -164,7 +163,7 @@ const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   // 已有实例在运行：本实例立即终止，不得执行任何后续初始化。
   // 注意不能用 app.quit()（异步，不阻断同步代码）：whenReady 回调仍会
-  // initDatabase + 注册 232 个 IPC + createWindow()，导致窗口闪现后进程
+  // 注册 232 个 IPC + createWindow()，导致窗口闪现后进程
   // 退出，表现为「关闭后再次启动窗口闪烁闪退」。app.exit() 直接终止，
   // 非主实例无任何资源可清理（数据库/窗口尚未创建），安全。
   app.exit(0)
@@ -588,8 +587,6 @@ function registerWindowHandlers(): void {
   // 清空所有数据（P7 对齐 D6）：已登记仓库整体进 OS 回收站（可还原，替代旧 rmSync 直删）+ 全局重置 → 回首启引导
   ipcMain.handle('db:clearAllData', async () => {
     try {
-      const db = getDatabase()
-
       // 1) 全部已登记仓库 → 回收站并移除注册（护栏校验失败的仓库跳过并中止，绝不半途强删）
       const { trashed, errors } = await trashAllRegisteredVaults()
       console.log(`[clearAllData] 已送回收站 ${trashed} 个仓库${errors.length ? '；异常：' + errors.join('；') : ''}`)
@@ -597,24 +594,8 @@ function registerWindowHandlers(): void {
         return { success: false, error: errors[0] }
       }
 
-      // 2) 回退 sqlite 残留表（老模块兜底）+ vault 注册清空（回首启引导重新选/建仓库）
-      const tables = [
-        'entries', 'tags', 'entry_tags',
-        'schedule_todos', 'schedule_tags',
-        'knowledge_categories', 'knowledge_pages', 'knowledge_links', 'knowledge_tags', 'knowledge_page_tags', 'knowledge_manual_links', 'knowledge_pack_imports',
-        'recycle_bin', 'user_profile', 'toolbox_scripts', 'moments_posts', 'moments_albums', 'attachments',
-        'blog_templates',
-        'toolbox_passwords', 'toolbox_weight_records', 'pomodoro_sessions',
-        'habits', 'habit_records',
-        'bookmark_categories', 'bookmarks',
-        'supervise_log', 'supervise_config',
-        'plugin_audit_log', 'mcp_servers', 'agent_sessions', 'agent_messages',
-      ]
-      for (const t of tables) {
-        db.run(`DROP TABLE IF EXISTS ${t}`)
-      }
-      // 仓库注册清空（回首启引导）+ 当前仓库内存态/持久化一并清
-      try { db.run('DELETE FROM vaults'); saveToDisk() } catch { /* 旧库无 vaults 表 */ }
+      // 2) 仓库登记表清空（回首启引导）+ 当前仓库内存态/持久化一并清
+      try { clearVaultRegistry() } catch { /* ignore */ }
       setCurrentVault(null)
 
       // 3) settings 恢复默认
@@ -622,11 +603,6 @@ function registerWindowHandlers(): void {
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
       flushSettingsToDisk()
 
-      // 4) 重建 sqlite schema（残留表结构，数据为空）
-      //    必须先清 _migrations 记账：否则所有迁移被视为「已应用」而全部跳过，表建不回来（历史回归）
-      try { db.run('DELETE FROM _migrations') } catch { /* 记账表可能不存在 */ }
-      runMigrations()
-      saveToDisk()
       return { success: true }
     } catch (err: unknown) {
       return { success: false, error: (err as Error).message || String(err) }
@@ -741,7 +717,6 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('db:getPath', () => getDbPath())
   ipcMain.handle('app:getAttachmentsPath', () => getAttachmentsDir())
   // 复制图片到系统剪贴板（path 或 dataUrl），供粘贴到其他程序
   // 剪贴板条件清空:仅当剪贴板内容仍为所复制的密码时才清空,不覆盖用户后续复制的内容
@@ -793,7 +768,6 @@ app.whenReady().then(async () => {
       console.warn('[Security] 拒绝打开数据目录外的路径:', target)
     }
   })
-  await initDatabase()
   // 番茄钟状态跨窗口中转：主进程维护快照，渲染层上报 + 接收广播（让 popout 独立窗口也能显示番茄钟状态）
   registerPomodoroBroadcast()
   // AI 测试桥(构建期由 __DEV_BRIDGE__ 消除, 运行期再以 app.isPackaged 兜底)。
@@ -809,8 +783,6 @@ app.whenReady().then(async () => {
   }
   registerWindowHandlers()
   registerRepoConfigHandlers()
-  // 去库化数据源（storageData）：结构化 repo 每次调用按当前设置动态判定
-  bindDataSourceGetter((key) => settingsCache[key])
   registerEntryHandlers()
   registerTagHandlers()
   registerScheduleHandlers()
@@ -998,7 +970,6 @@ app.on('before-quit', () => {
   stopClipperServer()
   // Flush pending settings writes
   if (saveTimer) { clearTimeout(saveTimer); flushSettingsToDisk() }
-  closeDatabase()
 })
 
 // 安全：禁止 webview

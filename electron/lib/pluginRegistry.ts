@@ -1,15 +1,15 @@
+// R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
 import { app, ipcMain, net, dialog, BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync } from 'fs'
 import { join, resolve, sep, extname, basename } from 'path'
-import { randomUUID } from 'crypto'
 import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
-import { getDatabase, saveToDisk } from '../database/connection'
 import { createGateway } from './pluginHostGateway'
 import { pluginStoreGet, pluginStoreSet, pluginStoreDelete, pluginStoreHas, pluginStoreUsage } from './kbStore/pluginStore'
 import { verifyPluginSignature, buildKeyring } from './pluginSigning'
 import { getPackState, importPack } from './knowledgePackImporter'
+import { appendAudit, readAuditRaw, clearAudit } from './pluginAudit'
 import {
   validateTableDef, ensurePluginTables, dropPluginTables,
   pluginQuery, pluginInsert, pluginUpdate, pluginDelete, pluginDumpTable,
@@ -429,17 +429,9 @@ function getAllowedLevels(): Set<string> {
   return new Set(['S', 'A', 'B', 'C'])
 }
 
-/** 行为审计 */
+/** 行为审计（委托 pluginAudit 的 JSON 审计存储 userData/data/plugin-audit.json） */
 export function auditWrite(pluginId: string, action: string, detail: unknown): void {
-  try {
-    getDatabase().run(
-      'INSERT INTO plugin_audit_log (id, plugin_id, action, detail) VALUES (?, ?, ?, ?)',
-      [randomUUID(), pluginId, action, JSON.stringify(detail ?? {})]
-    )
-    saveToDisk()
-  } catch (e) {
-    console.error('[Plugins] 审计写入失败:', e)
-  }
+  appendAudit(pluginId, action, (detail ?? {}) as Record<string, unknown>)
 }
 
 function readManifestAt(pluginDir: string, legacy = false): { manifest: PluginManifest } | { error: string } {
@@ -909,22 +901,11 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
 
   // 行为审计:列表 / 清空 / 渲染层写入(A 级导入、B 级拒绝等)
   ipcMain.handle('plugin:auditList', (_e, id: string | undefined) => {
-    const db = getDatabase()
-    const rows: { id: string; plugin_id: string; action: string; detail: string; created_at: string }[] = []
-    const stmt = id
-      ? db.prepare('SELECT id, plugin_id, action, detail, created_at FROM plugin_audit_log WHERE plugin_id = ? ORDER BY created_at DESC LIMIT 20')
-      : db.prepare('SELECT id, plugin_id, action, detail, created_at FROM plugin_audit_log ORDER BY created_at DESC LIMIT 20')
-    if (id) stmt.bind([id])
-    while (stmt.step()) rows.push(stmt.getAsObject() as typeof rows[number])
-    stmt.free()
-    return rows.map(r => ({ id: r.id, pluginId: r.plugin_id, action: r.action, detail: r.detail, createdAt: r.created_at }))
+    return readAuditRaw(id, 20).map(r => ({ id: r.id, pluginId: r.plugin_id, action: r.action, detail: r.detail, createdAt: r.created_at }))
   })
 
   ipcMain.handle('plugin:auditClear', (_e, id: string | undefined) => {
-    const db = getDatabase()
-    if (id) db.run('DELETE FROM plugin_audit_log WHERE plugin_id = ?', [id])
-    else db.run('DELETE FROM plugin_audit_log')
-    saveToDisk()
+    clearAudit(id)
     return { success: true }
   })
 

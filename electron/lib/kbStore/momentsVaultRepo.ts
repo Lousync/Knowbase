@@ -4,7 +4,7 @@ import { exists, readJson, writeJson } from './jsonStore'
  * 说说 vault 数据仓库（去库化 P2）：`.knowbase/modules/moments/{posts.json, albums.json}`
  *
  * 行结构与 moments_posts / moments_albums 表行一致（snake_case 原样保留，与迁移器
- * vaultMigration.planTable 产物、回收站快照兼容）；images_data_urls / attachment_ids /
+ * 迁移器产物、回收站快照兼容）；images_data_urls / attachment_ids /
  * tags 等列内 JSON 字符串保持为字符串（不反序列化），parse 与 DTO 映射归 momentsRepo。
  * 文件顺序 = 表插入顺序（对应 sqlite 无 ORDER BY 的 SELECT * 语义），排序由调用方做。
  */

@@ -1,8 +1,8 @@
 import { BrowserWindow, globalShortcut, screen, clipboard, app, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
-import { getDatabase } from '../database/connection'
 import { decryptPassword } from '../database/repositories/passwordRepo'
+import { vaultPasswordsAll } from '../lib/kbStore/secretVaultRepo'
 
 let fillWindow: BrowserWindow | null = null
 
@@ -71,12 +71,11 @@ function showFillPopup() {
 
 export function initPasswordFiller() {
   ipcMain.handle('fillPopup:getEntries', () => {
-    const db = getDatabase()
-    const stmt = db.prepare('SELECT * FROM toolbox_passwords ORDER BY sort_order, updated_at DESC')
-    const rows: any[] = []
-    while (stmt.step()) rows.push(stmt.getAsObject())
-    stmt.free()
-    return rows.map((r: any) => ({
+    // R6 去库化：密码本读 .knowbase/secret/passwords.json（行结构与旧表一致；排序同原 SQL）
+    return vaultPasswordsAll()
+      .slice()
+      .sort((a, b) => (a.sort_order - b.sort_order) || (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0))
+      .map((r) => ({
       id: r.id, title: r.title, url: r.url || '', account: r.account || '',
       username: r.username || '', password: decryptPassword(r.password), notes: r.notes || '',
       sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at

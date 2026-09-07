@@ -9,7 +9,7 @@ import { parseMarkdown, serializeMarkdown } from './mdStore'
  *
  * 存储形态（D3 定稿 2026-09-06：博客整体收进 .knowbase）：
  *   <Vault>/.knowbase/blog/<年份>/<日期>.md    正文 + frontmatter 元数据（每天一篇）
- *   （旧版曾放仓库根 `blog/`，由 vaultMigration.migrateBlogLayoutIntoKnowbase 一次性迁入，幂等）
+ *   （旧版曾放仓库根 `blog/`，由 migrateBlogLayoutIntoKnowbase 一次性迁入，幂等）
  * frontmatter 字段：id / title / date / created / updated / pinned / starred /
  *                   wordCount / states / tags(names[])
  *

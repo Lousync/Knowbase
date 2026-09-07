@@ -46,7 +46,6 @@ const api = {
   getTags: () => ipcRenderer.invoke('db:getTags'),
   createTag: (name: string, color?: string) => ipcRenderer.invoke('db:createTag', name, color),
   deleteTag: (id: string) => ipcRenderer.invoke('db:deleteTag', id),
-  getDbPath: () => ipcRenderer.invoke('db:getPath'),
 
   // schedule
   getScheduleTodos: (date: string) => ipcRenderer.invoke('schedule:getTodos', date),
