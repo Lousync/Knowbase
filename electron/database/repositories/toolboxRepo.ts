@@ -1,9 +1,10 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
-import { buildUpdateSet } from '../../lib/safeUpdate'
+import { readJson, writeJson } from '../../lib/kbStore/jsonStore'
 
-// ---- types ----
+// R6 去库化：真相源 = .knowbase/modules/toolbox/scripts.json（sql.js 路径已移除，D9）
+// 行快照 schema（snake_case 字段）与迁移器 planTable 产物约定一致（同 study/sets.json 风格）
+
 interface ScriptRow {
   id: string; name: string; description: string | null; content: string
   language: string; sort_order: number; created_at: string; updated_at: string
@@ -17,85 +18,88 @@ function rowToScript(row: ScriptRow) {
   }
 }
 
-// ---- helpers ----
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
+/** 对齐 sqlite datetime('now','localtime') 的本地时间串 */
+function localNow(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
+function readRows(): ScriptRow[] {
+  return readJson<ScriptRow[]>('toolbox', 'scripts.json', [])
+}
+
+function writeRows(rows: ScriptRow[]): void {
+  writeJson('toolbox', 'scripts.json', rows)
 }
 
 // ---- IPC handlers ----
 export function registerToolboxHandlers(): void {
 
   ipcMain.handle('toolbox:getScripts', () => {
-    const rows = queryAll<ScriptRow>(
-      'SELECT * FROM toolbox_scripts ORDER BY sort_order, created_at'
-    )
-    return rows.map(rowToScript)
+    return readRows()
+      .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))
+      .map(rowToScript)
   })
 
   ipcMain.handle('toolbox:getScriptById', (_e, id: string) => {
-    const rows = queryAll<ScriptRow>('SELECT * FROM toolbox_scripts WHERE id = ?', [id])
-    return rows.length > 0 ? rowToScript(rows[0]) : null
+    const row = readRows().find((r) => r.id === id)
+    return row ? rowToScript(row) : null
   })
 
   ipcMain.handle('toolbox:createScript', (_e, data: {
     name?: string; description?: string; content?: string; language?: string
   }) => {
+    const rows = readRows()
     const id = randomUUID()
-    const now = new Date().toISOString()
-    // Get next sort_order
-    const maxRow = queryAll<{ m: number }>(
-      'SELECT COALESCE(MAX(sort_order), -1) AS m FROM toolbox_scripts'
-    )
-    const sortOrder = (maxRow[0]?.m ?? -1) + 1
-    run(
-      `INSERT INTO toolbox_scripts (id, name, description, content, language, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.name || '未命名脚本', data.description || '', data.content || '', data.language || 'plaintext', sortOrder, now, now]
-    )
-    const rows = queryAll<ScriptRow>('SELECT * FROM toolbox_scripts WHERE id = ?', [id])
-    return rowToScript(rows[0])
+    const now = localNow()
+    const sortOrder = rows.reduce((m, r) => Math.max(m, r.sort_order), -1) + 1
+    const row: ScriptRow = {
+      id,
+      name: data.name || '未命名脚本',
+      description: data.description || '',
+      content: data.content || '',
+      language: data.language || 'plaintext',
+      sort_order: sortOrder,
+      created_at: now,
+      updated_at: now,
+    }
+    rows.push(row)
+    writeRows(rows)
+    return rowToScript(row)
   })
 
   ipcMain.handle('toolbox:updateScript', (_e, id: string, data: {
     name?: string; description?: string; content?: string; language?: string; sortOrder?: number
   }) => {
-    // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
-    const { sets, params } = buildUpdateSet(
-      data,
-      ['name', 'description', 'content', 'language', 'sort_order'],
-      { sets: ['updated_at = ?'], params: [new Date().toISOString()] }
-    )
-    params.push(id)
-    run(`UPDATE toolbox_scripts SET ${sets.join(', ')} WHERE id = ?`, params)
-    const rows = queryAll<ScriptRow>('SELECT * FROM toolbox_scripts WHERE id = ?', [id])
-    return rowToScript(rows[0])
+    const rows = readRows()
+    const i = rows.findIndex((r) => r.id === id)
+    if (i < 0) throw new Error('脚本不存在: ' + id)
+    const cur = rows[i]
+    const next: ScriptRow = {
+      ...cur,
+      name: data.name !== undefined ? data.name : cur.name,
+      description: data.description !== undefined ? data.description : cur.description,
+      content: data.content !== undefined ? data.content : cur.content,
+      language: data.language !== undefined ? data.language : cur.language,
+      sort_order: data.sortOrder !== undefined ? data.sortOrder : cur.sort_order,
+      updated_at: localNow(),
+    }
+    rows[i] = next
+    writeRows(rows)
+    return rowToScript(next)
   })
 
   ipcMain.handle('toolbox:deleteScript', (_e, id: string) => {
-    run('DELETE FROM toolbox_scripts WHERE id = ?', [id])
+    writeRows(readRows().filter((r) => r.id !== id))
   })
 
   ipcMain.handle('toolbox:reorderScripts', (_e, orderedIds: string[]) => {
-    const stmt = getDatabase().prepare('UPDATE toolbox_scripts SET sort_order = ? WHERE id = ?')
-    orderedIds.forEach((id, idx) => {
-      stmt.run([idx, id])
-    })
-    stmt.free()
-    saveToDisk()
+    const rows = readRows()
+    const idxOf = new Map(orderedIds.map((id, idx) => [id, idx]))
+    for (const row of rows) {
+      if (idxOf.has(row.id)) row.sort_order = idxOf.get(row.id)!
+    }
+    writeRows(rows)
   })
-}
-
-function camelToSnake(s: string): string {
-  return s.replace(/[A-Z]/g, c => '_' + c.toLowerCase())
 }

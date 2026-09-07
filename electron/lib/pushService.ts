@@ -1,15 +1,19 @@
-import { getDatabase, saveToDisk } from '../database/connection'
+import { getDatabase } from '../database/connection'
 import { adaptPush, type SupervisePlatform, type SupervisePushConfig, type PushPayload } from './pushAdapters'
 import { isVaultDataSource } from '../database/dataSourceMode'
 import { vaultRecordsAll, vaultHabitsAll } from './kbStore/habitVaultRepo'
+import { readJson, writeJson } from './kbStore/jsonStore'
 
 /**
  * 远程监督推送服务 —— 配置读写、免打扰判断、带重试的 webhook 发送、
  * 打卡即时通知、每日汇总定时任务。由 superviseRepo 注册 IPC，
  * 由 checkinRepo 的打卡钩子触发即时推送。
+ *
+ * R6 去库化：配置/日志真相源 = .knowbase/modules/supervise/{config.json,log.json}
+ * （行快照 schema 与迁移器 planTable 产物一致；sql.js 路径已移除，D9）
  */
 
-// ===== 配置（存 supervise_config KV 表，避免与 settings 模块耦合） =====
+// ===== 配置（KV 行数组存 config.json，避免与 settings 模块耦合） =====
 
 export interface SuperviseConfig extends SupervisePushConfig {
   enabled: boolean
@@ -36,14 +40,20 @@ const CONFIG_DEFAULTS: SuperviseConfig = {
 
 interface ConfigRow { key: string; value: string }
 
+/** 对齐 sqlite datetime('now','localtime') 的本地时间串 */
+function localNow(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function readConfigRows(): ConfigRow[] {
+  return readJson<ConfigRow[]>('supervise', 'config.json', [])
+}
+
 export function getSuperviseConfig(): SuperviseConfig {
-  const db = getDatabase()
-  const stmt = db.prepare('SELECT key, value FROM supervise_config')
-  const rows: ConfigRow[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as ConfigRow)
-  stmt.free()
   const cfg = { ...CONFIG_DEFAULTS }
-  for (const row of rows) {
+  for (const row of readConfigRows()) {
     if (row.key in cfg) {
       const v = row.value
       ;(cfg as unknown as Record<string, unknown>)[row.key] =
@@ -54,52 +64,130 @@ export function getSuperviseConfig(): SuperviseConfig {
 }
 
 export function saveSuperviseConfig(partial: Partial<SuperviseConfig>): SuperviseConfig {
-  const db = getDatabase()
   const merged = { ...getSuperviseConfig(), ...partial }
-  for (const [key, value] of Object.entries(merged)) {
-    db.run(
-      `INSERT INTO supervise_config (key, value) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [key, String(value)]
-    )
-  }
-  saveToDisk()
+  writeJson(
+    'supervise',
+    'config.json',
+    Object.entries(merged).map(([key, value]) => ({ key, value: String(value) }))
+  )
   return getSuperviseConfig()
 }
 
-// ===== 日志 =====
+// ===== 日志（.knowbase/modules/supervise/log.json） =====
 
-interface LogRow {
+export interface LogRow {
   id: number; push_type: string; habit_id: string | null
   title: string; content: string; status: string
   retry_count: number; error_message: string | null
   created_at: string; pushed_at: string | null
 }
 
+export interface SuperviseLogDto {
+  id: number
+  pushType: 'instant' | 'daily'
+  habitId: string | null
+  title: string
+  content: string
+  status: 'success' | 'failed' | 'pending'
+  retryCount: number
+  errorMessage: string | null
+  createdAt: string
+  pushedAt: string | null
+}
+
+function rowToDto(r: LogRow): SuperviseLogDto {
+  return {
+    id: r.id,
+    pushType: r.push_type as 'instant' | 'daily',
+    habitId: r.habit_id,
+    title: r.title,
+    content: r.content,
+    status: r.status as 'success' | 'failed' | 'pending',
+    retryCount: r.retry_count,
+    errorMessage: r.error_message,
+    createdAt: r.created_at,
+    pushedAt: r.pushed_at,
+  }
+}
+
+function readLogRows(): LogRow[] {
+  return readJson<LogRow[]>('supervise', 'log.json', [])
+}
+
+function writeLogRows(rows: LogRow[]): void {
+  writeJson('supervise', 'log.json', rows)
+}
+
 function insertLog(pushType: 'instant' | 'daily', habitId: string | null, title: string, content: string): number {
-  const db = getDatabase()
-  db.run(
-    `INSERT INTO supervise_log (push_type, habit_id, title, content, status, created_at)
-     VALUES (?, ?, ?, ?, 'pending', datetime('now', 'localtime'))`,
-    [pushType, habitId, title, content]
-  )
-  const stmt = db.prepare('SELECT last_insert_rowid() AS id')
-  let id = 0
-  while (stmt.step()) id = (stmt.getAsObject() as { id: number }).id
-  stmt.free()
-  saveToDisk()
+  const rows = readLogRows()
+  const id = rows.reduce((m, r) => Math.max(m, r.id), 0) + 1
+  rows.push({
+    id, push_type: pushType, habit_id: habitId, title, content,
+    status: 'pending', retry_count: 0, error_message: null,
+    created_at: localNow(), pushed_at: null,
+  })
+  writeLogRows(rows)
   return id
 }
 
 function updateLogStatus(id: number, status: 'success' | 'failed' | 'pending', error?: string): void {
-  getDatabase().run(
-    `UPDATE supervise_log
-     SET status = ?, retry_count = retry_count + 1, error_message = ?,
-         pushed_at = CASE WHEN ? = 'success' THEN datetime('now', 'localtime') ELSE pushed_at END
-     WHERE id = ?`,
-    [status, error ?? null, status, id]
-  )
-  saveToDisk()
+  const rows = readLogRows()
+  const row = rows.find((r) => r.id === id)
+  if (!row) return
+  row.status = status
+  row.retry_count += 1
+  row.error_message = error ?? null
+  if (status === 'success') row.pushed_at = localNow()
+  writeLogRows(rows)
+}
+
+/** 推送历史（id 降序，limit 条） */
+export function superviseHistory(limit: number): SuperviseLogDto[] {
+  return readLogRows()
+    .sort((a, b) => b.id - a.id)
+    .slice(0, limit)
+    .map(rowToDto)
+}
+
+/** 单条失败重推：置 pending → 投递 → 返回最新状态 */
+export async function superviseRetryOne(id: number): Promise<SuperviseLogDto | null> {
+  const rows = readLogRows()
+  const row = rows.find((r) => r.id === id)
+  if (!row) return null
+  if (row.status === 'failed') {
+    row.status = 'pending'
+    row.error_message = null
+    writeLogRows(rows)
+  }
+  await deliverLog(id)
+  const after = readLogRows().find((r) => r.id === id)
+  return after ? rowToDto(after) : null
+}
+
+/** 全部失败重推：先统一置 pending 再逐条投递 */
+export async function superviseRetryAllFailed(): Promise<{ total: number; ok: number }> {
+  const failed = readLogRows().filter((r) => r.status === 'failed').sort((a, b) => a.id - b.id)
+  if (failed.length > 0) {
+    const rows = readLogRows()
+    for (const row of rows) {
+      if (row.status === 'failed') {
+        row.status = 'pending'
+        row.error_message = null
+      }
+    }
+    writeLogRows(rows)
+  }
+  let okCount = 0
+  for (const row of failed) {
+    const res = await deliverLog(row.id)
+    if (res.ok) okCount++
+  }
+  return { total: failed.length, ok: okCount }
+}
+
+/** 清空推送历史 */
+export function superviseClearHistory(): void {
+  writeLogRows([])
 }
 
 // ===== 免打扰 =====
@@ -148,14 +236,9 @@ async function postOnce(url: string, body: string, contentType?: string): Promis
   }
 }
 
-/** 投递一条日志：内部重试，最终状态写回日志表 */
+/** 投递一条日志：内部重试，最终状态写回日志文件 */
 export async function deliverLog(id: number): Promise<{ ok: boolean; error?: string }> {
-  const db = getDatabase()
-  const stmt = db.prepare('SELECT * FROM supervise_log WHERE id = ?')
-  stmt.bind([id])
-  let row: LogRow | null = null
-  while (stmt.step()) row = stmt.getAsObject() as LogRow
-  stmt.free()
+  const row = readLogRows().find((r) => r.id === id) ?? null
   if (!row) return { ok: false, error: '日志不存在' }
 
   const cfg = getSuperviseConfig()
@@ -303,17 +386,14 @@ async function buildDailySummary(date: string): Promise<PushPayload> {
 }
 
 function hasDailySentToday(date: string): boolean {
-  const db = getDatabase()
   // 含 failed：自动模式每天只尝试一次，失败靠历史页手动重推，避免调度器反复轰炸
   // created_at 已存本地时间（insertLog 显式 localtime），此处直接比较
-  const stmt = db.prepare(
-    "SELECT COUNT(*) AS n FROM supervise_log WHERE push_type = 'daily' AND status IN ('success','pending','failed') AND date(created_at) = ?"
+  return readLogRows().some(
+    (r) =>
+      r.push_type === 'daily' &&
+      (r.status === 'success' || r.status === 'pending' || r.status === 'failed') &&
+      r.created_at.slice(0, 10) === date
   )
-  stmt.bind([date])
-  let n = 0
-  while (stmt.step()) n = (stmt.getAsObject() as { n: number }).n
-  stmt.free()
-  return n > 0
 }
 
 /** 发送每日汇总；force = 手动触发（跳过去重与开关） */
@@ -337,11 +417,7 @@ let schedulerTimer: ReturnType<typeof setInterval> | null = null
 async function flushPending(): Promise<void> {
   const cfg = getSuperviseConfig()
   if (!cfg.enabled || isInQuietHours(cfg) || !cfg.webhookUrl) return
-  const db = getDatabase()
-  const stmt = db.prepare("SELECT id FROM supervise_log WHERE status = 'pending'")
-  const ids: number[] = []
-  while (stmt.step()) ids.push((stmt.getAsObject() as { id: number }).id)
-  stmt.free()
+  const ids = readLogRows().filter((r) => r.status === 'pending').map((r) => r.id)
   for (const id of ids) await deliverLog(id)
 }
 

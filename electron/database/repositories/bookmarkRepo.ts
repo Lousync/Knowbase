@@ -1,133 +1,50 @@
 import { ipcMain, dialog, shell } from 'electron'
-import { randomUUID } from 'crypto'
 import { BrowserWindow } from 'electron'
-import { getDatabase, saveToDisk } from '../connection'
 import {
   vaultBookmarksAll, vaultCreateCategory, vaultUpdateCategory, vaultDeleteCategory,
   vaultReorderCategories, vaultCreateBookmark, vaultUpdateBookmark, vaultDeleteBookmark,
 } from '../../lib/kbStore/bookmarkVaultRepo'
 
-interface CategoryRow {
-  id: string; name: string; color: string
-  sort_order: number; created_at: string
-}
+// R6 去库化：真相源 = .knowbase/modules/bookmarks/（bookmarks.json / categories.json，sql.js 路径已移除，D9）
 
-interface BookmarkRow {
-  id: string; category_id: string; title: string; url: string
-  description: string; sort_order: number; created_at: string
-}
-
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
-function rowToCategory(row: CategoryRow) {
-  return { id: row.id, name: row.name, color: row.color, sortOrder: row.sort_order ?? 0, createdAt: row.created_at }
-}
-
-function rowToBookmark(row: BookmarkRow) {
-  return {
-    id: row.id,
-    categoryId: row.category_id || '',
-    title: row.title,
-    url: row.url,
-    description: row.description || '',
-    sortOrder: row.sort_order ?? 0,
-    createdAt: row.created_at,
-  }
-}
-
-export function registerBookmarkHandlers(getSettingValue?: (key: string) => unknown): void {
-  // 去库化 P2：结构化模块（storageData=vault）读写 .knowbase/modules/bookmarks/*.json
-  const isVault = (): boolean => getSettingValue?.('storageData') === 'vault'
+export function registerBookmarkHandlers(): void {
 
   // ---- 数据 ----
   ipcMain.handle('bookmark:getAll', () => {
-    if (isVault()) return vaultBookmarksAll()
-    const categories = queryAll<CategoryRow>('SELECT * FROM bookmark_categories ORDER BY sort_order ASC, created_at ASC').map(rowToCategory)
-    const bookmarks = queryAll<BookmarkRow>('SELECT * FROM bookmarks ORDER BY sort_order ASC, created_at ASC').map(rowToBookmark)
-    return { categories, bookmarks }
+    return vaultBookmarksAll()
   })
 
   ipcMain.handle('bookmark:createCategory', (_e, data: { name: string; color?: string }) => {
-    if (isVault()) return vaultCreateCategory(data.name, data.color)
-    const id = randomUUID()
-    run(
-      'INSERT INTO bookmark_categories (id, name, color, sort_order) VALUES (?, ?, ?, ?)',
-      [id, data.name, data.color || '#3B82F6', Date.now()]
-    )
-    return rowToCategory(queryAll<CategoryRow>('SELECT * FROM bookmark_categories WHERE id = ?', [id])[0])
+    return vaultCreateCategory(data.name, data.color)
   })
 
   ipcMain.handle('bookmark:updateCategory', (_e, id: string, data: { name?: string; color?: string }) => {
-    if (isVault()) return vaultUpdateCategory(id, data)
-    const sets: string[] = []
-    const params: unknown[] = []
-    if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name) }
-    if (data.color !== undefined) { sets.push('color = ?'); params.push(data.color) }
-    if (sets.length === 0) return null
-    params.push(id)
-    run(`UPDATE bookmark_categories SET ${sets.join(', ')} WHERE id = ?`, params)
-    return rowToCategory(queryAll<CategoryRow>('SELECT * FROM bookmark_categories WHERE id = ?', [id])[0])
+    return vaultUpdateCategory(id, data)
   })
 
   ipcMain.handle('bookmark:deleteCategory', (_e, id: string) => {
-    if (isVault()) { vaultDeleteCategory(id); return }
     // 分类下的书签移入未分类，不删书签
-    run("UPDATE bookmarks SET category_id = '' WHERE category_id = ?", [id])
-    run('DELETE FROM bookmark_categories WHERE id = ?', [id])
+    vaultDeleteCategory(id)
   })
 
   ipcMain.handle('bookmark:reorderCategories', (_e, orderedIds: string[]) => {
-    if (isVault()) { vaultReorderCategories(orderedIds); return }
-    const base = Date.now()
-    orderedIds.forEach((id, i) => {
-      run('UPDATE bookmark_categories SET sort_order = ? WHERE id = ?', [i + base - orderedIds.length, id])
-    })
+    vaultReorderCategories(orderedIds)
   })
 
   ipcMain.handle('bookmark:createBookmark', (_e, data: {
     title: string; url: string; description?: string; categoryId?: string
   }) => {
-    if (isVault()) return vaultCreateBookmark(data)
-    const id = randomUUID()
-    run(
-      "INSERT INTO bookmarks (id, category_id, title, url, description, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-      [id, data.categoryId || '', data.title, data.url, data.description || '', Date.now()]
-    )
-    return rowToBookmark(queryAll<BookmarkRow>('SELECT * FROM bookmarks WHERE id = ?', [id])[0])
+    return vaultCreateBookmark(data)
   })
 
   ipcMain.handle('bookmark:updateBookmark', (_e, id: string, data: {
     title?: string; url?: string; description?: string; categoryId?: string | null
   }) => {
-    if (isVault()) return vaultUpdateBookmark(id, data)
-    const sets: string[] = []
-    const params: unknown[] = []
-    if (data.title !== undefined) { sets.push('title = ?'); params.push(data.title) }
-    if (data.url !== undefined) { sets.push('url = ?'); params.push(data.url) }
-    if (data.description !== undefined) { sets.push('description = ?'); params.push(data.description) }
-    if (data.categoryId !== undefined) { sets.push('category_id = ?'); params.push(data.categoryId || '') }
-    if (sets.length === 0) return null
-    params.push(id)
-    run(`UPDATE bookmarks SET ${sets.join(', ')} WHERE id = ?`, params)
-    return rowToBookmark(queryAll<BookmarkRow>('SELECT * FROM bookmarks WHERE id = ?', [id])[0])
+    return vaultUpdateBookmark(id, data)
   })
 
   ipcMain.handle('bookmark:deleteBookmark', (_e, id: string) => {
-    if (isVault()) { vaultDeleteBookmark(id); return }
-    run('DELETE FROM bookmarks WHERE id = ?', [id])
+    vaultDeleteBookmark(id)
   })
 
   // ---- 外链 / 文件（与存储形态无关，恒可用）----

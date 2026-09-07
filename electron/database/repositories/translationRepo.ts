@@ -1,6 +1,9 @@
-import { getDatabase, saveToDisk } from '../connection'
+import { readJson, writeJson } from '../../lib/kbStore/jsonStore'
 
-/** 划词翻译缓存（迁移 050）：LLM 结果按 cache_key 幂等复用 */
+// R6 去库化：真相源 = .knowbase/modules/translation/cache.json（无迁移存量，新建存储；
+// 行快照 schema 与迁移器 planTable 产物约定一致，sql.js 路径已移除，D9）
+
+/** 划词翻译缓存：LLM 结果按 cache_key 幂等复用（原迁移 050 语义） */
 
 export interface TranslationCacheRow {
   cache_key: string
@@ -12,33 +15,36 @@ export interface TranslationCacheRow {
   updated_at: string
 }
 
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const stmt = getDatabase().prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
+function readRows(): TranslationCacheRow[] {
+  return readJson<TranslationCacheRow[]>('translation', 'cache.json', [])
 }
 
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
+function writeRows(rows: TranslationCacheRow[]): void {
+  writeJson('translation', 'cache.json', rows)
+}
+
+/** 对齐 sqlite datetime('now','localtime') 的本地时间串 */
+function localNow(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 export function getTranslationCache(key: string): TranslationCacheRow | null {
-  const rows = queryAll<TranslationCacheRow>('SELECT * FROM translation_cache WHERE cache_key = ?', [key])
-  return rows.length > 0 ? rows[0] : null
+  return readRows().find((r) => r.cache_key === key) ?? null
 }
 
 export function upsertTranslationCache(key: string, mode: string, sourceText: string, resultMd: string, model: string): void {
-  run(
-    `INSERT INTO translation_cache (cache_key, mode, source_text, result_md, model)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(cache_key) DO UPDATE SET
-       result_md = excluded.result_md,
-       model = excluded.model,
-       updated_at = datetime('now', 'localtime')`,
-    [key, mode, sourceText, resultMd, model]
-  )
+  const rows = readRows()
+  const now = localNow()
+  const i = rows.findIndex((r) => r.cache_key === key)
+  if (i >= 0) {
+    rows[i] = { ...rows[i], mode, source_text: sourceText, result_md: resultMd, model, updated_at: now }
+  } else {
+    rows.push({
+      cache_key: key, mode, source_text: sourceText, result_md: resultMd,
+      model, created_at: now, updated_at: now,
+    })
+  }
+  writeRows(rows)
 }
