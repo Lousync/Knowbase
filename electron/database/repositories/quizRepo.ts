@@ -1,23 +1,21 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
-import { isVaultDataSource } from '../dataSourceMode'
 import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 import * as V from '../../lib/kbStore/quizVaultRepo'
 import { migrationStatus, exportQuizData, migrateToPlugin, migrateFromPlugin, dropPluginData, pluginReportRecord, pluginToggleFavoriteRecord, QUIZBOOK_PLUGIN_ID } from '../../lib/quizMigration'
 
 /**
+ * R6 去库化：真相源 = .knowbase/modules/quiz/*.json（sql.js 路径已移除，D9）
+ *
  * 刷题记录（收藏 + 错题）数据层。
  * 通用能力：408 / 数学 / 英语 / 政治知识包共用一套，靠 source_space 快照区分来源。
- * - 收藏与错题同表（一题一行，UNIQUE(page_id, quiz_no) 去重计数）
- * - 重刷全对自动移出：答对时 wrong_count 归零
+ * - 收藏与错题同表（一题一行，按 (page_id, quiz_no) 幂等去重）
+ * - 重刷全对自动移出：连续答对次数达到阈值即视为已掌握
  * - 两级分类：source_space 自动维度 + quiz_collections 自定义分组
+ * - 五文件对应原五张表，行结构 snake_case 原样
  *
- * 去库化 P2：storageData=vault 时读写 .knowbase/modules/quiz/*.json
- * （五文件对应原五张表，行结构 snake_case 原样）；
- * 首次访问自动把 sqlite 主表存量一次性播种到 json（之后以 json 为权威源）。
- * 插件命名空间表（quizbookMode=plugin / quizMigrate:* / quiz:plugin*）仍在
- * sqlite（quizMigration.ts 管辖），本文件不为其提供 vault 路径。
+ * 插件命名空间表（quizbookMode=plugin / quizMigrate:* / quiz:plugin*）仍由
+ * quizMigration.ts 管辖，本文件不为其提供 vault 路径。
  */
 
 export interface QuizOptionDto { key: string; text: string }
@@ -73,31 +71,6 @@ export interface QuizCollectionDto {
   count: number
 }
 
-interface RecordRow {
-  id: string; page_id: string; quiz_no: number; page_title: string
-  is_favorite: number; wrong_count: number; correct_count: number; last_result: number | null
-  streak_correct?: number; note?: string; source_chapter?: string
-  snapshot_json: string; source_space: string; source_notebook: string
-  created_at: string; updated_at: string
-}
-
-interface CollectionRow { id: string; name: string; sort_order: number; created_at: string }
-
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
 function parseSnapshot(json: string): QuizSnapshotDto | null {
   if (!json) return null
   try {
@@ -109,71 +82,10 @@ function parseSnapshot(json: string): QuizSnapshotDto | null {
   }
 }
 
-/**
- * 解析题目来源：空间 / 笔记本 / 章节路径。
- * 章节 = 笔记本以下所有 folder 层级（由外到内，如"树 › 遍历"）——
- * 原题快照只存 space+notebook 导致归档最细只能到笔记本，这里补上章节层级。
- */
-function resolveSource(pageId: string): { space: string; notebook: string; chapter: string } {
-  let space = ''
-  let notebook = ''
-  const page = queryAll<{ category_id: string }>('SELECT category_id FROM knowledge_pages WHERE id = ?', [pageId])[0]
-  if (!page) return { space, notebook, chapter: '' }
-  const folders: string[] = []
-  let curId: string | null = page.category_id
-  let guard = 0
-  while (curId && guard++ < 12) {
-    const cat: { parent_id: string | null; name: string; category_type: string } | undefined = queryAll<{ parent_id: string | null; name: string; category_type: string }>(
-      'SELECT parent_id, name, category_type FROM knowledge_categories WHERE id = ?', [curId]
-    )[0]
-    if (!cat) break
-    if (cat.category_type === 'notebook') { notebook = cat.name; break }
-    if (cat.category_type === 'space') { space = cat.name; break }
-    if (cat.category_type === 'folder' && cat.name) folders.unshift(cat.name)
-    curId = cat.parent_id
-  }
-  return { space, notebook, chapter: folders.join(' › ') }
-}
-
-function collectionIdsOf(recordId: string): string[] {
-  return queryAll<{ collection_id: string }>(
-    'SELECT collection_id FROM quiz_record_collections WHERE record_id = ?', [recordId]
-  ).map(r => r.collection_id)
-}
-
-function tagIdsOf(recordId: string): string[] {
-  return queryAll<{ tag_id: string }>(
-    'SELECT tag_id FROM quiz_record_tags WHERE record_id = ?', [recordId]
-  ).map(r => r.tag_id)
-}
-
-function rowToDto(row: RecordRow): QuizRecordDto {
-  return {
-    id: row.id,
-    pageId: row.page_id,
-    quizNo: row.quiz_no,
-    pageTitle: row.page_title,
-    isFavorite: !!row.is_favorite,
-    wrongCount: row.wrong_count ?? 0,
-    correctCount: row.correct_count ?? 0,
-    lastResult: row.last_result,
-    streakCorrect: row.streak_correct ?? 0,
-    note: row.note ?? '',
-    snapshot: parseSnapshot(row.snapshot_json),
-    sourceSpace: row.source_space,
-    sourceNotebook: row.source_notebook,
-    sourceChapter: row.source_chapter ?? '',
-    collectionIds: collectionIdsOf(row.id),
-    tagIds: tagIdsOf(row.id),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-// ===== vault 路由（去库化 P2）：storageData=vault 时真相源 = .knowbase/modules/quiz/*.json =====
-// 行结构与表一致（snake_case）；以下把主表五张表的 SQL 语义逐一用内存过滤/排序复刻，
-// 返回 DTO 与 sqlite 路径逐字段一致。插件命名空间表（quizMigrate:* / quiz:plugin*）
-// 仍走 sqlite（quizMigration.ts 管辖），此处不为其提供 vault 路径。
+// ===== vault 数据层：真相源 = .knowbase/modules/quiz/*.json =====
+// 行结构与原表一致（snake_case）；以下把主表五张表的 SQL 语义逐一用内存过滤/排序复刻，
+// 返回 DTO 逐字段保持原语义。插件命名空间表（quizMigrate:* / quiz:plugin*）
+// 仍走 quizMigration.ts，此处不为其提供 vault 路径。
 
 /** 字符串比较：对齐 sqlite BINARY collation 的码序比较（时间串/UUID 场景与字典序一致） */
 function strCmp(a: string, b: string): number {
@@ -190,7 +102,6 @@ function vaultTagIdsOf(recordId: string): string[] {
   return V.readQuizRecordTags().filter((l) => l.record_id === recordId).map((l) => l.tag_id)
 }
 
-/** 与 rowToDto（sqlite 路径）逐字段一致的 vault 版（关联数据改读 json 关联表） */
 function vaultRowToDto(row: V.VaultQuizRecordRow): QuizRecordDto {
   return {
     id: row.id,
@@ -214,7 +125,7 @@ function vaultRowToDto(row: V.VaultQuizRecordRow): QuizRecordDto {
   }
 }
 
-/** resolveSource 的 vault 版：知识页/分类去库化后以知识索引为准（sqlite 表在 vault 模式下非权威源） */
+/** 知识页/分类以知识索引为准：空间 / 笔记本 / 章节路径解析 */
 function vaultResolveSource(pageId: string): { space: string; notebook: string; chapter: string } {
   let space = ''
   let notebook = ''
@@ -236,7 +147,7 @@ function vaultResolveSource(pageId: string): { space: string; notebook: string; 
   return { space, notebook, chapter: folders.join(' › ') }
 }
 
-/** ensureRecord 的 vault 版：按 (page_id, quiz_no) 幂等 find-or-create；新行字段对齐 INSERT 列 + 建表 DEFAULT */
+/** ensureRecord：按 (page_id, quiz_no) 幂等 find-or-create；新行字段对齐原 INSERT 列 + 建表 DEFAULT */
 function vaultEnsureRecord(pageId: string, quizNo: number, meta: {
   pageTitle: string
   snapshot: QuizSnapshotDto | null
@@ -269,48 +180,9 @@ function vaultEnsureRecord(pageId: string, quizNo: number, meta: {
 }
 
 /**
- * vault 首次访问时把 sqlite 主表五张表存量一次性播种到 json（幂等标记：records.json 存在，
- * 即 jsonStore.exists——播种后即使为空表也算已迁移，不重复播种）；表缺/库异常按空表处理。
- */
-export function ensureQuizVaultSeeded(): void {
-  if (V.vaultQuizHasData()) return
-  const all = <T>(sql: string): T[] => {
-    try {
-      return queryAll<T>(sql)
-    } catch {
-      return []
-    }
-  }
-  V.vaultQuizSeedAll({
-    records: all<V.VaultQuizRecordRow>('SELECT * FROM quiz_records'),
-    collections: all<V.VaultQuizCollectionRow>('SELECT * FROM quiz_collections'),
-    recordCollections: all<V.VaultQuizRecordCollectionRow>('SELECT * FROM quiz_record_collections'),
-    tags: all<V.VaultQuizTagRow>('SELECT * FROM quiz_tags'),
-    recordTags: all<V.VaultQuizRecordTagRow>('SELECT * FROM quiz_record_tags'),
-  })
-}
-
-/** 查找或创建一条记录（按 page_id + quiz_no 幂等），返回记录行 */
-function ensureRecord(pageId: string, quizNo: number, meta: {
-  pageTitle: string
-  snapshot: QuizSnapshotDto | null
-}): RecordRow {
-  const existing = queryAll<RecordRow>('SELECT * FROM quiz_records WHERE page_id = ? AND quiz_no = ?', [pageId, quizNo])[0]
-  if (existing) return existing
-  const { space, notebook, chapter } = resolveSource(pageId)
-  const id = randomUUID()
-  run(
-    `INSERT INTO quiz_records (id, page_id, quiz_no, page_title, is_favorite, wrong_count, correct_count, last_result, snapshot_json, source_space, source_notebook, source_chapter)
-     VALUES (?, ?, ?, ?, 0, 0, 0, NULL, ?, ?, ?, ?)`,
-    [id, pageId, quizNo, meta.pageTitle, meta.snapshot ? JSON.stringify(meta.snapshot) : '', space, notebook, chapter]
-  )
-  return queryAll<RecordRow>('SELECT * FROM quiz_records WHERE id = ?', [id])[0]
-}
-
-/**
  * 判题/收藏上报的存储目标：
  * - quizbookMode=plugin 且插件表存在 → 写插件命名空间表（错题本彻底插件化）
- * - 否则 → 主表（回退/内置模式）
+ * - 否则 → vault 主表（内置模式）
  */
 function pluginModeEnabled(getSettingValue?: (key: string) => unknown): boolean {
   try {
@@ -323,15 +195,11 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
 
   ipcMain.handle('quizRecord:getByPage', (_e, pageId: string) => {
     if (typeof pageId !== 'string' || !pageId) return []
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // SELECT * WHERE page_id = ? ORDER BY quiz_no ASC
-      return V.readQuizRecords()
-        .filter((r) => r.page_id === pageId)
-        .sort((a, b) => a.quiz_no - b.quiz_no)
-        .map(vaultRowToDto)
-    }
-    return queryAll<RecordRow>('SELECT * FROM quiz_records WHERE page_id = ? ORDER BY quiz_no ASC', [pageId]).map(rowToDto)
+    // SELECT * WHERE page_id = ? ORDER BY quiz_no ASC
+    return V.readQuizRecords()
+      .filter((r) => r.page_id === pageId)
+      .sort((a, b) => a.quiz_no - b.quiz_no)
+      .map(vaultRowToDto)
   })
 
   ipcMain.handle('quizRecord:report', (_e, pageId: string, quizNo: number, correct: boolean, meta: {
@@ -349,59 +217,35 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
       })
       return null
     }
-    // vault 分支放在插件分支之后：quizbookMode=plugin（插件表，sqlite）行为不变，
-    // 仅内置版主表语义改由 JSON 承载
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const row = vaultEnsureRecord(pageId, no, {
-        pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
-        snapshot: meta?.snapshot ?? null,
-      })
-      const rows = V.readQuizRecords()
-      const i = rows.findIndex((r) => r.id === row.id)
-      if (i < 0) return vaultRowToDto(row)
-      const now = V.vaultLocalNow() // 对齐 datetime('now', 'localtime')
-      if (correct) {
-        // 与 sqlite 同语义：correct_count+1、streak_correct+1（wrong_count 保留供档位分层）
-        rows[i] = {
-          ...rows[i],
-          correct_count: (rows[i].correct_count ?? 0) + 1,
-          streak_correct: (rows[i].streak_correct ?? 0) + 1,
-          last_result: 1,
-          updated_at: now,
-        }
-      } else {
-        // 答错：wrong_count+1、连续答对清零（回流错题本）
-        rows[i] = {
-          ...rows[i],
-          wrong_count: (rows[i].wrong_count ?? 0) + 1,
-          streak_correct: 0,
-          last_result: 0,
-          updated_at: now,
-        }
-      }
-      V.writeQuizRecords(rows)
-      return vaultRowToDto(rows[i])
-    }
-    const row = ensureRecord(pageId, no, {
+    const row = vaultEnsureRecord(pageId, no, {
       pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
       snapshot: meta?.snapshot ?? null,
     })
+    const rows = V.readQuizRecords()
+    const i = rows.findIndex((r) => r.id === row.id)
+    if (i < 0) return vaultRowToDto(row)
+    const now = V.vaultLocalNow() // 对齐 datetime('now', 'localtime')
     if (correct) {
-      // 答对：correct_count+1、连续答对 streak_correct+1；wrong_count 保留（历史错次供档位分层）。
-      // 连续答对 2 次（streak_correct >= 2）视为已掌握，从错题本列表移出。
-      run(
-        "UPDATE quiz_records SET correct_count = correct_count + 1, streak_correct = streak_correct + 1, last_result = 1, updated_at = datetime('now', 'localtime') WHERE id = ?",
-        [row.id]
-      )
+      // correct_count+1、streak_correct+1（wrong_count 保留供档位分层）
+      rows[i] = {
+        ...rows[i],
+        correct_count: (rows[i].correct_count ?? 0) + 1,
+        streak_correct: (rows[i].streak_correct ?? 0) + 1,
+        last_result: 1,
+        updated_at: now,
+      }
     } else {
       // 答错：wrong_count+1、连续答对清零（回流错题本）
-      run(
-        "UPDATE quiz_records SET wrong_count = wrong_count + 1, streak_correct = 0, last_result = 0, updated_at = datetime('now', 'localtime') WHERE id = ?",
-        [row.id]
-      )
+      rows[i] = {
+        ...rows[i],
+        wrong_count: (rows[i].wrong_count ?? 0) + 1,
+        streak_correct: 0,
+        last_result: 0,
+        updated_at: now,
+      }
     }
-    return rowToDto(queryAll<RecordRow>('SELECT * FROM quiz_records WHERE id = ?', [row.id])[0])
+    V.writeQuizRecords(rows)
+    return vaultRowToDto(rows[i])
   })
 
   ipcMain.handle('quizRecord:toggleFavorite', (_e, pageId: string, quizNo: number, meta: {
@@ -416,27 +260,16 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
       const r = pluginToggleFavoriteRecord(QUIZBOOK_PLUGIN_ID, pageId, no)
       return { id: `${pageId}:${no}`, pageId, quizNo: no, pageTitle: '', isFavorite: r.favorite, wrongCount: 0, correctCount: 0, lastResult: null, streakCorrect: 0, note: '', snapshot: null, sourceSpace: '', sourceNotebook: '', sourceChapter: '', collectionIds: [], tagIds: [], createdAt: '', updatedAt: '' } as QuizRecordDto
     }
-    // vault 分支放在插件分支之后（同 report：插件表路径行为不变）
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const row = vaultEnsureRecord(pageId, no, {
-        pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
-        snapshot: meta?.snapshot ?? null,
-      })
-      const rows = V.readQuizRecords()
-      const i = rows.findIndex((r) => r.id === row.id)
-      if (i < 0) return vaultRowToDto(row)
-      rows[i] = { ...rows[i], is_favorite: rows[i].is_favorite ? 0 : 1, updated_at: V.vaultLocalNow() }
-      V.writeQuizRecords(rows)
-      return vaultRowToDto(rows[i])
-    }
-    const row = ensureRecord(pageId, no, {
+    const row = vaultEnsureRecord(pageId, no, {
       pageTitle: typeof meta?.pageTitle === 'string' ? meta.pageTitle : '',
       snapshot: meta?.snapshot ?? null,
     })
-    const next = row.is_favorite ? 0 : 1
-    run("UPDATE quiz_records SET is_favorite = ?, updated_at = datetime('now', 'localtime') WHERE id = ?", [next, row.id])
-    return rowToDto(queryAll<RecordRow>('SELECT * FROM quiz_records WHERE id = ?', [row.id])[0])
+    const rows = V.readQuizRecords()
+    const i = rows.findIndex((r) => r.id === row.id)
+    if (i < 0) return vaultRowToDto(row)
+    rows[i] = { ...rows[i], is_favorite: rows[i].is_favorite ? 0 : 1, updated_at: V.vaultLocalNow() }
+    V.writeQuizRecords(rows)
+    return vaultRowToDto(rows[i])
   })
 
   ipcMain.handle('quizRecord:list', (_e, opts?: {
@@ -450,86 +283,47 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
     const collectionId = typeof opts?.collectionId === 'string' && opts.collectionId ? opts.collectionId : ''
     // 标签筛选：命中任一选中标签即算匹配
     const tagIds = Array.isArray(opts?.tagIds) ? opts!.tagIds!.filter(t => typeof t === 'string' && t) : []
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // EXISTS 子查询 → 关联表 join：先归约成命中记录 id 集合
-      const colHit = collectionId
-        ? new Set(V.readQuizRecordCollections().filter((l) => l.collection_id === collectionId).map((l) => l.record_id))
-        : null
-      const tagHit = tagIds.length > 0
-        ? new Set(V.readQuizRecordTags().filter((l) => tagIds.includes(l.tag_id)).map((l) => l.record_id))
-        : null
-      const matchKind = (r: V.VaultQuizRecordRow): boolean => {
-        const hasWrong = (r.wrong_count ?? 0) > 0 && (r.streak_correct ?? 0) < 2
-        if (kind === 'favorite') return !!r.is_favorite
-        if (kind === 'wrong') return hasWrong
-        return !!r.is_favorite || hasWrong
-      }
-      return V.readQuizRecords()
-        .filter((r) => matchKind(r)
-          && (!sourceSpace || r.source_space === sourceSpace)
-          && (!colHit || colHit.has(r.id))
-          && (!tagHit || tagHit.has(r.id)))
-        .sort((a, b) => strCmp(b.updated_at ?? '', a.updated_at ?? '') || strCmp(a.page_id, b.page_id) || a.quiz_no - b.quiz_no)
-        .map(vaultRowToDto)
+    // EXISTS 子查询 → 关联表 join：先归约成命中记录 id 集合
+    const colHit = collectionId
+      ? new Set(V.readQuizRecordCollections().filter((l) => l.collection_id === collectionId).map((l) => l.record_id))
+      : null
+    const tagHit = tagIds.length > 0
+      ? new Set(V.readQuizRecordTags().filter((l) => tagIds.includes(l.tag_id)).map((l) => l.record_id))
+      : null
+    const matchKind = (r: V.VaultQuizRecordRow): boolean => {
+      const hasWrong = (r.wrong_count ?? 0) > 0 && (r.streak_correct ?? 0) < 2
+      if (kind === 'favorite') return !!r.is_favorite
+      if (kind === 'wrong') return hasWrong
+      return !!r.is_favorite || hasWrong
     }
-    const conds: string[] = []
-    const params: unknown[] = []
-    if (kind === 'favorite') conds.push('r.is_favorite = 1')
-    else if (kind === 'wrong') conds.push('r.wrong_count > 0 AND r.streak_correct < 2')
-    else conds.push('(r.is_favorite = 1 OR (r.wrong_count > 0 AND r.streak_correct < 2))')
-    if (sourceSpace) { conds.push('r.source_space = ?'); params.push(sourceSpace) }
-    if (collectionId) {
-      conds.push('EXISTS (SELECT 1 FROM quiz_record_collections c WHERE c.record_id = r.id AND c.collection_id = ?)')
-      params.push(collectionId)
-    }
-    if (tagIds.length > 0) {
-      conds.push(`EXISTS (SELECT 1 FROM quiz_record_tags t WHERE t.record_id = r.id AND t.tag_id IN (${tagIds.map(() => '?').join(',')}))`)
-      params.push(...tagIds)
-    }
-    const rows = queryAll<RecordRow>(
-      `SELECT r.* FROM quiz_records r WHERE ${conds.join(' AND ')} ORDER BY r.updated_at DESC, r.page_id ASC, r.quiz_no ASC`,
-      params
-    )
-    return rows.map(rowToDto)
+    return V.readQuizRecords()
+      .filter((r) => matchKind(r)
+        && (!sourceSpace || r.source_space === sourceSpace)
+        && (!colHit || colHit.has(r.id))
+        && (!tagHit || tagHit.has(r.id)))
+      .sort((a, b) => strCmp(b.updated_at ?? '', a.updated_at ?? '') || strCmp(a.page_id, b.page_id) || a.quiz_no - b.quiz_no)
+      .map(vaultRowToDto)
   })
 
   ipcMain.handle('quizRecord:remove', (_e, pageId: string, quizNo: number) => {
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const no = Number(quizNo)
-      const row = V.readQuizRecords().find((r) => r.page_id === pageId && r.quiz_no === no)
-      if (!row) return
-      V.writeQuizRecordCollections(V.readQuizRecordCollections().filter((l) => l.record_id !== row.id))
-      V.writeQuizRecords(V.readQuizRecords().filter((r) => r.id !== row.id))
-      return
-    }
-    const row = queryAll<RecordRow>('SELECT id FROM quiz_records WHERE page_id = ? AND quiz_no = ?', [pageId, Number(quizNo)])[0]
+    const no = Number(quizNo)
+    const row = V.readQuizRecords().find((r) => r.page_id === pageId && r.quiz_no === no)
     if (!row) return
-    run('DELETE FROM quiz_record_collections WHERE record_id = ?', [row.id])
-    run('DELETE FROM quiz_records WHERE id = ?', [row.id])
+    V.writeQuizRecordCollections(V.readQuizRecordCollections().filter((l) => l.record_id !== row.id))
+    V.writeQuizRecords(V.readQuizRecords().filter((r) => r.id !== row.id))
   })
 
   ipcMain.handle('quizRecord:setCollections', (_e, recordId: string, collectionIds: string[]) => {
     if (typeof recordId !== 'string' || !recordId) throw new Error('recordId 缺失')
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // DELETE + 逐条 INSERT OR IGNORE（联合主键去重）：整体重写该记录的关联行
-      const kept = V.readQuizRecordCollections().filter((l) => l.record_id !== recordId)
-      const seen = new Set<string>()
-      for (const cid of Array.isArray(collectionIds) ? collectionIds : []) {
-        if (typeof cid !== 'string' || !cid || seen.has(cid)) continue
-        seen.add(cid)
-        kept.push({ record_id: recordId, collection_id: cid })
-      }
-      V.writeQuizRecordCollections(kept)
-      return
-    }
-    run('DELETE FROM quiz_record_collections WHERE record_id = ?', [recordId])
+    // DELETE + 逐条 INSERT OR IGNORE（联合主键去重）：整体重写该记录的关联行
+    const kept = V.readQuizRecordCollections().filter((l) => l.record_id !== recordId)
+    const seen = new Set<string>()
     for (const cid of Array.isArray(collectionIds) ? collectionIds : []) {
-      if (typeof cid !== 'string' || !cid) continue
-      run('INSERT OR IGNORE INTO quiz_record_collections (record_id, collection_id) VALUES (?, ?)', [recordId, cid])
+      if (typeof cid !== 'string' || !cid || seen.has(cid)) continue
+      seen.add(cid)
+      kept.push({ record_id: recordId, collection_id: cid })
     }
+    V.writeQuizRecordCollections(kept)
   })
 
   /** 同步 QuizTagDto 的 kind 取值：考点 / 题型 / 难度 / 关键词 */
@@ -543,24 +337,9 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
   }
 
   ipcMain.handle('quizTag:list', () => {
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // ORDER BY sort_order ASC, created_at ASC；count 由关联表计数
-      const rows = V.readQuizTags().sort((a, b) => a.sort_order - b.sort_order || strCmp(a.created_at ?? '', b.created_at ?? ''))
-      const links = V.readQuizRecordTags()
-      return rows.map(t => ({
-        id: t.id,
-        name: t.name,
-        kind: t.kind,
-        color: t.color || TAG_COLORS[t.kind] || '#888780',
-        sortOrder: t.sort_order,
-        createdAt: t.created_at,
-        count: links.filter((l) => l.tag_id === t.id).length,
-      })) as QuizTagDto[]
-    }
-    const rows = queryAll<{ id: string; name: string; kind: string; color: string; sort_order: number; created_at: string }>(
-      'SELECT * FROM quiz_tags ORDER BY sort_order ASC, created_at ASC'
-    )
+    // ORDER BY sort_order ASC, created_at ASC；count 由关联表计数
+    const rows = V.readQuizTags().sort((a, b) => a.sort_order - b.sort_order || strCmp(a.created_at ?? '', b.created_at ?? ''))
+    const links = V.readQuizRecordTags()
     return rows.map(t => ({
       id: t.id,
       name: t.name,
@@ -568,7 +347,7 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
       color: t.color || TAG_COLORS[t.kind] || '#888780',
       sortOrder: t.sort_order,
       createdAt: t.created_at,
-      count: queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM quiz_record_tags WHERE tag_id = ?', [t.id])[0]?.n ?? 0,
+      count: links.filter((l) => l.tag_id === t.id).length,
     })) as QuizTagDto[]
   })
 
@@ -576,66 +355,38 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
     const nm = typeof name === 'string' ? name.trim().slice(0, 24) : ''
     if (!nm) throw new Error('标签名缺失')
     const k = validKind(kind)
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // 唯一索引 (name, kind) 等义：按 name+kind 查找，命中即原样返回（含 count: 0 的现语义）
-      const exist = V.readQuizTags().find((t) => t.name === nm && t.kind === k)
-      if (exist) {
-        return { id: exist.id, name: exist.name, kind: exist.kind, color: exist.color, sortOrder: exist.sort_order, createdAt: exist.created_at, count: 0 } as QuizTagDto
-      }
-      const id = randomUUID()
-      // COALESCE(MAX(sort_order), -1) + 1
-      const tags = V.readQuizTags()
-      const maxOrder = tags.reduce((m, t) => Math.max(m, t.sort_order), -1) + 1
-      V.writeQuizTags([...tags, { id, name: nm, kind: k, color: TAG_COLORS[k] ?? '', sort_order: maxOrder, created_at: V.vaultLocalNow() }])
-      // 与 sqlite 路径逐字段一致（该分支不回填 createdAt，保持 ''）
-      return { id, name: nm, kind: k, color: TAG_COLORS[k] ?? '', sortOrder: maxOrder, createdAt: '', count: 0 } as QuizTagDto
-    }
-    const exist = queryAll<{ id: string }>('SELECT id FROM quiz_tags WHERE name = ? AND kind = ?', [nm, k])[0]
+    // 唯一索引 (name, kind) 等义：按 name+kind 查找，命中即原样返回（含 count: 0 的现语义）
+    const exist = V.readQuizTags().find((t) => t.name === nm && t.kind === k)
     if (exist) {
-      return queryAll<{ id: string; name: string; kind: string; color: string; sort_order: number; created_at: string }>(
-        'SELECT * FROM quiz_tags WHERE id = ?', [exist.id]
-      ).map(t => ({ id: t.id, name: t.name, kind: t.kind, color: t.color, sortOrder: t.sort_order, createdAt: t.created_at, count: 0 }))[0] as QuizTagDto
+      return { id: exist.id, name: exist.name, kind: exist.kind, color: exist.color, sortOrder: exist.sort_order, createdAt: exist.created_at, count: 0 } as QuizTagDto
     }
     const id = randomUUID()
-    const maxOrder = queryAll<{ m: number }>('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM quiz_tags')[0]?.m ?? 0
-    run('INSERT INTO quiz_tags (id, name, kind, color, sort_order) VALUES (?, ?, ?, ?, ?)', [id, nm, k, TAG_COLORS[k] ?? '', maxOrder])
+    // COALESCE(MAX(sort_order), -1) + 1
+    const tags = V.readQuizTags()
+    const maxOrder = tags.reduce((m, t) => Math.max(m, t.sort_order), -1) + 1
+    V.writeQuizTags([...tags, { id, name: nm, kind: k, color: TAG_COLORS[k] ?? '', sort_order: maxOrder, created_at: V.vaultLocalNow() }])
+    // 保持原语义：该分支不回填 createdAt，保持 ''
     return { id, name: nm, kind: k, color: TAG_COLORS[k] ?? '', sortOrder: maxOrder, createdAt: '', count: 0 } as QuizTagDto
   })
 
   ipcMain.handle('quizTag:delete', (_e, tagId: string) => {
     if (typeof tagId !== 'string' || !tagId) return
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      V.writeQuizRecordTags(V.readQuizRecordTags().filter((l) => l.tag_id !== tagId))
-      V.writeQuizTags(V.readQuizTags().filter((t) => t.id !== tagId))
-      return
-    }
-    run('DELETE FROM quiz_record_tags WHERE tag_id = ?', [tagId])
-    run('DELETE FROM quiz_tags WHERE id = ?', [tagId])
+    V.writeQuizRecordTags(V.readQuizRecordTags().filter((l) => l.tag_id !== tagId))
+    V.writeQuizTags(V.readQuizTags().filter((t) => t.id !== tagId))
   })
 
   /** 单题设置标签（整体覆盖） */
   ipcMain.handle('quizRecord:setTags', (_e, recordId: string, tagIds: string[]) => {
     if (typeof recordId !== 'string' || !recordId) throw new Error('recordId 缺失')
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // DELETE + 逐条 INSERT OR IGNORE（联合主键去重）：整体重写该记录的标签关联
-      const kept = V.readQuizRecordTags().filter((l) => l.record_id !== recordId)
-      const seen = new Set<string>()
-      for (const tid of Array.isArray(tagIds) ? tagIds : []) {
-        if (typeof tid !== 'string' || !tid || seen.has(tid)) continue
-        seen.add(tid)
-        kept.push({ record_id: recordId, tag_id: tid })
-      }
-      V.writeQuizRecordTags(kept)
-      return
-    }
-    run('DELETE FROM quiz_record_tags WHERE record_id = ?', [recordId])
+    // DELETE + 逐条 INSERT OR IGNORE（联合主键去重）：整体重写该记录的标签关联
+    const kept = V.readQuizRecordTags().filter((l) => l.record_id !== recordId)
+    const seen = new Set<string>()
     for (const tid of Array.isArray(tagIds) ? tagIds : []) {
-      if (typeof tid !== 'string' || !tid) continue
-      run('INSERT OR IGNORE INTO quiz_record_tags (record_id, tag_id) VALUES (?, ?)', [recordId, tid])
+      if (typeof tid !== 'string' || !tid || seen.has(tid)) continue
+      seen.add(tid)
+      kept.push({ record_id: recordId, tag_id: tid })
     }
+    V.writeQuizRecordTags(kept)
   })
 
   /** 批量打标：给多条记录追加标签（去重） */
@@ -643,121 +394,72 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
     const rids = Array.isArray(recordIds) ? recordIds.filter(x => typeof x === 'string' && x) : []
     const tids = Array.isArray(tagIds) ? tagIds.filter(x => typeof x === 'string' && x) : []
     if (rids.length === 0 || tids.length === 0) return
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // 全矩阵 INSERT OR IGNORE：已存在的 (record_id, tag_id) 跳过
-      const links = V.readQuizRecordTags()
-      const have = new Set(links.map((l) => `${l.record_id}\u0000${l.tag_id}`))
-      for (const rid of rids) {
-        for (const tid of tids) {
-          const key = `${rid}\u0000${tid}`
-          if (have.has(key)) continue
-          have.add(key)
-          links.push({ record_id: rid, tag_id: tid })
-        }
-      }
-      V.writeQuizRecordTags(links)
-      return
-    }
+    // 全矩阵 INSERT OR IGNORE：已存在的 (record_id, tag_id) 跳过
+    const links = V.readQuizRecordTags()
+    const have = new Set(links.map((l) => `${l.record_id}\u0000${l.tag_id}`))
     for (const rid of rids) {
       for (const tid of tids) {
-        run('INSERT OR IGNORE INTO quiz_record_tags (record_id, tag_id) VALUES (?, ?)', [rid, tid])
+        const key = `${rid}\u0000${tid}`
+        if (have.has(key)) continue
+        have.add(key)
+        links.push({ record_id: rid, tag_id: tid })
       }
     }
+    V.writeQuizRecordTags(links)
   })
 
   ipcMain.handle('quizRecord:setNote', (_e, recordId: string, note: string) => {
     if (typeof recordId !== 'string' || !recordId) throw new Error('recordId 缺失')
     const text = typeof note === 'string' ? note.slice(0, 500) : ''
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const rows = V.readQuizRecords()
-      const i = rows.findIndex((r) => r.id === recordId)
-      if (i >= 0) {
-        // 与 sqlite 一致：仅更新 note，不触碰 updated_at
-        rows[i] = { ...rows[i], note: text }
-        V.writeQuizRecords(rows)
-      }
-      return
+    const rows = V.readQuizRecords()
+    const i = rows.findIndex((r) => r.id === recordId)
+    if (i >= 0) {
+      // 仅更新 note，不触碰 updated_at
+      rows[i] = { ...rows[i], note: text }
+      V.writeQuizRecords(rows)
     }
-    run("UPDATE quiz_records SET note = ? WHERE id = ?", [text, recordId])
   })
 
   ipcMain.handle('quizRecord:stats', (_e, opts?: { sourceSpace?: string }) => {
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const space = typeof opts?.sourceSpace === 'string' && opts.sourceSpace ? opts.sourceSpace : ''
-      const rows = V.readQuizRecords().filter((r) => !space || r.source_space === space)
-      const today = V.vaultLocalToday() // date('now','localtime')
-      let wrong = 0
-      let mastered = 0
-      let todayWrong = 0
-      let sumCorrect = 0
-      let sumWrong = 0
-      for (const r of rows) {
-        const hasWrong = (r.wrong_count ?? 0) > 0
-        const sc = r.streak_correct ?? 0
-        if (hasWrong && sc < 2) wrong += 1
-        if (hasWrong && sc >= 2) mastered += 1
-        // date(r.updated_at) = date('now','localtime')：'YYYY-MM-DD HH:MM:SS' 取前 10 位即日期
-        if (r.last_result === 0 && (r.updated_at ?? '').slice(0, 10) === today) todayWrong += 1
-        sumCorrect += r.correct_count ?? 0
-        sumWrong += r.wrong_count ?? 0
-      }
-      const total = sumCorrect + sumWrong
-      return {
-        wrong,
-        mastered,
-        todayWrong,
-        correctRate: total > 0 ? Math.round((sumCorrect / total) * 100) : 0,
-      }
+    const space = typeof opts?.sourceSpace === 'string' && opts.sourceSpace ? opts.sourceSpace : ''
+    const rows = V.readQuizRecords().filter((r) => !space || r.source_space === space)
+    const today = V.vaultLocalToday() // date('now','localtime')
+    let wrong = 0
+    let mastered = 0
+    let todayWrong = 0
+    let sumCorrect = 0
+    let sumWrong = 0
+    for (const r of rows) {
+      const hasWrong = (r.wrong_count ?? 0) > 0
+      const sc = r.streak_correct ?? 0
+      if (hasWrong && sc < 2) wrong += 1
+      if (hasWrong && sc >= 2) mastered += 1
+      // date(r.updated_at) = date('now','localtime')：'YYYY-MM-DD HH:MM:SS' 取前 10 位即日期
+      if (r.last_result === 0 && (r.updated_at ?? '').slice(0, 10) === today) todayWrong += 1
+      sumCorrect += r.correct_count ?? 0
+      sumWrong += r.wrong_count ?? 0
     }
-    const conds: string[] = []
-    const params: unknown[] = []
-    if (opts?.sourceSpace) { conds.push('r.source_space = ?'); params.push(opts.sourceSpace) }
-    const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : ''
-    const agg = queryAll<{ wrong: number; mastered: number; today_wrong: number; sum_correct: number; sum_wrong: number }>(
-      `SELECT
-        SUM(CASE WHEN r.wrong_count > 0 AND r.streak_correct < 2 THEN 1 ELSE 0 END) AS wrong,
-        SUM(CASE WHEN r.wrong_count > 0 AND r.streak_correct >= 2 THEN 1 ELSE 0 END) AS mastered,
-        SUM(CASE WHEN r.last_result = 0 AND date(r.updated_at) = date('now', 'localtime') THEN 1 ELSE 0 END) AS today_wrong,
-        SUM(r.correct_count) AS sum_correct,
-        SUM(r.wrong_count) AS sum_wrong
-       FROM quiz_records r ${where}`,
-      params
-    )[0] ?? { wrong: 0, mastered: 0, today_wrong: 0, sum_correct: 0, sum_wrong: 0 }
-    const total = (agg.sum_correct ?? 0) + (agg.sum_wrong ?? 0)
+    const total = sumCorrect + sumWrong
     return {
-      wrong: agg.wrong ?? 0,
-      mastered: agg.mastered ?? 0,
-      todayWrong: agg.today_wrong ?? 0,
-      correctRate: total > 0 ? Math.round(((agg.sum_correct ?? 0) / total) * 100) : 0,
+      wrong,
+      mastered,
+      todayWrong,
+      correctRate: total > 0 ? Math.round((sumCorrect / total) * 100) : 0,
     }
   })
 
   // ===== 自定义分组 =====
 
   ipcMain.handle('quizCollection:list', () => {
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      // ORDER BY sort_order ASC, created_at ASC；count 由关联表计数
-      const cols = V.readQuizCollections().sort((a, b) => a.sort_order - b.sort_order || strCmp(a.created_at ?? '', b.created_at ?? ''))
-      const links = V.readQuizRecordCollections()
-      return cols.map(c => ({
-        id: c.id,
-        name: c.name,
-        sortOrder: c.sort_order,
-        createdAt: c.created_at,
-        count: links.filter((l) => l.collection_id === c.id).length,
-      })) as QuizCollectionDto[]
-    }
-    const cols = queryAll<CollectionRow>('SELECT * FROM quiz_collections ORDER BY sort_order ASC, created_at ASC')
+    // ORDER BY sort_order ASC, created_at ASC；count 由关联表计数
+    const cols = V.readQuizCollections().sort((a, b) => a.sort_order - b.sort_order || strCmp(a.created_at ?? '', b.created_at ?? ''))
+    const links = V.readQuizRecordCollections()
     return cols.map(c => ({
       id: c.id,
       name: c.name,
       sortOrder: c.sort_order,
       createdAt: c.created_at,
-      count: queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM quiz_record_collections WHERE collection_id = ?', [c.id])[0]?.n ?? 0,
+      count: links.filter((l) => l.collection_id === c.id).length,
     })) as QuizCollectionDto[]
   })
 
@@ -765,64 +467,42 @@ export function registerQuizHandlers(deps?: { getSettingValue?: (key: string) =>
     const n = typeof name === 'string' ? name.trim() : ''
     if (!n) throw new Error('分组名不能为空')
     if (n.length > 50) throw new Error('分组名过长')
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const cols = V.readQuizCollections()
-      const id = randomUUID()
-      // COALESCE(MAX(sort_order), -1) + 1
-      const maxOrder = cols.reduce((m, c) => Math.max(m, c.sort_order), -1) + 1
-      const created: V.VaultQuizCollectionRow = { id, name: n, sort_order: maxOrder, created_at: V.vaultLocalNow() }
-      V.writeQuizCollections([...cols, created])
-      // 与 sqlite 路径一致：回读整行 + count: 0
-      return { id: created.id, name: created.name, sortOrder: created.sort_order, createdAt: created.created_at, count: 0 } as QuizCollectionDto
-    }
+    const cols = V.readQuizCollections()
     const id = randomUUID()
-    const maxOrder = queryAll<{ m: number }>('SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM quiz_collections')[0]?.m ?? 0
-    run('INSERT INTO quiz_collections (id, name, sort_order) VALUES (?, ?, ?)', [id, n, maxOrder])
-    const c = queryAll<CollectionRow>('SELECT * FROM quiz_collections WHERE id = ?', [id])[0]
-    return { id: c.id, name: c.name, sortOrder: c.sort_order, createdAt: c.created_at, count: 0 } as QuizCollectionDto
+    // COALESCE(MAX(sort_order), -1) + 1
+    const maxOrder = cols.reduce((m, c) => Math.max(m, c.sort_order), -1) + 1
+    const created: V.VaultQuizCollectionRow = { id, name: n, sort_order: maxOrder, created_at: V.vaultLocalNow() }
+    V.writeQuizCollections([...cols, created])
+    // 回读整行 + count: 0
+    return { id: created.id, name: created.name, sortOrder: created.sort_order, createdAt: created.created_at, count: 0 } as QuizCollectionDto
   })
 
   ipcMain.handle('quizCollection:rename', (_e, id: string, name: string) => {
     const n = typeof name === 'string' ? name.trim() : ''
     if (!n) throw new Error('分组名不能为空')
     if (n.length > 50) throw new Error('分组名过长')
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      const cols = V.readQuizCollections()
-      const i = cols.findIndex((c) => c.id === id)
-      if (i < 0) throw new Error('分组不存在')
-      cols[i] = { ...cols[i], name: n }
-      V.writeQuizCollections(cols)
-      return {
-        id: cols[i].id,
-        name: cols[i].name,
-        sortOrder: cols[i].sort_order,
-        createdAt: cols[i].created_at,
-        count: V.readQuizRecordCollections().filter((l) => l.collection_id === id).length,
-      } as QuizCollectionDto
-    }
-    run('UPDATE quiz_collections SET name = ? WHERE id = ?', [n, id])
-    const c = queryAll<CollectionRow>('SELECT * FROM quiz_collections WHERE id = ?', [id])[0]
-    if (!c) throw new Error('分组不存在')
-    return { id: c.id, name: c.name, sortOrder: c.sort_order, createdAt: c.created_at, count: queryAll<{ n: number }>('SELECT COUNT(*) AS n FROM quiz_record_collections WHERE collection_id = ?', [id])[0]?.n ?? 0 } as QuizCollectionDto
+    const cols = V.readQuizCollections()
+    const i = cols.findIndex((c) => c.id === id)
+    if (i < 0) throw new Error('分组不存在')
+    cols[i] = { ...cols[i], name: n }
+    V.writeQuizCollections(cols)
+    return {
+      id: cols[i].id,
+      name: cols[i].name,
+      sortOrder: cols[i].sort_order,
+      createdAt: cols[i].created_at,
+      count: V.readQuizRecordCollections().filter((l) => l.collection_id === id).length,
+    } as QuizCollectionDto
   })
 
   ipcMain.handle('quizCollection:delete', (_e, id: string) => {
-    if (isVaultDataSource()) {
-      ensureQuizVaultSeeded()
-      V.writeQuizRecordCollections(V.readQuizRecordCollections().filter((l) => l.collection_id !== id))
-      V.writeQuizCollections(V.readQuizCollections().filter((c) => c.id !== id))
-      return
-    }
-    run('DELETE FROM quiz_record_collections WHERE collection_id = ?', [id])
-    run('DELETE FROM quiz_collections WHERE id = ?', [id])
+    V.writeQuizRecordCollections(V.readQuizRecordCollections().filter((l) => l.collection_id !== id))
+    V.writeQuizCollections(V.readQuizCollections().filter((c) => c.id !== id))
   })
 
-  // ===== 数据迁移（P2：主表 ⇄ 插件命名空间表） =====
-  // 去库化说明：以下 quizMigrate:* / quiz:plugin* handler 全部作用于插件命名空间表
-  // （sqlite 内，quizMigration.ts 管辖），不属于本次迁 vault 的五张主表，
-  // 故不加 vault 分支（保持 sqlite 原样）。
+  // ===== 数据迁移（主表 ⇄ 插件命名空间表） =====
+  // 以下 quizMigrate:* / quiz:plugin* handler 全部作用于插件命名空间表
+  // （quizMigration.ts 管辖），不属于主表 vault 数据层，故保持原样。
 
   ipcMain.handle('quizMigrate:status', () => migrationStatus())
   ipcMain.handle('quizMigrate:export', () => exportQuizData())
