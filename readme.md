@@ -10,7 +10,7 @@ Windows 桌面端知识日程管理工具，纯本地运行
 |------|------|
 | 📝 博客 | 每日一篇，Markdown 写作，标签分类，日历筛选，全文搜索；**周/月总结面板**自动汇总区间数据，**自定义模板**一键套用 |
 | 📅 任务 | 日历视图，待办列表，四象限优先级，子任务，截止时间线，周期任务；**日程与打卡小窗**——主窗口之外的独立伴随窗口，常驻桌面一角，贴边吸附 / 磁吸回位 / 拖离自由摆放，逾期任务置顶 + 今日任务 + 一句话快速添加 + 今日打卡，与主窗口实时双向同步 |
-| 📚 知识库 | 空间 / 笔记本 / 章节 / 页面四级结构，`[[双链]]` + **关联网络**（反链上下文、手动关联、相关性推荐），PDF / 代码 / XMind 附件与注解层，**沉浸阅读模式** |
+| 📚 知识库 | 空间 / 笔记本 / 章节 / 页面四级结构，`[[双链]]` + **关联网络**（反链上下文、手动关联、相关性推荐），PDF / 代码 / XMind 附件与注解层，**沉浸阅读模式**；支持仓库根 `.ignore` 规则文件（gitignore 语法）——私人目录/草稿在知识库、搜索、图谱、AI 检索中整体隐藏，编辑器不受影响 |
 | 💬 说说 | 轻量动态 + 相册管理，支持时间线可见性切换 |
 | 🤖 AI 助手 | 全局侧栏（`Ctrl+J` / 右下角悬浮按钮），**本地优先**的模型网关（OpenAI 兼容 / Ollama / Anthropic，支持 CC Switch 一键导入），自然语言驱动本地工具（≤8 轮推理、全程审计、月度用量上限），**上下文感知**——阅读知识库页面时"边看边问"；MCP 外部服务器、Skill 提示词包、按模块权限分级 |
 | 🧩 插件 | 官方市场一键安装，S/A/B 三级安全审核；**主题包**（GitHub Dark/Light、护眼米白、赛博朋克、手绘线条、OpenCode 终端灰）、番茄钟进阶预设、C++ 文档速查、**408 考研学习空间**（教材 76 页 + 18 套 846 题真题，一键导入知识库，含冲突管理面板） |
@@ -48,7 +48,7 @@ Windows 桌面端知识日程管理工具，纯本地运行
 | 前端框架 | React 19 + TypeScript | 函数组件 + Hooks，严格模式 |
 | 构建工具 | electron-vite | 主进程 / preload / 渲染进程统一构建 |
 | UI 样式 | TailwindCSS 4 | 原子化 CSS，深色/浅色双主题（CSS 变量） |
-| 数据库 | sql.js (SQLite WASM) | 零原生依赖；原子写盘 + 自动 `.bak` 回退 |
+| 数据存储 | 本地 JSON + Markdown（仓库 Vault） | 无数据库依赖；内容页为 `.md` 文件，结构化数据为 `.knowbase/` 内 JSON，原子写盘 |
 | 编辑器 | Monaco Editor | VS Code 同款内核 |
 | Markdown | react-markdown + rehype-highlight | 默认不渲染原始 HTML，安全无 XSS |
 | 图标 | lucide-react | 轻量 SVG 图标 |
@@ -62,11 +62,10 @@ Knowbase/
 │   ├── main/index.ts          # 窗口管理 + IPC 调度 + 安全策略
 │   ├── main/passwordFiller.ts # 密码快速填充悬浮窗
 │   ├── preload/index.ts       # contextBridge 安全 API 桥接
-│   ├── database/connection.ts # sql.js 初始化 / 迁移调度（单事务）/ 原子持久化
-│   ├── database/migrations/   # 逐版本迁移：一文件一迁移 NNN_name.ts + index.ts 顺序表
-│   ├── database/paths.ts      # 附件目录等路径解析（供迁移复用，避免循环依赖）
-│   ├── database/repositories/ # 各模块 Repository（SQL 全参数化）
-│   └── lib/                   # 推送服务、ZIP、路径防护、更新检查等
+│   ├── database/repositories/ # 各模块 IPC handler（vault-only 薄壳）
+│   ├── lib/kbStore/           # 模块数据仓库：.knowbase/ JSON 读写 + 知识索引 + 图谱索引
+│   ├── lib/workspaceManager.ts# 仓库（Vault）文件服务：路径防护 / 原子写 / 回收站
+│   └── lib/                   # 推送服务、ZIP、插件注册、模型网关、更新检查等
 ├── src/
 │   ├── App.tsx                # 主组件：TitleBar + ActivityBar + 模块路由
 │   ├── modules/               # blog / schedule / knowledge / moments /
@@ -80,10 +79,10 @@ Knowbase/
 
 ## 安全设计
 
-- 数据 100% 本地存储（SQLite），密码本列使用系统级加密（Windows DPAPI）
+- 数据 100% 本地存储（Markdown + JSON 纯文件，无数据库），密码本列使用系统级加密（Windows DPAPI）
 - 渲染进程沙箱 + contextIsolation，IPC 最小暴露面，路径类操作防穿越（Zip Slip 防护）
 - 复制的密码 30 秒后自动清空剪贴板（仅当内容未被覆盖时）
-- 备份导入预检 + 事务回滚，数据库损坏自动从 `.bak` 恢复
+- 整仓备份 = 仓库 `.knowbase/` 目录整包 ZIP，恢复前预检
 - **AI 安全**：API Key 系统级加密存储（渲染层永不可见）；AI 工具调用全程审计、月度用量硬上限；按模块权限分级（禁止/只读/读写），未授权工具对 AI 完全不可见；MCP 外部命令双重确认
 - **插件安全**：S/A/B 三级强算分级（主进程防骗标）；内容包导入单事务执行、失败自动回滚；本地已修改页面默认跳过保护，冲突面板可勾选按页覆盖
 
@@ -119,16 +118,24 @@ npm run pack
 
 ## 数据目录
 
-| 文件 | 路径 |
+应用采用「仓库 = 磁盘文件夹」模型（对标 Obsidian Vault），数据分两层：
+
+| 数据 | 路径 |
 |------|------|
-| 数据库 | `%APPDATA%/knowbase/data/knowledge.db`（含 `.bak` 自动备份） |
-| 附件 | `%APPDATA%/knowbase/attachments/` |
+| 知识页 / 博客 | 仓库根内 `.md` 文件（frontmatter 承载元数据） |
+| 结构化数据 | 仓库根 `.knowbase/modules/*.json`（书签/日程/打卡/错题本等） |
+| 索引与缓存 | 仓库根 `.knowbase/cache/` |
+| 仓库内附件 | 仓库根 `.attachments/` |
 | 设置 | `%APPDATA%/knowbase/settings.json` |
+| 全局域数据 | `%APPDATA%/knowbase/data/*.json`（AI 会话 / MCP / 插件数据等） |
+| 历史附件目录 | `%APPDATA%/knowbase/attachments/`（旧版遗留，只读兼容） |
+
+> 仓库可放在任意磁盘目录（含网盘同步目录），换电脑 = 拷走仓库文件夹。
 
 ## 环境检查
 
 1. **`ELECTRON_RUN_AS_NODE`** — 系统环境变量中若存在需删除，否则 Electron 以纯 Node 模式运行
-2. **数据备份** — 定期使用导出功能备份；数据库损坏时应用会自动尝试 `.bak` 回退
+2. **数据备份** — 定期使用「设置 → 数据与仓库」的整仓备份，或直接拷贝仓库文件夹
 
 ## 免责声明
 
