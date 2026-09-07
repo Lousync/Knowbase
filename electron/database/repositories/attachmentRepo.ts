@@ -1,24 +1,14 @@
+// R6 去库化：附件台账 = .knowbase/modules/attachments/registry.json（附件文件仍在 userData/attachments，sql.js 路径已移除，D9）
 import { ipcMain, app } from 'electron'
 import { join, basename } from 'path'
 import { mkdirSync, writeFileSync, copyFileSync, existsSync, unlinkSync, renameSync, readFileSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
+import { getAttachmentsDir } from '../paths'
 import { safePathInside } from '../../lib/pathGuard'
-
-interface AttachmentRow {
-  id: string
-  owner_type: string
-  owner_id: string
-  position: number
-  file_name: string
-  file_path: string
-  thumb_path: string
-  mime_type: string
-  size_bytes: number
-  trashed: number
-  trash_path: string
-  created_at: string
-}
+import { vaultAttachmentsAll, vaultAttachmentsSave, AttachmentRow } from '../../lib/kbStore/attachmentVaultRepo'
+import { vaultPostsAll } from '../../lib/kbStore/momentsVaultRepo'
+import { vaultListEntries } from '../../lib/kbStore/blogVaultRepo'
+import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 
 const EXT_MAP: Record<string, string> = {
   'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/bmp': 'bmp',
@@ -37,30 +27,6 @@ function mimeFromPath(p: string): string {
   const ext = (p.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
   const inv: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml', pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', json: 'application/json' }
   return inv[ext] || 'application/octet-stream'
-}
-
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function queryOne<T>(sql: string, params: unknown[] = []): T | null {
-  const rows = queryAll<T>(sql, params)
-  return rows.length > 0 ? rows[0] : null
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
-function relFromAttachments(absPath: string): string {
-  return absPath.replace(getAttachmentsDir() + '\\', '').replace(getAttachmentsDir() + '/', '')
 }
 
 function toMeta(r: AttachmentRow) {
@@ -92,7 +58,7 @@ export function parseInlineAttachmentIds(md: string): string[] {
 
 /** 供 attachment:// 协议解析真实文件路径（路径防护:历史脏数据/恶意注入的 file_path 不会越出附件目录） */
 export function getAttachmentFilePath(id: string, thumb = false): string | null {
-  const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+  const row = vaultAttachmentsAll().find(r => r.id === id)
   if (!row) return null
   const p = safePathInside(getAttachmentsDir(), thumb && row.thumb_path ? row.thumb_path : row.file_path)
   return p && existsSync(p) ? p : null
@@ -102,27 +68,36 @@ export function getAttachmentFilePath(id: string, thumb = false): string | null 
 export function getAttachmentsForIds(ids: string[]): ReturnType<typeof toMeta>[] {
   const list = ids.filter(Boolean)
   if (list.length === 0) return []
-  const placeholders = list.map(() => '?').join(',')
-  const rows = queryAll<AttachmentRow>(`SELECT * FROM attachments WHERE id IN (${placeholders})`, list)
+  const rows = vaultAttachmentsAll().filter(r => list.includes(r.id))
   const map = new Map(rows.map(r => [r.id, toMeta(r)]))
   return list.map(id => map.get(id)).filter((x): x is ReturnType<typeof toMeta> => !!x)
 }
 
 /** 认领附件：上传时 owner_id 为空，创建业务记录后归属到具体对象 */
 export function claimAttachments(ids: string[], ownerType: string, ownerId: string): void {
+  const rows = vaultAttachmentsAll()
+  let changed = false
   ids.forEach((id, i) => {
     if (!id) return
-    run('UPDATE attachments SET owner_type = ?, owner_id = ?, position = ? WHERE id = ?', [ownerType, ownerId, i, id])
+    const row = rows.find(r => r.id === id)
+    if (!row) return
+    row.owner_type = ownerType
+    row.owner_id = ownerId
+    row.position = i
+    changed = true
   })
+  if (changed) vaultAttachmentsSave(rows)
 }
 
 /** 删除业务记录时，附件文件移入回收区（可恢复） */
 export function trashAttachments(ids: string[], binId: string): void {
   const trashRoot = join(app.getPath('userData'), 'attachments_trash', binId)
   mkdirSync(trashRoot, { recursive: true })
+  const rows = vaultAttachmentsAll()
+  let changed = false
   for (const id of ids) {
     if (!id) continue
-    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+    const row = rows.find(r => r.id === id)
     if (!row || row.trashed) continue
     const src = safePathInside(getAttachmentsDir(), row.file_path)
     if (!src) continue
@@ -132,7 +107,6 @@ export function trashAttachments(ids: string[], binId: string): void {
     } catch {
       try { if (existsSync(src)) { copyFileSync(src, dest); unlinkSync(src) } } catch { /* keep */ }
     }
-    let relThumb = ''
     if (row.thumb_path) {
       const tsrc = safePathInside(getAttachmentsDir(), row.thumb_path)
       const tdest = join(trashRoot, basename(row.thumb_path))
@@ -141,19 +115,23 @@ export function trashAttachments(ids: string[], binId: string): void {
       } catch {
         try { if (existsSync(tsrc)) { copyFileSync(tsrc, tdest); unlinkSync(tsrc) } } catch { /* keep */ }
       }
-      relThumb = join('attachments_trash', binId, basename(row.thumb_path))
     }
-    run('UPDATE attachments SET trashed = 1, trash_path = ? WHERE id = ?', [join('attachments_trash', binId, basename(row.file_path)), id])
+    row.trashed = 1
+    row.trash_path = join('attachments_trash', binId, basename(row.file_path))
+    changed = true
   }
+  if (changed) vaultAttachmentsSave(rows)
 }
 
 /** 从回收区恢复附件文件 */
 export function restoreAttachments(ids: string[]): void {
+  const rows = vaultAttachmentsAll()
+  let changed = false
   for (const id of ids) {
     if (!id) continue
-    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+    const row = rows.find(r => r.id === id)
     if (!row || !row.trashed || !row.trash_path) continue
-    // 路径防护:trash_path / file_path 均来自数据库,越出预期目录的脏数据直接跳过
+    // 路径防护:trash_path / file_path 均来自台账,越出预期目录的脏数据直接跳过
     const src = safePathInside(app.getPath('userData'), row.trash_path)
     const dest = safePathInside(getAttachmentsDir(), row.file_path)
     if (!src || !dest) continue
@@ -163,15 +141,21 @@ export function restoreAttachments(ids: string[]): void {
     } catch {
       try { if (existsSync(src)) { copyFileSync(src, dest); unlinkSync(src) } } catch { /* keep */ }
     }
-    run('UPDATE attachments SET trashed = 0, trash_path = ? WHERE id = ?', ['', id])
+    row.trashed = 0
+    row.trash_path = ''
+    changed = true
   }
+  if (changed) vaultAttachmentsSave(rows)
 }
 
 /** 彻底删除附件（文件 + 记录） */
 export function deleteAttachments(ids: string[]): void {
+  if (ids.filter(Boolean).length === 0) return
+  let rows = vaultAttachmentsAll()
+  let changed = false
   for (const id of ids) {
     if (!id) continue
-    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])
+    const row = rows.find(r => r.id === id)
     if (!row) continue
     for (const p of [row.file_path, row.thumb_path]) {
       if (!p) continue
@@ -182,8 +166,10 @@ export function deleteAttachments(ids: string[]): void {
       const trashFull = safePathInside(app.getPath('userData'), row.trash_path)
       try { if (trashFull && existsSync(trashFull)) unlinkSync(trashFull) } catch { /* ignore */ }
     }
-    run('DELETE FROM attachments WHERE id = ?', [id])
+    rows = rows.filter(r => r.id !== id)
+    changed = true
   }
+  if (changed) vaultAttachmentsSave(rows)
 }
 
 /** 注册一条已有文件的附件记录（文件已由调用方落盘） */
@@ -197,11 +183,22 @@ export function registerAttachment(data: {
   size?: number
 }): string {
   const id = randomUUID()
-  run(
-    `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, data.ownerType, data.ownerId, data.position || 0, data.fileName, data.relPath, data.mime || 'application/octet-stream', data.size || 0, new Date().toISOString()]
-  )
+  const rows = vaultAttachmentsAll()
+  rows.push({
+    id,
+    owner_type: data.ownerType,
+    owner_id: data.ownerId,
+    position: data.position || 0,
+    file_name: data.fileName,
+    file_path: data.relPath,
+    thumb_path: '',
+    mime_type: data.mime || 'application/octet-stream',
+    size_bytes: data.size || 0,
+    trashed: 0,
+    trash_path: '',
+    created_at: new Date().toISOString(),
+  })
+  vaultAttachmentsSave(rows)
   return id
 }
 
@@ -218,6 +215,7 @@ export function registerAttachmentHandlers(): void {
     if (!/^[A-Za-z0-9_-]+$/.test(ownerType) || !/^[A-Za-z0-9_-]+$/.test(ownerId)) return []
     const now = new Date().toISOString()
     const out: ReturnType<typeof toMeta>[] = []
+    const rows = vaultAttachmentsAll()
     for (const f of data.files || []) {
       const id = randomUUID()
       const raw = f.dataUrl || ''
@@ -237,14 +235,24 @@ export function registerAttachmentHandlers(): void {
         writeFileSync(join(getAttachmentsDir(), relThumb), Buffer.from(f.thumbDataUrl.split(',')[1] || '', 'base64'))
       }
 
-      run(
-        `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, thumb_path, mime_type, size_bytes, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, ownerType, ownerId, out.length, f.name || 'file', rel, relThumb, mime, buf.length, now]
-      )
-      const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])!
+      const row: AttachmentRow = {
+        id,
+        owner_type: ownerType,
+        owner_id: ownerId,
+        position: out.length,
+        file_name: f.name || 'file',
+        file_path: rel,
+        thumb_path: relThumb,
+        mime_type: mime,
+        size_bytes: buf.length,
+        trashed: 0,
+        trash_path: '',
+        created_at: now,
+      }
+      rows.push(row)
       out.push(toMeta(row))
     }
+    vaultAttachmentsSave(rows)
     return out
   })
 
@@ -263,17 +271,30 @@ export function registerAttachmentHandlers(): void {
     const rel = join(ownerType, ownerId, `${id}${ext}`)
     copyFileSync(data.filePath, join(getAttachmentsDir(), rel))
     const size = existsSync(data.filePath) ? (readFileSync(data.filePath).length) : 0
-    run(
-      `INSERT INTO attachments (id, owner_type, owner_id, position, file_name, file_path, mime_type, size_bytes, created_at)
-       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
-      [id, ownerType, ownerId, name, rel, mimeFromPath(data.filePath), size, new Date().toISOString()]
-    )
-    const row = queryOne<AttachmentRow>('SELECT * FROM attachments WHERE id = ?', [id])!
+    const row: AttachmentRow = {
+      id,
+      owner_type: ownerType,
+      owner_id: ownerId,
+      position: 0,
+      file_name: name,
+      file_path: rel,
+      thumb_path: '',
+      mime_type: mimeFromPath(data.filePath),
+      size_bytes: size,
+      trashed: 0,
+      trash_path: '',
+      created_at: new Date().toISOString(),
+    }
+    const rows = vaultAttachmentsAll()
+    rows.push(row)
+    vaultAttachmentsSave(rows)
     return toMeta(row)
   })
 
   ipcMain.handle('attachment:getByOwner', (_e, ownerType: string, ownerId: string) => {
-    const rows = queryAll<AttachmentRow>('SELECT * FROM attachments WHERE owner_type = ? AND owner_id = ? ORDER BY position ASC', [ownerType, ownerId])
+    const rows = vaultAttachmentsAll()
+      .filter(r => r.owner_type === ownerType && r.owner_id === ownerId)
+      .sort((a, b) => a.position - b.position)
     return rows.map(toMeta)
   })
 
@@ -313,7 +334,7 @@ export function registerAttachmentHandlers(): void {
   ipcMain.handle('attachment:cleanupOrphans', () => {
     let removed = 0
     // 1) 超过 24 小时的未认领上传（owner_id = _pending）
-    const pending = queryAll<AttachmentRow>("SELECT * FROM attachments WHERE owner_id = '_pending'")
+    const pending = vaultAttachmentsAll().filter(r => r.owner_id === '_pending')
     for (const r of pending) {
       const age = Date.now() - new Date(r.created_at).getTime()
       if (age > 24 * 3600 * 1000) {
@@ -321,11 +342,11 @@ export function registerAttachmentHandlers(): void {
         removed++
       }
     }
-    // 2) 归属对象已不存在的附件（说说 / 知识页面；头像等固定归属跳过）
-    const momentsIds = new Set(queryAll<{ id: string }>('SELECT id FROM moments_posts').map(r => r.id))
-    const pageIds = new Set(queryAll<{ id: string }>('SELECT id FROM knowledge_pages').map(r => r.id))
-    const entryIds = new Set(queryAll<{ id: string }>('SELECT id FROM entries').map(r => r.id))
-    const rows = queryAll<AttachmentRow>("SELECT * FROM attachments WHERE owner_id != '_pending'")
+    // 2) 归属对象已不存在的附件（说说 / 知识页面 / 博客；头像等固定归属跳过）
+    const momentsIds = new Set(vaultPostsAll().map(r => r.id))
+    const pageIds = new Set(Object.keys(getKnowledgeIndex().byId))
+    const entryIds = new Set(vaultListEntries().map(r => r.id))
+    const rows = vaultAttachmentsAll().filter(r => r.owner_id !== '_pending')
     for (const r of rows) {
       let exists = true
       if (r.owner_type === 'moments_post') exists = momentsIds.has(r.owner_id)
