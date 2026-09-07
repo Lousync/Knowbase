@@ -5,8 +5,10 @@ import { join, basename } from 'path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, unlinkSync } from 'fs'
 import { registerAttachment, deleteAttachments } from './attachmentRepo'
 import { isVaultDataSource } from '../dataSourceMode'
-import { ensureScheduleVaultSeeded } from './scheduleRepo'
 import { vaultTodosAll, vaultTagsAll } from '../../lib/kbStore/scheduleVaultRepo'
+import { vaultListEntries } from '../../lib/kbStore/blogVaultRepo'
+import { vaultGetTags } from '../../lib/kbStore/knowledgeVaultRepo'
+import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 
 // ---- types ----
 interface UserProfileRow {
@@ -217,24 +219,21 @@ export function registerUserHandlers(): void {
 
   // ===== Get stats =====
   ipcMain.handle('user:getStats', (): UserStats => {
-    // P5c 消费方接线：storageData=vault 时日程计数/连击改读 .knowbase/modules/schedule/*.json
-    const vaultSchedule = isVaultDataSource()
-    let scheduleRows: Array<{ date: string }> = []
-    if (vaultSchedule) {
-      ensureScheduleVaultSeeded()
-      scheduleRows = vaultTodosAll()
-    }
+    // R6 去库化（D9）：统计全部读 vault 数据源（博客 md / knowledgeIndex / schedule json）
+    const entries = vaultListEntries()
+    const scheduleRows = vaultTodosAll()
     const scheduleDates = new Set(scheduleRows.map((r) => r.date))
-    const blogCount = count('entries')
-    const knowledgePages = count('knowledge_pages')
-    const scheduleTodos = vaultSchedule ? scheduleRows.length : count('schedule_todos')
-    const blogTags = count('tags')
-    const knowledgeTags = count('knowledge_tags')
-    const scheduleTags = vaultSchedule ? vaultTagsAll().length : count('schedule_tags')
-    const totalWords = queryOne<{ sum: number }>('SELECT COALESCE(SUM(word_count), 0) as sum FROM entries')?.sum ?? 0
-    const totalCategories = count('knowledge_categories')
+    const blogCount = entries.length
+    const knowledgePages = getKnowledgeIndex().pages.length
+    const scheduleTodos = scheduleRows.length
+    const blogTags = new Set(entries.flatMap((e) => e.tags.map((t) => t.id))).size
+    const knowledgeTags = vaultGetTags().length
+    const scheduleTags = vaultTagsAll().length
+    const totalWords = entries.reduce((sum, e) => sum + (e.wordCount || 0), 0)
+    const totalCategories = getKnowledgeIndex().categories.length
 
     // Consecutive days: count backward from today how many consecutive days have entries
+    const entryDates = new Set(entries.map((e) => e.date))
     let consecutiveDays = 0
     const today = new Date()
     for (let i = 0; i < 3650; i++) { // max 10 years
@@ -242,11 +241,9 @@ export function registerUserHandlers(): void {
       d.setDate(d.getDate() - i)
       // 本地日期(不用 toISOString 的 UTC 截断,避免凌晨连击算错)
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      const hasEntry = queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM entries WHERE date = ?', [dateStr])
-      const hasSchedule = vaultSchedule
-        ? { cnt: scheduleDates.has(dateStr) ? 1 : 0 }
-        : queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM schedule_todos WHERE date = ?', [dateStr])
-      if ((hasEntry?.cnt ?? 0) > 0 || (hasSchedule?.cnt ?? 0) > 0) {
+      const hasEntry = entryDates.has(dateStr)
+      const hasSchedule = scheduleDates.has(dateStr)
+      if (hasEntry || hasSchedule) {
         consecutiveDays++
       } else if (i > 0) {
         break // break on first gap (skip today, which may not have been written yet)

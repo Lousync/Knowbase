@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
 import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
-import { encryptExistingPasswords, ensureSecretVaultSeeded, encryptPassword } from './passwordRepo'
+import { encryptPassword } from './passwordRepo'
 import { isVaultDataSource } from '../dataSourceMode'
 import { vaultPasswordsAll, vaultPasswordsSave } from '../../lib/kbStore/secretVaultRepo'
 
@@ -241,7 +241,6 @@ export function registerRecycleBinHandlers(): void {
       // 恢复密码条目(新快照中密码为密文,直接插回;旧明文快照插入后由加密清理统一处理)
       if (isVaultDataSource()) {
         // P5b：vault 模式恢复进 .knowbase/secret/passwords.json（密文原样，明文快照补加密）
-        ensureSecretVaultSeeded()
         const vrows = vaultPasswordsAll()
         if (vrows.some((r) => r.id === record.id)) return { success: false, message: '仓库中已存在同一条目' }
         const storedPwd = typeof record.password === 'string' && !record.password.startsWith('enc1:') ? encryptPassword(record.password) : record.password
@@ -265,7 +264,6 @@ export function registerRecycleBinHandlers(): void {
             (maxRow[0]?.m ?? -1) + 1, record.createdAt, record.updatedAt
           ]
         )
-        encryptExistingPasswords()
       }
     } else if (item.module === 'moments') {
       const images = Array.isArray(record.imageDataUrls)

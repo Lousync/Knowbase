@@ -6,13 +6,13 @@ import { registerTool, getSettingReader } from './aiTools'
 import { webSearch, webReadPage } from './webSearch'
 import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
+import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
 import { vaultTodosAll, vaultCreateTodo } from './kbStore/scheduleVaultRepo'
-import { ensureScheduleVaultSeeded } from '../database/repositories/scheduleRepo'
 import { extractDocText } from './docsReader'
 import type { ToolJsonSchema } from './aiTools'
 
@@ -572,13 +572,15 @@ export function registerBuiltinTools(): void {
     const days = clamp(Math.floor(num(args.days, 7)), 1, 365)
     const end = new Date()
     const start = addDays(end, -(days - 1))
-    const rows = queryAll(
-      `SELECT date, COUNT(*) AS sessions, SUM(minutes) AS minutes
-       FROM pomodoro_sessions WHERE date BETWEEN ? AND ?
-       GROUP BY date ORDER BY date ASC`,
-      [formatLocalDate(start), formatLocalDate(end)]
-    )
-    const byDate = new Map(rows.map(r => [str(r.date), r]))
+    // R6 去库化：pomodoro 场次读 .knowbase/modules/pomodoro/sessions.json
+    const sessions = pomoSessionsAll().filter((r) => r.date >= formatLocalDate(start) && r.date <= formatLocalDate(end))
+    const byDate = new Map<string, { sessions: number; minutes: number }>()
+    for (const r of sessions) {
+      const hit = byDate.get(r.date) ?? { sessions: 0, minutes: 0 }
+      hit.sessions += 1
+      hit.minutes += Number(r.minutes) || 0
+      byDate.set(r.date, hit)
+    }
     const out: { date: string; minutes: number; sessions: number }[] = []
     let totalMinutes = 0
     let totalSessions = 0
@@ -616,7 +618,6 @@ export function registerBuiltinTools(): void {
     let rows: DbRow[]
     if (storageIs('data')) {
       // P5c 消费方接线：读 .knowbase/modules/schedule/todos.json（date BETWEEN + 排序 + LIMIT 100 同 SQL）
-      ensureScheduleVaultSeeded()
       rows = vaultTodosAll()
         .filter(r => typeof r.date === 'string' && r.date >= start && r.date <= end)
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.sort_order ?? 0) - (b.sort_order ?? 0)))
@@ -793,7 +794,6 @@ export function registerBuiltinTools(): void {
     const id = randomUUID()
     if (storageIs('data')) {
       // P5c 消费方接线：写 .knowbase/modules/schedule/todos.json（默认值同表列：plan/pending/sort 0）
-      ensureScheduleVaultSeeded()
       const now = new Date().toISOString()
       vaultCreateTodo({
         id, title, description: '', date, time, quadrant,

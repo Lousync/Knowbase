@@ -5,7 +5,6 @@ import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAtt
 import { randomUUID } from 'crypto'
 import { registerAttachment } from './attachmentRepo'
 import { vaultImportFolder } from '../../lib/kbStore/knowledgeVaultRepo'
-import { encryptExistingPasswords } from './passwordRepo'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
 
@@ -631,8 +630,6 @@ export function executeImportData(data: any): {
         }
       }
       db.run('COMMIT')
-      // 导入的密码为明文 JSON,统一走一次加密(幂等)再落盘
-      encryptExistingPasswords()
       saveToDisk()
       return { success: true, imported, skipped, message: `成功导入 ${imported} 条记录${skipped > 0 ? `，跳过 ${skipped} 条已有记录` : ''}` }
   } catch (e: any) {
