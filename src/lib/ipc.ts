@@ -108,12 +108,10 @@ export const duplicateKnowledgeCategory = (data: { categoryId: string; targetPar
 // export
 export const showExportSaveDialog = (opts: { defaultName: string; filters: { name: string; extensions: string[] }[] }) => a().showExportSaveDialog(opts)
 export const writeExportTextFile = (filePath: string, content: string, encoding?: string): Promise<ExportFileResult> => a().writeExportTextFile(filePath, content, encoding)
-// 全仓导出/导入（去库化：db 快照入 .knowbase/backup + 整仓 zip）
-export const vaultBackupGetState = () => a().vaultBackupGetState()
+// 全仓导出/导入（R6 去库化：纯 .knowbase 仓库目录 zip，无 sqlite 快照）
 export const vaultBackupExportToZip = (zipPath: string) => a().vaultBackupExportToZip(zipPath)
 export const vaultBackupPickArchive = () => a().vaultBackupPickArchive()
 export const vaultBackupRestoreArchive = (archivePath: string) => a().vaultBackupRestoreArchive(archivePath)
-export const vaultBackupRestoreDb = () => a().vaultBackupRestoreDb()
 
 // import
 export const showImportOpenDialog = () => a().showImportOpenDialog()
@@ -289,10 +287,6 @@ export const clipperResetToken = () => a().clipperResetToken()
 export const clipperOpenFolder = () => a().clipperOpenFolder()
 export const clipperSelfPing = () => a().clipperSelfPing()
 export const clipperCheckToken = (candidate: string) => a().clipperCheckToken(candidate)
-// 旧数据 → 当前仓库迁移（去库化 P0）
-export const vaultLegacySummary = () => a().vaultLegacySummary()
-export const vaultImportLegacy = (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => a().vaultImportLegacy(opts)
-export const onVaultImportProgress = (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => a().onVaultImportProgress(cb)
 export const getAttachmentsByOwner = (ownerType: string, ownerId: string): Promise<AttachmentMeta[]> => a().getAttachmentsByOwner(ownerType, ownerId)
 export const deleteAttachment = (id: string) => a().deleteAttachment(id)
 export const getAttachmentPath = (id: string): Promise<string | null> => a().getAttachmentPath(id)
@@ -312,7 +306,6 @@ export async function copyImageUrlToClipboard(url: string): Promise<boolean> {
   if (url.startsWith('data:')) return copyImage({ dataUrl: url })
   return false
 }
-export const exportBackupToZip = (zipPath: string, moduleIds?: string[]) => a().exportBackupToZip(zipPath, moduleIds)
 export const importBackupPackage = (srcPath: string) => a().importBackupPackage(srcPath)
 // ===== Weight Tracker =====
 export const getWeightRecords = () => a().getWeightRecords()

@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
 import { notifyCheckin } from '../../lib/pushService'
 import type { LinkSource } from '../../lib/habitLinkService'
 import {
@@ -56,21 +55,6 @@ function rowToHabit(row: HabitRow): HabitDto {
     archived: !!row.archived,
     createdAt: row.created_at,
   }
-}
-
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
 }
 
 /** 对标 sqlite datetime('now')：UTC 'YYYY-MM-DD HH:MM:SS' */

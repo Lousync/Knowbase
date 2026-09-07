@@ -1118,22 +1118,16 @@ export interface ElectronAPI {
   clipperOpenFolder: () => Promise<{ ok: boolean; error?: string }>
   clipperSelfPing: () => Promise<{ ok: boolean; status?: number; vault?: string | null; error?: string }>
   clipperCheckToken: (candidate: string) => Promise<{ ok: boolean }>
-  vaultLegacySummary: () => Promise<{ hasLegacy: boolean; categories: number; pages: number; pagesEmpty: number; blogEntries: number; attachments: number; attachmentBytes: number; error?: string }>
-  vaultImportLegacy: (opts: { overwrite?: boolean; extractSvg?: boolean; skipAttachments?: boolean }) => Promise<{ started: boolean; error?: string }>
-  onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => () => void
   getAttachmentsByOwner: (ownerType: string, ownerId: string) => Promise<AttachmentMeta[]>
   deleteAttachment: (id: string) => Promise<void>
   getAttachmentPath: (id: string) => Promise<string | null>
   readAttachmentBase64: (id: string) => Promise<string | null>
   readAttachmentBase64ByFileName: (fileName: string) => Promise<string | null>
   cleanupOrphanAttachments: () => Promise<{ removed: number }>
-  exportBackupToZip: (zipPath: string, moduleIds?: string[]) => Promise<{ filePath: string; fileCount: number; totalSize: number }>
   importBackupPackage: (srcPath: string) => Promise<{ success: boolean; imported: number; skipped: number; attachments: number; message: string }>
-  vaultBackupGetState: () => Promise<{ ok: boolean; root?: string; hasBackupDb?: boolean; dbBytes?: number; message?: string }>
-  vaultBackupExportToZip: (zipPath: string) => Promise<{ ok: boolean; fileCount: number; dbBytes: number; zipPath: string }>
+  vaultBackupExportToZip: (zipPath: string) => Promise<{ ok: boolean; fileCount: number; zipPath: string }>
   vaultBackupPickArchive: () => Promise<string | null>
-  vaultBackupRestoreArchive: (archivePath: string) => Promise<{ ok: boolean; target?: string; written?: number; dbFound?: boolean; message?: string }>
-  vaultBackupRestoreDb: () => Promise<{ ok: boolean; needRestart: boolean }>
+  vaultBackupRestoreArchive: (archivePath: string) => Promise<{ ok: boolean; target?: string; written?: number; message?: string }>
   // weight tracker
   getWeightRecords: () => Promise<WeightRecord[]>
   getWeightSeries: () => Promise<string[]>

@@ -292,14 +292,6 @@ const api = {
     ipcRenderer.on('knowledgePack:progress', handler)
     return () => { ipcRenderer.removeListener('knowledgePack:progress', handler) }
   },
-  // 旧数据 → 当前仓库迁移（去库化 P0）
-  vaultLegacySummary: () => ipcRenderer.invoke('vault:legacySummary'),
-  vaultImportLegacy: (opts: unknown) => ipcRenderer.invoke('vault:importLegacy', opts),
-  onVaultImportProgress: (cb: (p: { phase: string; current: number; total: number; message?: string }) => void) => {
-    const handler = (_e: unknown, p: { phase: string; current: number; total: number; message?: string }) => cb(p)
-    ipcRenderer.on('vault:importProgress', handler)
-    return () => { ipcRenderer.removeListener('vault:importProgress', handler) }
-  },
   showImportDataDialog: () => ipcRenderer.invoke('import:showDataDialog'),
   readImportFile: (filePath: string) => ipcRenderer.invoke('import:readFile', filePath),
   executeImport: (data: unknown) => ipcRenderer.invoke('import:executeImport', data),
@@ -375,13 +367,10 @@ const api = {
   readAttachmentBase64: (id: string) => ipcRenderer.invoke('attachment:readBase64', id),
   readAttachmentBase64ByFileName: (fileName: string) => ipcRenderer.invoke('attachment:readBase64ByFileName', fileName),
   cleanupOrphanAttachments: () => ipcRenderer.invoke('attachment:cleanupOrphans'),
-  exportBackupToZip: (zipPath: string, moduleIds?: string[]) => ipcRenderer.invoke('export:backupToZip', zipPath, moduleIds),
   importBackupPackage: (srcPath: string) => ipcRenderer.invoke('import:importBackupPackage', srcPath),
-  vaultBackupGetState: () => ipcRenderer.invoke('vaultBackup:getState'),
   vaultBackupExportToZip: (zipPath: string) => ipcRenderer.invoke('vaultBackup:exportToZip', zipPath),
   vaultBackupPickArchive: () => ipcRenderer.invoke('vaultBackup:pickArchive'),
   vaultBackupRestoreArchive: (archivePath: string) => ipcRenderer.invoke('vaultBackup:restoreArchive', archivePath),
-  vaultBackupRestoreDb: () => ipcRenderer.invoke('vaultBackup:restoreDb'),
   // weight tracker
   getWeightRecords: () => ipcRenderer.invoke('weight:getAll'),
   getWeightSeries: () => ipcRenderer.invoke('weight:getSeries'),

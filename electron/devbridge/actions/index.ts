@@ -1,6 +1,4 @@
 import { throwErr } from '../response'
-import { resetData, seedData, type Scenario } from './data'
-import { hasPassword, unlock, setPassword, clearPassword } from './auth'
 import {
   corruptMainDb,
   corruptBak,
@@ -24,22 +22,16 @@ import {
   windowUi,
   clipboardUi,
 } from '../ui'
-import { getDatabase } from '../../database/connection'
-import {
-  blogCreate,
-  blogUpdate,
-  habitCreate,
-  habitCheck,
-  habitUncheck,
-  scheduleCreateTodo,
-  scheduleCompleteTodo,
-  pomodoroComplete,
-  knowledgeCreatePage,
-} from './flows'
 
 /**
  * 动作注册表 —— 只执行这里登记过的名字，不接受任意代码或任意 SQL。
  * 新增动作：在下方加一项即可，AI 可通过 GET / 自举发现。
+ *
+ * 处置（R6 去库化收尾）：删除 DB 直查动作 actions/auth.ts、actions/data.ts、
+ * actions/flows.ts（auth.hasPassword/auth.unlock/auth.setPassword/auth.clearPassword、
+ * data.reset/data.seed、blog/habit/schedule/pomodoro/knowledge 系列流程动作）。
+ * sqlite 基础设施（connection.ts）删除后这些直查无法存活；测试数据构造与业务流程
+ * 触发请改走渲染层 UI 动作（ui.*）或各模块 vaultRepo 语义。monkey 健康探针不再查库。
  *
  * runAction = execute + 录制埋点；record.replay 走 execute，
  * 保证重放不会被再次录入轨迹。
@@ -60,27 +52,6 @@ function withConfirm(handler: ActionHandler): ActionHandler {
 }
 
 const REGISTRY: Record<string, ActionHandler> = {
-  // ---------- 数据 ----------
-  'data.reset': withConfirm((p) => resetData(Array.isArray(p.tables) ? (p.tables as string[]) : undefined)),
-  'data.seed': (p) => seedData(String(p.scenario ?? 'full') as Scenario, Number(p.days ?? 30)),
-
-  // ---------- 权限 ----------
-  'auth.hasPassword': () => hasPassword(),
-  'auth.unlock': (p) => unlock(String(p.password ?? '')),
-  'auth.setPassword': (p) => setPassword(String(p.password ?? '')),
-  'auth.clearPassword': (p) => clearPassword(String(p.password ?? '')),
-
-  // ---------- 核心流程 ----------
-  'blog.create': (p) => blogCreate(p),
-  'blog.update': (p) => blogUpdate(p),
-  'habit.create': (p) => habitCreate(p),
-  'habit.check': (p) => habitCheck(p),
-  'habit.uncheck': (p) => habitUncheck(p),
-  'schedule.createTodo': (p) => scheduleCreateTodo(p),
-  'schedule.completeTodo': (p) => scheduleCompleteTodo(p),
-  'pomodoro.complete': (p) => pomodoroComplete(p),
-  'knowledge.createPage': (p) => knowledgeCreatePage(p),
-
   // ---------- 混沌注入（全部 confirm；验证姿势见各返回值 warning） ----------
   'chaos.corruptMainDb': withConfirm(() => corruptMainDb()),
   'chaos.corruptBak': withConfirm(() => corruptBak()),
@@ -127,14 +98,9 @@ const REGISTRY: Record<string, ActionHandler> = {
       exclude,
       execute,
       Object.keys(REGISTRY),
-      () => {
-        try {
-          getDatabase().exec('SELECT 1')
-          return true
-        } catch {
-          return false
-        }
-      }
+      // R6 去库化：健康探针不再直查 sqlite（connection.ts 删除后无库可查），
+      // 固定返回 true，仅保留 runMonkey 的探针签名
+      () => true
     )
   },
 

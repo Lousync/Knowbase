@@ -1,28 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-  Download, ExternalLink, Loader2, RotateCcw, Database,
+  Download, ExternalLink, Loader2,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 import {
-  vaultLegacySummary, vaultImportLegacy, onVaultImportProgress,
-  showExportSaveDialog, vaultBackupGetState, vaultBackupExportToZip,
-  vaultBackupPickArchive, vaultBackupRestoreArchive, vaultBackupRestoreDb,
+  showExportSaveDialog, vaultBackupExportToZip,
+  vaultBackupPickArchive, vaultBackupRestoreArchive,
 } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
 import { NumberField } from '../components/fields/NumberField'
 import { ExportSettingsView } from './ExportSettingsView'
 
-/** 设置 → 数据与仓库：存储读源 / 旧数据导入 / 整仓备份恢复 + 导出 */
+/**
+ * 设置 → 数据与仓库：存储读源 + 整仓备份恢复 + 导出。
+ * R6 去库化收尾：旧库一次性迁移器（vaultLegacySummary/vaultImportLegacy）与
+ * sqlite 快照还原（vaultBackupGetState/vaultBackupRestoreDb）已删除，
+ * 备份 = 当前仓库 .knowbase/ 目录整包 zip。
+ */
 export function DataView() {
   const { s, update } = useSettings()
-  const [legacy, setLegacy] = useState<{ hasLegacy: boolean; pages: number; blogEntries: number; attachments: number; attachmentBytes: number } | null>(null)
-  const [importing, setImporting] = useState(false)
-  const [importMsg, setImportMsg] = useState('')
   const [backupBusy, setBackupBusy] = useState(false)
-  const [backupState, setBackupState] = useState<{ hasBackupDb: boolean; dbBytes: number }>({ hasBackupDb: false, dbBytes: 0 })
-
-  useEffect(() => { void vaultBackupGetState().then((r) => { if (r.ok) setBackupState({ hasBackupDb: !!r.hasBackupDb, dbBytes: r.dbBytes ?? 0 }) }).catch(() => {}) }, [])
-  const refreshBackupState = () => void vaultBackupGetState().then((r) => { if (r.ok) setBackupState({ hasBackupDb: !!r.hasBackupDb, dbBytes: r.dbBytes ?? 0 }) }).catch(() => {})
 
   const doExportFull = async () => {
     try {
@@ -34,8 +31,7 @@ export function DataView() {
       setBackupBusy(true)
       const r = await vaultBackupExportToZip(filePath)
       setBackupBusy(false)
-      showToast({ type: 'info', message: `整仓备份完成：${r.fileCount} 个文件（含 sqlite 快照 ${(r.dbBytes / 1024).toFixed(0)} KB）` })
-      refreshBackupState()
+      showToast({ type: 'info', message: `整仓备份完成：${r.fileCount} 个文件` })
     } catch (e) {
       setBackupBusy(false)
       showToast({ type: 'error', message: `导出失败：${(e as Error).message}` })
@@ -49,52 +45,10 @@ export function DataView() {
       const r = await vaultBackupRestoreArchive(archive)
       setBackupBusy(false)
       if (!r.ok) { showToast({ type: 'error', message: r.message || '恢复失败' }); return }
-      showToast({ type: 'info', message: `已解压 ${r.written} 个文件到 ${r.target}${r.dbFound ? '（含 sqlite 快照，可继续还原数据库）' : ''}` })
-      refreshBackupState()
+      showToast({ type: 'info', message: `已解压 ${r.written} 个文件到 ${r.target}` })
     } catch (e) {
       setBackupBusy(false)
       showToast({ type: 'error', message: `恢复失败：${(e as Error).message}` })
-    }
-  }
-  const doRestoreDb = async () => {
-    try {
-      const r = await vaultBackupRestoreDb()
-      showToast({ type: 'info', message: r.ok ? 'sqlite 快照已还原到数据目录，重启应用后生效（小模块回到数据库读源可见）' : '还原失败' })
-    } catch (e) {
-      showToast({ type: 'error', message: `还原失败：${(e as Error).message}` })
-    }
-  }
-
-  useEffect(() => { vaultLegacySummary().then(setLegacy).catch(() => {}) }, [])
-  useEffect(() => {
-    const un = onVaultImportProgress((p) => {
-      if (p.phase === 'done') {
-        setImporting(false)
-        setImportMsg('')
-        showToast({ type: 'info', message: p.message || '导入完成' })
-      } else if (p.phase === 'error') {
-        setImporting(false)
-        setImportMsg('')
-        showToast({ type: 'error', message: p.message || '导入失败' })
-      } else {
-        setImportMsg(p.message || '正在导入…')
-      }
-    })
-    return un
-  }, [])
-
-  const startImport = async () => {
-    setImporting(true)
-    setImportMsg('准备导入…')
-    try {
-      const r = await vaultImportLegacy({})
-      if (!r.started && r.error) {
-        setImporting(false)
-        showToast({ type: 'error', message: r.error })
-      }
-    } catch {
-      setImporting(false)
-      showToast({ type: 'error', message: '启动导入失败' })
     }
   }
 
@@ -150,32 +104,6 @@ export function DataView() {
             </p>
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => void startImport()}
-                disabled={importing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {importing ? <Loader2 size={12} className="animate-spin" /> : <Database size={12} />}
-                导入旧数据到当前仓库
-              </button>
-              {legacy?.hasLegacy && !importing && (
-                <span className="text-[11px] text-[var(--text-muted)]">
-                  检测到旧数据：知识 {legacy.pages} 篇 · 博客 {legacy.blogEntries} 篇 · 附件 {legacy.attachments} 个
-                </span>
-              )}
-            </div>
-            {importing && (
-              <div className="mt-2 flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
-                <Loader2 size={12} className="animate-spin text-[var(--accent)]" />
-                {importMsg}（原库自动备份，可回滚）
-              </div>
-            )}
-            {legacy && !legacy.hasLegacy && !importing && (
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">未检测到旧版数据库数据</p>
-            )}
-          </div>
-          <div>
             <label className="block text-[12px] text-[var(--text-secondary)] mb-1">整仓备份 / 恢复</label>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -194,19 +122,9 @@ export function DataView() {
                 <ExternalLink size={12} />
                 从备份恢复仓库（解压）
               </button>
-              <button
-                onClick={() => void doRestoreDb()}
-                disabled={!backupState.hasBackupDb}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                title="把仓库 .knowbase/backup/knowledge.db 还原回数据目录（重启生效）"
-              >
-                <RotateCcw size={12} />
-                还原 sqlite 快照（重启生效）
-              </button>
             </div>
             <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-relaxed">
-              备份含 sqlite 快照，恢复仓库后可还原。
-              {backupState.hasBackupDb ? `当前快照 ${(backupState.dbBytes / 1024).toFixed(0)} KB` : '当前暂无快照'}
+              备份 = 当前仓库 .knowbase/ 目录整包 zip（md/JSON/附件全量），恢复时解压到目标目录后作为仓库打开。
             </p>
           </div>
         </div>

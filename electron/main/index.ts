@@ -11,7 +11,6 @@ import { bindDataSourceGetter } from '../database/dataSourceMode'
 import { registerTagHandlers } from '../database/repositories/tagRepo'
 import { registerScheduleHandlers } from '../database/repositories/scheduleRepo'
 import { registerKnowledgeHandlers } from '../database/repositories/knowledgeRepo'
-import { registerVaultMigrationHandlers } from '../database/repositories/vaultMigrationRepo'
 import { registerExportHandlers } from '../database/repositories/exportRepo'
 import { registerRecycleBinHandlers } from '../database/repositories/recycleBinRepo'
 import { registerImportHandlers } from '../database/repositories/importRepo'
@@ -20,7 +19,6 @@ import { registerToolboxHandlers } from '../database/repositories/toolboxRepo'
 import { registerPasswordHandlers } from '../database/repositories/passwordRepo'
 import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
 import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/repositories/attachmentRepo'
-import { registerBackupHandlers } from '../database/repositories/backupRepo'
 import { registerVaultBackupHandlers } from '../database/repositories/vaultBackupRepo'
 import { registerRepoConfigHandlers } from '../database/repositories/repoConfigRepo'
 import { registerWeightHandlers } from '../database/repositories/weightRepo'
@@ -813,20 +811,18 @@ app.whenReady().then(async () => {
   registerRepoConfigHandlers()
   // 去库化数据源（storageData）：结构化 repo 每次调用按当前设置动态判定
   bindDataSourceGetter((key) => settingsCache[key])
-  registerEntryHandlers((key) => settingsCache[key])
+  registerEntryHandlers()
   registerTagHandlers()
   registerScheduleHandlers()
-  registerKnowledgeHandlers((key) => settingsCache[key])
-  registerVaultMigrationHandlers()
+  registerKnowledgeHandlers()
   registerExportHandlers()
   registerRecycleBinHandlers()
-  registerImportHandlers((key) => settingsCache[key])
+  registerImportHandlers()
   registerUserHandlers()
   registerToolboxHandlers()
   registerPasswordHandlers()
   registerMomentsHandlers()
   registerAttachmentHandlers()
-  registerBackupHandlers()
   registerVaultBackupHandlers()
   registerWeightHandlers()
   registerCheckinHandlers()

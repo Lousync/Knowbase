@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
 import { Upload, FileText, Database, Check, Settings, History, FileArchive, XCircle, Loader2, Shield, Sparkles, CalendarCheck2, Globe, ArrowLeft } from 'lucide-react'
-import { exportBackupToZip, showExportSaveDialog } from '../../../../lib/ipc'
 import { SETTINGS_DEFAULTS } from '../../../../lib/settings'
 import { ProgressPanel } from './ProgressPanel'
 
@@ -46,14 +45,12 @@ interface ExportResult {
   totalSize?: number
 }
 
-async function runBackupExport(moduleIds: string[]): Promise<ExportResult> {
-  const { filePath } = await showExportSaveDialog({
-    defaultName: `knowbase-backup-${new Date().toISOString().slice(0, 10)}.zip`,
-    filters: [{ name: '备份包 (ZIP)', extensions: ['zip'] }]
-  })
-  if (!filePath) return { cancelled: true }
-  const r = await exportBackupToZip(filePath, moduleIds)
-  return { cancelled: false, filePath, fileCount: r.fileCount, totalSize: r.totalSize }
+// R6 去库化收尾：按模块的 JSON+附件备份包导出（export:backupToZip）已随 sql.js
+// 基础设施退役。数据已随仓库文件夹（.knowbase/）保存，全量备份请使用
+// 设置 → 数据与仓库 的「导出整仓备份（zip）」（vaultBackup:exportToZip）。
+// 通道与入口暂保留，执行时返回弃用提示，避免渲染层崩。
+async function runBackupExport(_moduleIds: string[]): Promise<ExportResult> {
+  throw new Error('已弃用：数据已随仓库文件夹保存（.knowbase/），按模块备份包导出不再支持。请使用 设置 → 数据与仓库 的「导出整仓备份（zip）」')
 }
 
 export function ExportTool({ onBack }: { onBack: () => void }) {

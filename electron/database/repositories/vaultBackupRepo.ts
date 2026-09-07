@@ -1,18 +1,19 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { dirname, join, relative, resolve, sep } from 'path'
-import { randomUUID } from 'crypto'
-import { getDbPath } from '../connection'
 import { getCurrentVault } from '../../lib/kbStore/vaultContext'
 import { isWritePathAuthorized } from './exportRepo'
 import { zipBuffer, unzipBuffer } from '../../lib/zip'
 
 /**
- * 全仓导出/导入（用户拍板：sqlite 全量放进 .knowbase，整仓打成 zip）。
- * - 导出：userData 的 knowledge.db 副本 → 当前仓库 .knowbase/backup/knowledge.db，
- *   再把整个仓库目录压成一个 zip（内容含 md/附件/.knowbase）。
- * - 导入/恢复：解压备份 zip 到目标目录重建仓库；可选把 backup 内 db 还原回 userData（重启生效）。
+ * 全仓备份/恢复（R6 去库化收尾：纯 .knowbase 仓库语义）。
+ * - 导出：当前仓库目录（.knowbase/ JSON + md + 附件）整包压成一个 zip，
+ *   不再向 .knowbase/backup 塞 knowledge.db 快照（sqlite 基础设施已删）。
+ * - 导入/恢复：解压备份 zip 到目标目录重建仓库。
  * 大仓库（数百 MB 附件）会一次性读入内存压缩，属已知限制（后续可换流式）。
+ *
+ * 处置（R6）：原 getState / restoreDb 两个 sqlite 快照相关通道已删除
+ * （渲染层 DataView 的「还原 sqlite 快照」入口同步移除）。
  */
 
 function requireVault(): string {
@@ -41,31 +42,10 @@ function safeUnder(targetRoot: string, relName: string): string | null {
 }
 
 export function registerVaultBackupHandlers(): void {
-  // 导出状态（供 UI 提示仓库是否已有 sqlite 快照）
-  ipcMain.handle('vaultBackup:getState', () => {
-    try {
-      const root = requireVault()
-      const bak = join(root, '.knowbase', 'backup', 'knowledge.db')
-      let dbBytes = 0
-      try { dbBytes = existsSync(bak) ? statSync(bak).size : 0 } catch { /* ignore */ }
-      return { ok: true, root, hasBackupDb: dbBytes > 0, dbBytes }
-    } catch (e) {
-      return { ok: false, message: (e as Error).message }
-    }
-  })
-
-  // 全仓导出：db 快照入 .knowbase/backup + 整仓 zip（zipPath 须经保存对话框授权）
+  // 全仓导出：整个仓库目录压成 zip（zipPath 须经保存对话框授权）
   ipcMain.handle('vaultBackup:exportToZip', (_e, zipPath: string) => {
     if (!isWritePathAuthorized(zipPath)) throw new Error('写入路径未经过保存对话框授权,已拒绝')
     const root = requireVault()
-    const kbDir = join(root, '.knowbase')
-    const backupDir = join(kbDir, 'backup')
-    mkdirSync(backupDir, { recursive: true })
-    const dbSrc = getDbPath()
-    const dbDst = join(backupDir, 'knowledge.db')
-    if (!existsSync(dbSrc)) throw new Error('未找到 sqlite 数据库文件')
-    copyFileSync(dbSrc, dbDst)
-
     const files: string[] = []
     walkFiles(root, files)
     const entries = files.map((f) => ({
@@ -73,7 +53,7 @@ export function registerVaultBackupHandlers(): void {
       data: readFileSync(f),
     }))
     writeFileSync(zipPath, zipBuffer(entries))
-    return { ok: true, fileCount: files.length, dbBytes: statSync(dbDst).size, zipPath }
+    return { ok: true, fileCount: files.length, zipPath }
   })
 
   // 选择备份 zip（渲染层无授权需求，仅读）
@@ -101,28 +81,14 @@ export function registerVaultBackupHandlers(): void {
     const target = targetResult.filePaths[0]
     const entries = unzipBuffer(readFileSync(archivePath))
     let written = 0
-    let dbFound = false
     for (const [relName, data] of entries) {
       if (relName.endsWith('/')) continue
       const abs = safeUnder(target, relName)
       if (!abs) continue
-      if (relName === '.knowbase/backup/knowledge.db') dbFound = true
       mkdirSync(dirname(abs), { recursive: true })
       writeFileSync(abs, data)
       written++
     }
-    return { ok: true, target, written, dbFound }
-  })
-
-  // 把当前仓库 .knowbase/backup/knowledge.db 还原到 userData（重启应用生效）
-  ipcMain.handle('vaultBackup:restoreDb', () => {
-    const root = requireVault()
-    const src = join(root, '.knowbase', 'backup', 'knowledge.db')
-    if (!existsSync(src)) throw new Error('仓库内没有 backup/knowledge.db，请先导出')
-    const dst = getDbPath()
-    const tmp = join(dirname(dst), `.${randomUUID()}.tmp`)
-    copyFileSync(src, tmp)
-    try { renameSync(tmp, dst) } catch { if (existsSync(dst)) unlinkSync(dst); renameSync(tmp, dst) }
-    return { ok: true, needRestart: true }
+    return { ok: true, target, written }
   })
 }
