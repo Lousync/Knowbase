@@ -4,6 +4,8 @@ import { randomUUID } from 'crypto'
 import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
 import { readJson, writeJson, deleteFile } from './jsonStore'
 import { parseMarkdown } from './mdStore'
+import { getVaultIgnore, isDirIgnored, type VaultIgnoreResult } from './ignoreFile'
+import type { Ignore } from 'ignore'
 
 export type KnowledgeCategoryType = 'space' | 'notebook' | 'folder'
 
@@ -71,8 +73,12 @@ function asStringArray(value: unknown): string[] {
 /**
  * 扫描仓库 .md（P5a 嵌套防护）：全仓库最多一个 `.knowbase`（仓库根直属那个）；
  * 深层再出现 `.knowbase` 视为布局违规——跳过不扫描，并经 warnings 提示（D4/§1 完整性规则）。
+ *
+ * .ignore 过滤层（docs/ignore-filter-design.md）：叠加在系统区跳过之后——
+ * 系统目录（. 开头 / _inbox / _attachments / 嵌套 .knowbase）先按固有规则跳过，
+ * 用户规则对系统区无效（不可被 ! 取反救回）；目录命中 → 整棵剪枝不递归。
  */
-function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: string[]): void {
+function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: string[], ign?: Ignore | null): void {
   let entries: Dirent[]
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -90,6 +96,15 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
     // 注：Web 剪藏草稿已迁至 .knowbase/_draft/clipper（随 . 前缀规则天然跳过，不依赖本行）
     if (entry.isDirectory() && entry.name.toLowerCase() === '_inbox') continue
     const abs = join(dir, entry.name)
+    // .ignore 过滤：目录命中整棵剪枝；文件命中不入扫描结果（rel = 仓库内 posix 相对路径）
+    if (ign) {
+      const rel = relative(root, abs).replace(/\\/g, '/')
+      if (entry.isDirectory()) {
+        if (isDirIgnored(ign, rel)) continue
+      } else if (entry.isFile() && ign.ignores(rel)) {
+        continue
+      }
+    }
     try {
       if (entry.isSymbolicLink() || lstatSync(abs).isSymbolicLink()) continue
       if (entry.isDirectory()) {
@@ -102,11 +117,11 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
         if (entry.name.startsWith('.')) {
           if (entry.name === '.knowbase') {
             const inbox = join(abs, '_inbox')
-            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out, warnings)
+            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out, warnings, ign)
           }
           continue
         }
-        scanMarkdownFiles(root, abs, out, warnings)
+        scanMarkdownFiles(root, abs, out, warnings, ign)
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
         out.push(abs)
       }
@@ -367,7 +382,10 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const categories = categoryResult.categories
   let categoriesDirty = false
   const files: string[] = []
-  scanMarkdownFiles(current.rootPath, current.rootPath, files, warnings)
+  // .ignore 过滤层：规则解析警告随索引 warnings 透出；命中文件/目录不参与索引（连带不参与目录派生分类）
+  const ignoreResult: VaultIgnoreResult = getVaultIgnore()
+  warnings.push(...ignoreResult.warnings)
+  scanMarkdownFiles(current.rootPath, current.rootPath, files, warnings, ignoreResult.ign)
 
   // 第一遍：读入全部 md（目录派生需先知道「所有知识页所在目录」，再统一补建分类）
   const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown> }> = []
