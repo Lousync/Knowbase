@@ -22,6 +22,7 @@
 | D6 | 图谱归属 | 图谱入口放在**现有知识库模块**（知识库模块重设计中，具体形式后定）；**标签默认入图**、支持开关 | §7-4 |
 | D7 | 读写分工 | **知识库模块 = 阅读器 + 结构化视图**（沉浸阅读/刷题/反链/标签）；**编辑器模块 = 唯一写入方**（Monaco + Ctrl+S）；**Vault = 唯一真相源**；无 frontmatter id 的文件 = 普通草稿，知识库列表不显示 | §7-1 / §7-2 |
 | D8 | 文档结构 | 总体文档（本文）+ 功能子文档引用制 | 本文 |
+| D9 | R6 范围（2026-09-07 拍板） | **彻底 JSON 化**：小模块（日程/说说/习惯/体重/密码本/quiz）也迁 `.knowbase/`，推翻 R3 期「小模块留 sqlite」拍板；sql.js 完整移除 | 本文 §5 R6 |
 
 ## 3. 总体架构：三层
 
@@ -43,7 +44,7 @@
 
 **不变量（重构全程成立）**：
 1. 渲染层永不接触绝对路径，IPC 只收 `{rootId, relPath}`
-2. 写入唯一入口 = 编辑器模块（原子写 + mtime 冲突检测，见 `docs/conflict-resolution-design.md`）
+2. **内容写入**唯一入口 = 编辑器模块（原子写 + mtime 冲突检测，见 `docs/conflict-resolution-design.md`）；知识库模块自 2026-09-07 起开放**结构维护写**（建删目录/空间/笔记本、导入、重命名、排序——全部 vault 原生文件语义，D7 演进见 §5 R6 注）
 3. 索引一律「写时失效、用时懒重建」，失效钩子挂在 `ws:writeFile/createFile/rename/trash` 四通道
 4. 密码本/AI Key 走 DPAPI，渲染层永不可见
 
@@ -71,7 +72,7 @@
 | **R3 数据层推广** | 博客(.md) → 说说/日程/打卡/书签 → 密码本(加密) → quiz/wordbook(仓库级)+agent/mcp(全局) | 原 P1-P4 | ✅ 博客/书签/wordbook + 目录重构 + 插件 vault 适配（小模块留 sqlite 为拍板决定） |
 | **R4 图谱** | G0-G4（GraphIndex→物理动画→交互→过滤→增删动画），入口在知识库模块 | 原 阶段6 | ✅ G0-G3 + A8 收尾（含设置持久化），G4 其余挂账 |
 | **R5 分栏预览**（原 Live Preview，**2026-09-03 用户拍板改方案**） | ~~CodeMirror 6 所见即所得~~ → **编辑区分栏：左 Monaco 编辑 / 右 MarkdownPreview 实时渲染**（复用现有 react-markdown 基建，不引入 CM6） | 原 阶段4 | ✅ 落地（预览开关 + 双链跳转 + localStorage 记忆） |
-| **R6 去库收尾** | 移除 sql.js、删库、备份适配——**最后一步** | 原 P5 | — |
+| **R6 去库收尾**（2026-09-07 拍板 D9：彻底 JSON 化） | R6-a 小模块逐个迁 `.knowbase/` JSON（schedule→moments→habit→weight→password(DPAPI)→quiz，每模块：vaultRepo+渲染层双读+迁移器+回收站/导出适配）→ R6-b 双读源开关 `storageKnowledge` 下线（固定 vault）→ R6-c 移除 sql.js（connection/migrations/repositories DB 分支清理）→ R6-d 备份适配（纯 `.knowbase` 打包）→ R6-e 全量回归+打包验证 | 原 P5 + D9 | 🔜 计划定稿待开工 |
 | **R7 插件开放** | 沙箱运行时 + capability 网关 + 签名（修订 plugin-api v2） | D3 | ✅ V3-1 契约定稿 / V3-2a 网关骨架 / V3-2b code 放行 / V3-2c UI+Worker 宿主 / V3-2d 自动挂载 / V3-3 code-hello 试点 / V3-4 签名链路（2026-09-03 收官） |
 | **PDF 阅读器 P1**（[plugin-pdf-reader-design](./plugin-pdf-reader-design.md) v1 冻结项全落地，2026-09-03） | 二进制范围读取 ws:readRange → 编辑器 .pdf 文档类型路由（PdfReaderView 懒加载 range transport）→ 大纲/文本层/Ctrl+F 搜索/沉浸 → 知识库附件路由（含无扩展名 PDF 头探测） | 原 阶段4 子项 | ✅ 594d426 → c0ab7f9 → f86e136 → 77c540c（v2 注解/引用/进度 + P2 外壳插件化待做） |
 
@@ -100,7 +101,7 @@
 | 8 | [agent-file-tools-design.md](./agent-file-tools-design.md) | AI 文件操控工具：Vault 内 list/read/write/edit 工具族、vaultFile 权限域、写入双通道不变量 |
 | 9 | [knowledge-query-design.md](./knowledge-query-design.md) | 库查询（Dataview 式）：QDL JSON 查询描述、knowledgeIndex 之上的查询引擎、saved-queries 落 `.knowbase/modules/knowledge/` |
 | 10 | [plugin-web-clipper-design.md](./plugin-web-clipper-design.md) | 浏览器剪藏：厚桌面端 clipperServer（127.0.0.1 + token，defuddle 转 md）+ 薄扩展，落 `_inbox/clipper`（判为内置能力，同 lanShare 理由） |
-| 11 | [zen-mode-design.md](./zen-mode-design.md) | 禅模式（写作态沉浸）：Z1 专注 / Z2 禅（隐标题栏活动栏）/ Z3 打字机，与沉浸阅读对称，建议抽 ImmersionShell |
+| 11 | ~~zen-mode-design.md~~ | 禅模式 **已实现**（R25，2026-09-06：Z1/Z2 进出+Esc 退，真机验收通过）；设计文档未落盘，如需归档可从实现反写 |
 
 > 9-11 均为**方案文档、待拍板**（2026-09-02 讨论会话产出），未进入实现排期。
 
