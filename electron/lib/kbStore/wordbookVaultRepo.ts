@@ -39,6 +39,7 @@ export function vaultWordbookHasData(): boolean {
 function readEntries(): WordbookEntryRow[] { return readJson<WordbookEntryRow[]>(MOD, 'entries.json', []) }
 function writeEntries(rows: WordbookEntryRow[]): void { writeJson(MOD, 'entries.json', rows) }
 function readDaily(): DailyRow[] { return readJson<DailyRow[]>(MOD, 'daily.json', []) }
+export function vaultWordbookDaily(): DailyRow[] { return readDaily() }
 function writeDaily(rows: DailyRow[]): void { writeJson(MOD, 'daily.json', rows) }
 function readGroups(): GroupJson[] { return readJson<GroupJson[]>(MOD, 'groups.json', []) }
 function writeGroups(rows: GroupJson[]): void { writeJson(MOD, 'groups.json', rows) }

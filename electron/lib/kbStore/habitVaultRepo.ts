@@ -73,3 +73,21 @@ export function vaultHabitRecordAddIfAbsent(habitId: string, date: string, sourc
 export function vaultHabitRecordRemove(habitId: string, date: string): void {
   writeJson(MOD, RECORDS_FILE, readRecords().filter((r) => !(r.habit_id === habitId && r.date === date)))
 }
+
+// ===== 习惯联动规则（R6 去库化，D9）：原 sqlite habit_links 表 → links.json（两库存量均为空，空起步） =====
+
+export interface HabitLinkRow {
+  id: string
+  habit_id: string
+  source: string
+  threshold: number
+  enabled: number
+}
+
+export function vaultHabitLinksAll(): HabitLinkRow[] {
+  return readJson<HabitLinkRow[]>(MOD, 'links.json', [])
+}
+
+export function vaultHabitLinksSave(rows: HabitLinkRow[]): void {
+  writeJson(MOD, 'links.json', rows)
+}

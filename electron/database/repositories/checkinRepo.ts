@@ -10,6 +10,8 @@ import {
   vaultRecordsSave,
   vaultHabitRecordAddIfAbsent,
   vaultHabitRecordRemove,
+  vaultHabitLinksAll,
+  vaultHabitLinksSave,
   type HabitRow,
 } from '../../lib/kbStore/habitVaultRepo'
 
@@ -21,8 +23,8 @@ import {
  * （见 habitVaultRepo）。行结构=表行 snake_case 原样，SQL 语义（ORDER BY sort_order,
  * created_at、删习惯连带记录、UNIQUE(habit_id,date) 的 INSERT OR IGNORE、排序批量 UPDATE）
  * 在内存复刻。
- * 注意：habit_links 不在去库化范围，联动规则仍存 sqlite（故 getAll 的 link 映射、
- * habitLink:* 的落库走同一段 sqlite 代码）。
+ * 注意：联动规则存 links.json（getAll 的 link 映射、
+ * habitLink:* 落 links.json（R6 去库化，D9））。
  */
 
 interface LinkRow { habit_id: string; source: string; threshold: number; enabled: number }
@@ -84,10 +86,10 @@ function vaultHabitsOrdered(): HabitRow[] {
     || (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0))
 }
 
-/** 联动规则仍在 sqlite；库异常时按无规则处理，不阻断打卡数据读取 */
+/** 联动规则读 .knowbase/modules/checkin/links.json（R6 去库化，D9）；读取异常按无规则处理 */
 function linkRowsSafe(): LinkRow[] {
   try {
-    return queryAll<LinkRow>('SELECT habit_id, source, threshold, enabled FROM habit_links')
+    return vaultHabitLinksAll() as LinkRow[]
   } catch { return [] }
 }
 
@@ -159,10 +161,10 @@ export function registerCheckinHandlers(): void {
   })
 
   ipcMain.handle('habit:delete', (_e, id: string) => {
-    // 删除习惯连带记录；habit_links 仍在 sqlite，顺带清掉避免残留
+    // 删除习惯连带记录与联动规则（links.json，R6 去库化）
     vaultRecordsSave(vaultRecordsAll().filter(r => r.habit_id !== id))
     vaultHabitsSave(vaultHabitsAll().filter(h => h.id !== id))
-    try { run('DELETE FROM habit_links WHERE habit_id = ?', [id]) } catch { /* 联动表未就绪时忽略 */ }
+    vaultHabitLinksSave(vaultHabitLinksAll().filter(l => l.habit_id !== id))
     return
   })
 
@@ -191,26 +193,22 @@ export function registerCheckinHandlers(): void {
     return
   })
 
-  // 联动规则:link 为 null 表示解除绑定;UNIQUE(habit_id) → 一个习惯至多一条规则
-  // （habit_links 表不在去库化范围：规则本身落 sqlite，仅存在性校验改查 json）
+  // 联动规则:link 为 null 表示解除绑定;UNIQUE(habit_id) → 一个习惯至多一条规则（links.json，R6 去库化）
   ipcMain.handle('habitLink:save', (_e, habitId: string, link: { source: LinkSource; threshold: number; enabled: boolean } | null) => {
+    const rows = vaultHabitLinksAll().filter(l => l.habit_id !== habitId)
     if (link === null) {
-      run('DELETE FROM habit_links WHERE habit_id = ?', [habitId])
+      vaultHabitLinksSave(rows)
       return
     }
     if (!LINK_SOURCES.includes(link.source)) throw new Error(`未知的联动来源: ${link.source}`)
     if (!vaultHabitsAll().some(h => h.id === habitId)) throw new Error('习惯不存在')
     const threshold = Math.max(1, Math.round(link.threshold || 1))
-    run('DELETE FROM habit_links WHERE habit_id = ?', [habitId])
-    run(
-      'INSERT INTO habit_links (id, habit_id, source, threshold, enabled) VALUES (?, ?, ?, ?, ?)',
-      [randomUUID(), habitId, link.source, threshold, link.enabled ? 1 : 0]
-    )
+    rows.push({ id: randomUUID(), habit_id: habitId, source: link.source, threshold, enabled: link.enabled ? 1 : 0 })
+    vaultHabitLinksSave(rows)
     return
   })
 
   ipcMain.handle('habitLink:remove', (_e, habitId: string) => {
-    // habit_links 仍在 sqlite，两种数据源下同语义
-    run('DELETE FROM habit_links WHERE habit_id = ?', [habitId])
+    vaultHabitLinksSave(vaultHabitLinksAll().filter(l => l.habit_id !== habitId))
   })
 }
