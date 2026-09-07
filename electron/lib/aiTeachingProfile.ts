@@ -3,6 +3,7 @@ import { join } from 'path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { ensureSessionFolder } from './aiTeachingFolders'
+import { getWorkspaceOfSession, workspaceFolderRel } from './aiTeachingWorkspaces'
 
 /**
  * AI教学模块 · 用户画像（总纲 docs/ai-teaching-module-rework.md §3.14，P8）
@@ -59,6 +60,23 @@ function globalProfilePath(): string {
   return join(app.getPath('userData'), 'AI教学', PROFILE_FILE)
 }
 
+/** UI 优化条目8.2.2：工作区画像第三层——{产物根}/{工作区文件夹}/PROFILE.md（课程目标/整体进度/跨会话薄弱点） */
+export const WORKSPACE_PROFILE_SKELETON = [
+  '# 学习者画像 · 工作区',
+  '',
+  '（本工作区＝一门课程：整体学习目标、当前进度、跨会话的薄弱点汇总。叠加在「全局画像」之上，会话画像再叠加在其上——冲突时以更细颗粒为准。）',
+  '',
+  '## 课程目标',
+  '- ',
+  '',
+  '## 整体进度',
+  '- ',
+  '',
+  '## 跨会话薄弱点',
+  '- ',
+  '',
+].join('\n')
+
 export interface ProfileResult { ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }
 
 /** 全局画像读取（不存在=返回骨架草稿供编辑，不落盘；abs 路径回传展示） */
@@ -78,6 +96,39 @@ export function writeGlobalProfile(text: string): ProfileResult {
     mkdirSync(join(p, '..'), { recursive: true })
     writeFileSync(p, String(text ?? '').replace(/\r\n/g, '\n'), 'utf-8')
     return { ok: true, text: String(text ?? ''), relPath: p }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 工作区画像路径（{产物根}/{工作区文件夹}/PROFILE.md；懒建目录，未生成不落盘）——UI 优化条目8.2.2 第三层 */
+export function readWorkspaceProfile(wsId: string, getSetting: (key: string) => unknown): ProfileResult {
+  try {
+    const folderRel = workspaceFolderRel(wsId, getSetting)
+    if (!folderRel) return { ok: false, error: '工作区不存在或未打开仓库' }
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const p = join(vault.rootPath, folderRel, PROFILE_FILE)
+    return { ok: true, text: existsSync(p) ? readFileSync(p, 'utf-8') : '', relPath: `${folderRel}/${PROFILE_FILE}`, skeleton: WORKSPACE_PROFILE_SKELETON }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+export function writeWorkspaceProfile(wsId: string, text: string, getSetting: (key: string) => unknown): ProfileResult {
+  try {
+    const folderRel = workspaceFolderRel(wsId, getSetting)
+    if (!folderRel) return { ok: false, error: '工作区不存在或未打开仓库' }
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const dirAbs = join(vault.rootPath, folderRel)
+    mkdirSync(dirAbs, { recursive: true })
+    const body = String(text ?? '').replace(/\r\n/g, '\n')
+    writeFileSync(join(dirAbs, PROFILE_FILE), body, 'utf-8')
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('aiTeach:tree-refresh', { dirRel: folderRel })
+    }
+    return { ok: true, text: body, relPath: `${folderRel}/${PROFILE_FILE}` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
@@ -124,15 +175,19 @@ export function writeSessionProfile(sessionId: string, text: string, getSetting:
 export function resolveProfilesForInjection(sessionId: string, getSetting: (key: string) => unknown): string {
   try {
     const g = readGlobalProfile()
+    const wsId = getWorkspaceOfSession(sessionId)
+    const w = wsId ? readWorkspaceProfile(wsId, getSetting) : null
     const s = readSessionProfile(sessionId, getSetting)
     const gt = g.ok && g.text ? g.text.trim() : ''
+    const wt = w && w.ok && w.text ? w.text.trim() : ''
     const st = s.ok && s.text ? s.text.trim() : ''
-    if (!gt && !st) return ''
+    if (!gt && !wt && !st) return ''
     const cut = (t: string, n: number) => (t.length > n ? t.slice(0, n) + '\n…（画像过长已截断）' : t)
-    const parts = ['【学习者画像】以下是关于当前用户的学习者画像（“我是谁/我会什么”），讲解深浅、例子与节奏须适配画像；与用户当下消息冲突时以用户消息为准。']
-    if (gt) parts.push(`■ 全局画像（跨主题稳定）：\n${cut(gt, 2000)}`)
-    if (st) parts.push(`■ 本主题画像（叠加在全局之上）：\n${cut(st, 2000)}`)
-    parts.push('当对话揭示画像应更新（新掌握的知识点、暴露的薄弱点、进度推进）时，不要直接修改画像文件——在回答末尾追加一个 ```profile 围栏代码块，内容是**更新后的本主题画像全文**（完整 PROFILE.md markdown，保留未变化部分），客户端会渲染「画像更新建议」卡片，用户接受后才会写入。')
+    const parts = ['【学习者画像】以下是关于当前用户的学习者画像（“我是谁/我会什么”），讲解深浅、例子与节奏须适配画像；同字段冲突时**以更细颗粒层为准**（会话 > 工作区 > 全局）；与用户当下消息冲突时以用户消息为准。']
+    if (gt) parts.push(`■ 全局画像（跨工作区稳定）：\n${cut(gt, 2000)}`)
+    if (wt) parts.push(`■ 工作区画像（本课程目标/进度/薄弱点，覆盖全局）：\n${cut(wt, 2000)}`)
+    if (st) parts.push(`■ 本主题画像（会话级，覆盖以上两层）：\n${cut(st, 2000)}`)
+    parts.push('当对话揭示画像应更新（新掌握的知识点、暴露的薄弱点、进度推进）时，不要直接修改画像文件——在回答末尾追加一个 ```profile 围栏代码块，内容是**更新后的本主题画像全文**（完整 PROFILE.md markdown，保留未变化部分），客户端会渲染「画像更新建议」卡片，用户选择写入层级后才会落文件。')
     return '\n\n' + parts.join('\n\n')
   } catch {
     return ''
@@ -145,4 +200,6 @@ export function registerAiTeachingProfileHandlers(getSetting: (key: string) => u
   ipcMain.handle('aiTeachProfile:writeGlobal', (_e, text: string) => writeGlobalProfile(String(text ?? '')))
   ipcMain.handle('aiTeachProfile:readSession', (_e, sessionId: string) => readSessionProfile(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeachProfile:writeSession', (_e, sessionId: string, text: string) => writeSessionProfile(String(sessionId ?? ''), String(text ?? ''), getSetting))
+  ipcMain.handle('aiTeachProfile:readWorkspace', (_e, wsId: string) => readWorkspaceProfile(String(wsId ?? ''), getSetting))
+  ipcMain.handle('aiTeachProfile:writeWorkspace', (_e, wsId: string, text: string) => writeWorkspaceProfile(String(wsId ?? ''), String(text ?? ''), getSetting))
 }

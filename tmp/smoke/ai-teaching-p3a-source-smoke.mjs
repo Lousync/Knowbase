@@ -20,7 +20,8 @@ function ok(name, cond, extra = '') {
 console.log('P3a 断言：标题规则注入（主进程）')
 ok('AgentChatRequest 增 source 字段', SVC.includes('source?: string'))
 ok('source=aiTeaching 注入回答标题规则（### 标题）', SVC.includes("source === 'aiTeaching'") && SVC.includes('### 这里写标题'))
-ok('titleRuleHint 拼入 system', SVC.includes('buildSystemPrompt(context) + instHint + profileHint + titleRuleHint'))
+ok('titleRuleHint 拼入 system（UI 优化条目9：baseSystem 提前求值以统计注入构成）',
+  SVC.includes('const baseSystem = buildSystemPrompt(context)') && SVC.includes('baseSystem + instHint + profileHint + titleRuleHint'))
 ok('runAgentLoop 签名带 source 且三处调用透传 req.source（P3b 后追加 llmOpts 实参）',
   /runAgentLoop\([\s\S]*?trace: AgentTraceStep\[\],\s*source\?: string/.test(SVC) && (SVC.match(/req\.source/g) || []).length === 3)
 

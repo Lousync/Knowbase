@@ -99,6 +99,17 @@ export interface AgentChatResult {
   trace: AgentTraceStep[]
   /** 本次执行真实发生的写改动（成功写入/创建类工具），供 UI 渲染改动清单 */
   changes?: AgentChange[]
+  /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（渲染层据此估算「上下文构成」摘要；其它来源不设） */
+  injection?: AiTeachInjectionStats
+}
+
+/** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
+export interface AiTeachInjectionStats {
+  systemChars: number
+  constraintChars: number
+  profileChars: number
+  sourcesChars: number
+  ruleChars: number
 }
 
 /** 进行中的对话 → 中断控制器（用户点击停止时触发） */
@@ -259,10 +270,22 @@ async function runAgentLoop(
     const cat = resolveSourcesForInjection(sessionId, getSettingReader())
     return cat ? `\n\n${cat}` : ''
   })() : ''
-  // P8（§3.14）：两层学习者画像注入（全局 userData + 会话 PROFILE.md）+ 更新建议协议（3-33 Plan B）
+  // P8（§3.14）+ UI 优化条目8.2.2：三层学习者画像注入（全局 → 工作区 → 会话，细颗粒覆盖粗颗粒）
+  // + 更新建议协议（3-33 Plan B）
   const profileHint = source === 'aiTeaching' ? resolveProfilesForInjection(sessionId, getSettingReader()) : ''
+  const baseSystem = buildSystemPrompt(context)
+  // UI 优化条目9②：教学会话的注入分段用量（字符数，渲染层按 ≈2.6 字/token 折算做构成摘要）
+  const injection: AiTeachInjectionStats | undefined = source === 'aiTeaching'
+    ? {
+        systemChars: baseSystem.length,
+        constraintChars: sessionInst.length,
+        profileChars: profileHint.length,
+        sourcesChars: sourcesHint.length,
+        ruleChars: titleRuleHint.length + quizRuleHint.length,
+      }
+    : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: buildSystemPrompt(context) + instHint + profileHint + titleRuleHint + quizRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + instHint + profileHint + titleRuleHint + quizRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0
@@ -300,7 +323,7 @@ async function runAgentLoop(
         : ''
       const reply = r.content + changesText
       appendAgentMessage(sessionId, 'assistant', reply, trace)
-      return { ok: true, sessionId, reply, changes, trace }
+      return { ok: true, sessionId, reply, changes, trace, injection }
     }
 
     // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----

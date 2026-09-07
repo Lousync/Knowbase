@@ -23,7 +23,7 @@ import { visionChat } from './llmService'
 
 const SOURCE_FILE = 'SOURCE.md'
 const SOURCES_DIR = 'SOURCES'
-const TYPE_ENUM = ['url', 'pptx', 'pdf', 'image', 'md', 'other'] as const
+const TYPE_ENUM = ['url', 'pptx', 'pdf', 'image', 'md', 'code', 'other'] as const
 export type SourceType = (typeof TYPE_ENUM)[number]
 
 export interface SourceEntry {
@@ -45,6 +45,8 @@ export interface SourcesResult {
   ok: boolean
   relPath?: string | null
   entries?: SourceEntry[]
+  /** 条目5.3：手编/AI 直写的异常统计（缺编号的小节、编号重复被丢弃数） */
+  anomalies?: { unnamed: number; dupNo: number }
   error?: string
 }
 
@@ -100,30 +102,35 @@ function emptyTemplate(l: SourcesLayout): string {
     '# 素材来源登记',
     '',
     '每个素材一个小节（`### 编号. 名称` + 固定字段行）。可在右栏「素材库 → ＋ 添加素材」登记，',
-    '直接编辑本文件，或在对话里让 AI 按此格式登记。字段：类型(url/pptx/pdf/image/md/other)、路径、',
-    '页码区间(如 12-34，无则 -)、存放方式(已入库/仅引用)、已提取(程序维护)、备注。',
+    '直接编辑本文件，或在对话里让 AI 按此格式登记。字段：类型(url/pptx/pdf/image/md/code/other)、路径、',
+    '页码区间(pdf/pptx 页码，或 code 行号；如 12-34，无则 -)、存放方式(已入库/仅引用)、已提取(程序维护)、备注。',
     '',
   ].join('\n')
 }
 
-/** 解析 SOURCE.md → 条目数组（宽容：缺字段回退默认，编号重复保留先到者） */
+/** 解析 SOURCE.md → 条目数组（宽容：缺字段回退默认，编号重复保留先到者）
+ *  UI 优化条目5.3 容错加强（AI 直接登记/用户手编的三种真实坏形）：
+ *  ①小节标题层级与 # 后空格不规范（`#编号. 名称` / `## 3. 名称`）；②字段行漏掉前导 `- `；
+ *  ③值被反引号包裹（`` `./a.pdf` ``）——三种都在解析层吸收，重写时归一化回模板形状。 */
 export function parseSourceMd(text: string): SourceEntry[] {
   const out: SourceEntry[] = []
   const seen = new Set<number>()
   let cur: SourceEntry | null = null
   const flush = () => { if (cur && !seen.has(cur.no)) { seen.add(cur.no); out.push(cur) } cur = null }
+  const clean = (v: string) => v.trim().replace(/^`+|`+$/g, '').trim()
   for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
-    const head = /^###\s*(\d+)\s*[.、]\s*(.+?)\s*$/.exec(raw)
+    const head = /^#{1,6}\s*(\d+)\s*[.、]\s*(.+?)\s*$/.exec(raw)
     if (head) {
       flush()
-      cur = { no: parseInt(head[1], 10), name: head[2], type: 'other', path: '', range: '-', storage: '仅引用', extracted: '-', note: '' }
+      cur = { no: parseInt(head[1], 10), name: clean(head[2]), type: 'other', path: '', range: '-', storage: '仅引用', extracted: '-', note: '' }
       continue
     }
     if (/^#{1,6}\s/.test(raw)) { flush(); continue } // 其他标题结束当前小节
     if (!cur) continue
-    const m = /^-\s*(类型|路径|页码区间|存放方式|已提取|备注)\s*[：:]\s*(.*)$/.exec(raw.trim())
+    // 条目5.3 容错加强：分隔符支持「：」「:」与裸空格（手常打漏冒号是最常见写法，如 `- 已提取:未提取`）
+    const m = /^[-*]?\s*(类型|路径|页码区间|存放方式|已提取|备注)(?:\s*[：:]\s*|\s+)(.*)$/.exec(raw.trim())
     if (!m) continue
-    const val = m[2].trim()
+    const val = clean(m[2])
     if (m[1] === '类型') cur.type = val.toLowerCase() || 'other'
     else if (m[1] === '路径') cur.path = val
     else if (m[1] === '页码区间') cur.range = val || '-'
@@ -133,6 +140,25 @@ export function parseSourceMd(text: string): SourceEntry[] {
   }
   flush()
   return out.sort((a, b) => a.no - b.no)
+}
+
+/** 手编/AI 直写 SOURCE.md 的异常统计（UI 优化条目5.3）：
+ *  `unnamed`=缺「编号.」的小节标题（整节不会被登记）、`dupNo`=编号重复被丢弃的节数。
+ *  仅统计（不改动文件），供右栏一行提示——否则用户只会看到「列表没变化」而无处排查。 */
+export function sourceAnomalies(text: string): { unnamed: number; dupNo: number } {
+  let unnamed = 0
+  let numbered = 0
+  let fmCount = 0
+  let inFm = false
+  for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
+    const line = raw.trim()
+    if (line === '---') { fmCount++; inFm = fmCount % 2 === 1; continue }
+    if (inFm || !/^#{1,6}\s*\S/.test(line)) continue
+    if (/^#{1,6}\s*\d+\s*[.、]\s*\S/.test(line)) { numbered++; continue }
+    if (/^#{1,6}\s*素材来源登记\s*$/.test(line)) continue
+    unnamed++
+  }
+  return { unnamed, dupNo: Math.max(0, numbered - parseSourceMd(text).length) }
 }
 
 function entryToBlock(e: SourceEntry): string {
@@ -184,7 +210,13 @@ export function readSources(sessionId: string, getSetting: (key: string) => unkn
       writeFileSync(fileAbs, emptyTemplate(l), 'utf-8')
       broadcastTreeRefresh(l.dirRel)
     }
-    return { ok: true, relPath: l.fileRel, entries: readEntries(l) }
+    let anomalies: SourcesResult['anomalies']
+    try {
+      const text = readFileSync(fileAbs, 'utf-8')
+      const a = sourceAnomalies(text)
+      if (a.unnamed || a.dupNo) anomalies = a
+    } catch { /* 统计失败不影响列表 */ }
+    return { ok: true, relPath: l.fileRel, entries: readEntries(l), anomalies }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
@@ -258,8 +290,17 @@ function resolveMaterialAbs(l: SourcesLayout, p: string): string {
   return join(l.rootPath, clean)
 }
 
+/** 区间解析：`12-34` / 单页 `12`；也容忍 `L100-250`、`行100-250`、全角横线与波浪线（条目10：源码用行号区间同一机制） */
+/** 文本读取编码兜底（条目10）：utf-8 解出替换符（U+FFFD）则按 GBK 系再解一次（国内老源码常见） */
+function readTextSmart(abs: string): string {
+  const buf = readFileSync(abs)
+  const utf8 = buf.toString('utf-8')
+  if (!utf8.includes('\uFFFD')) return utf8
+  try { return new TextDecoder('gbk').decode(buf) } catch { return utf8 }
+}
+
 function parseRange(r: string): { from: number; to: number } | null {
-  const m = /^(\d+)\s*(?:-\s*(\d+))?$/.exec(r.trim())
+  const m = /^(?:[Ll]|行)?\s*(\d+)\s*(?:[-–~]\s*(?:[Ll]|行)?\s*(\d+))?$/.exec(r.trim())
   if (!m) return null
   const from = parseInt(m[1], 10)
   const to = m[2] ? parseInt(m[2], 10) : from
@@ -271,6 +312,7 @@ function parseRange(r: string): { from: number; to: number } | null {
  * 区间提取（3-26 防重复：已 ✓ 直接返回现有提取稿）：pdf/pptx 文本层逐页提取，
  * 生成 `{素材名}-p{起}-{终}.md`（3-30 命名拍板，与 SOURCE.md 同级、可编辑修正），回写「已提取」字段。
  * 公式/图表以文本层为准——视觉转写（3-21 手动）为后续增强，提取稿可编辑是其兜底。
+ * UI 优化条目10：code 类型按**行号区间**提取（同「页码区间」字段，`{素材名}-L{起}-{终}.md`）。
  */
 export async function extractRange(sessionId: string, no: number, getSetting: (key: string) => unknown): Promise<{ ok: boolean; relPath?: string; error?: string }> {
   try {
@@ -282,11 +324,38 @@ export async function extractRange(sessionId: string, no: number, getSetting: (k
     // 3-26 程序防重复：已 ✓ 直接返回现有提取稿（UI 也不出提取按钮，双保险）
     const ext = /^✓\s*→\s*(.+)$/.exec(e.extracted)
     if (ext) return { ok: true, relPath: `${l.dirRel}/${ext[1].trim()}` }
-    if (e.type !== 'pdf' && e.type !== 'pptx') return { ok: false, error: '仅 pdf / pptx 支持区间提取' }
+    if (e.type !== 'pdf' && e.type !== 'pptx' && e.type !== 'code') return { ok: false, error: '仅 pdf / pptx / code 支持区间提取' }
     const abs = resolveMaterialAbs(l, e.path)
     if (!e.path || e.path === '-' || !existsSync(abs)) return { ok: false, error: `素材原件不可用：${e.path || '（未登记路径）'}` }
     const rg = parseRange(e.range)
-    if (!rg) return { ok: false, error: '页码区间未登记或格式非法（应为 起-止，如 12-34）' }
+    if (!rg) return { ok: false, error: '区间未登记或格式非法（应为 起-止，如 12-34）' }
+    if (e.type === 'code') {
+      // 条目10：文本源码按行号区间抽取（超大文件截 2000 行提示）
+      const raw = readTextSmart(abs)
+      const lines = raw.replace(/\r\n/g, '\n').split('\n')
+      const from = Math.min(rg.from, Math.max(1, lines.length))
+      const to = Math.min(rg.to, lines.length)
+      const capped = to - from > 2000
+      const takeEnd = capped ? from + 2000 : to
+      const fence = /\.([A-Za-z0-9]+)$/.exec(e.path)?.[1]?.toLowerCase() ?? ''
+      const extractName = uniqueFileName(l.dirAbs, `${sanitizeTitle(e.name)}-L${from}-${takeEnd}.md`)
+      const body = [
+        `# ${e.name} · 第 ${from}-${takeEnd} 行提取稿`,
+        '',
+        `> 来源：${SOURCE_FILE} 素材 #${e.no}（${e.path}） · 提取于 ${today()} · 按行号区间抽取${capped ? '（超 2000 行已截断，可缩小区间重新登记提取）' : ''}`,
+        '> 本页**可直接编辑修正**（删减无关段落、加注释），AI 后续按修正版引用。',
+        '',
+        '```' + fence,
+        ...lines.slice(from - 1, takeEnd),
+        '```',
+        '',
+      ].join('\n')
+      writeFileSync(join(l.dirAbs, extractName), body, 'utf-8')
+      const w = rewriteEntries(l, entries.map(x => x.no === e.no ? { ...x, extracted: `✓ → ${extractName}` } : x))
+      if (!w.ok) return { ok: false, error: w.error }
+      broadcastTreeRefresh(l.dirRel)
+      return { ok: true, relPath: `${l.dirRel}/${extractName}` }
+    }
     const pages: { n: number; text: string }[] = e.type === 'pdf'
       ? (await extractPdfRange(abs, rg.from, rg.to)).pages
       : extractPptxPages(abs).filter(p => p.n >= rg.from && p.n <= rg.to)
@@ -398,15 +467,16 @@ export function resolveSourcesForInjection(sessionId: string, getSetting: (key: 
     if (entries.length === 0) return ''
     const lines = entries.slice(0, 60).map(e => {
       const bits = [`类型 ${e.type}`, `路径 ${e.path || '-'}`]
-      if (e.range && e.range !== '-') bits.push(`页码区间 ${e.range}`)
+      if (e.range && e.range !== '-') bits.push(`${e.type === 'code' ? '行号区间' : '页码区间'} ${e.range}`)
       const ext = /^✓\s*→\s*(.+)$/.exec(e.extracted)
       bits.push(ext ? `**提取稿 ${l.dirRel}/${ext[1].trim()}（优先读此文件）**` : '未提取')
       return `- [${e.no}] ${e.name}（${bits.join(' · ')}）${e.note ? ` 备注：${e.note}` : ''}`
     })
     const hint = [
       '【素材目录（本对话 SOURCE.md，实时读取）】用户登记的素材如下。需要使用素材内容时：',
-      '有「提取稿」的条目优先 vault 读提取稿（文本已按页码区间抽取、可编辑）；未提取的 pdf/pptx 可提示用户',
-      '在右栏「素材库」点提取，或仅按登记信息回答。引用素材内容时行内标注编号与页码，形如 [1] p.15；',
+      '有「提取稿」的条目优先 vault 读提取稿（文本已按页码/行号区间抽取、可编辑）；未提取的 pdf/pptx（按页码区间）或 code（按行号区间）可提示用户',
+      '在右栏「素材库」点提取，或仅按登记信息回答；code 素材未提取时也可按登记路径与行号区间直接读文件。',
+      '引用素材内容时行内标注编号与页码/行号，形如 [1] p.15（code 写作 [1] L120）；',
       '每条回答末尾附「本次引用素材」清单（仅列实际用到的：编号. 名称 · 页码/URL）。用户要求登记素材时，',
       `按模板直接编辑 ${l.fileRel}（### 编号. 名称 + 固定字段行）。`,
       ...lines,

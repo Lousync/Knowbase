@@ -446,12 +446,60 @@
   </div>
 </div>
 
-<!-- RESOURCES.md 弹层 -->
+<!-- RESOURCES 登记弹层 -->
 <div class="overlay" id="ovRes" onclick="if(event.target===this)closeOv('ovRes')">
   <div class="dialog">
-    <div class="dhead">🔗 RESOURCES/09-06 随堂测验.md <span class="x" onclick="closeOv('ovRes')">✕</span></div>
+    <div class="dhead">🔗 SOURCES/09-06 随堂测验/SOURCE.md <span class="x" onclick="closeOv('ovRes')">✕</span></div>
     <div class="dbody md" id="resBody"></div>
-    <div class="dfoot"><button class="btn" onclick="closeOv('ovRes')">关闭</button><button class="btn primary" onclick="addResource()">＋ 添加素材</button></div>
+    <div class="dfoot"><button class="btn" onclick="closeOv('ovRes')">关闭</button><button class="btn primary" onclick="closeOv('ovRes'); addResource()">＋ 添加素材</button></div>
+  </div>
+</div>
+
+<!-- 添加素材表单弹层 -->
+<div class="overlay" id="ovResAdd" onclick="if(event.target===this)closeOv('ovResAdd')">
+  <div class="dialog" style="width:460px;">
+    <div class="dhead">＋ 添加素材 — 登记到 SOURCE.md <span class="x" onclick="closeOv('ovResAdd')">✕</span></div>
+    <div class="dbody">
+      <form id="resForm">
+        <div style="display:flex; gap:10px; margin-bottom:8px;">
+          <label style="flex:1; font-size:11.5px; color:var(--sub)">类型
+            <select name="rtype" onchange="togglePages()" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;">
+              <option value="url">🌐 网页</option>
+              <option value="pptx">📽️ PPT</option>
+              <option value="pdf">📄 PDF</option>
+              <option value="image">🖼️ 图片</option>
+              <option value="md">📝 MD</option>
+              <option value="other">📦 其他</option>
+            </select>
+          </label>
+          <label style="flex:2; font-size:11.5px; color:var(--sub)">名称 *
+            <input name="rname" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;" placeholder="如：一次函数课件">
+          </label>
+        </div>
+        <label style="display:block; font-size:11.5px; color:var(--sub); margin-bottom:8px;">地址 / 路径
+          <input name="rpath" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;" placeholder="https://… 或 本地路径（选「已入库」时可省略）">
+        </label>
+        <div id="pagesRow" style="display:none; gap:10px; margin-bottom:8px;">
+          <label style="flex:1; font-size:11.5px; color:var(--sub)">起始页
+            <input name="rpageFrom" type="number" min="1" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;" placeholder="如 12">
+          </label>
+          <label style="flex:1; font-size:11.5px; color:var(--sub)">结束页
+            <input name="rpageTo" type="number" min="1" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;" placeholder="如 34">
+          </label>
+        </div>
+        <label style="display:block; font-size:11.5px; color:var(--sub); margin-bottom:8px;">存放方式
+          <select name="rstore" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;">
+            <option value="ref">仅引用（记路径）</option>
+            <option value="in">已入库（拷贝到本文件夹）</option>
+          </select>
+        </label>
+        <label style="display:block; font-size:11.5px; color:var(--sub)">备注
+          <input name="rnote" style="display:block; width:100%; margin-top:3px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;" placeholder="可空">
+        </label>
+      </form>
+      <p style="font-size:10.5px; color:var(--mut); margin-top:6px">确定后按 SOURCE.md 模板字段登记，AI 即可按行检索该素材。</p>
+    </div>
+    <div class="dfoot"><button class="btn" onclick="closeOv('ovResAdd')">取消</button><button class="btn primary" onclick="confirmResAdd()">✓ 确定登记</button></div>
   </div>
 </div>
 
@@ -530,19 +578,49 @@ function toggleSb(id, h){
 /* 文件树折叠 */
 document.querySelectorAll('#fileTree > .row').forEach(r=>r.addEventListener('click',()=>r.classList.toggle('open')));
 
-let resSeq = 3;
 const RES_SAMPLES = [
   { icon:'🌐', type:'网页', name:'B 站·一次函数微课' },
   { icon:'💾', type:'本地', name:'几何画板.exe 演示文件' },
 ];
+/* 添加素材：表单录入（对应 SOURCE.md 字段），不再是随机塞示例 */
+const RES_TYPES = [
+  { id:'url',   label:'🌐 网页',  icon:'🌐' },
+  { id:'pptx',  label:'📽️ PPT',  icon:'📽️' },
+  { id:'pdf',   label:'📄 PDF',   icon:'📄' },
+  { id:'image', label:'🖼️ 图片',  icon:'🖼️' },
+  { id:'md',    label:'📝 MD',    icon:'📝' },
+  { id:'other', label:'📦 其他',  icon:'📦' },
+];
 function addResource(){
-  const names = ['🌐 网页 · 交互式函数图像工具', '💾 本地 · 第3章练习册.pdf', '📽️ 本地 · 复习课PPT.pptx'];
-  const n = names[resSeq % names.length]; resSeq++;
-  const d = document.createElement('div'); d.className='fileitem'; d.setAttribute('onclick','showResources()');
-  d.textContent = n;
+  // 预填表单（编辑态：点已有条目时先填充——原型简化为每次空白）
+  document.getElementById('resForm').reset();
+  togglePages();
+  openOv('ovResAdd');
+}
+/* 页码区间仅 PDF/PPT 显示 */
+function togglePages(){
+  const t = document.getElementById('resForm').rtype.value;
+  document.getElementById('pagesRow').style.display = (t==='pdf' || t==='pptx') ? 'flex' : 'none';
+}
+function confirmResAdd(){
+  const f = document.getElementById('resForm');
+  const type = f.rtype.value, name = f.rname.value.trim(),
+        path = f.rpath.value.trim(), store = f.rstore.value, note = f.rnote.value.trim();
+  if (!name){ toast('请填写素材名称'); return; }
+  const pf = f.rpageFrom.value.trim(), pt = f.rpageTo.value.trim();
+  let pages = '';
+  if (type==='pdf' || type==='pptx'){
+    if (pf && pt) pages = pf + '-' + pt;
+    else if (pf) pages = pf;
+  }
+  const icon = (RES_TYPES.find(t=>t.id===type)||{}).icon || '📦';
+  const label = icon + ' ' + name + (pages ? '（' + pages + '）' : '');
+  const d = document.createElement('div'); d.className='fileitem';
+  d.textContent = label; d.setAttribute('onclick','showResources()');
   document.getElementById('resList').appendChild(d);
   renderResBody();
-  toast('已追加到 RESOURCES.md（工作区级，所有对话共享）');
+  closeOv('ovResAdd');
+  toast('✓ 已写入 SOURCE.md：' + name + (pages ? ' · 页码 ' + pages : '') + ' · ' + (store==='in'?'已入库':'仅引用'));
 }
 function renderResBody(){
   const items = [...document.querySelectorAll('#resList .fileitem')].map(e=>'<li>'+e.textContent+'</li>').join('');

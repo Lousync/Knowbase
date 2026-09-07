@@ -406,7 +406,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** P1 附件路由：PDF/文档附件 → 编辑器 PdfReaderView（App 收到 kb-open-in-editor 会切编辑器 Tab） */
   const openAttachmentInEditor = useCallback((relPath: string) => {
     if (!relPath) { showToast({ type: 'warning', message: '附件路径为空' }); return }
-    window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath } }))
+    window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath, from: 'knowledge' } })) // 条目6：带来源 → 编辑器出「← 返回 知识库」
   }, [])
 
   // --- tab management (VS Code preview mode) ---
@@ -562,7 +562,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         showToast({ type: 'warning', message: '该页面不在仓库读源中（设置 → 通用 → 知识库读源 开启 vault）' })
         return
       }
-      window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: p.path } }))
+      window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: p.path, from: 'knowledge' } }))
     } catch (e) {
       console.error(e)
       showToast({ type: 'error', message: '跳转编辑器失败' })

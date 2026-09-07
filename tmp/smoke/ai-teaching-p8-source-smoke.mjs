@@ -28,13 +28,16 @@ ok('画像骨架含 3-36 建议字段（当前水平/薄弱点/学习进度/学�
   ['当前水平', '薄弱点', '学习进度', '学习目标', '偏好'].every(k => PF.includes(k)) && ['身份与背景', '已知基础', '通用学习偏好'].every(k => PF.includes(k)))
 ok('读返回 text+relPath+skeleton（未生成不落盘，弹层可载骨架）',
   PF.includes('skeleton: GLOBAL_PROFILE_SKELETON') && PF.includes('skeleton: SESSION_PROFILE_SKELETON'))
-ok('注入规则（§3.14）：全局+会话两层合并一段、各 2000 截断、皆空零注入；写后广播树刷新',
-  PF.includes('resolveProfilesForInjection') && PF.includes("cut(gt, 2000)") && PF.includes('if (!gt && !st) return \'\'') && PF.includes("'aiTeach:tree-refresh'"))
-ok('Plan B 协议（3-33）：AI 只出 ```profile 建议块、明示不得直接写文件',
-  PF.includes('```profile 围栏代码块') && PF.includes('用户接受后才会写入') && PF.includes('不要直接修改画像文件'))
-ok('4 通道注册 + 三层接线',
+ok('注入规则（§3.14 + UI 优化条目8.2.2）：全局/工作区/会话三层合并一段、各 2000 截断、皆空零注入；写后广播树刷新',
+  PF.includes('resolveProfilesForInjection') && PF.includes('readWorkspaceProfile') && PF.includes("cut(wt, 2000)") &&
+  PF.includes("if (!gt && !wt && !st) return ''") && PF.includes("'aiTeach:tree-refresh'"))
+ok('三层语义＝细颗粒覆盖粗颗粒（用户口径：全局→工作区→会话，会话 > 工作区 > 全局）',
+  PF.includes('以更细颗粒层为准') && PF.includes('（会话 > 工作区 > 全局）') && PF.includes('■ 工作区画像（本课程目标/进度/薄弱点，覆盖全局）'))
+ok('Plan B 协议（3-33）：AI 只出 ```profile 建议块、明示不得直接写文件（层级由用户选择）',
+  PF.includes('```profile 围栏代码块') && PF.includes('用户选择写入层级后才会落文件') && PF.includes('不要直接修改画像文件'))
+ok('6 通道注册 + 三层接线（条目8.2.2 增工作区 read/write）',
   MAIN.includes('registerAiTeachingProfileHandlers') &&
-  ['aiTeachProfileReadGlobal', 'aiTeachProfileWriteGlobal', 'aiTeachProfileReadSession', 'aiTeachProfileWriteSession'].every(k => PRE.includes(k) && TY.includes(k) && IPC.includes(k)))
+  ['aiTeachProfileReadGlobal', 'aiTeachProfileWriteGlobal', 'aiTeachProfileReadWorkspace', 'aiTeachProfileWriteWorkspace', 'aiTeachProfileReadSession', 'aiTeachProfileWriteSession'].every(k => PRE.includes(k) && TY.includes(k) && IPC.includes(k)))
 ok('AgentRunner 注入链：instHint(约束) 后接 profileHint（aiTeaching 源专属）',
   SVC.includes('resolveProfilesForInjection(sessionId, getSettingReader())') && SVC.includes('instHint + profileHint + titleRuleHint'))
 ok('PROFILE.md 不计入工作区产物数（与 CONSTRAINTS/SOURCE 同列基础设施文件）',
@@ -42,16 +45,20 @@ ok('PROFILE.md 不计入工作区产物数（与 CONSTRAINTS/SOURCE 同列基础
 
 ok('诊断问答模板（3-34）：入 TEMPLATES，开场要求一次列 3~5 题、答完出 ```profile 初稿且先不写文件',
   MOD.includes("id: 'profile-diagnose'") && MOD.includes('```profile 围栏代码块') && MOD.includes('先不要直接写文件'))
-ok('双入口（3-35）：选择页「全局画像」chip + 顶栏「画像」chip（带建议红点）',
-  MOD.includes('openProfile(\'global\')') && MOD.includes('openProfile(\'session\')') && MOD.includes('profileSuggestion && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />'))
+ok('三层入口（3-35 + 条目8.2.1）：选择页显眼画像卡片 + 工作区卡片 hover「画像」+ 顶栏「画像」chip（带建议红点、无截断）',
+  MOD.includes('学习者画像 · 三层') && MOD.includes("openProfile('global')") && MOD.includes("openProfile('workspace', w.id)") &&
+  MOD.includes("openProfile(activeId ? 'session' : 'workspace')") && !MOD.includes('max-w-[64px]') &&
+  MOD.includes('profileSuggestion && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]"'))
 ok('建议解析：最新一条 assistant 回答的 ```profile 围栏；渲染层剥离该围栏不直显',
   MOD.includes('/```profile[^\\n]*\\n([\\s\\S]*?)```/.exec(m.content)') && MOD.includes("m.content.replace(/```profile[^\\n]*\\n[\\s\\S]*?```/g, '')"))
-ok('建议卡片：接受（本主题）/接受（全局）/忽略/预览 四动作，位置在输入框上方',
-  MOD.includes("acceptProfileSuggestion('session')") && MOD.includes("acceptProfileSuggestion('global')") && MOD.includes('setProfDismissed(true)') && MOD.includes('AI 提议更新学习者画像'))
+ok('建议卡片三层落点（条目8.2.2）：接受（本主题）/接受（工作区）/接受（全局）/忽略/预览，位置在输入框上方',
+  ["acceptProfileSuggestion('session')", "acceptProfileSuggestion('workspace')", "acceptProfileSuggestion('global')"].every(k => MOD.includes(k)) &&
+  MOD.includes('setProfDismissed(true)') && MOD.includes('选择写入层级'))
 ok('接受写入后明示下轮生效 + 新回答到达自动重新展示卡片',
   MOD.includes('下轮生效') && MOD.includes('useEffect(() => { setProfDismissed(false) }, [messages])'))
-ok('画像弹层：层标题/路径展示/textarea 直编/载入骨架/诊断问答按钮/保存',
-  MOD.includes('全局学习者画像') && MOD.includes('本主题画像（对话级）') && MOD.includes('载入骨架') && MOD.includes('🩺 诊断问答生成') && MOD.includes('void saveProfile()'))
+ok('画像弹层三层切换（条目8.2.2）：全局/工作区/本主题 + 路径展示 + textarea 直编 + 载入骨架 + 诊断问答 + 保存',
+  MOD.includes("['global', '全局'], ['workspace', '工作区'], ['session', '本主题']") && MOD.includes('冲突时以更细颗粒层为准') &&
+  MOD.includes('载入骨架') && MOD.includes('🩺 诊断问答生成') && MOD.includes('void saveProfile()'))
 
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

@@ -214,7 +214,7 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
 
   const openInEditor = useCallback(() => {
     if (!sel || sel.kind !== 'page') return
-    window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: sel.path } }))
+    window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: sel.path, from: 'knowledge' } })) // 条目6：带来源
   }, [sel])
 
   const openInReader = useCallback(() => {

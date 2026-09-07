@@ -256,6 +256,8 @@ const api = {
   aiTeachProfileWriteGlobal: (text: string) => ipcRenderer.invoke('aiTeachProfile:writeGlobal', text),
   aiTeachProfileReadSession: (id: string) => ipcRenderer.invoke('aiTeachProfile:readSession', id),
   aiTeachProfileWriteSession: (id: string, text: string) => ipcRenderer.invoke('aiTeachProfile:writeSession', id, text),
+  aiTeachProfileReadWorkspace: (id: string) => ipcRenderer.invoke('aiTeachProfile:readWorkspace', id),
+  aiTeachProfileWriteWorkspace: (id: string, text: string) => ipcRenderer.invoke('aiTeachProfile:writeWorkspace', id, text),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

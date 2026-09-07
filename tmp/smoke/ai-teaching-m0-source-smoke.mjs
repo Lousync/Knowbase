@@ -50,8 +50,8 @@ ok('占位区清零（P0→P8 全部落地，头注释含 P8 画像说明）',
   !IM.includes('占位（') && IM.includes('P8 用户画像（§3.14）'))
 
 console.log('AI教学 Token 面板断言')
-ok('Token 面板：收起 chip（Gauge ≈ tokens）+ 展开明细',
-  IM.includes('<Gauge size={12} />') && IM.includes('tokenOpen') && IM.includes('fmtTok(tokenStats.llmTokens)'))
+ok('条目9 迁位：顶栏 Gauge chip 退役 → 输入区 UsageRing 圆环 + 点击上翻明细（tokenOpen 保留）',
+  !IM.includes('<Gauge') && IM.includes('<UsageRing') && IM.includes('tokenOpen') && IM.includes('fmtTok(tokenStats.llmTokens)'))
 ok('统计：从轨迹聚合 tokens/轮次/工具/耗时（llm steps tokens + tool 步）',
   IM.includes('s.kind === \'llm\'') && IM.includes('llmTokens += s.tokens') && IM.includes('tokenStats = useMemo'))
 ok('月度：llmGetUsage(monthTokens/budget) + 预算进度条（超 85% 转红）',

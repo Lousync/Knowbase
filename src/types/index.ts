@@ -724,6 +724,8 @@ export interface AiTeachSourcesResult {
   relPath?: string | null
   entries?: AiTeachSourceEntry[]
   no?: number
+  /** UI 优化条目5.3：手编/AI 直写 SOURCE.md 的形状异常统计（unnamed=缺编号的小节，dupNo=编号重复被丢弃数） */
+  anomalies?: { unnamed: number; dupNo: number }
   error?: string
 }
 
@@ -757,6 +759,17 @@ export interface AgentChatResult {
   trace: AgentTraceStep[]
   /** 本次真实发生的写改动 */
   changes?: AgentChange[]
+  /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（上下文构成摘要；其它来源无此字段） */
+  injection?: AiTeachInjectionStats
+}
+
+/** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
+export interface AiTeachInjectionStats {
+  systemChars: number
+  constraintChars: number
+  profileChars: number
+  sourcesChars: number
+  ruleChars: number
 }
 
 // ===== PDF 工具箱 =====
@@ -1332,6 +1345,8 @@ export interface ElectronAPI {
   aiTeachProfileWriteGlobal: (text: string) => Promise<{ ok: boolean; error?: string }>
   aiTeachProfileReadSession: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
   aiTeachProfileWriteSession: (id: string, text: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachProfileReadWorkspace: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
+  aiTeachProfileWriteWorkspace: (id: string, text: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void

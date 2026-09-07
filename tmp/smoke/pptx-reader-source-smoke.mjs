@@ -30,10 +30,10 @@ ok('桥：preload docsPptxPages + ElectronAPI + ipc.ts 封装',
   PR.includes('docsPptxPages') && TY.includes('docsPptxPages: (relPath: string)') && IM.includes('docsPptxPages'))
 
 console.log('沉浸 PPT 阅读 UI 断言')
-ok('素材：右栏「PPT 素材」按钮 + 递归扫描仓库 .pptx（≤3 层）',
-  IM.includes('PPT 素材') && IM.includes('workspaceListDir') && IM.includes("endsWith('.pptx')"))
-ok('素材列表：加入/移除/阅读中高亮/讲解按钮',
-  IM.includes('removeSource') && IM.includes('阅读中'))
+ok('条目5.1 承接：旧「PPT 素材」扫描区块退役，pptx 原件统一从素材库条目「逐页阅读」进入',
+  !IM.includes('PPT 素材（逐页讲解）') && IM.includes('逐页阅读原件') && IM.includes('openPptxReader('))
+ok('素材条目动作：移除登记 / 提取稿阅读 / 逐页阅读原件（阅读态由 reader 占用中栏表达）',
+  IM.includes('doRemoveSrc(e.no') && IM.includes('void openDocView(') && IM.includes('setReader(null)'))
 ok('逐页阅读视图（P3a：reader 激活占用中栏——页卡+原文编号+文本/空页提示）',
   IM.includes('原文编号') && IM.includes('（本页无文字内容'))
 ok('翻页与「讲解此页」（把当前页文本发给 agent 并退出阅读回对话流）',

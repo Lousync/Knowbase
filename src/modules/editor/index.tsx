@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText,
+  FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText, ArrowLeft,
   Pencil, Trash2, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2, ImagePlus,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
@@ -40,6 +40,10 @@ interface Props {
   zenLevel?: number
   /** 切档回调（Ctrl+K Z 循环 / 退出条 / Esc / 切 Tab 自动退出） */
   onZenLevelChange?: (n: number) => void
+  /** UI 优化条目6：模块跳转入编辑器时的来源标签（如「AI教学」）；非空时标签栏右侧显示「← 返回 X」chip */
+  openFrom?: string | null
+  /** 点「返回来源」：App 切回来源 Tab（保活上下文不丢） */
+  onBackFrom?: () => void
 }
 
 interface InputBoxState {
@@ -50,7 +54,7 @@ interface InputBoxState {
   onSubmit: (value: string) => void
 }
 
-export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange }: Props) {
+export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange, openFrom = null, onBackFrom }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
@@ -951,6 +955,14 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                   </div>
                 )
               })}
+              {/* UI 优化条目6：模块跳转来源——「← 返回 AI教学」chip（点击回来源 Tab，手动切 Tab 即消失） */}
+              {openFrom && onBackFrom && (
+                <button onClick={onBackFrom}
+                  className="ml-auto shrink-0 self-center mb-0.5 flex items-center gap-1 rounded-md border border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  title={`返回「${openFrom}」（保留其离开时的界面状态）`}>
+                  <ArrowLeft size={12} /> 返回 {openFrom}
+                </button>
+              )}
             </div>
           )}
           {/* 编辑器 */}

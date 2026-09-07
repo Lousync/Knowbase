@@ -253,7 +253,13 @@ export const workspaceSaveImage = (rootId: string, payload: { fileName: string; 
 export const workspaceReadFile = (rootId: string, relPath: string) => a().workspaceReadFile(rootId, relPath)
 export const workspaceReadRange = (rootId: string, relPath: string, offset: number, length: number) => a().workspaceReadRange(rootId, relPath, offset, length)
 export const workspaceSetMdStatus = (rootId: string, relPath: string, draft: boolean) => a().workspaceSetMdStatus(rootId, relPath, draft)
-export const workspaceWriteFile = (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => a().workspaceWriteFile(rootId, relPath, content, expectedMtimeMs)
+/** UI 优化条目5.3：应用内文件落盘后广播 `kb:file-saved`，供按需回读的消费方（AI教学右栏素材库 /
+ *  会话要求弹层）即时同步。主进程程序写入另发 `aiTeach:tree-refresh`；应用外编辑由消费方在激活/聚焦时回读。 */
+export const workspaceWriteFile = (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) =>
+  a().workspaceWriteFile(rootId, relPath, content, expectedMtimeMs).then((r) => {
+    if (r?.ok) window.dispatchEvent(new CustomEvent('kb:file-saved', { detail: { relPath } }))
+    return r
+  })
 export const workspaceCreateFile = (rootId: string, relPath: string, content?: string) => a().workspaceCreateFile(rootId, relPath, content)
 export const workspaceMkdir = (rootId: string, relPath: string) => a().workspaceMkdir(rootId, relPath)
 export const workspaceRename = (rootId: string, oldRel: string, newRel: string) => a().workspaceRename(rootId, oldRel, newRel)
@@ -511,11 +517,13 @@ export const aiTeachSrcPick = () => a().aiTeachSrcPick()
 // 3-21 视觉转写（手动档）
 export const aiTeachSrcPdfBytes = (id: string, no: number) => a().aiTeachSrcPdfBytes(id, no)
 export const aiTeachSrcTranscribe = (id: string, no: number, pages: { n: number; dataUrl: string }[]) => a().aiTeachSrcTranscribe(id, no, pages)
-// P8 用户画像（§3.14 两层 PROFILE.md）
+// P8 用户画像（§3.14 两层 PROFILE.md）；UI 优化条目8.2.2 加工作区第三层（全局/工作区/会话）
 export const aiTeachProfileReadGlobal = () => a().aiTeachProfileReadGlobal()
 export const aiTeachProfileWriteGlobal = (text: string) => a().aiTeachProfileWriteGlobal(text)
 export const aiTeachProfileReadSession = (id: string) => a().aiTeachProfileReadSession(id)
 export const aiTeachProfileWriteSession = (id: string, text: string) => a().aiTeachProfileWriteSession(id, text)
+export const aiTeachProfileReadWorkspace = (id: string) => a().aiTeachProfileReadWorkspace(id)
+export const aiTeachProfileWriteWorkspace = (id: string, text: string) => a().aiTeachProfileWriteWorkspace(id, text)
 /** P3b：模型是否支持思考强度（主进程单一真相源正则） */
 export const llmReasoningCapable = (model: string): Promise<boolean> => a().llmReasoningCapable(model)
 export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)

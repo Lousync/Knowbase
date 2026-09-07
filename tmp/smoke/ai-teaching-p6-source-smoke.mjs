@@ -25,8 +25,8 @@ console.log('AI教学 P6 素材库源码冒烟：')
 
 ok('结构 v3 布局：素材夹=会话父目录/SOURCES/{与会话夹同名}，登记文档 SOURCE.md（§3.13 权威结构）',
   SRC.includes("SOURCES_DIR = 'SOURCES'") && SRC.includes("SOURCE_FILE = 'SOURCE.md'") && SRC.includes('`${parentRel}/${SOURCES_DIR}/${convName}`'))
-ok('SOURCE.md 模板 v2：YAML frontmatter + ### 编号小节 + 固定字段行（3-28），类型枚举 6 项（3-27）',
-  SRC.includes('workspace: ') && SRC.includes('parseSourceMd') && SRC.includes("'url', 'pptx', 'pdf', 'image', 'md', 'other'") && SRC.includes('- 页码区间: '))
+ok('SOURCE.md 模板 v2：YAML frontmatter + ### 编号小节 + 固定字段行（3-28），类型枚举 7 项（3-27 六项 + UI 优化条目10 增 code）',
+  SRC.includes('workspace: ') && SRC.includes('parseSourceMd') && SRC.includes("'url', 'pptx', 'pdf', 'image', 'md', 'code', 'other'") && SRC.includes('- 页码区间: '))
 ok('解析宽容 + 重写保留 frontmatter 并刷新 updated（三入口收敛同一解析）',
   SRC.includes('rewriteEntries') && SRC.includes('updated:') && SRC.includes('sort((a, b) => a.no - b.no)'))
 ok('首次读取懒生成空模板（§3.13 创建对话时生成的懒实现）',
@@ -56,14 +56,33 @@ ok('入库浏览=系统文件选择器（aiTeachSrc:pick 绝对路径回传）',
 
 ok('右栏素材库区：条目卡（#编号/名称/类型/区间/存放）+ SOURCE 阅读 + ＋素材按钮',
   MOD.includes('素材库{srcEntries.length') && MOD.includes('void openDocView(srcFileRel)') && MOD.includes('setSrcForm({ name: \'\', type: \'pdf\''))
-ok('添加素材表单：类型下拉/名称必填/存放双模式/页码区间仅 pdf·pptx 拆起止双输入（§3.13 表单拍板）',
-  MOD.includes("srcForm.type === 'pdf' || srcForm.type === 'pptx'") && MOD.includes("placeholder=\"起始页\"") && MOD.includes("placeholder=\"结束页\"") && MOD.includes('浏览…'))
+ok('添加素材表单：类型下拉/名称必填/存放双模式/区间仅 pdf·pptx·code 拆起止双输入（§3.13 拍板 + 条目10 code 行号）',
+  MOD.includes("srcForm.type === 'pdf' || srcForm.type === 'pptx' || srcForm.type === 'code'") &&
+  MOD.includes("srcForm.type === 'code' ? '起始行' : '起始页'") && MOD.includes("srcForm.type === 'code' ? '结束行' : '结束页'") && MOD.includes('浏览…'))
+ok('条目5.2（真机 A1）：表单挂根层（工作区视图可达）+ 未选对话时按钮给引导 toast',
+  MOD.indexOf('{srcForm && (') > MOD.indexOf('工作区选择页') &&
+  MOD.includes('条目5.2.1') && MOD.includes('先选择或新建一个对话（素材随对话登记）'))
 ok('登记成功 toast「✓ 已写入 SOURCE.md」+ 列表即时同步（refreshSources 回读）',
   MOD.includes('✓ 已写入 SOURCE.md') && MOD.includes('await refreshSources(activeId)'))
 ok('条目动作：提取（pdf/pptx 未提取）/提取稿阅读跳转/原件逐页阅读/移除登记（不删文件）',
   MOD.includes('doExtract(e.no)') && MOD.includes('提取稿 ✓') && MOD.includes('doRemoveSrc(e.no, e.name)') && MOD.includes('素材原件与提取稿文件不会被删除'))
 ok('切会话自动回读素材登记（activeId effect）',
   MOD.includes('useEffect(() => { void refreshSources(activeId) }, [activeId, refreshSources])'))
+
+// ---------- UI 优化条目5.3 / 条目10 追加断言 ----------
+ok('条目5.3 解析容错加强：编号小节标题容忍 1~6 级与 # 后无空格、字段行容忍漏写前导 - 与冒号、值去反引号',
+  SRC.includes('/^#{1,6}\\s*(\\d+)\\s*[.、]\\s*(.+?)\\s*$/') && SRC.includes('/^[-*]?\\s*(类型|路径|页码区间|存放方式|已提取|备注)(?:\\s*[：:]\\s*|\\s+)(.*)$/') &&
+  SRC.includes('const clean = (v: string)'))
+ok('条目5.3 异常统计：缺编号小节 / 编号重复被丢弃 → 右栏可见提示（不静默丢失）',
+  SRC.includes('export function sourceAnomalies') && SRC.includes('anomalies') &&
+  MOD.includes('个小节缺「编号.」未登记') && MOD.includes('处编号重复被忽略'))
+ok('条目10 code 类型：文本源码按行号区间抽取（readTextSmart 编码兜底、超 2000 行截断、提取稿 {名}-L{起}-{终}.md）+ 区间容忍 L/行 前缀',
+  SRC.includes("if (e.type === 'code')") && SRC.includes('const raw = readTextSmart(abs)') &&
+  SRC.includes('-L${from}-${takeEnd}.md') && SRC.includes('const capped = to - from > 2000') &&
+  SRC.includes("(?:[Ll]|行)?") && SRC.includes('TextDecoder'))
+ok('条目10 类型枚举三处同步（服务枚举/表单下拉/模板说明）+ 注入按页/行区间措辞分流',
+  MOD.includes("'code'") && SRC.includes('code 行号') && SRC.includes('code（按行号区间）') &&
+  SRC.includes("e.type === 'code' ? '行号区间' : '页码区间'"))
 
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

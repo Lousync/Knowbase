@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FolderTree, Trash2 } from 'lucide-react'
+import { FolderTree, Trash2, Gauge, Database } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
 
 /** 设置 → 模块设置 → AI教学：会话产物根目录与删除联动（总纲 §二，P1） */
@@ -60,6 +60,38 @@ export function AiTeachingView() {
         </label>
         <p className="text-[11px] text-[var(--text-disabled)] leading-relaxed px-1">
           对话消息记录始终随会话删除；此设置只管理仓库里的产物文件夹。删除为移入系统回收站，可还原。
+        </p>
+
+        {/* UI 优化条目9：输入区用量指示三档 + 上下文窗口大小（圆环分母，0=退化纯数字） */}
+        <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+          <span className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
+            <Gauge size={14} className="text-[var(--text-muted)]" />
+            输入区用量指示
+          </span>
+          <select
+            value={s.aiTeachUsageDetail || 'compact'}
+            onChange={e => update('aiTeachUsageDetail', e.target.value)}
+            className="px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          >
+            <option value="off">隐藏</option>
+            <option value="compact">紧凑（上下文圆环）</option>
+            <option value="detailed">详细（圆环+文字摘要）</option>
+          </select>
+        </label>
+        <label className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+          <span className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
+            <Database size={14} className="text-[var(--text-muted)]" />
+            模型上下文窗口（token）
+          </span>
+          <input
+            type="number" min={0} step={1000}
+            value={s.aiTeachCtxWindow ?? 0}
+            onChange={e => update('aiTeachCtxWindow', Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            className="w-40 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+        </label>
+        <p className="text-[11px] text-[var(--text-disabled)] leading-relaxed px-1">
+          0=未设置，用量指示退化为纯数字；设置所选模型的上下文窗口（如 128000）后圆环按占用比例着色（&gt;85% 变红）。
         </p>
       </div>
     </div>

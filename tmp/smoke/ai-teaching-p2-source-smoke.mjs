@@ -50,7 +50,10 @@ ok('loadConstraints：有文件夹认文件，无文件夹读兼容 DB',
 ok('saveInstr 写文件而非 DB', MOD.includes('aiTeachWriteConstraints(sid, text)') && !/agentSetSessionInstructions\(sid, text\)/.test(MOD))
 ok('保存后清旧 DB 残留（防双真相源）', MOD.includes("agentSetSessionInstructions(sid, '')"))
 ok('弹层标注 CONSTRAINTS.md + maxLength 提到 2000', MOD.includes('CONSTRAINTS.md') && MOD.includes('maxLength={2000}'))
-ok('落盘路径展示 instrRel', MOD.includes('instrRel') && MOD.includes('落盘于：'))
+ok('落盘路径展示 instrRel（条目8.1 方案 A：弹层内次级入口=在方案 B 阅读视图打开本文件）',
+  MOD.includes('instrRel') && MOD.includes('在方案 B 阅读视图中打开本文件') && MOD.includes('void openDocView(instrRel)'))
+ok('条目8.1：中型编辑弹层规格（560px/86vh 对齐画像弹层）+ 模板说明折叠 + Ctrl+Enter 保存',
+  MOD.includes('w-[560px] max-w-[94vw] max-h-[86vh]') && MOD.includes('怎么写？（模板与示例）') && MOD.includes("e.key === 'Enter' && (e.ctrlKey || e.metaKey)"))
 
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

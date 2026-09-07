@@ -32,9 +32,11 @@ interface Props {
   active: TabName
   onChange: (tab: TabName) => void
   onToggleSidebar?: () => void
+  /** UI 优化条目1：最大化时活动栏卡去留白/圆角/边框阴影，贴满屏幕边缘 */
+  flush?: boolean
 }
 
-export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
+export function ActivityBar({ active, onChange, onToggleSidebar, flush }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [themeExpanded, setThemeExpanded] = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
@@ -142,7 +144,7 @@ export function ActivityBar({ active, onChange, onToggleSidebar }: Props) {
 
   return (
     <div ref={barRef}
-      className="w-14 mx-1.5 my-1.5 rounded-xl bg-[color-mix(in_srgb,var(--activitybar-bg)_85%,transparent)] border border-[var(--border-color)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)] flex flex-col items-center py-2 gap-1 shrink-0 select-none"
+      className={`w-14 flex flex-col items-center py-2 gap-1 shrink-0 select-none transition-all duration-300 ease-out bg-[color-mix(in_srgb,var(--activitybar-bg)_85%,transparent)] ${flush ? 'rounded-none' : 'mx-1.5 my-1.5 rounded-xl border border-[var(--border-color)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}
       onContextMenu={e => {
         e.preventDefault()
         setCtxMenu({ x: e.clientX, y: e.clientY })

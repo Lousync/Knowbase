@@ -381,11 +381,16 @@ export default function App() {
   // 会重建编辑器实例，旧实例的 listener 消费事件后随实例一起被丢弃，新实例拿不到
   // pending → 永远空态。state+props 不受实例重建影响。
   const [pendingOpenRel, setPendingOpenRel] = useState<string | null>(null)
+  // UI 优化条目6：跳转来源记录——kb-open-in-editor 带 from（如 aiTeaching），编辑器出「← 返回 X」chip；
+  // 新跳转覆盖旧来源，任何手动切 Tab（handleTabChange）清除
+  const [editorJumpFrom, setEditorJumpFrom] = useState<TabName | null>(null)
   useEffect(() => {
     const handler = (e: Event) => {
-      const relPath = (e as CustomEvent).detail?.relPath as string | undefined
+      const detail = (e as CustomEvent).detail as { relPath?: string; from?: TabName } | undefined
+      const relPath = detail?.relPath
       if (typeof relPath === 'string' && relPath) {
         setPendingOpenRel(relPath)
+        if (detail?.from) setEditorJumpFrom(detail.from)
       }
       setActiveTab('editor')
     }
@@ -507,6 +512,7 @@ export default function App() {
   }, [])
 
   const handleTabChange = (tab: TabName) => {
+    setEditorJumpFrom(null) // 手动切 Tab 即清除「返回来源」上下文（条目6）
     if (tab === activeTab) { setSidebarOpen(v => !v); return }
     // 分屏冲突：目标已在副栏 → 主栏显示它、旧主栏进副栏（避免同模块双实例）
     if (secondaryTab === tab) {
@@ -573,7 +579,7 @@ export default function App() {
       case 'schedule': return <ScheduleModule sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} />
       case 'knowledge': return <KnowledgeModule sidebarOpen={sidebarOpen} zoom={s.zoom} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} isActive={on} />
       case 'moments': return <MomentsModule />
-      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
+      case 'editor': return <EditorModule isActive={on} sidebarEl={workbench && on ? wbSidebarEl : null} markdownDim={s.markdownDim} pendingOpenRel={pendingOpenRel} onPendingConsumed={() => setPendingOpenRel(null)} openFrom={editorJumpFrom && editorJumpFrom !== 'editor' ? tabLabel(editorJumpFrom) : null} onBackFrom={() => { const f = editorJumpFrom; if (f) { setEditorJumpFrom(null); handleTabChange(f) } }} zenLevel={zenLevel} onZenLevelChange={setZenLevel} />
       case 'aiTeaching': return <AiTeachingModule isActive={on} zenLevel={zenLevel} onZenLevelChange={changeZen} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
@@ -603,12 +609,12 @@ export default function App() {
       <PomodoroProvider>
         <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
-          {zenLevel < 2 && <ActivityBar active={activeTab} onChange={handleTabChange} />}
+          {zenLevel < 2 && <ActivityBar active={activeTab} onChange={handleTabChange} flush={winMax} />}
 <main className="flex-1 flex overflow-hidden bg-transparent relative">
             {/* 主内容区卡片壳：与左右两侧(ActivityBar / 日程打卡面板)同款圆角+阴影+留白，三卡对称。
-                半透明底色 + 顶缘高光 = 液态玻璃卡片；禅模式 Z2+ 全屏化（去边距/圆角/边框，眼里只有文字） */}
-            <div className={`transition-all duration-300 ease-out ${zenLevel >= 2 ? 'flex min-w-0 flex-1' : 'm-1.5 flex min-w-0 flex-1'}`}>
-              <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-out ${zenLevel >= 2 ? 'bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)]' : 'rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}>
+                半透明底色 + 顶缘高光 = 液态玻璃卡片；禅模式 Z2+ 或 最大化（UI 优化条目1）全屏化（去边距/圆角/边框，贴满屏幕） */}
+            <div className={`transition-all duration-300 ease-out ${zenLevel >= 2 || winMax ? 'flex min-w-0 flex-1' : 'm-1.5 flex min-w-0 flex-1'}`}>
+              <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-out ${zenLevel >= 2 || winMax ? 'bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)]' : 'rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}>
               {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同。
                   Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1）；禅模式 Z1+ 收起侧栏槽 */}
               <div className="flex min-h-0 flex-1">
@@ -626,11 +632,13 @@ export default function App() {
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                       {/* 主栏：activeTab 可见；其余已访问模块 display:none 常驻保活（切 Tab 不卸载 → 状态保留）。
                           ISS-2026-09-04-02：原实现只渲染 activeTab，切走即卸载（知识库页签/树状态全丢）。
-                          保活顺序 = mountedTabs 访问序 + activeTab 兜底首访（on=true 时 add 到集合） */}
-                      {renderMounted(activeTab, true)}
-                      {Array.from(mountedTabs.current)
-                        .filter((t) => t !== activeTab && t !== secondaryTab)
-                        .map((t) => renderMounted(t, false))}
+                          保活顺序 = mountedTabs 访问序 + activeTab 兜底首访（on=true 时 add 到集合）。
+                          UI 优化条目6B（根因修）：可见与隐藏模块必须装进**同一个 keyed 数组**——旧写法把可见
+                          模块单列为数组外的首个子节点，切 Tab 时可见↔隐藏换了子节点槽位，React 按位置卸载重建
+                          （= ISS-2026-09-04-07 备注的「保活层在切 Tab 时会重建编辑器实例」真实成因）；
+                          同数组内换序由 key 保住实例，模块内状态（会话/中栏视图/滚动）自然保留。 */}
+                      {[activeTab, ...Array.from(mountedTabs.current).filter((t) => t !== activeTab && t !== secondaryTab)]
+                        .map((t) => renderMounted(t, t === activeTab))}
                     </div>
                     {secondaryTab && secondaryTab !== activeTab && (
                       <ResizablePanel
@@ -686,8 +694,9 @@ export default function App() {
                 showHandle
                 growWindow
               >
-                {/* 内嵌面板的"子窗口"外壳：留白 + 圆角 + 阴影，让它在主窗口内像独立浮窗（微信会议窗同款） */}
-                <div className="m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]">
+                {/* 内嵌面板的"子窗口"外壳：留白 + 圆角 + 阴影，让它在主窗口内像独立浮窗（微信会议窗同款）；
+                    最大化时与主内容/活动栏同条件贴边（UI 优化条目1） */}
+                <div className={`flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-out ${winMax ? 'bg-[var(--bg-secondary)]' : 'm-1.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_6px_24px_rgba(0,0,0,0.16)]'}`}>
                   <DayPanel
                     mode="embedded"
                     onPopout={() => { void window.api?.dayPanelPopout?.() }}

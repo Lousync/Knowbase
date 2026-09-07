@@ -207,11 +207,12 @@ export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenExtern
 
       {ctx && (
         <div className="fixed inset-0 z-[70]" onClick={() => setCtx(null)} onContextMenu={(e) => { e.preventDefault(); setCtx(null) }}>
-          <div className="absolute min-w-[160px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl py-1"
-            style={{ left: Math.min(ctx.x, window.innerWidth - 180), top: Math.min(ctx.y, window.innerHeight - 220) }}>
+          {/* UI 优化条目7：w-max 显式内容宽（修 shrink-to-fit+ w-full 子项测量歧义导致的拉宽），长文案换行兜底，钳制按实际宽 */}
+          <div className="absolute min-w-[160px] w-max max-w-[280px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl py-1"
+            style={{ left: Math.min(ctx.x, window.innerWidth - 290), top: Math.min(ctx.y, window.innerHeight - 300) }}>
             {menuItems(ctx.node).map((it, i) => (
               <button key={i} disabled={it.disabled} onClick={() => { setCtx(null); it.run() }}
-                className={`w-full text-left px-3 py-1.5 text-[12px] transition-colors disabled:opacity-40 ${it.danger ? 'text-red-400 hover:bg-[var(--bg-hover)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
+                className={`w-full text-left px-3 py-1.5 text-[12px] leading-snug transition-colors disabled:opacity-40 ${it.danger ? 'text-red-400 hover:bg-[var(--bg-hover)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}>
                 {it.label}
               </button>
             ))}
