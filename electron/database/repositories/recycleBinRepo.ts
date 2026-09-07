@@ -1,14 +1,15 @@
-// R6 去库化：真相源 = .knowbase/modules/recycle-bin.json（sql.js 路径已移除，D9）
+// R6 去库化：真相源 = .knowbase/modules/recycle-bin.json（恢复目标模块同样只写各模块 vault 真相源，sqlite 路径已移除）
 import { ipcMain } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
-import { randomUUID } from 'crypto'
-import { getDatabase, saveToDisk } from '../connection'
 import { trashItem, trashAll } from '../../lib/trashFiles'
 import { restoreAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 import { encryptPassword } from './passwordRepo'
 import { vaultPasswordsAll, vaultPasswordsSave } from '../../lib/kbStore/secretVaultRepo'
+import { vaultListEntries, vaultCreateEntry, vaultUpdateEntry } from '../../lib/kbStore/blogVaultRepo'
+import { vaultPostsAll, vaultPostsSave, vaultAlbumsAll, type MomentsRow } from '../../lib/kbStore/momentsVaultRepo'
+import { vaultGetCategory, vaultRestorePage, vaultRestoreCategory } from '../../lib/kbStore/knowledgeVaultRepo'
 import { readJson, writeJson } from '../../lib/kbStore/jsonStore'
 
 function getSettingsRetentionDays(): number {
@@ -32,64 +33,17 @@ interface RecycleBinRow {
   deleted_at: string
 }
 
-interface TagRow {
-  id: string
-  name: string
-  color: string
-}
-
-// ---- sqlite 辅助（仅剩恢复目标模块的写入在使用，属各模块 R6 范围） ----
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
 function normalizeCategoryType(raw: unknown): 'notebook' | 'folder' | 'space' {
   if (raw === 'notebook' || raw === 'space') return raw
   return 'folder'
 }
 
-function getOrCreateDefaultSpaceId(): string {
-  const existing = queryAll<{ id: string }>(
-    "SELECT id FROM knowledge_categories WHERE category_type = 'space' AND parent_id IS NULL ORDER BY sort_order, name LIMIT 1"
-  )
-  if (existing[0]) return existing[0].id
-
-  const id = randomUUID()
-  const maxOrder = queryAll<{ m: number }>(
-    'SELECT COALESCE(MAX(sort_order), -1) + 1 AS m FROM knowledge_categories WHERE parent_id IS NULL'
-  )[0]?.m ?? 0
-  run(
-    `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
-     VALUES (?, '默认空间', NULL, ?, 'space')`,
-    [id, maxOrder]
-  )
-  return id
-}
-
+/** 分类归属父级解析（vault 字典口径）：空间恒为顶层；父级不在字典内则落到顶层（不再新建默认空间） */
 function resolveCategoryParent(categoryType: unknown, parentId: string | null | undefined): string | null {
   const ct = normalizeCategoryType(categoryType)
   if (ct === 'space') return null
-
-  if (parentId) {
-    const parentExists = queryAll<{ id: string }>(
-      'SELECT id FROM knowledge_categories WHERE id = ?',
-      [parentId]
-    ).length > 0
-    if (parentExists) return parentId
-  }
-
-  return getOrCreateDefaultSpaceId()
+  if (parentId && vaultGetCategory(parentId)) return parentId
+  return null
 }
 
 // ---- 回收站 JSON 存取（.knowbase/modules/recycle-bin.json，原子写） ----
@@ -191,89 +145,65 @@ export function registerRecycleBinHandlers(): void {
     }
 
     if (item.module === 'blog') {
-      // 恢复博文 — 同日期去重:已有该日期日志时不恢复(避免造出重复日期条目)
-      const dup = queryAll<{ id: string }>('SELECT id FROM entries WHERE date = ?', [record.date])
+      // 恢复博文 — 同日期去重:已有该日期日志时不恢复(避免造出重复日期条目);查 vault 真相源
+      const dup = vaultListEntries({ date: record.date })
       if (dup.length > 0) {
         return { success: false, message: `恢复失败:${record.date} 已存在日志,请先处理该日的现有日志` }
       }
-      run(
-        `INSERT INTO entries (id, title, content_md, content_html, date, created_at, updated_at, is_pinned, word_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          record.id, record.title, record.contentMd, record.contentHtml || '',
-          record.date, record.createdAt, record.updatedAt,
-          record.isPinned ? 1 : 0, record.wordCount || 0
-        ]
-      )
+      // 写 .knowbase/blog/<年>/<date>.md（tags 按 vault 约定 id=name，frontmatter 存名字）
+      const tagNames = Array.isArray(record.tags)
+        ? (record.tags as Array<{ name?: unknown }>).map((t) => String(t?.name ?? '')).filter(Boolean)
+        : []
+      const created = vaultCreateEntry({
+        title: record.title, contentMd: record.contentMd, date: record.date,
+        tags: tagNames, states: record.states,
+      })
+      // vaultCreateEntry 不收 isPinned，钉住状态补一次小编辑（仅钉住时，避免多余 frontmatter 重写）
+      if (record.isPinned) vaultUpdateEntry(created.id, { isPinned: true })
       // 恢复正文内联图片附件
       restoreAttachments(parseInlineAttachmentIds(record.contentMd || ''))
-      // 恢复标签关联
-      if (record.tags && Array.isArray(record.tags)) {
-        for (const tag of record.tags as TagRow[]) {
-          try {
-            run('INSERT OR IGNORE INTO entry_tags (entry_id, tag_id) VALUES (?, ?)', [record.id, tag.id])
-          } catch { /* 标签可能已被删除 */ }
-        }
-      }
     } else if (item.module === 'knowledge') {
-      // 恢复知识页面 — 分类可能已被单独删除:失效时置 NULL(落入未分类),避免外键失败卡死条目
-      const catOk = record.categoryId
-        ? queryAll<{ id: string }>('SELECT id FROM knowledge_categories WHERE id = ?', [record.categoryId]).length > 0
-        : false
-      run(
-        `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          record.id, record.title, record.contentMd, record.contentHtml || '',
-          catOk ? record.categoryId : null, record.isStarred ? 1 : 0,
-          record.sortOrder || 0, record.fileType || '', record.createdAt, record.updatedAt
-        ]
-      )
+      // 恢复知识页面 — 写 frontmatter md（分类按字典 path 落位，失效落收件箱）；重复 id 报错
+      try {
+        vaultRestorePage({
+          id: record.id, title: record.title, contentMd: record.contentMd || '',
+          categoryId: record.categoryId ?? null,
+          tags: Array.isArray(record.tags) ? record.tags : [],
+          starred: !!record.isStarred, sortOrder: record.sortOrder || 0,
+          fileType: record.fileType || '', createdAt: record.createdAt, updatedAt: record.updatedAt,
+        })
+      } catch (e) {
+        return { success: false, message: e instanceof Error ? e.message : '恢复失败' }
+      }
       // 恢复正文内联图片附件
       restoreAttachments(parseInlineAttachmentIds(record.contentMd || ''))
-      // 恢复标签关联
-      if (record.tags && Array.isArray(record.tags)) {
-        for (const tag of record.tags as TagRow[]) {
-          try {
-            run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [record.id, tag.id])
-          } catch { /* 标签可能已被删除 */ }
-        }
-      }
-      // 注意: knowledge_links 不恢复 — 保存页面时会自动重建
+      // 注意: knowledge_links 不恢复 — 索引重建时自动从正文提取出链
     } else if (item.module === 'knowledge_category') {
       const cat = record.category
       const categoryType = normalizeCategoryType(cat.categoryType)
       const parentId = resolveCategoryParent(categoryType, cat.parentId)
 
-      run(
-        `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
-         VALUES (?, ?, ?, ?, ?)`,
-        [cat.id, cat.name, parentId, cat.sortOrder || 0, categoryType]
-      )
+      // 恢复目录：mkdir 磁盘文件夹 + categories.json 追加条目（重复 id 报错，对齐原主键语义）
+      try {
+        vaultRestoreCategory({ id: cat.id, name: cat.name, parentId, sortOrder: cat.sortOrder || 0, categoryType })
+      } catch (e) {
+        return { success: false, message: e instanceof Error ? e.message : '恢复失败' }
+      }
 
       // Recursively restore children
       const restoreChildren = (children: any[], parentId: string) => {
         for (const ch of (children || [])) {
           const c = ch.category
-          run(
-            `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
-             VALUES (?, ?, ?, ?, ?)`,
-            [c.id, c.name, parentId, c.sortOrder || 0, c.categoryType === 'notebook' || c.categoryType === 'space' ? c.categoryType : 'folder']
-          )
-          // Restore pages under this child
+          vaultRestoreCategory({ id: c.id, name: c.name, parentId, sortOrder: c.sortOrder || 0, categoryType: normalizeCategoryType(c.categoryType) })
+          // Restore pages under this child（页面已存在/单独恢复过 → 跳过）
           for (const p of (ch.pages || [])) {
             try {
-              run(
-                `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [p.id, p.title, p.contentMd, p.contentHtml || '', c.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
-              )
+              vaultRestorePage({
+                id: p.id, title: p.title, contentMd: p.contentMd || '', categoryId: c.id,
+                tags: p.tags || [], starred: !!p.isStarred, sortOrder: p.sortOrder || 0,
+                fileType: p.fileType || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
+              })
             } catch { /* 页面已存在(可能被单独恢复过),跳过 */ }
-            for (const tag of (p.tags || [])) {
-              try {
-                run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id])
-              } catch { /* tag may have been deleted */ }
-            }
           }
           restoreChildren(ch.children, c.id)
         }
@@ -283,17 +213,12 @@ export function registerRecycleBinHandlers(): void {
       // Restore direct pages
       for (const p of (record.pages || [])) {
         try {
-          run(
-            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [p.id, p.title, p.contentMd, p.contentHtml || '', cat.id, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
-          )
+          vaultRestorePage({
+            id: p.id, title: p.title, contentMd: p.contentMd || '', categoryId: cat.id,
+            tags: p.tags || [], starred: !!p.isStarred, sortOrder: p.sortOrder || 0,
+            fileType: p.fileType || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
+          })
         } catch { /* 页面已存在(可能被单独恢复过),跳过 */ }
-        for (const tag of (p.tags || [])) {
-          try {
-            run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id])
-          } catch { /* tag may have been deleted */ }
-        }
       }
     } else if (item.module === 'passwordVault') {
       // 恢复密码条目(新快照中密码为密文,直接插回;旧明文快照插入后由加密清理统一处理)
@@ -314,19 +239,31 @@ export function registerRecycleBinHandlers(): void {
         : (record.imageDataUrl ? [record.imageDataUrl] : [])
       const tags = Array.isArray(record.tags) ? record.tags.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0) : []
       const attachmentIds = Array.isArray(record.attachmentIds) ? record.attachmentIds : []
-      // 相册可能已删除:置空避免外键失败
+      // 重复保护：同 id 已存在则不恢复（对齐原主键语义）
+      const rows = vaultPostsAll()
+      if (rows.some((r) => r.id === record.id)) {
+        return { success: false, message: '仓库中已存在同一条目' }
+      }
+      // 相册可能已删除:置空避免悬挂引用
       const albumOk = record.albumId
-        ? queryAll<{ id: string }>('SELECT id FROM moments_albums WHERE id = ?', [record.albumId]).length > 0
+        ? vaultAlbumsAll().some((a) => a.id === record.albumId)
         : false
-      // 先插记录、后恢复附件文件:插入失败时文件不被挪动,不留半状态
-      run(
-        `INSERT INTO moments_posts (id, content_md, content_html, images_data_urls, attachment_ids, tags, album_id, is_pinned, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          record.id, record.contentMd || '', record.contentHtml || '', JSON.stringify(images), JSON.stringify(attachmentIds), JSON.stringify(tags), albumOk ? record.albumId : '', record.isPinned ? 1 : 0,
-          record.createdAt, record.updatedAt
-        ]
-      )
+      // 写 .knowbase/modules/moments/posts.json（行结构与表行一致，列内 JSON 保持字符串）
+      const row: MomentsRow = {
+        id: record.id,
+        content_md: record.contentMd || '',
+        content_html: record.contentHtml || '',
+        image_data_url: '',
+        images_data_urls: JSON.stringify(images),
+        attachment_ids: JSON.stringify(attachmentIds),
+        tags: JSON.stringify(tags),
+        album_id: albumOk ? record.albumId : '',
+        is_pinned: record.isPinned ? 1 : 0,
+        show_in_timeline: record.showInTimeline === false ? 0 : 1,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+      }
+      vaultPostsSave([...rows, row])
       if (attachmentIds.length > 0) restoreAttachments(attachmentIds)
     }
 
@@ -369,11 +306,7 @@ export function registerRecycleBinHandlers(): void {
       const c = record.category
       const categoryType = normalizeCategoryType(c.categoryType)
       const parentId = resolveCategoryParent(categoryType, c.parentId)
-      run(
-        `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
-         VALUES (?, ?, ?, ?, ?)`,
-        [c.id, c.name, parentId, c.sortOrder || 0, categoryType]
-      )
+      vaultRestoreCategory({ id: c.id, name: c.name, parentId, sortOrder: c.sortOrder || 0, categoryType })
       // Remove category from snapshot; if nothing left, delete bin entry
       delete record.category
       const hasContent = (record.pages?.length > 0) || (record.children?.length > 0) || record.category
@@ -387,18 +320,15 @@ export function registerRecycleBinHandlers(): void {
     }
 
     if (segments[0] === 'pages') {
-      // Restore a direct page from record.pages[i]
+      // Restore a direct page from record.pages[i]（categoryId=null → 落收件箱，与原未分类语义对齐）
       const pageIdx = parseInt(segments[1], 10)
       const page = record.pages[pageIdx]
       if (page) {
-        run(
-          `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.fileType || '', page.createdAt, page.updatedAt]
-        )
-        for (const tag of (page.tags || [])) {
-          try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* */ }
-        }
+        vaultRestorePage({
+          id: page.id, title: page.title, contentMd: page.contentMd || '', categoryId: null,
+          tags: page.tags || [], starred: !!page.isStarred, sortOrder: page.sortOrder || 0,
+          fileType: page.fileType || '', createdAt: page.createdAt, updatedAt: page.updatedAt,
+        })
         record.pages.splice(pageIdx, 1)
       }
     } else if (segments[0] === 'children') {
@@ -411,31 +341,20 @@ export function registerRecycleBinHandlers(): void {
         const c = child.category
         const categoryType = normalizeCategoryType(c.categoryType)
         const parentId = resolveCategoryParent(categoryType, c.parentId)
-        run(
-          `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
-           VALUES (?, ?, ?, ?, ?)`,
-          [c.id, c.name, parentId, c.sortOrder || 0, categoryType]
-        )
+        vaultRestoreCategory({ id: c.id, name: c.name, parentId, sortOrder: c.sortOrder || 0, categoryType })
         const restorePages = (pages: any[], catId: string) => {
           for (const p of pages) {
-            run(
-              `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [p.id, p.title, p.contentMd, p.contentHtml || '', catId, p.isStarred ? 1 : 0, p.sortOrder || 0, p.fileType || '', p.createdAt, p.updatedAt]
-            )
-            for (const tag of (p.tags || [])) {
-              try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [p.id, tag.id]) } catch { /* */ }
-            }
+            vaultRestorePage({
+              id: p.id, title: p.title, contentMd: p.contentMd || '', categoryId: catId,
+              tags: p.tags || [], starred: !!p.isStarred, sortOrder: p.sortOrder || 0,
+              fileType: p.fileType || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
+            })
           }
         }
         const restoreChildren = (children: any[], parentId: string) => {
           for (const ch of children) {
             const cc = ch.category
-            run(
-              `INSERT INTO knowledge_categories (id, name, parent_id, sort_order, category_type)
-               VALUES (?, ?, ?, ?, ?)`,
-              [cc.id, cc.name, parentId, cc.sortOrder || 0, cc.categoryType === 'notebook' || cc.categoryType === 'space' ? cc.categoryType : 'folder']
-            )
+            vaultRestoreCategory({ id: cc.id, name: cc.name, parentId, sortOrder: cc.sortOrder || 0, categoryType: normalizeCategoryType(cc.categoryType) })
             restorePages(ch.pages || [], cc.id)
             restoreChildren(ch.children || [], cc.id)
           }
@@ -448,14 +367,11 @@ export function registerRecycleBinHandlers(): void {
         const pageIdx = parseInt(segments[3], 10)
         const page = child.pages[pageIdx]
         if (page) {
-          run(
-            `INSERT INTO knowledge_pages (id, title, content_md, content_html, category_id, is_starred, sort_order, file_type, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [page.id, page.title, page.contentMd, page.contentHtml || '', null, page.isStarred ? 1 : 0, page.sortOrder || 0, page.fileType || '', page.createdAt, page.updatedAt]
-          )
-          for (const tag of (page.tags || [])) {
-            try { run('INSERT OR IGNORE INTO knowledge_page_tags (page_id, tag_id) VALUES (?, ?)', [page.id, tag.id]) } catch { /* */ }
-          }
+          vaultRestorePage({
+            id: page.id, title: page.title, contentMd: page.contentMd || '', categoryId: null,
+            tags: page.tags || [], starred: !!page.isStarred, sortOrder: page.sortOrder || 0,
+            fileType: page.fileType || '', createdAt: page.createdAt, updatedAt: page.updatedAt,
+          })
           child.pages.splice(pageIdx, 1)
         }
       }

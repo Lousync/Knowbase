@@ -146,6 +146,67 @@ export function vaultCreateCategory(entry: { id: string; name: string; categoryT
   invalidateKnowledgeIndex()
 }
 
+// ===== R6 回收站恢复放行（vault 模式）：恢复=按原 id 重写 md 文件 / mkdir 目录+字典条目 =====
+
+/** R6 回收站恢复页面：frontmatter 带原 id/title/tags/starred/created/updated，body=contentMd；
+ *  分类归属按 payload.categoryId 对应字典条目的 path 落位，条目不存在（或为 null）落收件箱；
+ *  重复 id 报错（对齐原主键语义）。 */
+export function vaultRestorePage(payload: {
+  id: string
+  title: string
+  contentMd: string
+  categoryId?: string | null
+  tags?: Array<VaultTag | string>
+  starred?: boolean
+  sortOrder?: number
+  fileType?: string
+  createdAt?: string
+  updatedAt?: string
+}): void {
+  if (getKnowledgeIndex().byId[payload.id]) throw new Error('页面已存在（可能已被恢复过）')
+  const root = requireRoot()
+  const dirRel = (payload.categoryId ? vaultGetCategoryRelPath(payload.categoryId) : null) ?? KB_INBOX_DIR
+  const stem = sanitizeFileStem(payload.title || '恢复页面')
+  const name = uniquePageName(dirRel, stem, root)
+  const rel = `${dirRel}/${name}`
+  const tagNames = [...new Set((payload.tags ?? []).map((t) => (typeof t === 'string' ? t : t.name)).filter(Boolean))]
+  const fm: Record<string, unknown> = {
+    id: payload.id,
+    title: payload.title || stem,
+    tags: tagNames,
+    starred: !!payload.starred,
+    sortOrder: payload.sortOrder ?? 0,
+    status: 'published' as const,
+    created: payload.createdAt || new Date().toISOString(),
+    updated: payload.updatedAt || payload.createdAt || new Date().toISOString(),
+  }
+  if (payload.fileType) fm.fileType = payload.fileType
+  if (!writeVaultFile(rel, serializeMarkdown(fm, payload.contentMd ?? ''))) throw new Error('页面文件写入失败')
+  invalidateKnowledgeIndex()
+}
+
+/** R6 回收站恢复目录：mkdir 磁盘文件夹（已存在则复用）+ categories.json 追加条目（父级须在字典内且绑定 path）；
+ *  重复 id 报错（对齐原主键语义）。索引失效由本函数负责，恢复批次内后续 path 查询会触发懒重建。 */
+export function vaultRestoreCategory(payload: {
+  id: string
+  name: string
+  parentId: string | null
+  categoryType: KnowledgeCategoryType
+  sortOrder?: number
+}): void {
+  if (getKnowledgeIndex().categories.some((c) => c.id === payload.id)) throw new Error('目录已存在（可能已被恢复过）')
+  const name = payload.name.trim()
+  if (!name) throw new Error('名称不能为空')
+  if (/[\\/:*?"<>|]/.test(name)) throw new Error('名称不能包含 \\ / : * ? " < > | 等文件名字符')
+  const parentPath = payload.parentId ? vaultGetCategoryRelPath(payload.parentId) : null
+  if (payload.parentId && !parentPath) throw new Error('父目录不存在或未绑定仓库文件夹')
+  const rel = parentPath ? `${parentPath}/${name}` : name
+  const abs = join(requireRoot(), rel)
+  if (!existsSync(abs)) mkdirSync(abs, { recursive: true })
+  appendCategoryEntry({ id: payload.id, name, categoryType: payload.categoryType, parentId: payload.parentId, sortOrder: payload.sortOrder, path: rel })
+  invalidateKnowledgeIndex()
+}
+
 // ===== 2026-09-07 知识库导入放行（vault 模式）：页面=frontmatter md 文件，二进制=附件目录 + 协议引用 =====
 
 /** 与 importRepo.TEXT_EXTS 对齐的文本扩展名 */

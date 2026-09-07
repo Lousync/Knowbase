@@ -1,25 +1,18 @@
 import { ipcMain, app, dialog, BrowserWindow } from 'electron'
 import { randomBytes, pbkdf2Sync } from 'crypto'
-import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
-import { join, basename } from 'path'
+import { getAttachmentsDir, getDatabase } from '../connection'
+import { join } from 'path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, unlinkSync } from 'fs'
 import { registerAttachment, deleteAttachments } from './attachmentRepo'
-import { isVaultDataSource } from '../dataSourceMode'
 import { vaultTodosAll, vaultTagsAll } from '../../lib/kbStore/scheduleVaultRepo'
 import { vaultListEntries } from '../../lib/kbStore/blogVaultRepo'
 import { vaultGetTags } from '../../lib/kbStore/knowledgeVaultRepo'
 import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
+import { vaultUserProfile, vaultUserProfileSave, type UserVaultRow } from '../../lib/kbStore/userVaultRepo'
+
+// R6 去库化：用户档案 = .knowbase/modules/user.json（登录密码 hash 同存；sql.js 路径已移除，D9）
 
 // ---- types ----
-interface UserProfileRow {
-  id: string
-  username: string
-  avatar_path: string
-  password_hash: string
-  created_at: string
-  updated_at: string
-}
-
 interface UserStats {
   blogCount: number
   knowledgePages: number
@@ -33,35 +26,21 @@ interface UserStats {
 }
 
 // ---- helpers ----
-function queryOne<T>(sql: string, params: unknown[] = []): T | null {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  let row: T | null = null
-  if (stmt.step()) row = stmt.getAsObject() as T
-  stmt.free()
+function newVaultProfile(): UserVaultRow {
+  const now = new Date().toISOString()
+  return { id: 'default', username: '', avatar_path: '', password_hash: '', created_at: now, updated_at: now }
+}
+
+/** 读取档案，无则初始化一条 default（不落盘，落盘由各写操作完成） */
+function loadProfileOrDefault(): UserVaultRow {
+  return vaultUserProfile() ?? newVaultProfile()
+}
+
+/** 局部更新档案并落盘（无则初始化后合并） */
+function patchProfile(patch: Partial<Omit<UserVaultRow, 'id' | 'created_at'>>): UserVaultRow {
+  const row = { ...loadProfileOrDefault(), ...patch, updated_at: new Date().toISOString() }
+  vaultUserProfileSave(row)
   return row
-}
-
-function queryAll<T>(sql: string, params: unknown[] = []): T[] {
-  const db = getDatabase()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-  const rows: T[] = []
-  while (stmt.step()) rows.push(stmt.getAsObject() as T)
-  stmt.free()
-  return rows
-}
-
-function run(sql: string, params: unknown[] = []): void {
-  getDatabase().run(sql, params)
-  saveToDisk()
-}
-
-function count(table: string, extraCondition: string = ''): number {
-  const sql = `SELECT COUNT(*) as cnt FROM ${table}` + (extraCondition ? ` WHERE ${extraCondition}` : '')
-  const row = queryOne<{ cnt: number }>(sql)
-  return row?.cnt ?? 0
 }
 
 // ---- Avatar directory ----
@@ -93,12 +72,12 @@ function verifyPassword(password: string, stored: string): boolean {
 export function registerUserHandlers(): void {
   // ===== Get profile =====
   ipcMain.handle('user:getProfile', () => {
-    const row = queryOne<UserProfileRow>('SELECT * FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     if (!row) return null
     return {
       username: row.username,
       avatarPath: row.avatar_path,
-      hasPassword: row.password_hash !== '',
+      hasPassword: !!row.password_hash,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
@@ -106,29 +85,26 @@ export function registerUserHandlers(): void {
 
   // ===== Update username =====
   ipcMain.handle('user:setUsername', (_e, username: string) => {
-    const now = new Date().toISOString()
-    run("UPDATE user_profile SET username = ?, updated_at = ? WHERE id = 'default'", [username, now])
+    patchProfile({ username })
     return { success: true }
   })
 
   // ===== Set password =====
   ipcMain.handle('user:setPassword', (_e, password: string) => {
-    const hash = hashPassword(password)
-    const now = new Date().toISOString()
-    run("UPDATE user_profile SET password_hash = ?, updated_at = ? WHERE id = 'default'", [hash, now])
+    patchProfile({ password_hash: hashPassword(password) })
     return { success: true }
   })
 
   // ===== Verify password =====
   ipcMain.handle('user:verifyPassword', (_e, password: string) => {
-    const row = queryOne<UserProfileRow>('SELECT password_hash FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     if (!row || !row.password_hash) return false
     return verifyPassword(password, row.password_hash)
   })
 
   // ===== Check if password set =====
   ipcMain.handle('user:hasPassword', () => {
-    const row = queryOne<UserProfileRow>('SELECT password_hash FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     return !!(row && row.password_hash)
   })
 
@@ -139,24 +115,21 @@ export function registerUserHandlers(): void {
 
   // ===== Change password (verify old first) =====
   ipcMain.handle('user:changePassword', (_e, oldPassword: string, newPassword: string) => {
-    const row = queryOne<UserProfileRow>('SELECT password_hash FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     if (row && row.password_hash && !verifyPassword(oldPassword, row.password_hash)) {
       return { success: false, error: '当前密码错误' }
     }
-    const hash = hashPassword(newPassword)
-    const now = new Date().toISOString()
-    run("UPDATE user_profile SET password_hash = ?, updated_at = ? WHERE id = 'default'", [hash, now])
+    patchProfile({ password_hash: hashPassword(newPassword) })
     return { success: true }
   })
 
   // ===== Clear password =====
   ipcMain.handle('user:clearPassword', (_e, password: string) => {
-    const row = queryOne<UserProfileRow>('SELECT password_hash FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     if (row && row.password_hash && !verifyPassword(password, row.password_hash)) {
       return { success: false, error: '密码错误' }
     }
-    const now = new Date().toISOString()
-    run("UPDATE user_profile SET password_hash = '', updated_at = ? WHERE id = 'default'", [now])
+    patchProfile({ password_hash: '' })
     return { success: true }
   })
 
@@ -183,7 +156,7 @@ export function registerUserHandlers(): void {
     copyFileSync(sourcePath, destPath)
 
     // 删除旧头像文件与旧附件记录
-    const prev = queryOne<UserProfileRow>('SELECT avatar_path FROM user_profile WHERE id = ?', ['default'])
+    const prev = vaultUserProfile()
     if (prev?.avatar_path) {
       const oldPath = join(app.getPath('userData'), prev.avatar_path)
       try { if (existsSync(oldPath)) unlinkSync(oldPath) } catch { /* ignore */ }
@@ -191,7 +164,6 @@ export function registerUserHandlers(): void {
     const oldAtts = queryAll<{ id: string }>("SELECT id FROM attachments WHERE owner_type = 'user_profile' AND owner_id = 'default'")
     if (oldAtts.length > 0) deleteAttachments(oldAtts.map(a => a.id))
 
-    const now = new Date().toISOString()
     const relativePath = `attachments/user_profile/default/${fileName}`
     registerAttachment({
       ownerType: 'user_profile',
@@ -201,13 +173,13 @@ export function registerUserHandlers(): void {
       mime: `image/${ext.replace(/^\./, '').replace('jpg', 'jpeg')}`,
       size: readFileSync(destPath).length,
     })
-    run("UPDATE user_profile SET avatar_path = ?, updated_at = ? WHERE id = 'default'", [relativePath, now])
+    patchProfile({ avatar_path: relativePath })
     return { success: true, path: relativePath }
   })
 
   // ===== Avatar: read as base64 =====
   ipcMain.handle('user:getAvatarBase64', () => {
-    const row = queryOne<UserProfileRow>('SELECT avatar_path FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     if (!row?.avatar_path) return null
     const fullPath = join(app.getPath('userData'), row.avatar_path)
     if (!existsSync(fullPath)) return null
@@ -255,7 +227,7 @@ export function registerUserHandlers(): void {
 
   // ===== Export: get full user data (for JSON export) =====
   ipcMain.handle('user:getExportData', () => {
-    const row = queryOne<UserProfileRow>('SELECT * FROM user_profile WHERE id = ?', ['default'])
+    const row = vaultUserProfile()
     if (!row) return null
 
     // Read avatar base64 if exists
@@ -274,19 +246,17 @@ export function registerUserHandlers(): void {
       username: row.username,
       avatarPath: row.avatar_path,
       avatarBase64,
-      passwordHash: row.password_hash
+      passwordHash: row.password_hash || ''
     }
   })
 
   // ===== Import: restore user data =====
   ipcMain.handle('user:restoreFromImport', (_e, data: { username?: string; avatarPath?: string; avatarBase64?: string; passwordHash?: string }) => {
-    const now = new Date().toISOString()
-
     if (data.username !== undefined) {
-      run("UPDATE user_profile SET username = ?, updated_at = ? WHERE id = 'default'", [data.username, now])
+      patchProfile({ username: data.username })
     }
     if (data.passwordHash !== undefined) {
-      run("UPDATE user_profile SET password_hash = ?, updated_at = ? WHERE id = 'default'", [data.passwordHash, now])
+      patchProfile({ password_hash: data.passwordHash })
     }
     if (data.avatarBase64) {
       // Extract base64 data and mime type
@@ -309,10 +279,21 @@ export function registerUserHandlers(): void {
           mime: `image/${ext}`,
           size: Buffer.byteLength(match[2], 'base64'),
         })
-        run("UPDATE user_profile SET avatar_path = ?, updated_at = ? WHERE id = 'default'", [relativePath, now])
+        patchProfile({ avatar_path: relativePath })
       }
     }
 
     return { success: true }
   })
+}
+
+// ---- attachments 表查询（附件记录仍走 sqlite，attachmentRepo 未去库化） ----
+function queryAll<T>(sql: string, params: unknown[] = []): T[] {
+  const db = getDatabase()
+  const stmt = db.prepare(sql)
+  if (params.length > 0) stmt.bind(params)
+  const rows: T[] = []
+  while (stmt.step()) rows.push(stmt.getAsObject() as T)
+  stmt.free()
+  return rows
 }
