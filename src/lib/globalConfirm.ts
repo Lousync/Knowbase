@@ -11,10 +11,15 @@ export interface GlobalConfirmOptions {
   message: string
   confirmLabel?: string
   cancelLabel?: string
+  /** 可选第三个按钮（中性样式，位于取消与确认之间）。提供后 resolve 可能返回 'extra' */
+  extraLabel?: string
   variant?: 'default' | 'danger'
 }
 
-type Handler = (opts: GlobalConfirmOptions, resolve: (ok: boolean) => void) => void
+/** resolve 结果：true=确认按钮，false=取消按钮/Esc/点击背景，'extra'=第三按钮（仅提供 extraLabel 时） */
+export type GlobalConfirmResult = boolean | 'extra'
+
+type Handler = (opts: GlobalConfirmOptions, resolve: (result: GlobalConfirmResult) => void) => void
 
 let handler: Handler | null = null
 
@@ -23,7 +28,7 @@ export function setGlobalConfirmHandler(h: Handler | null): void {
   handler = h
 }
 
-export function showGlobalConfirm(opts: GlobalConfirmOptions): Promise<boolean> {
+export function showGlobalConfirm(opts: GlobalConfirmOptions): Promise<GlobalConfirmResult> {
   if (!handler) return Promise.resolve(false)
   return new Promise((resolve) => handler!(opts, resolve))
 }

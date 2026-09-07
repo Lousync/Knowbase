@@ -29,7 +29,7 @@ export async function openVaultWithGuide(): Promise<OpenedVault | null> {
       cancelLabel: '取消',
       variant: 'default',
     })
-    const init = await workspaceInitPendingVault(ok)
+    const init = await workspaceInitPendingVault(ok === true) // showGlobalConfirm 类型含 'extra'（未传 extraLabel 不会出现），收敛为 boolean
     if (!ok || !init.ok || !init.rootId) {
       if (init.error) showToast({ type: 'error', message: init.error })
       return null

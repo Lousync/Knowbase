@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
   workspaceGetCurrent, workspaceReadFile, docsPptxPages, workspaceListDir,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
-  aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachSetLastWorkspace,
+  aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachUnassignSession, aiTeachSetLastWorkspace,
   aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick,
   aiTeachSrcPdfBytes, aiTeachSrcTranscribe,
   aiTeachProfileEnsureGlobal, aiTeachProfileEnsureSession, aiTeachProfileEnsureWorkspace,
@@ -470,6 +470,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setMessages(prev => [...prev, { role: 'user', content: raw, createdAt: new Date().toISOString() }]) // 条目4：乐观时间存 ISO（原纯时刻串必 Invalid Date）
     const ov = convoLlm.current.get(sid)
     const r = await agentChat(sid, raw, undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
+    // V-2：失败提示下沉到 sendText——模板开场/ask 发送/PPT 逐页讲解等 5 处 void sendText 路径统一覆盖（原先只有 doSend 有 toast）
+    if (r && !r.ok && r.code !== 'ABORTED') showToast({ type: 'error', message: `AI 调用失败：${r.error ?? ''}` })
     // 条目9②：本轮 system 注入分段按会话留存（hover 构成摘要）；条目9③：月度用量随每轮刷新
     if (r?.injection) setInjectionMap(prev => ({ ...prev, [sid]: r.injection as AiTeachInjectionStats }))
     void llmGetUsage().then(setUsage).catch(() => null)
@@ -485,8 +487,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setInput('')
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
-    const r = await sendText(text, cid)
-    if (r && !r.ok && r.code !== 'ABORTED') showToast({ type: 'error', message: `AI 调用失败：${r.error ?? ''}` })
+    await sendText(text, cid) // 失败 toast 已下沉 sendText（V-2），此处不再重复提示
   }, [input, pending, sendText])
 
   // 新建任务（模板）：自动发开场指令并选中该会话
@@ -986,7 +987,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     })
   }, [renameDraft, sessions])
 
-  /** 删除会话（P1，2-4）：对话记录必删；产物文件夹按 aiTeachDeleteSessionFolder 设置处理 */
+  /** 删除会话（P1，2-4）：对话记录必删；产物文件夹按 aiTeachDeleteSessionFolder 设置处理。A2：ask 弹窗三键，「取消」中止整个删除 */
   const delSession = useCallback(async (e: React.MouseEvent, sid: string, title?: string) => {
     e.stopPropagation()
     const mode = String((await getSettingRaw('aiTeachDeleteSessionFolder').catch(() => null)) ?? 'ask')
@@ -996,17 +997,21 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       if (f?.ok && f.relPath) {
         if (mode === 'delete') rmFolder = true
         else {
-          rmFolder = await showGlobalConfirm({
+          const r = await showGlobalConfirm({
             title: '删除会话',
-            message: `对话记录「${title ?? ''}」将被删除。该会话在仓库中的产物文件夹「${f.relPath}」是否一并移入系统回收站？（「保留文件夹」= 只删对话记录）`,
+            message: `对话记录「${title ?? ''}」将被删除。该会话在仓库中的产物文件夹「${f.relPath}」如何处理？\n\n· 删除文件夹 —— 对话记录与文件夹一并移入系统回收站\n· 仅保留文件夹 —— 只删对话记录，文件夹留在仓库\n· 取消 —— 什么都不删`,
             confirmLabel: '删除文件夹',
-            cancelLabel: '保留文件夹',
+            extraLabel: '仅保留文件夹',
+            cancelLabel: '取消',
             variant: 'danger',
           })
+          if (r === false) return // A2：Esc/背景/「取消」= 真正中止删除（原行为会无条件删掉会话）
+          rmFolder = r === true
         }
       }
     }
     await agentDeleteSession(sid).catch(() => null)
+    void aiTeachUnassignSession(sid).catch(() => null) // A4：同步清理 workspaces.json.sessionWs 残留
     clearNav(sid) // 条目6B：会话级导航持久化键随会话回收（否则 localStorage 只增不减）
     if (rmFolder) void aiTeachDeleteSessionFolder(sid).then(r => {
       if (r && !r.ok && r.error) showToast({ type: 'error', message: `会话文件夹删除失败：${r.error}` })
@@ -1161,7 +1166,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               title={s.id === activeId ? `当前对话：${activeTitle}` : s.title}
               className={`group shrink-0 flex items-center gap-1 px-2 h-[22px] rounded-md cursor-pointer text-[11.5px] transition-colors max-w-[160px] ${s.id === activeId ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] ring-1 ring-inset ring-[var(--accent)]/40' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}>
               {renamingId === s.id ? (
-                <input autoFocus value={renameDraft} maxLength={40} onChange={e => setRenameDraft(e.target.value)}
+                <input autoFocus onFocus={e => e.currentTarget.select()} value={renameDraft} maxLength={40} onChange={e => setRenameDraft(e.target.value)}
                   onBlur={() => void commitRename(s.id)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id) } else if (e.key === 'Escape') { e.stopPropagation(); setRenamingId(null) } }}
                   onClick={e => e.stopPropagation()}
@@ -1495,6 +1500,20 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                     )}
                   </div>
                 ))}
+
+                {/* V-2 附属增强：会话只有一条无回复的用户消息（模板开场发送失败等）时提供重发出口。
+                    实现取简单方案——重发该消息文本，不关心模板来源；历史保留失败那条，用户可看出重发过 */}
+                {!pending && messages.length === 1 && messages[0].role === 'user' && (
+                  <div className="flex justify-center py-1">
+                    <button
+                      onClick={() => { void sendText(messages[0].content, crypto.randomUUID()) }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                      <RotateCcw size={11} className="text-[var(--warning)]" />
+                      未收到 AI 回复？点击重发这条消息
+                    </button>
+                  </div>
+                )}
 
                 {pending && (
                   <div className="flex justify-start">

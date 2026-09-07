@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Folder, BookOpen, Layers } from 'lucide-react'
+import { Search, Folder, BookOpen, Layers, Sparkles } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -14,9 +14,11 @@ interface Props {
   onOpenPage: (pageId: string) => void
   onLocateCategory: (categoryId: string) => void
   onRequestRefresh?: () => void
+  /** B5：命中功能命令时触发（如 'aiTeaching' → 打开 AI教学 Tab） */
+  onRunCommand?: (commandId: string) => void
 }
 
-type ResultKind = 'page' | 'notebook' | 'folder' | 'space' | 'tag'
+type ResultKind = 'page' | 'notebook' | 'folder' | 'space' | 'tag' | 'command'
 
 interface ResultItem {
   kind: ResultKind
@@ -98,7 +100,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
   )
 }
 
-export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCategory, onRequestRefresh }: Props) {
+export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCategory, onRequestRefresh, onRunCommand }: Props) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(0)
@@ -136,6 +138,11 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
     if (!query.trim()) return []
     const res: ResultItem[] = []
     const ftsMap = new Map(ftsPages.map(p => [p.id, p]))
+
+    // B5：功能命令项（搜「AI」/「教学」等命中时置顶，与命令面板「打开 AI教学」同义）
+    if (fuzzyMatch(query, 'AI教学')) {
+      res.push({ kind: 'command', id: 'aiTeaching', name: '打开 AI教学', subtitle: '讲义 / 研读 / 出题' })
+    }
 
     // Pages by title（本地即时）+ 全文命中（后端，含仅正文命中的页面）
     const titleHit = new Set<string>()
@@ -256,6 +263,8 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
       case 'folder':
       case 'space':
         onLocateCategory(item.id); break
+      case 'command':
+        onRunCommand?.(item.id); break
       case 'tag':
         if (item.tagPages && item.tagPages.length > 0) {
           setExpandedTagId(prev => prev === item.id ? null : item.id)
@@ -264,7 +273,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
         break
     }
     setOpen(false); setQuery(''); setExpandedTagId(null)
-  }, [onOpenPage, onLocateCategory])
+  }, [onOpenPage, onLocateCategory, onRunCommand])
 
   const handleSelectTagPage = useCallback((pageId: string) => {
     onOpenPage(pageId)
@@ -319,6 +328,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
                       onMouseEnter={() => setSelectedIdx(idx)}
                     >
                       {item.kind === 'page' && <span className="mt-0.5 shrink-0"><FileIcon ext={item.fileType || ''} size={15} /></span>}
+                      {item.kind === 'command' && <Sparkles size={15} className="mt-0.5 text-[var(--accent)] shrink-0" />}
                       {item.kind === 'notebook' && <BookOpen size={15} className="mt-0.5 text-[var(--text-muted)] shrink-0" />}
                       {item.kind === 'folder' && <Folder size={15} className="mt-0.5 text-[var(--warning)] shrink-0" />}
                       {item.kind === 'space' && <Layers size={15} className="mt-0.5 text-[var(--info)] shrink-0" />}

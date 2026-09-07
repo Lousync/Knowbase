@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { setGlobalConfirmHandler, type GlobalConfirmOptions } from '../../lib/globalConfirm'
+import { setGlobalConfirmHandler, type GlobalConfirmOptions, type GlobalConfirmResult } from '../../lib/globalConfirm'
 
 /**
  * 全局确认框宿主（App 根部唯一挂载）。showGlobalConfirm() 的渲染端：
  * 样式对齐 ConfirmDialog，无「不再提示」勾选（一次性决策场景）。
+ * opts.extraLabel 提供时渲染第三个中性按钮，resolve('extra')（A2 三键语义）。
  */
 export function GlobalConfirm() {
-  const [req, setReq] = useState<{ opts: GlobalConfirmOptions; resolve: (ok: boolean) => void } | null>(null)
+  const [req, setReq] = useState<{ opts: GlobalConfirmOptions; resolve: (result: GlobalConfirmResult) => void } | null>(null)
 
   useEffect(() => {
     setGlobalConfirmHandler((opts, resolve) => setReq({ opts, resolve }))
@@ -30,7 +31,7 @@ export function GlobalConfirm() {
 
   if (!req) return null
   const { opts, resolve } = req
-  const done = (ok: boolean): void => {
+  const done = (ok: GlobalConfirmResult): void => {
     setReq(null)
     resolve(ok)
   }
@@ -53,6 +54,14 @@ export function GlobalConfirm() {
           >
             {opts.cancelLabel ?? '取消'}
           </button>
+          {opts.extraLabel && (
+            <button
+              onClick={() => done('extra')}
+              className="px-4 py-1.5 text-[13px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              {opts.extraLabel}
+            </button>
+          )}
           <button
             autoFocus
             onClick={() => done(true)}

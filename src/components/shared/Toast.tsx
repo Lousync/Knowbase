@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, AlertCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react'
 import type { ToastMessage } from '../../lib/toast'
 import { navigateToHelp } from '../../modules/help'
@@ -9,38 +9,61 @@ interface ActiveToast extends ToastMessage {
 
 export function Toast() {
   const [toasts, setToasts] = useState<ActiveToast[]>([])
+  // V-3：过期主驱动 = 每条 toast 一个独立 setTimeout（墙钟）。
+  // 原实现靠 interval tick 累计 progress 判定过期——窗口最小化/被完全遮挡时渲染层定时器
+  // 会被 Chromium intensive throttling 压到每分钟 1 tick，5s 的 toast 实际滞留数分钟。
+  // setTimeout 被节流推迟后，窗口恢复可见会立即补触发，不会冻结。
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
   const remove = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
+    const t = timers.current.get(id)
+    if (t) { clearTimeout(t); timers.current.delete(id) }
+    setToasts(prev => prev.filter(x => x.id !== id))
   }, [])
 
-  useEffect(() => {
-    const onShow = (e: Event) => {
-      const msg = (e as CustomEvent<ToastMessage>).detail
-      setToasts(prev => {
-        // Same type+message: replace the existing toast, resetting its progress
-        const existing = prev.find(t => t.type === msg.type && t.message === msg.message)
-        if (existing) {
-          return prev.map(t => t.id === existing.id ? { ...msg, progress: 0 } : t)
-        }
-        // Unique: add to stack
-        return [...prev, { ...msg, progress: 0 }]
-      })
-    }
-    const onDismiss = (e: Event) => {
-      const id = (e as CustomEvent<string>).detail
-      remove(id)
-    }
+  // 登记过期闹钟（同 id 重复 show = 重置计时，与进度条重置语义一致）
+  const arm = useCallback((msg: ToastMessage) => {
+    const prev = timers.current.get(msg.id)
+    if (prev) clearTimeout(prev)
+    timers.current.set(msg.id, setTimeout(() => {
+      timers.current.delete(msg.id)
+      remove(msg.id)
+    }, msg.duration ?? 5000))
+  }, [remove])
 
+  useEffect(() => () => {
+    timers.current.forEach(t => clearTimeout(t))
+    timers.current.clear()
+  }, [])
+
+  const onShow = useCallback((e: Event) => {
+    const msg = (e as CustomEvent<ToastMessage>).detail
+    arm(msg)
+    setToasts(prev => {
+      // Same type+message: replace the existing toast, resetting its progress
+      const existing = prev.find(t => t.type === msg.type && t.message === msg.message)
+      if (existing) {
+        return prev.map(t => t.id === existing.id ? { ...msg, progress: 0 } : t)
+      }
+      // Unique: add to stack
+      return [...prev, { ...msg, progress: 0 }]
+    })
+  }, [arm])
+  const onDismiss = useCallback((e: Event) => {
+    const id = (e as CustomEvent<string>).detail
+    remove(id)
+  }, [remove])
+
+  useEffect(() => {
     window.addEventListener('toast:show', onShow)
     window.addEventListener('toast:dismiss', onDismiss)
     return () => {
       window.removeEventListener('toast:show', onShow)
       window.removeEventListener('toast:dismiss', onDismiss)
     }
-  }, [remove])
+  }, [onShow, onDismiss])
 
-  // Progress animation
+  // Progress bar animation only（过期判定已由上方 setTimeout 主驱动）
   useEffect(() => {
     if (toasts.length === 0) return
     const tick = 50 // ms
@@ -48,13 +71,8 @@ export function Toast() {
       setToasts(prev =>
         prev.map(t => {
           const duration = t.duration ?? 5000
-          const delta = tick / duration
-          const next = t.progress + delta
-          if (next >= 1) {
-            // Auto-dismiss
-            setTimeout(() => remove(t.id), 0)
-            return t // will be filtered next frame
-          }
+          const next = t.progress + tick / duration
+          if (next >= 1) return t // 满格即停；移除由 setTimeout 负责
           return { ...t, progress: next }
         })
       )

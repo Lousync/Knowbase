@@ -880,6 +880,12 @@ export interface UiWindowActionParams extends UiWindowParam {
   height?: unknown
 }
 
+/** V-8：Windows 上窗口态事件（maximize/restore 等）落定晚于调用返回，轮询等状态切换（超时兜底不抛错） */
+async function waitWinState(win: BrowserWindow, pred: () => boolean, timeoutMs = 800): Promise<void> {
+  const start = Date.now()
+  while (!pred() && Date.now() - start < timeoutMs) await sleep(40)
+}
+
 /** resize / maximize / unmaximize / minimize / restore / info（默认，仅查看状态） */
 export async function windowUi(p: UiWindowActionParams): Promise<Record<string, unknown>> {
   const wc = resolveWebContents(normalizeWindowSel(p.window))
@@ -898,16 +904,16 @@ export async function windowUi(p: UiWindowActionParams): Promise<Record<string, 
     await sleep(250) // 等布局/媒体查询稳定
   } else if (action === 'maximize') {
     win.maximize()
-    await sleep(150)
+    await waitWinState(win, () => win.isMaximized())
   } else if (action === 'unmaximize') {
     win.unmaximize()
-    await sleep(150)
+    await waitWinState(win, () => !win.isMaximized())
   } else if (action === 'minimize') {
     win.minimize()
-    await sleep(150)
+    await waitWinState(win, () => win.isMinimized())
   } else if (action === 'restore') {
     win.restore()
-    await sleep(150)
+    await waitWinState(win, () => !win.isMinimized())
   } else if (action !== 'info') {
     throwErr('E_BAD_REQUEST', 'action 需为 info / resize / maximize / unmaximize / minimize / restore')
   }

@@ -11,12 +11,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   FileText, Calendar, BookOpen, MessageCircle, Wrench, Puzzle,
-  Trash2, LifeBuoy, User, Settings, Upload, FileCode2,
+  Trash2, LifeBuoy, User, Settings, Upload, FileCode2, GraduationCap,
 } from 'lucide-react'
 import { pluginGetContribution, pluginListInstalled } from './ipc'
 
 export type IconModuleId =
-  | 'blog' | 'schedule' | 'knowledge' | 'moments' | 'toolbox' | 'plugins'
+  | 'blog' | 'schedule' | 'knowledge' | 'moments' | 'aiTeaching' | 'toolbox' | 'plugins'
   | 'recycle' | 'help' | 'user' | 'settings' | 'export' | 'editor'
 
 export const BUILTIN_ICON_PACKS = [
@@ -28,6 +28,7 @@ export const BUILTIN_ICON_PACKS = [
 export function renderClassicIcon(moduleId: IconModuleId, size: number, className?: string): React.ReactNode {
   const map = {
     blog: FileText, schedule: Calendar, knowledge: BookOpen, moments: MessageCircle,
+    aiTeaching: GraduationCap,
     toolbox: Wrench, plugins: Puzzle, recycle: Trash2, help: LifeBuoy,
     user: User, settings: Settings, export: Upload, editor: FileCode2,
   } as const

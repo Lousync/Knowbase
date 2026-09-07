@@ -177,6 +177,18 @@ function PluginIconHandDrawn(props: IconProps) {  return (
   )
 }
 
+/** AI教学：学士帽（帽板 + 帽身，流苏自帽板右角垂下带实心穗点，呼应插件图标的中心点设计语言） */
+function AiTeachingIconHandDrawn(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 4.6 21.2 9 12 13.4 2.8 9Z" />
+      <path d="M21.2 9.4v4.7" />
+      <path d="M6.7 11.7v3.2a5.3 3 0 0 0 10.6 0v-3.2" />
+      <circle cx="21.2" cy="15.4" r="1" fill="currentColor" stroke="none" />
+    </Svg>
+  )
+}
+
 /** 编辑器：尖括号代码图标（VS Code 风格） */
 function EditorIconHandDrawn(props: IconProps) {
   return (
@@ -204,6 +216,7 @@ const HAND_DRAWN: Record<IconModuleId, (props: IconProps) => React.ReactElement>
   schedule: ScheduleIconHandDrawn,
   knowledge: KnowledgeIconHandDrawn,
   moments: MomentsIconHandDrawn,
+  aiTeaching: AiTeachingIconHandDrawn,
   toolbox: ToolboxIconHandDrawn,
   plugins: PluginIconHandDrawn,
   recycle: RecycleIconHandDrawn,
@@ -218,6 +231,7 @@ export function BlogIcon(props: IconProps) { return <StyleAware moduleId="blog" 
 export function ScheduleIcon(props: IconProps) { return <StyleAware moduleId="schedule" Fallback={ScheduleIconHandDrawn} {...props} /> }
 export function KnowledgeIcon(props: IconProps) { return <StyleAware moduleId="knowledge" Fallback={KnowledgeIconHandDrawn} {...props} /> }
 export function MomentsIcon(props: IconProps) { return <StyleAware moduleId="moments" Fallback={MomentsIconHandDrawn} {...props} /> }
+export function AiTeachingIcon(props: IconProps) { return <StyleAware moduleId="aiTeaching" Fallback={AiTeachingIconHandDrawn} {...props} /> }
 export function ToolboxIcon(props: IconProps) { return <StyleAware moduleId="toolbox" Fallback={ToolboxIconHandDrawn} {...props} /> }
 export function ExportIcon(props: IconProps) { return <StyleAware moduleId="export" Fallback={ExportIconHandDrawn} {...props} /> }
 export function RecycleIcon(props: IconProps) { return <StyleAware moduleId="recycle" Fallback={RecycleIconHandDrawn} {...props} /> }

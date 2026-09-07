@@ -3,11 +3,13 @@ import * as monaco from 'monaco-editor'
 // Vite 官方 Monaco 配方：显式注册各语言 worker（?worker 语法交给 Vite 打包）。
 // 缺这段时 Monaco 每次初始化都 throw「You must define MonacoEnvironment.getWorker」，
 // dev 下主线程回退链断裂 → 编辑器挂不起来（表现为点开文件后不能编辑）。
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+// monaco 0.56 起 package.json 新增 exports（"./*" → "./esm/vs/*"），旧深路径
+// `monaco-editor/esm/vs/...` 不再命中任何子路径（V-1 白屏根因），改用新约定导入。
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/language/json/json.worker?worker'
+import CssWorker from 'monaco-editor/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/language/html/html.worker?worker'
+import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker'
 
 ;(self as unknown as { MonacoEnvironment: monaco.Environment }).MonacoEnvironment = {
   getWorker(_workerId: string, label: string): Worker {

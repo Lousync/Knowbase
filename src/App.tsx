@@ -720,6 +720,7 @@ export default function App() {
         onOpenPage={openKnowledgePageFromSearch}
         onLocateCategory={locateKnowledgeCategoryFromSearch}
         onRequestRefresh={refreshGlobalSearch}
+        onRunCommand={(id) => openTab(id as TabName)}
       />
       {workbench && <WorkbenchStatusBar />}
         </div>
