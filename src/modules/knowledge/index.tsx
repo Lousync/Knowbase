@@ -17,6 +17,7 @@ import {
   workspaceRename, workspaceGetCurrent
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
+import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
 import { SpacePanel } from './components/SpacePanel'
@@ -218,12 +219,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- notebook CRUD（创建收口到编辑器模块：本模块仅保留重命名/删除等导航维护）---
   const handleRenameNotebook = async (id: string, name: string) => {
-    if (writeBlocked('重命名文件夹/笔记本')) return
     await updateKnowledgeCategory(id, { name })
     refreshCategories()
   }
   const handleRenamePage = async (id: string, name: string) => {
-    if (writeBlocked('重命名页面')) return
     await updateKnowledgePage(id, { title: name })
     setAllPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
     setChapterPages(prev => prev.map(p => p.id === id ? { ...p, title: name } : p))
@@ -239,9 +238,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
    * 发起删除 → 条目进入"删除中"（红色吞噬持续推进 + 龙头循环咀嚼，直到删除真正完成）；
    * 删除完成（IPC resolve）→ 收尾（快速吞完剩余 + 淡出）→ 条目消失并刷新；
    * 删除失败 → 动画回退（条目恢复显示）。
+   * vault 只读挡已挪到各调用方（2026-09-07：目录删除在仓库文件模式开放，页面删除维持收口编辑器）。
    */
   const deleteWithAnimation = useCallback(async (id: string, fn: () => Promise<void>) => {
-    if (vaultReadonly) { showToast({ type: 'warning', message: '仓库文件模式：删除请在编辑器模块操作（将移入回收站）' }); return }
     if (deletingRef.current.has(id)) return
     setDeletingMap(m => new Map(m).set(id, 'animating'))
     try {
@@ -258,7 +257,21 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     }
   }, [vaultReadonly])
 
+  /** vault 模式目录删除确认：文件夹将随全部子页面移入系统回收站（与编辑器删除同语义） */
+  const confirmVaultCategoryDelete = useCallback(async (id: string): Promise<boolean> => {
+    if (!vaultReadonly) return true
+    const name = categories.find(c => c.id === id)?.name ?? '该目录'
+    return await showGlobalConfirm({
+      title: '删除目录',
+      message: `目录「${name}」及其下全部子目录与页面文件将一并移入系统回收站。确定删除吗？`,
+      confirmLabel: '删除',
+      cancelLabel: '取消',
+      variant: 'danger',
+    }) === true
+  }, [vaultReadonly, categories])
+
   const handleDeleteNotebook = async (id: string) => {
+    if (!(await confirmVaultCategoryDelete(id))) return
     await deleteWithAnimation(id, async () => {
       await deleteKnowledgeCategory(id)
       if (selectedCategoryId === id) { setSelectedCategoryId(null); setSelectedChapterId(null) }
@@ -268,19 +281,43 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- chapter CRUD（创建收口到编辑器模块）---
   const handleRenameChapter = async (id: string, name: string) => {
-    if (writeBlocked('重命名章节')) return
     await updateKnowledgeCategory(id, { name })
     refreshCategories()
   }
   const handleDeleteChapter = async (id: string) => {
+    if (!(await confirmVaultCategoryDelete(id))) return
     await deleteWithAnimation(id, async () => {
       await deleteKnowledgeCategory(id)
       if (selectedChapterId === id) setSelectedChapterId(null)
     })
   }
 
+  /** 空白右键菜单：创建学习空间（2026-09-07 恢复；vault 模式=建顶层文件夹+目录条目，DB 模式=原通道；vault 已支持，不走 writeBlocked 老挡板） */
+  const handleCreateSpace = useCallback(async (name: string) => {
+    try {
+      await createKnowledgeCategory({ name, categoryType: 'space' })
+      refreshCategories()
+      showToast({ type: 'info', message: `已创建学习空间「${name}」` })
+    } catch (e) {
+      console.error('[Knowledge] create space failed:', e)
+      showToast({ type: 'error', message: e instanceof Error ? e.message : '创建学习空间失败' })
+    }
+  }, [])
+
+  /** 空白右键菜单（空间视图）：创建笔记本（2026-09-07 恢复；只能创建在学习空间内部，不可嵌套；vault 已支持，不走 writeBlocked 老挡板） */
+  const handleCreateNotebook = useCallback(async (name: string) => {
+    if (!selectedSpaceId) { showToast({ type: 'warning', message: '笔记本只能创建在学习空间内部' }); return }
+    try {
+      await createKnowledgeCategory({ name, categoryType: 'notebook', parentId: selectedSpaceId })
+      refreshCategories()
+      showToast({ type: 'info', message: `已创建笔记本「${name}」` })
+    } catch (e) {
+      console.error('[Knowledge] create notebook failed:', e)
+      showToast({ type: 'error', message: e instanceof Error ? e.message : '创建笔记本失败' })
+    }
+  }, [selectedSpaceId])
+
   const handleImportFolder = async () => {
-    if (writeBlocked('导入文件夹')) return
     try {
       const paths: string[] = await showFolderDialog()
       if (!paths || paths.length === 0) return
@@ -318,12 +355,15 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         }
       }
 
-      // Import binary files
+      // Import binary files — vault（仓库文件）模式下 PDF/XMind 导入通道未实现，明确跳过不静默失败
+      let skippedBinary = 0
       for (const bp of binaryPaths) {
+        if (vaultReadonly) { skippedBinary++; continue }
         const ext = bp.toLowerCase().split('.').pop() || ''
         const result = ext === 'pdf' ? await importPdfFile(bp) : await importBinaryFile(bp, ext)
         if (result.error) console.error(`${ext} import failed:`, result.error)
       }
+      if (skippedBinary > 0) showToast({ type: 'warning', message: `已导入文本 ${textPaths.length} 个；${skippedBinary} 个 PDF/思维导图暂不支持仓库文件模式，已跳过` })
 
       if (selectedChapterId) refreshChapterPages()
       else refreshAllPages()
@@ -331,7 +371,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropImport = async (files: Array<{ title: string; content: string; fileType: string }>) => {
-    if (writeBlocked('导入')) return
     try {
       const catId = selectedChapterId || null
       for (const f of files) {
@@ -343,7 +382,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }
 
   const handleDropImportBinary = async (files: Array<{ title: string; base64: string; fileName: string }>) => {
-    if (writeBlocked('导入')) return
+    if (vaultReadonly) { showToast({ type: 'warning', message: '仓库文件模式：PDF/思维导图拖放导入暂不支持' }); return }
     try {
       for (const f of files) {
         const ext = f.fileName.toLowerCase().split('.').pop() || ''
@@ -766,12 +805,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   // --- sort (up/down reorder) ---
   const handleSortCategory = async (id: string, direction: 'up' | 'down') => {
-    if (writeBlocked('调整顺序')) return
     await moveKnowledgeCategory(id, direction)
     refreshCategories()
   }
   const handleSortPage = async (id: string, direction: 'up' | 'down') => {
-    if (writeBlocked('调整顺序')) return
     await moveKnowledgePage(id, direction)
     refreshAllPages()
     refreshChapterPages()
@@ -1211,9 +1248,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={!graphMode && panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
-            {/* 空间沉浸视图顶部：返回栏（仅空间内显示） */}
+            {/* 空间沉浸视图顶部：返回栏（仅空间内显示）；目录拖到本栏=移出空间（移到根级中转） */}
             {selectedSpaceId && selectedSpace && (
-              <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={vaultReadonly ? undefined : handleRenameNotebook} />
+              <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={handleRenameNotebook}
+                onMoveOut={(id) => { void handleMoveCategory(id, null) }} />
             )}
 
             {/* 文件/大纲切换 — 仅在空间内显示，位于返回栏下方 */}
@@ -1311,6 +1349,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onDropOnCategory={handleDropOnCategory}
                       onDropOnLooseArea={handleDropOnLooseArea}
                       onMoveCategory={handleMoveCategory}
+                      onCreateSpace={handleCreateSpace}
+                      onCreateNotebook={handleCreateNotebook}
                       onSortCategory={handleSortCategory}
                       onSortPage={handleSortPage}
                       locatePageId={locatePageId}

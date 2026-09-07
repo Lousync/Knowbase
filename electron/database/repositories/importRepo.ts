@@ -4,6 +4,7 @@ import { basename, extname, join } from 'path'
 import { getDatabase, saveToDisk, closeDatabase, initDatabase, getDbPath, getAttachmentsDir, getSqlJs, validateDatabaseBuffer } from '../connection'
 import { randomUUID } from 'crypto'
 import { registerAttachment } from './attachmentRepo'
+import { vaultImportFolder } from '../../lib/kbStore/knowledgeVaultRepo'
 import { encryptExistingPasswords } from './passwordRepo'
 
 const TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
@@ -320,6 +321,15 @@ export function registerImportHandlers(getSettingValue?: (key: string) => unknow
   }
 
   ipcMain.handle('import:importFolder', async (_e, folderPath: string, parentCategoryId: string | null) => {
+    // 2026-09-07 vault 放行：目录镜像 + 文本转 frontmatter md + 二进制附件协议引用（不再强制回数据库模式）
+    if (getSettingValue?.('storageKnowledge') === 'vault') {
+      try {
+        return vaultImportFolder(folderPath, parentCategoryId)
+      } catch (e: any) {
+        console.error('[importFolder][vault] failed:', e)
+        return { error: String(e) }
+      }
+    }
     assertSqliteWrite()
     try {
       return importFolderRecursive(folderPath, parentCategoryId)

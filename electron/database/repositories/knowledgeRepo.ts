@@ -1,7 +1,7 @@
-import { ipcMain } from 'electron'
+import { ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
-import { existsSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, unlinkSync } from 'fs'
+import { join, resolve as resolvePath, sep } from 'path'
 import { getDatabase, saveToDisk, getAttachmentsDir } from '../connection'
 import { deleteAttachments, trashAttachments, parseInlineAttachmentIds } from './attachmentRepo'
 import { buildUpdateSet } from '../../lib/safeUpdate'
@@ -10,7 +10,10 @@ import {
   vaultGetCategories, vaultGetPages, vaultGetPageById, vaultToggleStar,
   vaultGetStarredPages, vaultGetTags, vaultSearchPages,
   vaultGetBacklinks, vaultGetBacklinkContext,
+  vaultGetCategoryRelPath, vaultDeleteCategory, vaultCreateCategory, vaultGetCategory, vaultCreatePage,
+  vaultRenameCategory, vaultRenamePage, vaultMoveCategoryOrder, vaultMovePageOrder,
 } from '../../lib/kbStore/knowledgeVaultRepo'
+import { getCurrentVault } from '../../lib/kbStore/vaultContext'
 import { getGraphIndex } from '../../lib/kbStore/graphIndex'
 
 // ---- row types (snake_case matching SQLite columns) ----
@@ -162,6 +165,14 @@ const VAULT_ALLOWED = new Set([
   'knowledge:getCategories', 'knowledge:getPages', 'knowledge:getPageById',
   'knowledge:searchPages', 'knowledge:toggleStar', 'knowledge:getStarredPages', 'knowledge:getTags',
   'knowledge:getBacklinks', 'knowledge:getBacklinkContext', 'knowledge:getGraph',
+  // 2026-09-07 知识库开放目录删除：vault 分支走 trash 磁盘文件夹 + 字典清理（与编辑器删除同语义）
+  'knowledge:deleteCategory',
+  // 2026-09-07 创建学习空间：vault 分支 = mkdir 磁盘文件夹 + categories.json 追加条目
+  'knowledge:createCategory',
+  // 2026-09-07 导入放行：vault 分支 = 写 frontmatter md 到目标目录/收件箱
+  'knowledge:createPage',
+  // 2026-09-07 重命名/排序放行：重命名=磁盘改名+字典级联；排序=字典/frontmatter 规范化互换
+  'knowledge:updateCategory', 'knowledge:updatePage', 'knowledge:moveCategory', 'knowledge:movePage',
 ])
 
 export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unknown): void {
@@ -187,10 +198,35 @@ export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unk
     return rows.map(mapCategory)
   })
 
-  // 创建分类
+  // 创建分类 — vault 模式：mkdir 仓库文件夹 + categories.json 追加条目（空间/笔记本=顶层，文件夹可挂父目录）；db 模式：原 INSERT
   kHandle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: CategoryType }) => {
-    const id = randomUUID()
     const ct = normalizeCategoryType(data.categoryType || 'folder')
+    if (isVaultMode()) {
+      const cur = getCurrentVault()
+      if (!cur) throw new Error('当前没有打开的仓库')
+      const name = String(data.name ?? '').trim()
+      if (!name) throw new Error('名称不能为空')
+      if (/[\\/:*?"<>|]/.test(name)) throw new Error('名称不能包含 \\ / : * ? " < > | 等文件名字符')
+      const parentId = data.parentId === undefined ? null : data.parentId
+      // 空间恒为仓库顶层；笔记本只能创建在学习空间内部（不可嵌套、不可顶层——2026-09-07 规则）
+      const parentRel = parentId ? vaultGetCategoryRelPath(parentId) : null
+      if (parentId && !parentRel) throw new Error('父目录不存在或未绑定仓库文件夹')
+      if (ct === 'space') {
+        if (parentId) throw new Error('学习空间只能创建在仓库顶层')
+      }
+      if (ct === 'notebook') {
+        const parent = parentId ? vaultGetCategory(parentId) : null
+        if (!parent || parent.categoryType !== 'space') throw new Error('笔记本只能创建在学习空间内部')
+      }
+      const baseRel = parentRel ? `${parentRel}/${name}` : name
+      const abs = resolvePath(resolvePath(cur.rootPath), baseRel)
+      if (existsSync(abs)) throw new Error(`同名文件夹「${name}」已存在`)
+      mkdirSync(abs, { recursive: true })
+      const id = randomUUID()
+      vaultCreateCategory({ id, name, categoryType: ct, parentId, path: baseRel })
+      return { id, name, parentId, sortOrder: 0, categoryType: ct, path: baseRel }
+    }
+    const id = randomUUID()
     const parentId = data.parentId === undefined ? null : data.parentId
     assertCategoryRules(null, ct, parentId)
     const maxOrder = queryAll<{ m: number }>(
@@ -207,6 +243,12 @@ export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unk
 
   // 更新分类（重命名/移动）— 72b2480 兼容逻辑：不引用 updated_at
   kHandle('knowledge:updateCategory', (_e, id: string, data: { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: CategoryType }) => {
+    // 2026-09-07 vault 放行：仅支持目录重命名（磁盘改名+字典级联）；移动/排序走 moveCategory 通道
+    if (isVaultMode()) {
+      if (!data.name) throw new Error('仓库文件模式下目录仅支持重命名')
+      vaultRenameCategory(id, String(data.name))
+      return
+    }
     console.log(`[knowledge:updateCategory] id=${id} data=`, JSON.stringify(data))
 
     const current = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
@@ -244,6 +286,8 @@ export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unk
 
   // 移动分类（上下排序）
   kHandle('knowledge:moveCategory', (_e, id: string, direction: 'up' | 'down') => {
+    // 2026-09-07 vault 放行：categories.json 同父级排序（规范化重编号）
+    if (isVaultMode()) { vaultMoveCategoryOrder(id, direction); return }
     const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
     if (!cat) return
     const parentId = cat.parent_id
@@ -258,8 +302,24 @@ export function registerKnowledgeHandlers(getSettingValue?: (key: string) => unk
     run('UPDATE knowledge_categories SET sort_order = ? WHERE id = ?', [cat.sort_order, neighbor[0].id])
   })
 
-  // 删除分类 — 软删除（完整快照存入回收站，子树页面全删）
-  kHandle('knowledge:deleteCategory', (_e, id: string) => {
+  // 删除分类 — vault 模式：目录对应仓库内真实文件夹 → 移入系统回收站（与编辑器删除同语义）+ 字典条目清理；
+  //             db 模式：软删除（完整快照存入回收站，子树页面全删）
+  kHandle('knowledge:deleteCategory', async (_e, id: string) => {
+    if (isVaultMode()) {
+      const rel = vaultGetCategoryRelPath(id)
+      if (rel) {
+        const cur = getCurrentVault()
+        if (!cur) throw new Error('当前没有打开的仓库')
+        // 路径守卫：目录必须落在仓库根内、不得是仓库根本身、不得位于 .knowbase 数据目录下
+        const rootAbs = resolvePath(cur.rootPath)
+        const abs = resolvePath(rootAbs, rel)
+        if (abs !== rootAbs && !abs.startsWith(rootAbs + sep)) throw new Error('目录路径越界，已阻止删除')
+        if (abs.slice(rootAbs.length + 1).split(sep).includes('.knowbase')) throw new Error('.knowbase 数据目录不可删除')
+        await shell.trashItem(abs)
+      }
+      vaultDeleteCategory(id)
+      return
+    }
     const cat = queryAll<CategoryRow>('SELECT * FROM knowledge_categories WHERE id = ?', [id])[0]
     if (!cat) return
 
@@ -390,8 +450,9 @@ kHandle('knowledge:getPages', (_e, categoryId?: string | null) => {
     }
   })
 
-  // 创建页面
-  kHandle('knowledge:createPage', (e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string }) => {
+  // 创建页面 — vault 模式：写 frontmatter md 到目标目录/收件箱（2026-09-07 导入放行）；db 模式：原 INSERT
+  kHandle('knowledge:createPage', (e, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
+    if (isVaultMode()) return vaultCreatePage({ title: data.title || '新页面', contentMd: data.contentMd || '', categoryId: data.categoryId ?? null, fileType: data.fileType, tags: data.tags })
     const id = randomUUID()
     const now = new Date()
     const nowIso = now.toISOString()
@@ -417,6 +478,12 @@ kHandle('knowledge:getPages', (_e, categoryId?: string | null) => {
 
   // 更新页面
   kHandle('knowledge:updatePage', (_e, id: string, data: { title?: string; contentMd?: string; contentHtml?: string; categoryId?: string | null; fileType?: string; tags?: string[] }) => {
+    // 2026-09-07 vault 放行：仅支持页面重命名（文件改名+frontmatter title）；内容编辑仍收口编辑器模块
+    if (isVaultMode()) {
+      if (!data.title) throw new Error('仓库文件模式下页面仅支持重命名')
+      vaultRenamePage(id, String(data.title))
+      return
+    }
     if (data.categoryId !== undefined) assertPageContainer(data.categoryId ?? null)
     // 列名白名单:渲染层传入的 key 不直接拼 SQL(防注入)
     const { sets, params } = buildUpdateSet(
@@ -453,6 +520,8 @@ kHandle('knowledge:getPages', (_e, categoryId?: string | null) => {
 
   // 移动页面（上下排序）
   kHandle('knowledge:movePage', (_e, id: string, direction: 'up' | 'down') => {
+    // 2026-09-07 vault 放行：同目录页面 frontmatter.sortOrder 互换
+    if (isVaultMode()) { vaultMovePageOrder(id, direction); return }
     const page = queryAll<PageRow>('SELECT * FROM knowledge_pages WHERE id = ?', [id])[0]
     if (!page) return
     const catId = page.category_id

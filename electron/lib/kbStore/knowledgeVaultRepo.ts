@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
-import { dirname, join } from 'path'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, copyFileSync, readdirSync, statSync } from 'fs'
+import { dirname, extname, join, resolve as resolvePath, sep } from 'path'
 import { randomUUID } from 'crypto'
-import { getCurrentVault } from './vaultContext'
-import { getKnowledgeIndex, invalidateKnowledgeIndex, type KnowledgePageIndexEntry } from './knowledgeIndex'
+import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
+import { getKnowledgeIndex, invalidateKnowledgeIndex, removeCategoryEntries, appendCategoryEntry, updateCategoryEntry, renameCategoryCascade, moveCategoryOrderInDict, type KnowledgeCategoryType, type KnowledgePageIndexEntry } from './knowledgeIndex'
 import { createLinkResolver, getGraphIndex } from './graphIndex'
 import { parseMarkdown, serializeMarkdown } from './mdStore'
 
@@ -122,9 +122,138 @@ export function vaultGetCategories(): Array<{ id: string; name: string; parentId
   }))
 }
 
+/** 目录的仓库内相对路径（无 path 条目=老格式/虚拟目录，返回 null）；供删除通道 trash 磁盘文件夹用 */
+export function vaultGetCategoryRelPath(id: string): string | null {
+  return getKnowledgeIndex().categories.find((c) => c.id === id)?.path ?? null
+}
+
+/** 目录条目（供创建笔记本等通道校验父级类型）；不存在返回 null */
+export function vaultGetCategory(id: string): { id: string; name: string; categoryType: string; parentId: string | null; path?: string } | null {
+  const c = getKnowledgeIndex().categories.find((x) => x.id === id)
+  if (!c) return null
+  return { id: c.id, name: c.name, categoryType: c.categoryType, parentId: c.parentId, ...(c.path ? { path: c.path } : {}) }
+}
+
+/** 从 categories.json 移除该目录及子孙条目并失效索引；磁盘文件夹由调用方先行 trash（2026-09-07 知识库开放目录删除） */
+export function vaultDeleteCategory(id: string): void {
+  removeCategoryEntries(id)
+  invalidateKnowledgeIndex()
+}
+
+/** 新增目录条目（含 path 与磁盘文件夹由调用方先行创建）并失效索引（2026-09-07 知识库创建学习空间） */
+export function vaultCreateCategory(entry: { id: string; name: string; categoryType: KnowledgeCategoryType; parentId: string | null; sortOrder?: number; path: string }): void {
+  appendCategoryEntry(entry)
+  invalidateKnowledgeIndex()
+}
+
+// ===== 2026-09-07 知识库导入放行（vault 模式）：页面=frontmatter md 文件，二进制=附件目录 + 协议引用 =====
+
+/** 与 importRepo.TEXT_EXTS 对齐的文本扩展名 */
+const IMPORT_TEXT_EXTS = ['md', 'txt', 'json', 'cpp', 'c', 'h', 'hpp', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'java', 'rs', 'go', 'sh', 'bat', 'xml', 'yaml', 'yml', 'sql', 'r', 'rb', 'php', 'swift', 'kt', 'lua', 'ini', 'cfg', 'toml']
+
+function sanitizeFileStem(title: string): string {
+  return title.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || 'untitled'
+}
+
+/** 目录内取不重名的 .md 文件名（重名自动 (1)(2)，与文件夹去重同风格） */
+function uniquePageName(dirRel: string, stem: string, root: string): string {
+  let name = `${stem}.md`
+  let n = 1
+  while (existsSync(join(root, dirRel, name))) { name = `${stem}(${n}).md`; n++ }
+  return name
+}
+
+/** vault 导入式建页：写带 frontmatter 的 .md 到目标目录（categoryId 目录，缺省落收件箱 .knowbase/_inbox）；status=published（导入即可见） */
+export function vaultCreatePage(data: { title: string; contentMd: string; categoryId?: string | null; fileType?: string; tags?: string[] }): VaultPage {
+  const root = requireRoot()
+  const now = new Date().toISOString()
+  const id = randomUUID()
+  const dirRel = (data.categoryId ? vaultGetCategoryRelPath(data.categoryId) : null) ?? KB_INBOX_DIR
+  const stem = sanitizeFileStem(data.title || '导入页面')
+  const name = uniquePageName(dirRel, stem, root)
+  const rel = `${dirRel}/${name}`
+  const fm = { id, title: data.title || stem, tags: data.tags ?? [], starred: false, status: 'published' as const, created: now, updated: now }
+  if (!writeVaultFile(rel, serializeMarkdown(fm, data.contentMd ?? ''))) throw new Error('页面文件写入失败')
+  invalidateKnowledgeIndex()
+  const entry = getKnowledgeIndex().byId[id]
+  if (entry) return entryToPage(entry, data.contentMd ?? '')
+  return { id, title: data.title || stem, contentMd: data.contentMd ?? '', contentHtml: '', annotationMd: '', categoryId: data.categoryId ?? null, isStarred: false, sortOrder: 0, fileType: 'md', attachmentId: '', createdAt: now, updatedAt: now, tags: (data.tags ?? []).map((t) => ({ id: t, name: t, color: '' })), path: rel, attachments: [], status: 'published' }
+}
+
+/** vault 导入文件夹：递归镜像为目录树（categories.json 条目）+ 文本文件转 frontmatter md；PDF/XMind 落附件目录并以协议引用挂入页面 */
+export function vaultImportFolder(folderPath: string, parentCategoryId: string | null): { id: string; name: string; fileCount: number; folderCount: number } {  const root = requireRoot()
+  const skipDirs = ['node_modules', '.git', '__pycache__', '.vscode', '.idea', 'dist', 'build', 'out', '.claude']
+  let totalFolders = 0
+  let totalFiles = 0
+  /** 本次导入期间新建的目录（path→id）：appendCategoryEntry 只写字典不更新内存索引，去重须查它 */
+  const pendingCategories = new Map<string, string>()
+
+  /** 确保目录条目存在（同 path 复用），返回 id 与仓库相对路径 */
+  const ensureCategory = (name: string, parentPath: string | null, parentId: string | null): { id: string; path: string } => {
+    const path = parentPath ? `${parentPath}/${name}` : name
+    const pendingId = pendingCategories.get(path)
+    if (pendingId) return { id: pendingId, path }
+    const existing = getKnowledgeIndex().categories.find((c) => c.path === path)
+    if (existing) return { id: existing.id, path }
+    const id = randomUUID()
+    appendCategoryEntry({ id, name, categoryType: 'folder', parentId, path })
+    pendingCategories.set(path, id)
+    return { id, path }
+  }
+
+  const walk = (dir: string, catId: string | null, catPath: string | null): void => {
+    let folders: string[] = []
+    let files: string[] = []
+    try {
+      for (const entry of readdirSync(dir)) {
+        if (entry.startsWith('.')) continue
+        const full = join(dir, entry)
+        try { if (statSync(full).isDirectory()) folders.push(entry); else files.push(entry) } catch { /* skip */ }
+      }
+    } catch { return }
+    for (const f of folders) {
+      if (skipDirs.includes(f.toLowerCase())) continue
+      const { id: subId, path: subPath } = ensureCategory(f, catPath, catId)
+      totalFolders++
+      walk(join(dir, f), subId, subPath)
+    }
+    const dirRel = catPath ?? KB_INBOX_DIR
+    for (const f of files) {
+      const ext = extname(f).slice(1).toLowerCase()
+      const title = f.replace(new RegExp(`\\.${ext}$`, 'i'), '')
+      try {
+        if (ext === 'pdf' || ext === 'xmind') {
+          // 二进制：附件落 .knowbase/_attachments/knowledge_page/<pageId>/，页面 md 挂协议引用（readPageDoc 已兼容）
+          const pageId = randomUUID()
+          const storeRel = ['.knowbase', '_attachments', 'knowledge_page', pageId, f].join('/')
+          mkdirSync(dirname(join(root, storeRel)), { recursive: true })
+          copyFileSync(join(dir, f), join(root, storeRel))
+          const stem = sanitizeFileStem(title)
+          const name = uniquePageName(dirRel, stem, root)
+          const now = new Date().toISOString()
+          const fm = { id: pageId, title, attachments: [storeRel], starred: false, status: 'published' as const, created: now, updated: now }
+          const body = `${ext === 'pdf' ? 'PDF' : 'XMind'} 附件：${f}\n\nattachment://vault/${pageId}/${encodeURIComponent(f)}\n`
+          if (writeVaultFile(`${dirRel}/${name}`, serializeMarkdown(fm, body))) totalFiles++
+        } else if (IMPORT_TEXT_EXTS.includes(ext)) {
+          const content = readFileSync(join(dir, f), 'utf-8')
+          vaultCreatePage({ title, contentMd: content, categoryId: catId })
+          totalFiles++
+        }
+      } catch { /* 单文件失败跳过，不中断整批导入 */ }
+    }
+  }
+
+  const folderName = folderPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '导入文件夹'
+  const parentPath = parentCategoryId ? vaultGetCategoryRelPath(parentCategoryId) : null
+  const top = ensureCategory(folderName, parentPath, parentPath ? parentCategoryId : null)
+  totalFolders++
+  walk(folderPath, top.id, top.path)
+  invalidateKnowledgeIndex()
+  return { id: top.id, name: folderName, fileCount: totalFiles, folderCount: totalFolders }
+}
+
 /** 语义对齐 knowledge:getPages：truthy=按分类，null=未分类，undefined=全部（均只含正式 published 页） */
-export function vaultGetPages(categoryId?: string | null): VaultPage[] {
-  const idx = getKnowledgeIndex()
+export function vaultGetPages(categoryId?: string | null): VaultPage[] {  const idx = getKnowledgeIndex()
   let list = publishedOnly(idx.pages)
   if (categoryId) list = list.filter((e) => e.categoryId === categoryId)
   else if (categoryId === null) list = list.filter((e) => e.categoryId === null)
@@ -293,4 +422,90 @@ export function vaultGetBacklinkContext(pageId: string): VaultBacklinkContextIte
     })
   }
   return out
+}
+
+// ===== 2026-09-07 重命名/排序放行（vault 模式）：目录=磁盘改名+字典级联；页面=文件改名+frontmatter =====
+
+/** vault 目录重命名：磁盘文件夹改名 + 字典条目 name/path 及子孙 path 级联更新 */
+export function vaultRenameCategory(id: string, newName: string): void {
+  const c = vaultGetCategory(id)
+  if (!c) throw new Error('目录不存在')
+  const clean = newName.trim()
+  if (!clean) throw new Error('名称不能为空')
+  if (/[\\/:*?"<>|]/.test(clean)) throw new Error('名称不能包含 \\ / : * ? " < > | 等文件名字符')
+  if (clean === c.name) return
+  if (!c.path) { updateCategoryEntry(id, { name: clean }); invalidateKnowledgeIndex(); return }
+  const root = requireRoot()
+  const rootAbs = resolvePath(root)
+  const oldAbs = resolvePath(join(root, c.path))
+  if (oldAbs !== rootAbs && !oldAbs.startsWith(rootAbs + sep)) throw new Error('目录路径越界')
+  const newAbs = join(c.path.includes('/') ? rootAbs + sep + c.path.slice(0, c.path.lastIndexOf('/')).replace(/\//g, sep) : rootAbs, clean)
+  if (existsSync(newAbs)) throw new Error(`同名文件夹「${clean}」已存在`)
+  renameSync(oldAbs, newAbs)
+  const parentRel = c.path.includes('/') ? c.path.slice(0, c.path.lastIndexOf('/')) : null
+  const newPath = parentRel ? `${parentRel}/${clean}` : clean
+  renameCategoryCascade(id, clean, c.path, newPath)
+  invalidateKnowledgeIndex()
+}
+
+/** vault 页面重命名：md 文件随标题改名（同目录冲突报错）+ frontmatter title 更新 */
+export function vaultRenamePage(id: string, newTitle: string): void {
+  const idx = getKnowledgeIndex()
+  const entry = idx.byId[id]
+  if (!entry) throw new Error('页面不存在')
+  const clean = newTitle.trim()
+  if (!clean) throw new Error('名称不能为空')
+  const root = requireRoot()
+  const oldAbs = join(root, entry.path)
+  const slash = entry.path.lastIndexOf('/')
+  const dirRel = slash >= 0 ? entry.path.slice(0, slash) : ''
+  const oldName = entry.path.slice(slash + 1)
+  const stem = sanitizeFileStem(clean)
+  let finalStem = stem
+  if (`${stem}.md` !== oldName && existsSync(join(root, dirRel, `${stem}.md`))) {
+    throw new Error(`同名文件「${stem}.md」已存在`)
+  }
+  if (`${stem}.md` !== oldName) {
+    renameSync(oldAbs, join(root, dirRel, `${stem}.md`))
+    finalStem = stem
+  }
+  const targetPath = dirRel ? `${dirRel}/${finalStem}.md` : `${finalStem}.md`
+  const doc = parseMarkdown(readFileSync(join(root, targetPath), 'utf-8'))
+  doc.frontmatter.title = clean
+  if (!writeVaultFile(targetPath, serializeMarkdown(doc.frontmatter, doc.body))) throw new Error('重命名写入失败')
+  invalidateKnowledgeIndex()
+}
+
+/** vault 目录排序：categories.json 同父级规范化重编号后与相邻项互换 */
+export function vaultMoveCategoryOrder(id: string, direction: 'up' | 'down'): void {
+  moveCategoryOrderInDict(id, direction)
+  invalidateKnowledgeIndex()
+}
+
+/** vault 页面排序：同目录页面按现行排序规则排定后与相邻项互换，重写 frontmatter.sortOrder（仅写变化者） */
+export function vaultMovePageOrder(id: string, direction: 'up' | 'down'): void {
+  const idx = getKnowledgeIndex()
+  const me = idx.byId[id]
+  if (!me) throw new Error('页面不存在')
+  const root = requireRoot()
+  const dirOf = (p: string): string => { const s = p.lastIndexOf('/'); return s >= 0 ? p.slice(0, s) : '' }
+  const dirRel = dirOf(me.path)
+  const siblings = idx.pages.filter((p) => dirOf(p.path) === dirRel)
+  siblings.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'zh-Hans'))
+  const i = siblings.findIndex((p) => p.id === id)
+  if (i < 0) return
+  const j = direction === 'up' ? i - 1 : i + 1
+  if (j < 0 || j >= siblings.length) return // 已在顶部/底部
+  const arr = [...siblings]
+  ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  arr.forEach((p, order) => {
+    if (p.sortOrder === order) return
+    try {
+      const abs = join(root, p.path)
+      const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
+      doc.frontmatter.sortOrder = order
+      writeVaultFile(p.path, serializeMarkdown(doc.frontmatter, doc.body))
+    } catch { /* 单文件失败跳过 */ }
+  })
+  invalidateKnowledgeIndex()
 }

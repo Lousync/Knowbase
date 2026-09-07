@@ -35,6 +35,10 @@ interface Props {
   onDropOnCategory: (pageId: string, categoryId: string) => void
   onDropOnLooseArea: (pageId: string) => void
   onMoveCategory: (categoryId: string, newParentId: string | null) => void
+  /** 空白右键菜单：创建学习空间（2026-09-07 恢复入口；vault/DB 同通道） */
+  onCreateSpace?: (name: string) => Promise<void> | void
+  /** 空白右键菜单（空间视图内）：创建笔记本（2026-09-07 恢复；只能创建在学习空间内部） */
+  onCreateNotebook?: (name: string) => Promise<void> | void
   onSortCategory?: (id: string, direction: 'up' | 'down') => void
   onSortPage?: (id: string, direction: 'up' | 'down') => void
   locatePageId?: string | null
@@ -56,7 +60,7 @@ export function NotebookList({
   selectedCategoryId, focusChapterId, activePageId,
   onSelectCategory, onSelectCategoryChapter, onRenameNotebook, onDeleteNotebook,
   onOpenPage, onImport, onImportFolder,
-  onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory,
+  onDropOnNotebook, onDropOnCategory, onDropOnLooseArea, onMoveCategory, onCreateSpace, onCreateNotebook,
   onSortCategory, onSortPage, locatePageId, locateCategoryId,
   onCopy, onCut, onPaste, onExportPage, onDeletePage, onRenamePage, onCopyPath, clipboard, cutItemIds,
   deletingMap,
@@ -88,6 +92,12 @@ export function NotebookList({
     : categories.filter(c => !c.parentId))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  /** 行内新建学习空间命名（空白菜单入口 → 树末尾输入行，Enter/失焦提交） */
+  const [creatingSpace, setCreatingSpace] = useState(false)
+  const [createSpaceName, setCreateSpaceName] = useState('')
+  /** 行内新建笔记本命名（空间视图空白菜单入口） */
+  const [creatingNotebook, setCreatingNotebook] = useState(false)
+  const [createNotebookName, setCreateNotebookName] = useState('')
   const [editingPageId, setEditingPageId] = useState<string | null>(null)
   const [editPageName, setEditPageName] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -120,6 +130,10 @@ export function NotebookList({
         outline: 2px dashed var(--accent) !important;
         outline-offset: -2px !important;
         border-radius: 4px !important;
+      }
+      /* 空白区=根级可放置（对齐编辑区 FileTree 根容器反馈） */
+      .drag-over-root {
+        background-color: rgba(0,122,204,0.10) !important;
       }
     `
     document.head.appendChild(style)
@@ -229,6 +243,22 @@ export function NotebookList({
     onRenameNotebook(id, editName.trim()); setEditingId(null)
   }
 
+  /** 提交行内新建学习空间（空名=放弃） */
+  function handleCreateSpaceCommit() {
+    const name = createSpaceName.trim()
+    setCreatingSpace(false)
+    if (!name || !onCreateSpace) return
+    void onCreateSpace(name)
+  }
+
+  /** 提交行内新建笔记本（空名=放弃） */
+  function handleCreateNotebookCommit() {
+    const name = createNotebookName.trim()
+    setCreatingNotebook(false)
+    if (!name || !onCreateNotebook) return
+    void onCreateNotebook(name)
+  }
+
   function handleStartRenamePage(id: string, name: string) { setEditingPageId(id); setEditPageName(name) }
   function handleRenamePage(id: string) {
     if (!editPageName.trim()) { setEditingPageId(null); return }
@@ -296,6 +326,7 @@ export function NotebookList({
       prevHighlightRef.current = null
     }
     dragOverTargetRef.current = null
+    treeRef.current?.classList.remove('drag-over-root')
   }
 
   function applyDragHighlight(el: Element) {
@@ -358,6 +389,8 @@ export function NotebookList({
             e.dataTransfer.effectAllowed = 'move'
             const payload = JSON.stringify({ type: 'category', id: cat.id })
             e.dataTransfer.setData('text/plain', payload)
+            // 专用类型：空间头部（SpacePanel）等 NotebookList 外的 drop 区识别目录拖拽用
+            e.dataTransfer.setData('application/x-kb-category', cat.id)
             dragRef.current = { type: 'category', id: cat.id }
             console.log('[NB dragStart] dragRef set:', dragRef.current)
             ;(e.currentTarget as HTMLElement).style.opacity = '0.4'
@@ -546,13 +579,18 @@ export function NotebookList({
             const looseEl = treeRef.current?.querySelector('[data-loose-area]') as HTMLElement | null
             if (looseEl) { clearDragHighlight(); looseEl.classList.add('drag-over-loose'); prevHighlightRef.current = looseEl; dragOverTargetRef.current = '__loose' }
           } else {
+            // 空白区 = 根级可放置（对齐编辑区 FileTree 根容器反馈）：目录/页面拖出目录时给出明确落点指示
             clearDragHighlight()
+            if (d.type === 'category' || d.type === 'page') {
+              treeRef.current?.classList.add('drag-over-root')
+            }
           }
         }}
         onDragLeave={e => {
           // Only clear when leaving the tree container entirely
           if (!treeRef.current?.contains(e.relatedTarget as Node)) {
             clearDragHighlight()
+            treeRef.current?.classList.remove('drag-over-root')
           }
         }}
         onDrop={e => {
@@ -561,6 +599,7 @@ export function NotebookList({
           const targetId = dragOverTargetRef.current
           dragRef.current = null
           clearDragHighlight()
+          treeRef.current?.classList.remove('drag-over-root')
 
           const d = dragged || parseDrop(e)
           if (!d) return
@@ -570,9 +609,12 @@ export function NotebookList({
             const targetCat = categories.find(c => c.id === targetId)
             if (targetCat) {
               if (d.type === 'category' && d.id !== targetId && !isDescendant(d.id, targetId) && canAcceptCategory(targetId, d.id)) {
-                console.log('[NB drop] → onMoveCategory:', d.id, '→', targetId)
-                setExpanded(prev => new Set(prev).add(targetId))
-                onMoveCategory(d.id, targetId)
+                const curParent = categories.find(c => c.id === d.id)?.parentId ?? null
+                if (targetId !== curParent) { // 已在该目录下：跳过重复移动（同路径 move 会报目标已存在）
+                  console.log('[NB drop] → onMoveCategory:', d.id, '→', targetId)
+                  setExpanded(prev => new Set(prev).add(targetId))
+                  onMoveCategory(d.id, targetId)
+                }
               } else if (d.type === 'page' && canAcceptPage(targetId)) {
                 const c = categories.find(x => x.id === targetId)
                 setExpanded(prev => new Set(prev).add(targetId))
@@ -596,6 +638,11 @@ export function NotebookList({
               // 空间沉浸视图下空白处拖入 = 放入该空间；否则为全局零散
               if (isSpaceView && spaceId) onDropOnCategory(d.id, spaceId)
               else onDropOnLooseArea(d.id)
+            } else if (d.type === 'category') {
+              // 2026-09-07 借鉴编辑区 FileTree 的容器兜底：目录拖到树空白/零散区 = 移到根级。
+              // 此前空白 drop 只认页面，目录拖进别的目录后无法拖出（「拖出来」问题的根因）。
+              const curParent = categories.find(c => c.id === d.id)?.parentId ?? null
+              if (curParent !== null) onMoveCategory(d.id, null)
             }
           } else if (d.type === 'page') {
             onDropOnLooseArea(d.id)
@@ -603,6 +650,48 @@ export function NotebookList({
         }}
       >
         {rootCats.map(cat => renderCategory(cat, 0))}
+
+        {/* 行内新建学习空间命名行（空白菜单「创建学习空间」触发） */}
+        {creatingSpace && (
+          <div className="flex items-center gap-1 py-[3px] rounded-md" style={{ paddingLeft: '6px', paddingRight: '4px' }}>
+            <span className="shrink-0 w-[12px]" />
+            <Layers size={14} className="shrink-0 text-[var(--info)]" />
+            <input
+              className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
+              value={createSpaceName}
+              placeholder="空间名称"
+              onChange={e => setCreateSpaceName(e.target.value)}
+              onBlur={handleCreateSpaceCommit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); handleCreateSpaceCommit() }
+                if (e.key === 'Escape') setCreatingSpace(false)
+              }}
+              onClick={e => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {/* 行内新建笔记本命名行（空间视图空白菜单「创建笔记本」触发） */}
+        {creatingNotebook && (
+          <div className="flex items-center gap-1 py-[3px] rounded-md" style={{ paddingLeft: '6px', paddingRight: '4px' }}>
+            <span className="shrink-0 w-[12px]" />
+            <BookOpen size={14} className="shrink-0 text-[var(--text-muted)]" />
+            <input
+              className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
+              value={createNotebookName}
+              placeholder="笔记本名称"
+              onChange={e => setCreateNotebookName(e.target.value)}
+              onBlur={handleCreateNotebookCommit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); handleCreateNotebookCommit() }
+                if (e.key === 'Escape') setCreatingNotebook(false)
+              }}
+              onClick={e => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
+        )}
 
         {/* Space view: the space's direct pages (loose within the space) */}
         {isSpaceView && spaceId && (() => {
@@ -894,6 +983,18 @@ export function NotebookList({
             )}
             {contextMenu.type === 'blank' && (
               <>
+                {onCreateSpace && !isSpaceView && (
+                  <button onClick={() => { setContextMenu(null); setCreateSpaceName(''); setCreatingSpace(true) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <Layers size={14} className="text-[var(--info)]" />创建学习空间
+                  </button>
+                )}
+                {onCreateNotebook && isSpaceView && (
+                  <button onClick={() => { setContextMenu(null); setCreateNotebookName(''); setCreatingNotebook(true) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left">
+                    <BookOpen size={14} className="text-[var(--text-muted)]" />创建笔记本
+                  </button>
+                )}
                 {onPaste && (
                   <button
                     onClick={() => {

@@ -284,6 +284,61 @@ function writeCategories(
   writeJson('modules/knowledge', 'categories.json', dict)
 }
 
+/** 删除目录条目（含子孙）并写回 categories.json；磁盘文件夹处置与索引失效由调用方负责（2026-09-07 知识库开放目录删除） */
+export function removeCategoryEntries(id: string): void {
+  const { categories, rawById, isArray } = readCategories()
+  const doomed = new Set<string>()
+  collectCategorySubtree(id, categories, doomed)
+  writeCategories(categories.filter((c) => !doomed.has(c.id)), rawById, isArray)
+}
+
+/** 追加目录条目并写回 categories.json（sortOrder 缺省=同父级末尾）；索引失效由调用方负责（2026-09-07 创建学习空间） */
+export function appendCategoryEntry(entry: { id: string; name: string; categoryType: KnowledgeCategoryType; parentId: string | null; sortOrder?: number; path?: string }): void {
+  const { categories, rawById, isArray } = readCategories()
+  const siblings = categories.filter((c) => (c.parentId ?? null) === (entry.parentId ?? null))
+  const sortOrder = entry.sortOrder ?? (siblings.length ? Math.max(...siblings.map((c) => c.sortOrder)) + 1 : 0)
+  const node: KnowledgeCategoryIndexEntry = { ...entry, sortOrder }
+  rawById.set(entry.id, {})
+  writeCategories([...categories, node], rawById, isArray)
+}
+
+/** 更新单个目录条目字段并写回（虚拟条目改名等轻量场景）；索引失效由调用方负责 */
+export function updateCategoryEntry(id: string, patch: { name?: string; path?: string; sortOrder?: number }): void {
+  const { categories, rawById, isArray } = readCategories()
+  const c = categories.find((x) => x.id === id)
+  if (!c) return
+  if (patch.name !== undefined) c.name = patch.name
+  if (patch.path !== undefined) c.path = patch.path
+  if (patch.sortOrder !== undefined) c.sortOrder = patch.sortOrder
+  writeCategories(categories, rawById, isArray)
+}
+
+/** 目录改名级联：改条目 name/path，并把子孙条目 path 前缀同步替换；索引失效由调用方负责（2026-09-07 重命名放行） */
+export function renameCategoryCascade(id: string, newName: string, oldPath: string, newPath: string): void {
+  const { categories, rawById, isArray } = readCategories()
+  for (const c of categories) {
+    if (c.id === id) { c.name = newName; c.path = newPath }
+    else if (oldPath && c.path && c.path.startsWith(oldPath + '/')) c.path = newPath + c.path.slice(oldPath.length)
+  }
+  writeCategories(categories, rawById, isArray)
+}
+
+/** 目录排序（同父级内规范化重编号后与相邻项互换）；索引失效由调用方负责（2026-09-07 排序放行） */
+export function moveCategoryOrderInDict(id: string, direction: 'up' | 'down'): void {
+  const { categories, rawById, isArray } = readCategories()
+  const me = categories.find((c) => c.id === id)
+  if (!me) return
+  const siblings = categories
+    .filter((c) => (c.parentId ?? null) === (me.parentId ?? null))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hans'))
+  const i = siblings.findIndex((c) => c.id === id)
+  const j = direction === 'up' ? i - 1 : i + 1
+  if (j < 0 || j >= siblings.length) return
+  ;[siblings[i], siblings[j]] = [siblings[j], siblings[i]]
+  siblings.forEach((c, order) => { c.sortOrder = order })
+  writeCategories(categories, rawById, isArray)
+}
+
 /** 目录 → categoryId（path 为准；根目录与未分类收件箱 → null） */
 function resolveCategoryIdByPath(relPath: string, categories: KnowledgeCategoryIndexEntry[]): string | null {
   const dir = dirRelOf(relPath)
