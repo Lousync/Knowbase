@@ -10,7 +10,7 @@ import {
   updateFailKind, updateFailMessage,
 } from '../../lib/updateStore'
 import { MarkdownPreview } from './MarkdownPreview'
-import { openExternal } from '../../lib/ipc'
+import { openExternal, edgeResizeStart, edgeResizeEnd } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 
 function showToastSafe(message: string): void {
@@ -82,6 +82,18 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
     window.dispatchEvent(new CustomEvent('settings:open', { detail: { section: 'advanced' } }))
   }
 
+  // UI 优化条目1.7（Q2 拍板）：最大化后拖标题栏空白处 = 恢复窗口 + 跟随移动。
+  // 透明无埋窗口在最大化态的 drag-region 原生行为不可靠，统一并入 edgeResize 协议：
+  // overlay（no-drag，压在空白区之上、交互控件之下）mousedown → 主进程 edge='move' 恢复+跟随；
+  // 双击 = 还原/最大化 toggle（Edge 同款语义）。渲染层 mouseup 收尾跟随循环。
+  const onMaxTitleDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    void edgeResizeStart('move').catch(() => {})
+    const up = () => { void edgeResizeEnd().catch(() => {}); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mouseup', up)
+  }
+
   const entryTitle =
     upd.phase === 'downloading' ? `正在下载 v${upd.check?.latestVersion}… ${upd.progress.percent}%`
     : upd.phase === 'paused' ? `下载已暂停 v${upd.check?.latestVersion},点击继续`
@@ -102,7 +114,7 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
       className="relative z-[75] flex items-center h-9 bg-[color-mix(in_srgb,var(--bg-tertiary)_72%,transparent)] backdrop-blur-md border-b border-[var(--border-color)] select-none shrink-0 drag-region"
     >
       {/* 左：macOS 红绿灯窗控 + 开发版角标 + 窗口级操作（锚定主内容区，不随抽屉外扩漂移） */}
-      <div className="flex items-center h-full pl-3 no-drag group/traffic">
+      <div className="relative z-10 flex items-center h-full pl-3 no-drag group/traffic">
         <TrafficLight color="#ff5f57" title="关闭" onClick={() => window.api?.close()}>
           <svg width="10" height="10" viewBox="0 0 8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none">
             <path d="M1.7 1.7 L6.3 6.3 M6.3 1.7 L1.7 6.3" />
@@ -279,11 +291,15 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
       {/* VS Code 风格居中搜索框：锚定主内容区中心（左移 drawerWidth/2），抽屉外扩时纹丝不动；
           宽度同步扣除 drawerWidth，展开前后保持不变 */}
       <div
-        className="absolute -translate-x-1/2 no-drag"
+        className="absolute -translate-x-1/2 no-drag z-10"
         style={{ left: `calc(50% - ${drawerWidth / 2}px)`, width: `min(100% - ${180 + drawerWidth}px, 560px)` }}
       >
         <div id="titlebar-search" />
       </div>
+      {/* UI 优化条目1.7：最大化态顶栏拖拽恢复 overlay（空白区接管，控件 z-10 保持可点；双击 toggle 还原） */}
+      {isMaximized && (
+        <div className="absolute inset-0 no-drag z-0" onMouseDown={onMaxTitleDown} onDoubleClick={() => window.api?.maximize()} />
+      )}
     </div>
   )
 }

@@ -46,19 +46,27 @@ export function ActivityBar({ active, onChange, onToggleSidebar, flush }: Props)
   const barRef = useRef<HTMLDivElement>(null)
   const { s, update } = useSettings()
 
-  // UI 打磨点4：activityBarOrder 一次性迁移——editor 提到第一位（全员，决策 4.4-1）。
-  // 旧默认串/定制序一律归一为 editor 居首、其余相对顺序不变（缺失则补到首位）；
-  // 归一结果写回后条件自然不再成立，迁移只发生一次；用户后续拖拽写回属预期覆盖。
+  // UI 打磨点4（修订）：editor 默认居首改为**一次性迁移**——旧实现在 useMemo 里每次渲染都强制归一，
+  // 用户拖拽 editor 写回的新顺序下一帧即被拉回首位（拖拽永远无效，等于焊死第一位）。
+  // 旧版本下 editor 拖拽从未生效过（同一段归一代码），故「跑一次归一 + 标记」安全：
+  // 标记落位后 allOrder 完全尊重 settings 存储，拖拽写回即所见即所得；缺失模块仍由下方 append 兜底。
   // AI教学 P0：activityBarOrder 内 immersive → aiTeaching（模块 id 改名，位置原地替换不丢失）。
-  const allOrder = useMemo(() => {
-    const arr = safeParse(String(s.activityBarOrder ?? ''), ['blog', 'schedule', 'knowledge', 'toolbox']).map((x) => (x === 'immersive' ? 'aiTeaching' : x))
-    const idx = arr.indexOf('editor')
-    if (idx === 0) return arr
-    return idx > 0 ? ['editor', ...arr.filter((x) => x !== 'editor')] : ['editor', ...arr]
-  }, [s.activityBarOrder])
+  const allOrder = useMemo(
+    () => safeParse(String(s.activityBarOrder ?? ''), ['blog', 'schedule', 'knowledge', 'toolbox']).map((x) => (x === 'immersive' ? 'aiTeaching' : x)),
+    [s.activityBarOrder],
+  )
   useEffect(() => {
     const raw = String(s.activityBarOrder ?? '')
-    if (raw !== JSON.stringify(allOrder)) update('activityBarOrder', JSON.stringify(allOrder))
+    const migratedKey = 'kb.activitybar.editorDefaultMigrated'
+    if (localStorage.getItem(migratedKey) === '1') {
+      // 已迁移：仅在归一映射（immersive 改名等）产生差异时写回，不干预用户排序
+      if (raw !== JSON.stringify(allOrder)) update('activityBarOrder', JSON.stringify(allOrder))
+      return
+    }
+    localStorage.setItem(migratedKey, '1')
+    const idx = allOrder.indexOf('editor')
+    const next = idx === 0 ? allOrder : idx > 0 ? ['editor', ...allOrder.filter((x) => x !== 'editor')] : ['editor', ...allOrder]
+    update('activityBarOrder', JSON.stringify(next))
   }, [allOrder]) // eslint-disable-line react-hooks/exhaustive-deps
   // AI教学 P0：activityBarHidden 同步一次性迁移 immersive → aiTeaching（隐藏的旧 Agent 迁移后仍隐藏）
   const hidden: string[] = useMemo(

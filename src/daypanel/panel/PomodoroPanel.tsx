@@ -31,7 +31,9 @@ export function PomodoroPanel() {
   // 主按钮：未激活=开始 / 完成=下一阶段 / 运行=暂停 / 暂停=继续
   const mainLabel = !ps.visible ? '开始' : ps.done ? '下一阶段' : ps.running ? '暂停' : '继续'
   const mainAction = () => {
-    if (!ps.visible) { pom.activate(ps.presetIdx); pom.startTimer() }
+    // 侧边栏启动不展开主窗口的全屏番茄钟遮罩（expanded:false）——在侧栏点开始就只在侧栏跑，
+    // 否则 activate() 的 expanded:true 会让主内容区被全屏番茄钟盖住，观感像「跳转到了工具箱」
+    if (!ps.visible) { pom.setState(s => ({ ...s, visible: true, expanded: false })); pom.startTimer() }
     else if (ps.done) pom.switchPhase()
     else if (ps.running) pom.pauseTimer()
     else pom.startTimer()

@@ -103,6 +103,11 @@
   .step.done i{background:var(--ok); color:#fff;}
   .step.doing i{background:var(--accent); color:#fff;}
   .step.doing b{color:var(--accent);}
+  .step{cursor:pointer; border-radius:6px; transition:background .15s;}
+  .step:hover{background:#ececf0;}
+  .step .badge{margin-left:auto; font-size:9.5px; color:var(--mut); background:#ececf0; border-radius:8px; padding:1px 6px; align-self:center; white-space:nowrap;}
+  .step.doing .badge{color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent);}
+  .plan-hint{font-size:10px; color:var(--mut); padding:5px 6px 2px;}
   /* 收放把手 */
   .handle{width:16px; background:var(--panel); border-right:1px solid var(--line2); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--mut); font-size:11px; flex-shrink:0;}
   .handle:hover{color:var(--accent);}
@@ -214,8 +219,15 @@
     <div class="pk-sub">一个工作区 = 一门课程 / 一个主题 · 内含多个对话 · 每个对话绑定编辑区一个文件夹</div>
     <div class="pk-search">🔍 搜索工作区…</div>
     <div style="display:flex; justify-content:center; margin-bottom:20px;"><span class="chip" onclick="openOv('ovProfileG')">👤 全局画像 · 计算机科学与技术 本科生</span></div>
+    <style>
+      .ws-card{position:relative;}
+      .ws-prof{position:absolute; top:8px; right:8px; font-size:10.5px; padding:2px 7px; border-radius:8px; border:1px solid var(--line2); color:var(--mut); opacity:0; transition:opacity .15s; background:var(--panel);}
+      .ws-card:hover .ws-prof{opacity:1;}
+      .ws-prof:hover{color:var(--accent); border-color:var(--accent);}
+    </style>
     <div class="pk-grid">
       <button class="ws-card" onclick="enterWS('数学冲刺')">
+        <span class="ws-prof" onclick="event.stopPropagation(); openOv('ovProfileW')">👤 画像</span>
         <h4>📚 数学冲刺</h4><div class="meta">3 个对话 · 最近活跃 今天</div>
         <div class="dir">📁 AI教学/数学冲刺/</div>
         <div class="tags"><span>随堂测验 12</span><span>讲义 5</span></div>
@@ -267,7 +279,7 @@
       <span class="chip" onclick="newConv()">＋ 新建对话</span>
       <div class="top-tools">
         <span class="chip" onclick="showConstraints()">✎ 会话要求 <small style="color:var(--mut)">CONSTRAINTS.md</small></span>
-        <span class="chip" onclick="openOv('ovProfileC')">👤 画像</span>
+        <span class="chip" onclick="openOv('ovProfileC')" title="本主题画像 · 仅此层在对话内编辑；全局在工作区选择页、工作区层在工作区卡片 hover">👤 本主题画像</span>
         <span class="chip" onclick="showToken()">⏱ ≈ 0</span>
         <span class="chip" onclick="toggleZen()">⊙ 禅模式</span>
       </div>
@@ -298,13 +310,8 @@
         </div>
         <div class="sb-sec" id="secPlan">
           <div class="sb-head" onclick="toggleSec(this)"><span class="arr">▾</span> 任务规划</div>
-          <div class="sb-body">
-            <div class="step done"><i>✓</i><span>通读资料</span></div>
-            <div class="step done"><i>✓</i><span>学习大纲</span></div>
-            <div class="step doing"><i>3</i><b>分章精讲（进行中）</b></div>
-            <div class="step"><i>4</i><span>随堂测验</span></div>
-            <div class="step"><i>5</i><span>沉浸复习笔记</span></div>
-          </div>
+          <div class="sb-body" id="planList"></div>
+          <div class="plan-hint">🤖 由 AI 实时维护 · 点击步骤可跳转</div>
         </div>
         <div class="sb-sec">
           <div class="sb-head" onclick="toggleSec(this)"><span class="arr">▾</span> 大纲 — 讲义·一次函数图像</div>
@@ -361,7 +368,22 @@
             </div>
           </div>
         </div>
+        <!-- §12 提问模式：AI 主动提问时输入区变形为选择卡 -->
+        <div id="askBar" style="display:none; padding:8px 12px 2px;">
+          <div id="askSingle">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:7px;">
+              <span style="font-size:11px; font-weight:600; color:var(--accent);">🤖 AI 想确认一下</span>
+              <span id="askQ" style="font-size:12.5px; color:var(--txt);"></span>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:7px; align-items:center;">
+              <div id="askOpts" style="display:flex; flex-wrap:wrap; gap:7px;"></div>
+              <span class="chip" onclick="exitAskMode()" title="关闭选择卡，自由打字回答">✍️ 自由输入</span>
+            </div>
+          </div>
+          <div id="askForm" style="display:none;"></div>
+        </div>
         <div class="inputbar">
+          <span class="chip" onclick="dxStart()" title="演示：画像诊断 × 提问模式——AI 逐题结构化提问，答完自动生成画像写入全局层">🩺 画像诊断</span>
           <input class="box" id="input" placeholder="粘贴资料或输入指令…（Enter 发送）" onkeydown="if(event.key==='Enter')sendMsg()">
           <div class="model-wrap">
             <span class="chip" id="modelBtn" onclick="toggleModelMenu(event)" title="模型与思考强度（本对话生效）">🤖 <b id="modelName"></b> ▾</span>
@@ -515,6 +537,21 @@
       <p style="color:var(--mut); font-size:11.5px">演进方式：AI 建议 → 你确认后写入（Plan B）</p>
     </div>
     <div class="dfoot"><button class="btn" onclick="closeOv('ovProfileG')">关闭</button><button class="btn primary">在编辑器中打开</button></div>
+  </div>
+</div>
+
+<!-- 工作区画像弹层（第三层入口：每层在它自己的地方编辑） -->
+<div class="overlay" id="ovProfileW" onclick="if(event.target===this)closeOv('ovProfileW')">
+  <div class="dialog">
+    <div class="dhead">👤 工作区画像 — AI教学/数学冲刺/PROFILE.md <span class="x" onclick="closeOv('ovProfileW')">✕</span></div>
+    <div class="dbody md">
+      <p style="color:var(--sub); font-size:11.5px">本工作区（课程）级 · 叠加在全局画像之上、被本主题画像覆盖 · 三层注入顺序：全局 → 工作区 → 会话</p>
+      <p><b>课程目标</b>：期中函数部分 90 分以上</p>
+      <p><b>整体进度</b>：函数基础 ✓ · 一次函数 学习中 · 图像变换 未开始</p>
+      <p><b>跨会话薄弱点</b>：图像平移变换（连续两次测验出错）</p>
+      <p style="color:var(--mut); font-size:11.5px">编辑入口 = 工作区卡片 hover「👤 画像」（仅此处）；AI 产出建议时按层归位到工作区层</p>
+    </div>
+    <div class="dfoot"><button class="btn" onclick="closeOv('ovProfileW')">关闭</button><button class="btn primary">在编辑器中打开</button></div>
   </div>
 </div>
 
@@ -684,6 +721,167 @@ function showExplain(){ document.getElementById('explain').style.display='block'
 let aiSeq = 0;
 const docs = new Set();
 function addMsg(html, cls){ const d=document.createElement('div'); d.className='msg '+cls; d.innerHTML=html; document.getElementById('chatScroll').appendChild(d); return d; }
+
+/* ---------- §11 任务规划（活计划）：AI 维护状态 + 数据徽标 + 点击跳转 ---------- */
+const PLAN = [
+  { label:'通读资料',     badge:'资料 4 条',   status:'done'  },
+  { label:'学习大纲',     badge:'已确认',      status:'done'  },
+  { label:'分章精讲',     badge:'讲义 3/5 章', status:'doing' },
+  { label:'随堂测验',     badge:'',            status:'todo'  },
+  { label:'沉浸复习笔记', badge:'',            status:'todo'  },
+];
+function renderPlan(){
+  const el = document.getElementById('planList');
+  if (!el) return;
+  el.innerHTML = '';
+  PLAN.forEach((p, i) => {
+    const d = document.createElement('div');
+    const cls = p.status === 'done' ? 'done' : (p.status === 'doing' ? 'doing' : '');
+    d.className = 'step ' + cls;
+    d.title = p.status === 'doing' ? '进行中 · 点击重新聚焦此步'
+            : p.status === 'todo'  ? '点击让 AI 跳到此步'
+            : '已完成 · 点击回顾此步';
+    d.innerHTML = `<i>${p.status === 'done' ? '✓' : (i + 1)}</i>`
+      + (p.status === 'doing' ? `<b>${p.label}</b>` : `<span>${p.label}</span>`)
+      + (p.badge ? `<span class="badge">${p.badge}</span>` : '');
+    d.onclick = () => jumpTo(i);
+    el.appendChild(d);
+  });
+}
+function jumpTo(i){
+  const p = PLAN[i];
+  if (p.status === 'doing'){ toast('当前就在「' + p.label + '」这一步'); return; }
+  const wasDone = p.status === 'done';
+  PLAN.forEach((q, j) => { q.status = j < i ? 'done' : (j === i ? 'doing' : 'todo'); });
+  renderPlan();
+  const verb = wasDone ? '回顾' : '跳到';
+  addMsg('<div class="bub">跳到「' + p.label + '」</div>', 'user');
+  const ack = addAI('已切到「' + p.label + '」',
+    `<p>好，${wasDone ? '我们回顾' : '现在进入'}「<b>${p.label}</b>」${p.badge ? '（' + p.badge + '）' : ''}。左侧任务规划已同步更新——你可以随时点其它步骤再切换。</p>`, false);
+  ack.scrollIntoView({ behavior:'smooth' });
+  toast('已发送指令：' + verb + '「' + p.label + '」');
+}
+renderPlan();
+
+/* ---------- §12 提问模式：AI 主动提问 → 输入区变形为选择卡（诊断问答/流程澄清场景） ---------- */
+const ASK_SEQ = [
+  { q:'你希望分章精讲从哪部分开始？', opts:['图像与斜率','方程与图像','先做例题演练'] },
+  { q:'讲义的深度偏好？', opts:['概念为主，例子适量','例子为主，直接上手','从零推导，完整证明'] },
+];
+let askIdx = 0, askRounds = 0, _onPick = null;
+function askDemo(){
+  askRounds = 0;
+  enterAskMode(ASK_SEQ[askIdx % ASK_SEQ.length]);
+}
+function enterAskMode(item, onPick){
+  _onPick = onPick || pickAskOpt;
+  askIdx = ASK_SEQ.indexOf(item);
+  document.getElementById('input').style.display = 'none';
+  document.getElementById('askBar').style.display = 'block';
+  document.getElementById('askForm').style.display = 'none';
+  document.getElementById('askSingle').style.display = 'block';
+  document.getElementById('askQ').textContent = item.q;
+  const opts = document.getElementById('askOpts');
+  opts.innerHTML = '';
+  item.opts.forEach(o => {
+    const c = document.createElement('span');
+    c.className = 'chip';
+    c.style.cssText = 'border:1px solid var(--line2); padding:4px 10px; font-size:12px; transition:all .15s;';
+    c.textContent = o;
+    c.onmouseenter = () => { c.style.borderColor = 'var(--accent)'; c.style.color = 'var(--accent)'; };
+    c.onmouseleave = () => { c.style.borderColor = 'var(--line2)'; c.style.color = ''; };
+    c.onclick = () => _onPick(o);
+    opts.appendChild(c);
+  });
+  toast('AI 正在等待你的选择（也可点「自由输入」打字回答）');
+}
+function pickAskOpt(o){
+  addMsg('<div class="bub">' + o + '</div>', 'user');
+  const done = ++askRounds >= ASK_SEQ.length;
+  exitAskMode();
+  const ack = addAI('收到：' + o,
+    done
+      ? '<p>好，记下了。提问模式演示到此为止——真实场景里 AI 会用 <b>```ask</b> 围栏块发起这类结构化提问（选项 ≤4、可自由输入），常用于<b>诊断问答、流程澄清、确认节点</b>；回答天然结构化，便于直接落库（如写入画像）。</p>'
+      : '<p>记下了。还有一个问题想确认一下——</p>', false);
+  ack.scrollIntoView({ behavior:'smooth' });
+  if (!done) setTimeout(() => enterAskMode(ASK_SEQ[(askIdx + 1) % ASK_SEQ.length]), 900);
+}
+function exitAskMode(){
+  _onPick = null;
+  document.getElementById('askBar').style.display = 'none';
+  document.getElementById('askSingle').style.display = 'block';
+  document.getElementById('askForm').style.display = 'none';
+  const inp = document.getElementById('input');
+  inp.style.display = '';
+  inp.focus();
+}
+
+/* ---------- 画像诊断 × ask 模式（§13 整卷版）：所有题一次摆出、逐题点选、统一提交 ---------- */
+function dxStart(){
+  const seq = [
+    { q:'你的身份与学科背景是？', opts:['计算机科学与技术 本科生','其他专业本科生','在职学习 / 转行'] },
+    { q:'当前水平自评？', opts:['入门：刚接触','进阶：学过基础课程','熟练：有项目经验'] },
+    { q:'最容易卡住的地方是？', opts:['有思路但写不出代码','底层原理容易混乱','缺乏完整项目经验'] },
+  ];
+  addMsg('<div class="bub">【画像诊断】开始吧</div>', 'user');
+  enterDxForm(seq);
+}
+function enterDxForm(seq){
+  _onPick = null;
+  document.getElementById('input').style.display = 'none';
+  document.getElementById('askSingle').style.display = 'none';
+  document.getElementById('askBar').style.display = 'block';
+  const form = document.getElementById('askForm');
+  const answers = new Array(seq.length).fill(null);
+  form.style.display = 'block';
+  form.innerHTML = seq.map((s, i) =>
+    `<div style="margin-bottom:9px;">
+       <div style="font-size:11px; font-weight:600; color:var(--accent); margin-bottom:4px;">🩺 ${i+1}/${seq.length} · ${s.q}</div>
+       <div class="dx-opts" data-i="${i}" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+     </div>`).join('')
+    + `<div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
+         <button class="btn primary" id="dxSubmit" disabled onclick="dxSubmit()" style="padding:4px 12px; opacity:.5;">✓ 提交回答</button>
+         <span class="chip" onclick="exitAskMode()">✍️ 自由输入</span>
+         <span style="font-size:10.5px; color:var(--mut);">全部选完后统一提交</span>
+       </div>`;
+  form.querySelectorAll('.dx-opts').forEach(box => {
+    const i = +box.dataset.i;
+    seq[i].opts.forEach(o => {
+      const c = document.createElement('span');
+      c.className = 'chip';
+      c.style.cssText = 'border:1px solid var(--line2); padding:3px 9px; font-size:12px; transition:all .15s;';
+      c.textContent = o;
+      c.onclick = () => {
+        answers[i] = o;
+        [...box.children].forEach(x => { x.style.borderColor = 'var(--line2)'; x.style.color = ''; x.style.background = ''; });
+        c.style.borderColor = 'var(--accent)'; c.style.color = 'var(--accent)';
+        c.style.background = 'color-mix(in srgb, var(--accent) 10%, transparent)';
+        const btn = document.getElementById('dxSubmit');
+        btn.disabled = answers.some(a => !a);
+        btn.style.opacity = btn.disabled ? '.5' : '1';
+      };
+      box.appendChild(c);
+    });
+  });
+  window._dx = { seq, answers };
+  form.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  toast('全部选完后点「提交回答」统一发送');
+}
+function dxSubmit(){
+  const { seq, answers } = window._dx;
+  if (answers.some(a => !a)){ toast('还有问题没选'); return; }
+  const text = '【画像诊断回答】' + seq.map((s, i) => (i+1) + '. ' + answers[i]).join('　');
+  addMsg('<div class="bub">' + text + '</div>', 'user');
+  exitAskMode();
+  const el = addAI('学习者画像 · 初稿已生成',
+    `<p>根据你的回答，画像初稿如下（已写入<b>全局画像</b>，可在工作区选择页查看/修改）：</p>
+     <p><b>身份</b>：计算机科学与技术 本科生</p>
+     <p><b>已知基础</b>：进阶水平，有课程与练习经验</p>
+     <p><b>薄弱点</b>：实现能力（思路→代码转化）、底层原理体系化</p>
+     <p style="color:var(--sub); font-size:12px">后续对话将自动注入此画像；工作区/本主题层可在此之上覆盖更细的信息。</p>`, false);
+  el.scrollIntoView({ behavior:'smooth' });
+  toast('✓ 已写入全局画像 · 选择页可查看');
+}
 function addAI(title, mdHtml, withDoc){
   aiSeq++;
   const id = 'ai-'+aiSeq;

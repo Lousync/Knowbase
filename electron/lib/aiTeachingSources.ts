@@ -127,13 +127,14 @@ export function parseSourceMd(text: string): SourceEntry[] {
     }
     if (/^#{1,6}\s/.test(raw)) { flush(); continue } // 其他标题结束当前小节
     if (!cur) continue
-    // 条目5.3 容错加强：分隔符支持「：」「:」与裸空格（手常打漏冒号是最常见写法，如 `- 已提取:未提取`）
-    const m = /^[-*]?\s*(类型|路径|页码区间|存放方式|已提取|备注)(?:\s*[：:]\s*|\s+)(.*)$/.exec(raw.trim())
+    // 条目5.3 容错加强：分隔符支持「：」「:」与裸空格（手常打漏冒号是最常见写法，如 `- 已提取:未提取`）；
+    // 条目10 容错：code 素材手写「行号区间」（或裸「区间」）与「页码区间」同义，落盘仍统一写「页码区间」
+    const m = /^[-*]?\s*(类型|路径|页码区间|行号区间|区间|存放方式|已提取|备注)(?:\s*[：:]\s*|\s+)(.*)$/.exec(raw.trim())
     if (!m) continue
     const val = clean(m[2])
     if (m[1] === '类型') cur.type = val.toLowerCase() || 'other'
     else if (m[1] === '路径') cur.path = val
-    else if (m[1] === '页码区间') cur.range = val || '-'
+    else if (m[1] === '页码区间' || m[1] === '行号区间' || m[1] === '区间') cur.range = val || '-'
     else if (m[1] === '存放方式') cur.storage = val
     else if (m[1] === '已提取') cur.extracted = val
     else if (m[1] === '备注') cur.note = val

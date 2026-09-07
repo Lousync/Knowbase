@@ -37,7 +37,9 @@ function run(sql: string, params: unknown[] = []): void {
 
 export function createAgentSession(title = '新会话'): AgentSessionRow {
   const id = randomUUID()
-  run('INSERT INTO agent_sessions (id, title) VALUES (?, ?)', [id, title])
+  // 真机验证补口：原来只插 (id, title)，created_at/updated_at 依赖列默认值（实测为空）
+  // → 渲染层排序/时间戳拿到 undefined。与 rename 一致，显式写本地时间。
+  run("INSERT INTO agent_sessions (id, title, created_at, updated_at) VALUES (?, ?, datetime('now','localtime'), datetime('now','localtime'))", [id, title])
   return queryAll<AgentSessionRow>('SELECT * FROM agent_sessions WHERE id = ?', [id])[0]
 }
 

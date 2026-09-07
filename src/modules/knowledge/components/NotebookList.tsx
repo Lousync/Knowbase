@@ -375,7 +375,7 @@ export function NotebookList({
         >
           {editingId === cat.id ? (
             <input
-              className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py-lg)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
+              className="w-full bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
               value={editName}
               onChange={e => setEditName(e.target.value)}
               onBlur={() => handleRename(cat.id)}
@@ -385,38 +385,38 @@ export function NotebookList({
           ) : (
             <div
               onClick={handleRowClick}
-              className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors ${
+              className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
                 deletingState(cat.id) === 'animating' ? 'kb-deleting'
                   : deletingState(cat.id) === 'done' ? 'kb-deleting kb-done'
-                : isSelected ? 'bg-[var(--bg-selected)] text-white'
+                : isSelected ? 'bg-[var(--bg-selected)]/40'
                 : dragOverId === cat.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
               }`}
               style={{
-                paddingLeft: `${depth * 16 + 8}px`, paddingRight: '4px',
+                paddingLeft: `${depth * 12 + 6}px`, paddingRight: '4px',
                 ...(cutItemIds?.has(cat.id) ? { opacity: 0.45 } : {})
               }}
             >
               <span
-                className={`shrink-0 w-3.5 flex items-center justify-center ${canExpand ? 'cursor-pointer hover:text-[var(--text-primary)]' : ''}`}
+                className={`shrink-0 w-[12px] flex items-center justify-center ${canExpand ? 'cursor-pointer hover:text-[var(--text-primary)]' : ''}`}
                 onClick={handleChevronClick}
               >
                 {canExpand ? (
-                  isExpanded ? <ChevronDown size={14} className="text-[var(--text-muted)]" /> : <ChevronRight size={14} className="text-[var(--text-muted)]" />
+                  isExpanded ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />
                 ) : (
-                  <span className="w-3.5" />
+                  <span className="w-[12px]" />
                 )}
               </span>
               {isSpace ? (
-                <Layers size={15} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--info)]'}`} />
+                <Layers size={14} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--info)]'}`} />
               ) : isNotebook ? (
-                <BookOpen size={15} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
+                <BookOpen size={14} className={`shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
               ) : canExpand ? (
-                isExpanded ? <FolderOpen size={15} className="shrink-0 text-[var(--warning)]" /> : <Folder size={15} className="shrink-0 text-[var(--warning)]" />
+                isExpanded ? <FolderOpen size={14} className="shrink-0 text-[var(--text-muted)]" /> : <Folder size={14} className="shrink-0 text-[var(--text-muted)]" />
               ) : (
-                <Folder size={15} className="shrink-0 text-[var(--text-muted)]" />
+                <Folder size={14} className="shrink-0 text-[var(--text-muted)]" />
               )}
-              <span className="flex-1 truncate text-[var(--kb-row-fs)]">{cat.name}</span>
+              <span className="flex-1 truncate text-[12.5px] text-[var(--text-primary)]">{cat.name}</span>
               <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
                 {onSortCategory && (<><button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={13} /></button><button onClick={e => { e.stopPropagation(); onSortCategory(cat.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={13} /></button></>)}
                 <button onClick={e => { e.stopPropagation(); handleStartRename(cat.id, cat.name) }} className="p-0.5 hover:text-white text-[var(--text-secondary)]" title="重命名"><Pencil size={13} /></button>
@@ -451,21 +451,21 @@ export function NotebookList({
                   e.preventDefault(); e.stopPropagation()
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
-                className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors border-l-[3px] ${
-                  deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
+                  deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                  : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
                 style={{
-                  paddingLeft: `${(depth + 1) * 16 + 8}px`, paddingRight: '4px',
+                  paddingLeft: `${(depth + 1) * 12 + 6}px`, paddingRight: '4px',
                   ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
                 }}
               >
-                <span className="w-3.5 shrink-0" />
+                <span className="w-[12px] shrink-0" />
                 <FileIcon ext={p.fileType || ''} size={14} />
                 {editingPageId === p.id ? (
                   <input
-                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
+                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
                     value={editPageName}
                     onChange={e => setEditPageName(e.target.value)}
                     onBlur={() => handleRenamePage(p.id)}
@@ -474,7 +474,7 @@ export function NotebookList({
                     autoFocus
                   />
                 ) : (
-                  <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
+                  <span className={`flex-1 truncate text-[12.5px] ${activePageId === p.id ? 'text-[var(--text-primary)]' : ''}`}>{p.title || '无标题'}</span>
                 )}
                 {onSortPage && <div className="hidden group-hover:flex items-center gap-0.5 shrink-0"><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'up') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="上移"><ChevronUp size={11} /></button><button onClick={e => { e.stopPropagation(); onSortPage(p.id, 'down') }} className="p-0.5 hover:text-[var(--accent)] text-[var(--text-muted)]" title="下移"><ChevronDown size={11} /></button></div>}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
@@ -630,21 +630,21 @@ export function NotebookList({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors border-l-[3px] ${
-                    deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                  className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
+                    deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                    : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                    : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                   }`}
                   style={{
-                    paddingLeft: '5px', paddingRight: '4px',
+                    paddingLeft: '18px', paddingRight: '4px',
                     ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
                   }}
                 >
-                  <span className="w-3.5 shrink-0" />
+                  <span className="w-[12px] shrink-0" />
                   <FileIcon ext={p.fileType || ''} size={14} />
                   {editingPageId === p.id ? (
                     <input
-                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
                       value={editPageName}
                       onChange={e => setEditPageName(e.target.value)}
                       onBlur={() => handleRenamePage(p.id)}
@@ -653,7 +653,7 @@ export function NotebookList({
                       autoFocus
                     />
                   ) : (
-                    <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
+                    <span className={`flex-1 truncate text-[12.5px] ${activePageId === p.id ? 'text-[var(--text-primary)]' : ''}`}>{p.title || '无标题'}</span>
                   )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                   {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
@@ -688,21 +688,21 @@ export function NotebookList({
                   e.preventDefault(); e.stopPropagation()
                   setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                 }}
-                className={`flex items-center gap-1.5 py-[var(--kb-row-py)] cursor-pointer group rounded transition-colors border-l-[3px] ${
-                  deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
+                  deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                  : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                  : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
                 style={{
-                  paddingLeft: '5px', paddingRight: '4px',
+                  paddingLeft: '18px', paddingRight: '4px',
                   ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
                 }}
               >
-                <span className="w-3.5 shrink-0" />
+                <span className="w-[12px] shrink-0" />
                 <FileIcon ext={p.fileType || ''} size={14} />
                 {editingPageId === p.id ? (
                   <input
-                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
+                    className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1.5 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
                     value={editPageName}
                     onChange={e => setEditPageName(e.target.value)}
                     onBlur={() => handleRenamePage(p.id)}
@@ -711,7 +711,7 @@ export function NotebookList({
                     autoFocus
                   />
                 ) : (
-                  <span className="flex-1 truncate text-[var(--kb-row-fs)]">{p.title || '无标题'}</span>
+                  <span className={`flex-1 truncate text-[12.5px] ${activePageId === p.id ? 'text-[var(--text-primary)]' : ''}`}>{p.title || '无标题'}</span>
                 )}
                 {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
@@ -750,15 +750,15 @@ export function NotebookList({
                     e.preventDefault(); e.stopPropagation()
                     setContextMenu({ type: 'page', id: p.id, x: e.clientX, y: e.clientY })
                   }}
-                  className={`group flex items-center gap-1.5 px-1 ml-2 py-[var(--kb-row-py)] cursor-pointer rounded text-[var(--kb-row-fs)] border-l-[3px] ${
-                    deletingState(p.id) === 'animating' ? 'kb-deleting border-l-transparent'
+                  className={`group flex items-center gap-1 px-1 ml-2 py-[3px] cursor-pointer rounded-md transition-colors ${
+                    deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                    : activePageId === p.id ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border-l-[var(--accent)]' : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent'
+                    : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                   }`}>
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />
                   {editingPageId === p.id ? (
                     <input
-                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1 py-[var(--kb-row-py)] text-[var(--kb-row-fs)] outline-none text-[var(--text-primary)]"
+                      className="flex-1 min-w-0 bg-[var(--input-bg)] border border-[var(--accent)] rounded px-1 py-[2px] text-[12.5px] outline-none text-[var(--text-primary)]"
                       value={editPageName}
                       onChange={e => setEditPageName(e.target.value)}
                       onBlur={() => handleRenamePage(p.id)}
@@ -767,7 +767,7 @@ export function NotebookList({
                       autoFocus
                     />
                   ) : (
-                    <span className="truncate flex-1">{p.title || '无标题'}</span>
+                    <span className="truncate flex-1 text-[12.5px]">{p.title || '无标题'}</span>
                   )}
                   {(() => { const fi = getFileTypeInfo(p.fileType || ''); return <span className="hidden group-hover:inline-block shrink-0 text-[8px] px-1 rounded font-medium ml-1" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}

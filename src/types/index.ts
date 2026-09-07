@@ -891,6 +891,9 @@ export interface ElectronAPI {
   onFullscreenChange: (cb: (v: boolean) => void) => void
   setAlwaysOnTop: (onTop: boolean) => Promise<boolean>
   isAlwaysOnTop: () => Promise<boolean>
+  /** UI 优化条目1.7：最大化边缘拖拽恢复（edge = 四边/四角/move） */
+  edgeResizeStart: (edge: string) => Promise<{ ok: boolean }>
+  edgeResizeEnd: () => Promise<{ ok: boolean }>
   getSetting: (key: string) => Promise<unknown>
   getAllSettings: () => Promise<Record<string, unknown>>
   setSetting: (key: string, value: unknown) => Promise<void>
@@ -1347,6 +1350,9 @@ export interface ElectronAPI {
   aiTeachProfileWriteSession: (id: string, text: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachProfileReadWorkspace: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
   aiTeachProfileWriteWorkspace: (id: string, text: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
+  aiTeachProfileEnsureGlobal: () => Promise<{ ok: boolean; relPath?: string; created?: boolean; error?: string }>
+  aiTeachProfileEnsureSession: (id: string) => Promise<{ ok: boolean; relPath?: string; created?: boolean; error?: string }>
+  aiTeachProfileEnsureWorkspace: (id: string) => Promise<{ ok: boolean; relPath?: string; created?: boolean; error?: string }>
   llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void

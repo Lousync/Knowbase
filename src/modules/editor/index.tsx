@@ -917,6 +917,16 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
         })()}
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* 条目6 + 第三轮：返回来源 chip——独立常驻行（不依赖标签栏：未脏文件无标签行，chip 也要可见） */}
+          {openFrom && onBackFrom && (
+            <div className="shrink-0 flex items-center px-2 py-1 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
+              <button onClick={onBackFrom}
+                className="flex items-center gap-1 rounded-md border border-[var(--border-color)] px-2 py-0.5 text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                title={`返回「${openFrom}」（保留其离开时的界面状态）`}>
+                <ArrowLeft size={12} /> 返回 {openFrom}
+              </button>
+            </div>
+          )}
           {/* 标签栏（禅模式隐藏：当前文件名见悬浮信息条/退出条） */}
           {zenLevel < 1 && openList.length > 0 && (
             <div className="flex items-center gap-0.5 overflow-x-auto border-b border-[var(--border-color)] px-1.5 pt-1">
@@ -955,14 +965,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
                   </div>
                 )
               })}
-              {/* UI 优化条目6：模块跳转来源——「← 返回 AI教学」chip（点击回来源 Tab，手动切 Tab 即消失） */}
-              {openFrom && onBackFrom && (
-                <button onClick={onBackFrom}
-                  className="ml-auto shrink-0 self-center mb-0.5 flex items-center gap-1 rounded-md border border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
-                  title={`返回「${openFrom}」（保留其离开时的界面状态）`}>
-                  <ArrowLeft size={12} /> 返回 {openFrom}
-                </button>
-              )}
+              {/* 返回 chip 已上移为独立常驻行（未脏文件无标签行时也可见） */}
             </div>
           )}
           {/* 编辑器 */}

@@ -41,7 +41,7 @@ ok('程序防重复提取：已 ✓ 条目短路返回现有提取稿（3-26）'
   SRC.includes('if (ext) return { ok: true, relPath:'))
 ok('AI 注入：resolveSourcesForInjection 每轮重读 + 提取稿优先指引 + [1] p.15 编号引用 + 末尾引用清单（3-25/3-29）',
   SRC.includes('resolveSourcesForInjection') && SRC.includes('优先读此文件') && SRC.includes('[1] p.15') && SRC.includes('本次引用素材') &&
-  SVC.includes('resolveSourcesForInjection(sessionId, getSettingReader())') && SVC.includes('quizRuleHint + sourcesHint'))
+  SVC.includes('resolveSourcesForInjection(sessionId, getSettingReader())') && SVC.includes('askRuleHint + sourcesHint'))
 ok('无登记=零注入（存量会话无扰）+ 3500 截断防 token 失控',
   SRC.includes('if (entries.length === 0) return \'\'') && SRC.includes('3500'))
 ok('对话改名→素材夹同步重命名；删除会话 delete 模式素材夹同进回收站（3-31 跟随同设置）',
@@ -71,7 +71,7 @@ ok('切会话自动回读素材登记（activeId effect）',
 
 // ---------- UI 优化条目5.3 / 条目10 追加断言 ----------
 ok('条目5.3 解析容错加强：编号小节标题容忍 1~6 级与 # 后无空格、字段行容忍漏写前导 - 与冒号、值去反引号',
-  SRC.includes('/^#{1,6}\\s*(\\d+)\\s*[.、]\\s*(.+?)\\s*$/') && SRC.includes('/^[-*]?\\s*(类型|路径|页码区间|存放方式|已提取|备注)(?:\\s*[：:]\\s*|\\s+)(.*)$/') &&
+  SRC.includes('/^#{1,6}\\s*(\\d+)\\s*[.、]\\s*(.+?)\\s*$/') && SRC.includes('/^[-*]?\\s*(类型|路径|页码区间|行号区间|区间|存放方式|已提取|备注)(?:\\s*[：:]\\s*|\\s+)(.*)$/') &&
   SRC.includes('const clean = (v: string)'))
 ok('条目5.3 异常统计：缺编号小节 / 编号重复被丢弃 → 右栏可见提示（不静默丢失）',
   SRC.includes('export function sourceAnomalies') && SRC.includes('anomalies') &&
@@ -83,6 +83,9 @@ ok('条目10 code 类型：文本源码按行号区间抽取（readTextSmart 编
 ok('条目10 类型枚举三处同步（服务枚举/表单下拉/模板说明）+ 注入按页/行区间措辞分流',
   MOD.includes("'code'") && SRC.includes('code 行号') && SRC.includes('code（按行号区间）') &&
   SRC.includes("e.type === 'code' ? '行号区间' : '页码区间'"))
+ok('条目10/5.3 真机补口：手编 SOURCE.md 用「行号区间」（或裸「区间」）＝「页码区间」别名，落盘仍统一写页码区间',
+  SRC.includes('页码区间|行号区间|区间') && SRC.includes("m[1] === '页码区间' || m[1] === '行号区间' || m[1] === '区间'") &&
+  SRC.includes('`- 页码区间: ${e.range'))
 
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

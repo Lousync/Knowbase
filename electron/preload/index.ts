@@ -26,6 +26,9 @@ const api = {
     ipcRenderer.on('window:fullscreenChange', (_e, v) => cb(v))
   },
   setAlwaysOnTop: (onTop: boolean) => ipcRenderer.invoke('window:setAlwaysOnTop', onTop),
+  // UI 优化条目1.7：最大化边缘拖拽恢复（渲染层热区 mousedown 启动 / window mouseup 收尾）
+  edgeResizeStart: (edge: string) => ipcRenderer.invoke('window:edgeResizeStart', edge),
+  edgeResizeEnd: () => ipcRenderer.invoke('window:edgeResizeEnd'),
   isAlwaysOnTop: () => ipcRenderer.invoke('window:isAlwaysOnTop'),
   reloadWindow: () => ipcRenderer.invoke('window:reload'),
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
@@ -258,6 +261,9 @@ const api = {
   aiTeachProfileWriteSession: (id: string, text: string) => ipcRenderer.invoke('aiTeachProfile:writeSession', id, text),
   aiTeachProfileReadWorkspace: (id: string) => ipcRenderer.invoke('aiTeachProfile:readWorkspace', id),
   aiTeachProfileWriteWorkspace: (id: string, text: string) => ipcRenderer.invoke('aiTeachProfile:writeWorkspace', id, text),
+  aiTeachProfileEnsureGlobal: () => ipcRenderer.invoke('aiTeachProfile:ensureGlobal'),
+  aiTeachProfileEnsureSession: (id: string) => ipcRenderer.invoke('aiTeachProfile:ensureSession', id),
+  aiTeachProfileEnsureWorkspace: (id: string) => ipcRenderer.invoke('aiTeachProfile:ensureWorkspace', id),
   /** AI教学会话文件夹落盘/改名/删除后的编辑区文件树刷新提示 */
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)

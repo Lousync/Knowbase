@@ -1,7 +1,5 @@
 # 图谱视图实现规格（R4 · G1–G3）
 
-> **[2026-09-03 归档]** 执行规格已完成使命（G1 ✅ G2 ✅ G3 ✅ A8 ✅），移入 `docs/archive/` 历史留存，勿作为当前设计引用。上级设计仍见 `docs/graph-view-design.md`。
->
 > 上级设计见 `docs/graph-view-design.md`（节点/边定义、动画规格 A1–A8、UI 规格、G0–G4 分期）。
 > 本文档是 G1–G3（图谱 UI）的**可执行实现规格**，供直接照做、逐批提交。
 > 前置：**G0 已完成**（提交 ed84466）——GraphIndex 数据层已落 `.knowbase/cache/graph.json`，

@@ -265,6 +265,14 @@ async function runAgentLoop(
   const quizRuleHint = source === 'aiTeaching'
     ? '\n\n【出题格式规则（AI教学）】当用户要求出题/测验/练习时，除开场说明与收尾提示外，每道题单独输出一个 ```quiz 围栏代码块，块内是一个 JSON 对象（不要注释、不要多个对象）：{"no":1,"points":"2分","question":"题干（支持 markdown）","options":[{"key":"A","text":"选项一"},{"key":"B","text":"选项二"},{"key":"C","text":"选项三"},{"key":"D","text":"选项四"}],"answer":"A","explanation":"答案解析（支持 markdown）"}。answer 的值必须是 options 中某个 key；默认四选一。围栏块之间可换行连续排列，客户端会自动收集进「题目」视图供答题。'
     : ''
+  // UI 优化条目11A（任务规划激活）：阶段推进时输出 ```plan 围栏 → 左栏「任务规划」渲染为带状态进度列表
+  const planRuleHint = source === 'aiTeaching'
+    ? '\n\n【任务规划协议（AI教学）】本会话有明确流程或阶段（如教学流程：通读资料→大纲→精讲→测验→笔记）时，你须在阶段发生推进的回答里输出一个 ```plan 围栏代码块，块内是一个 JSON 数组（不要注释）：[{"step":"步骤名（不超过12字）","status":"done|current|todo"}]。规则：status 恰好一个为 "current"，其余为 "done" 或 "todo"；每次输出完整最新清单（含全部步骤，未开始的也要列出）；步骤可按实际情况增删改名；阶段没有变化的普通回答不必输出。'
+    : ''
+  // UI 优化条目12/13（提问模式）：需要用户选择/澄清时输出 ```ask 围栏 → 输入区变形为选择卡
+  const askRuleHint = source === 'aiTeaching'
+    ? '\n\n【提问模式协议（AI教学）】当你需要用户做选择、澄清或确认才能继续时（方案二选一、参数不明确、流程确认等），在回答正文末尾输出一个 ```ask 围栏代码块，块内是一个 JSON 对象（不要注释）：{"question":"一句话问题","options":["选项一","选项二"],"allowCustom":true}。规则：选项 2~6 个、每项不超过 20 字且可直接作为用户的回答发出；allowCustom=true 表示也允许用户自由输入；一次回答最多一个 ask 块；客户端会把提问渲染成交互选择卡，正文里不要再重复罗列同样的选项。整卷式批量提问（如诊断问卷）时块内改为 JSON 数组，每个元素形如 {"question":"问题","options":["选项A","选项B","选项C"]}，用户会整卷作答后统一发回。正式出题仍走 ```quiz 协议，两者不得混用；无需用户确认时不要输出 ask。'
+    : ''
   // P6（§3.13/3-29）：素材目录实时注入（SOURCE.md 条目+提取稿路径+编号引用规则）；无登记则零注入
   const sourcesHint = source === 'aiTeaching' ? (() => {
     const cat = resolveSourcesForInjection(sessionId, getSettingReader())
@@ -281,11 +289,11 @@ async function runAgentLoop(
         constraintChars: sessionInst.length,
         profileChars: profileHint.length,
         sourcesChars: sourcesHint.length,
-        ruleChars: titleRuleHint.length + quizRuleHint.length,
+        ruleChars: titleRuleHint.length + quizRuleHint.length + planRuleHint.length + askRuleHint.length,
       }
     : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + instHint + profileHint + titleRuleHint + quizRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   let sessionWrites = 0
@@ -451,10 +459,26 @@ export function registerAgentHandlers(): void {
     activeChats.get(String(chatId ?? ''))?.abort()
     return true
   })
-  ipcMain.handle('agent:sessions', () => listAgentSessions())
+  // R26 真机验证发现的跨层缺口（agent:* 出口未做 snake_case→camelCase 映射）：
+  // 渲染层契约是 AgentSessionInfo.createdAt/updatedAt 与 AgentStoredMessage.createdAt/traceJson，
+  // 而仓库返回 SQLite 原始行（created_at/updated_at/trace_json）→ 前端读到 undefined：
+  // 消息时间戳不显示（条目4）、用量统计恒 0 与 trace 折叠区不出现（条目9）、
+  // AI教学 enterWs 按 updatedAt 排序直接抛 TypeError 把整个模块打崩（条目6B 复现路径）。
+  // 这里补「保留原字段 + 追加 camel 别名」的零破坏映射（既有按 snake_case 消费的代码不受影响）。
+  const camelRow = <T extends object>(r: T): T => {
+    const row = r as unknown as Record<string, unknown>
+    return {
+      ...row,
+      createdAt: typeof row.created_at === 'string' && row.created_at ? row.created_at : (row.createdAt ?? ''),
+      updatedAt: typeof row.updated_at === 'string' && row.updated_at ? row.updated_at : (row.updatedAt ?? ''),
+      sessionId: typeof row.session_id === 'string' ? row.session_id : (row.sessionId ?? ''),
+      traceJson: typeof row.trace_json === 'string' ? row.trace_json : (row.traceJson ?? null),
+    } as T
+  }
+  ipcMain.handle('agent:sessions', () => listAgentSessions().map(camelRow))
   ipcMain.handle('agent:newSession', (_e, title?: string) =>
-    createAgentSession(typeof title === 'string' && title.trim() ? title.trim() : '新会话'))
-  ipcMain.handle('agent:messages', (_e, id: string) => getAgentMessages(String(id ?? '')))
+    camelRow(createAgentSession(typeof title === 'string' && title.trim() ? title.trim() : '新会话')))
+  ipcMain.handle('agent:messages', (_e, id: string) => getAgentMessages(String(id ?? '')).map(camelRow))
   ipcMain.handle('agent:renameSession', (_e, id: string, title: string) => {
     if (typeof id === 'string' && typeof title === 'string' && title.trim()) renameAgentSession(id, title.trim())
     return true

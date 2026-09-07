@@ -54,7 +54,9 @@ import { useHabitAutoCheckinToast } from './lib/useHabitAutoCheckin'
 import { AssistantPanel } from './components/shared/AssistantPanel'
 import { DayPanelWindowApp } from './daypanel/DayPanelWindowApp'
 import { DayPanel } from './daypanel/DayPanel'
+import { RootErrorBoundary } from './components/shared/RootErrorBoundary'
 import { ResizablePanel } from './components/shared/ResizablePanel'
+import { WindowResizeHandles } from './components/shared/WindowResizeHandles'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
 export default function App() {
@@ -599,6 +601,7 @@ export default function App() {
   }
 
   return (
+    <RootErrorBoundary>
     <div className={`flex flex-col h-screen bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)] overflow-hidden ${winRounded ? 'rounded-[var(--window-radius)]' : 'rounded-none'}`}>
       <CodePluginHosts />
       {zenLevel < 2 ? (
@@ -739,6 +742,8 @@ export default function App() {
           onClose={() => setPalette(null)}
         />
       )}
+      {/* UI 优化条目1.7：最大化态边缘/顶栏拖拽恢复热区（Edge 式 v2，随 winMax 挂载/卸载） */}
+      {winMax && <WindowResizeHandles />}
       <Toast />
       <GlobalConfirm />
       {vaultPickOpen && <VaultPicker onDone={() => { setVaultPickOpen(false); setOnboardingOpen(true) }} />}
@@ -752,5 +757,6 @@ export default function App() {
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
       {welcomeOpen && <WelcomeOverlay onDone={() => setWelcomeOpen(false)} />}
     </div>
+    </RootErrorBoundary>
   )
 }

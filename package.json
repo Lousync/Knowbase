@@ -22,7 +22,7 @@
     "katex": "^0.18.4",
     "linkedom": "^0.18.13",
     "lucide-react": "^1.0.0",
-    "monaco-editor": "^0.55.1",
+    "monaco-editor": "0.56.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174",
     "qrcode": "^1.5.4",

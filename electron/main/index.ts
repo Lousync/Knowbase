@@ -193,11 +193,19 @@ function createTray(): void {
     const candidates = [
       join(app.getAppPath(), 'build', 'icon.png'),
       join(process.resourcesPath ?? '', 'build', 'icon.png'),
+      join(process.resourcesPath ?? '', 'icon.png'),   // 打包后 resources 根兜底
     ]
     let img = nativeImage.createEmpty()
     for (const p of candidates) {
+      if (!p || p === 'icon.png') continue
       const cand = nativeImage.createFromPath(p)
       if (!cand.isEmpty()) { img = cand; break }
+    }
+    if (img.isEmpty()) {
+      // 兜底：所有候选路径都失败时用内置 16px 彩色占位（拒绝 Windows 空白托盘白块）
+      img = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAApUlEQVR4nK3MWwvBAByG8X00KZnTNNNY5jDMSkkppZSUUj6U8/k8p8/zuvN3/fLcPz9F+UeB8AtB9YlQ5AE1ekcsfoOW8KFrPozkFaZ+gZU6wzZOKKaPcMwDqpk9PgAze9mdAMxct7YCMHMjtxGAmZv2WgBmbuVXAjBzu7AUgJk7pYUAzNx15gIwc6/8BTBzvzITgJkH7lQAZh7WJgIw88gbC/BLb/8X7Gi3iexmAAAAAElFTkSuQmCC'
+      )
+      console.warn('[Tray] 图标候选路径全部加载失败 → 使用内置占位图标')
     }
     if (process.platform === 'win32') img = img.resize({ width: 16, height: 16 })
     tray = new Tray(img)
@@ -238,6 +246,7 @@ function createWindow(): void {
     frame: false,                          // 无边框 → 自定义标题栏
     titleBarStyle: 'hidden',              // macOS 隐藏原生标题栏
     transparent: true,                     // 透明底 → 根容器 18px 自绘圆角（最大化时渲染层自动切直角）
+    icon: join(app.getAppPath(), 'build', 'icon.png'),  // 任务栏按钮显式用应用图标（dev 下 electron.exe 无内置图标 → 白板按钮的根因；打包后 exe 自带图标不受影响）
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,                         // preload 仅用 contextBridge/ipcRenderer/webUtils,完全兼容沙箱
@@ -308,7 +317,32 @@ function createWindow(): void {
 }
 
 // ===== 窗口控制 + 缩放 + 设置 IPC =====
+// 最大化态兜底（真机验证 · UI 优化条目1 的根因）：
+// Windows 上 frame:false + transparent:true 的窗口调用 maximize() 后，bounds 已铺满工作区，
+// 但 isMaximized() 仍返回 false 且不触发 'maximize' 事件 → 渲染层收不到窗口态变化，
+// 自绘圆角与卡片留白都不会切换，表现为「最大化后四个角填不满」。故这里以
+// 「bounds 覆盖工作区」的几何判定兜底，任何尺寸/位置变化后都主动同步一次给渲染层。
+function coversWorkArea(win: BrowserWindow): boolean {
+  if (win.isDestroyed() || win.isMinimized()) return false
+  const b = win.getBounds()
+  const wa = screen.getDisplayMatching(b).workArea
+  return b.x <= wa.x + 2 && b.y <= wa.y + 2 && b.width >= wa.width - 2 && b.height >= wa.height - 2
+}
+function isWinMaximized(win?: BrowserWindow | null): boolean {
+  if (!win || win.isDestroyed()) return false
+  return win.isMaximized() || coversWorkArea(win)
+}
 function registerWindowHandlers(): void {
+  let lastMaxSent: boolean | null = null
+  let preMaxBounds: Electron.Rectangle | null = null
+  const syncMaxState = (): void => {
+    const win = mainWindow
+    if (!win || win.isDestroyed()) return
+    const maxed = isWinMaximized(win)
+    if (maxed === lastMaxSent) return
+    lastMaxSent = maxed
+    win.webContents.send('window:maximizeChange', maxed)
+  }
   ipcMain.handle('window:minimize', () => {
     mainWindow?.minimize()
     // WeChat 模式下小窗要么内嵌在主窗口、要么是独立顶层窗口；最小化主窗口时：
@@ -316,11 +350,21 @@ function registerWindowHandlers(): void {
     //   - 独立态：保持可见（用户可能想让小窗单独常驻），不联动
   })
   ipcMain.handle('window:maximize', () => {
-    if (mainWindow?.isMaximized()) mainWindow.unmaximize()
-    else mainWindow?.maximize()
+    const win = mainWindow
+    if (!win || win.isDestroyed()) return
+    if (isWinMaximized(win)) {
+      // 未进最大化态的透明无边框窗口，unmaximize()/restore() 都可能无效 → 回落到记录的原始 bounds
+      if (win.isMaximized()) win.unmaximize()
+      else if (preMaxBounds) win.setBounds(preMaxBounds)
+      else win.restore()
+    } else {
+      preMaxBounds = win.getBounds()
+      win.maximize()
+    }
+    syncMaxState()
   })
   ipcMain.handle('window:close', () => mainWindow?.close())
-  ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+  ipcMain.handle('window:isMaximized', () => isWinMaximized(mainWindow))
 
   // OS 级全屏（禅模式 Z2+）：覆盖系统任务栏，比最大化更彻底的沉浸。
   // 进入前记录窗口状态，退出时还原（最大化态 → 重新最大化，普通态 → 还原 bounds）
@@ -417,6 +461,79 @@ function registerWindowHandlers(): void {
     return { applied: true, width: w }
   })
 
+  // UI 优化条目1.7：最大化后边缘拖拽 → 恢复窗口 + 对边固定 + 被拖边贴随鼠标（Edge 式 v2）。
+  // 无埋窗口在最大化态由 OS 接管，原生 resize 热区不响应——渲染层在四边/四角渲染透明热区，
+  // mousedown 经此 IPC 交主进程接管：unmaximize → 按恢复几何（preMaxBounds）锚定对边 →
+  // 轮询光标实时 setBounds（v2 贴鼠标）。edge='move' 为顶栏拖拽恢复模式（比例映射 + 跟随移动）。
+  let edgeDrag: { edge: string; anchor: Electron.Rectangle; p0: Electron.Point; timer: ReturnType<typeof setInterval> | null } | null = null
+  const MINW = 900, MINH = 600
+  const stopEdgeDrag = (): void => {
+    if (edgeDrag?.timer) clearInterval(edgeDrag.timer)
+    edgeDrag = null
+  }
+  /** 恢复几何基准：进最大化前的 bounds；无记录（异常路径）时按工作区 70% 居中兜底 */
+  const edgeRestoreRef = (cur: Electron.Rectangle): Electron.Rectangle => {
+    if (preMaxBounds) return preMaxBounds
+    const { workArea: wa } = screen.getDisplayMatching(cur)
+    return {
+      x: Math.round(wa.x + wa.width * 0.15), y: Math.round(wa.y + wa.height * 0.12),
+      width: Math.round(wa.width * 0.7), height: Math.round(wa.height * 0.7),
+    }
+  }
+  /** 按拖拽边与光标求矩形：对边固定自锚定基准，被拖边贴光标，min clamp 朝拖拽方向撑 */
+  const edgeRectFromCursor = (edge: string, ref: Electron.Rectangle, c: Electron.Point): Electron.Rectangle => {
+    const dragTop = edge === 'top' || edge.startsWith('top-')
+    const dragBottom = edge === 'bottom' || edge.startsWith('bottom-')
+    let x = ref.x, y = ref.y
+    let right = ref.x + ref.width, bottom = ref.y + ref.height
+    if (edge.includes('left')) x = c.x
+    if (edge.includes('right')) right = c.x
+    if (dragTop) y = c.y
+    if (dragBottom) bottom = c.y
+    if (right - x < MINW) { if (edge.includes('left')) x = right - MINW; else right = x + MINW }
+    if (bottom - y < MINH) { if (dragTop) y = bottom - MINH; else bottom = y + MINH }
+    return { x, y, width: right - x, height: bottom - y }
+  }
+  ipcMain.handle('window:edgeResizeStart', (_e, edge: string) => {
+    const win = mainWindow
+    if (!win || win.isDestroyed() || typeof edge !== 'string' || !/^(top|bottom|left|right|top-left|top-right|bottom-left|bottom-right|move)$/.test(edge)) {
+      return { ok: false }
+    }
+    stopEdgeDrag()
+    const cur = win.getBounds()
+    const p0 = screen.getCursorScreenPoint()
+    // 真最大化态先退出（透明无埋窗口的几何兜底型 isMaximized=false，直接由下方 setBounds 覆盖）
+    if (win.isMaximized()) win.unmaximize()
+    let anchor: Electron.Rectangle
+    if (edge === 'move') {
+      // 顶栏拖拽恢复：水平方向按光标在最大化宽度中的比例映射（Chrome 同款），垂直方向标题栏贴光标下 18px
+      const ref = edgeRestoreRef(cur)
+      const { workArea: wa } = screen.getDisplayMatching(cur)
+      const relX = cur.width > 0 ? (p0.x - cur.x) / cur.width : 0.5
+      const x = Math.max(wa.x - ref.width + 120, Math.min(Math.round(p0.x - ref.width * relX), wa.x + wa.width - 120))
+      const y = Math.max(wa.y, Math.min(Math.round(p0.y - 18), wa.y + wa.height - 40))
+      anchor = { x, y, width: ref.width, height: ref.height }
+    } else {
+      anchor = edgeRectFromCursor(edge, edgeRestoreRef(cur), p0)
+    }
+    win.setBounds(anchor)
+    edgeDrag = { edge, anchor, p0, timer: null }
+    // 跟随循环：光标轮询（DIP 一致）实时 setBounds；mouseup（渲染层）/ 窗口失焦兜底收尾
+    edgeDrag.timer = setInterval(() => {
+      const w = mainWindow
+      if (!w || w.isDestroyed()) { stopEdgeDrag(); return }
+      const c = screen.getCursorScreenPoint()
+      if (edgeDrag?.edge === 'move') {
+        const a = edgeDrag.anchor
+        w.setBounds({ x: a.x + (c.x - p0.x), y: a.y + (c.y - p0.y), width: a.width, height: a.height })
+      } else {
+        w.setBounds(edgeRectFromCursor(edge, edgeDrag!.anchor, c))
+      }
+    }, 16)
+    return { ok: true }
+  })
+  ipcMain.handle('window:edgeResizeEnd', () => { stopEdgeDrag(); return { ok: true } })
+
   // 窗口置顶（锁定）
   ipcMain.handle('window:setAlwaysOnTop', (_e, onTop: boolean) => {
     mainWindow?.setAlwaysOnTop(onTop)
@@ -425,8 +542,14 @@ function registerWindowHandlers(): void {
   ipcMain.handle('window:isAlwaysOnTop', () => mainWindow?.isAlwaysOnTop() ?? false)
   ipcMain.handle('window:reload', () => { mainWindow?.webContents.reload() })
 
-  mainWindow?.on('maximize', () => mainWindow?.webContents.send('window:maximizeChange', true))
-  mainWindow?.on('unmaximize', () => mainWindow?.webContents.send('window:maximizeChange', false))
+  mainWindow?.on('maximize', () => syncMaxState())
+  mainWindow?.on('unmaximize', () => syncMaxState())
+  mainWindow?.on('closed', stopEdgeDrag)
+  mainWindow?.on('blur', stopEdgeDrag) // 拖拽中失焦（Alt-Tab 等）兜底收尾，防跟随循环悬挂
+  // 几何兜底路径（透明无边框窗口不进最大化态）依赖 bounds 变化后重估，故 resize/move 也同步
+  mainWindow?.on('resize', () => syncMaxState())
+  mainWindow?.on('move', () => syncMaxState())
+  syncMaxState()
 
   // 缩放 — 仅缩放内容区（不缩放 chrome）
 

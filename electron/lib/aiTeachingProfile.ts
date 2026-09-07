@@ -2,16 +2,18 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
+import { rootDirName } from './aiTeachingFolders'
 import { ensureSessionFolder } from './aiTeachingFolders'
 import { getWorkspaceOfSession, workspaceFolderRel } from './aiTeachingWorkspaces'
 
 /**
- * AI教学模块 · 用户画像（总纲 docs/ai-teaching-module-rework.md §3.14，P8）
+ * AI教学模块 · 用户画像（总纲 docs/ai-teaching-module-rework.md §3.14，P8；UI 优化 §13.2 分层入口 / 第三轮「C 移入仓库」）
  *
- * 两层画像（3-32 拍板），完全复用「md 文件即真相源」哲学：
- * - 全局 PROFILE.md：userData/AI教学/PROFILE.md，跨工作区/跨仓库唯一（3-37 建议=按此设计）——身份/通用偏好/已知基础；
- * - 会话 PROFILE.md：会话文件夹内，与 CONSTRAINTS.md 平级——本主题水平/薄弱点/进度（叠加在全局之上）。
- * 注入规则（§3.14）：全局画像 + 会话画像 + CONSTRAINTS 三层进 system；画像=「我是谁/我会什么」，约束=「你要怎么做」。
+ * 三层画像，完全复用「md 文件即真相源」哲学——**三层全部是仓库内文件**，编辑=跳编辑区打开对应 md：
+ * - 全局 PROFILE.md：{仓库}/{aiTeachRootDir}/PROFILE.md（原 userData 位置已迁移入仓库，见 readGlobalProfile 迁移逻辑）；
+ * - 工作区 PROFILE.md：{仓库}/{aiTeachRootDir}/{工作区文件夹}/PROFILE.md；
+ * - 会话 PROFILE.md：{仓库}/{aiTeachRootDir}/{会话文件夹}/PROFILE.md。
+ * 注入规则：全局 + 工作区 + 会话三层进 system，冲突时以更细颗粒为准；画像=「我是谁/我会什么」，约束=「你要怎么做」。
  * 维护策略 Plan B（3-33）：AI 在回答里给 ```profile 围栏建议块 → 用户「接受」才写文件（渲染层做卡片）。
  */
 
@@ -56,8 +58,22 @@ export const GLOBAL_PROFILE_SKELETON = [
   '',
 ].join('\n')
 
-function globalProfilePath(): string {
-  return join(app.getPath('userData'), 'AI教学', PROFILE_FILE)
+function globalProfilePath(getSetting: (key: string) => unknown): string {
+  const vault = getCurrentVault()
+  if (!vault) return join(app.getPath('userData'), 'AI教学', PROFILE_FILE)
+  return join(vault.rootPath, rootDirName(getSetting), PROFILE_FILE)
+}
+
+/** 旧 userData 全局画像一次性迁移：仓库内不存在而 userData 存在 → 内容拷入（不删除旧文件） */
+function migrateLegacyGlobalProfile(vaultPath: string, getSetting: (key: string) => unknown): void {
+  try {
+    const legacy = join(app.getPath('userData'), 'AI教学', PROFILE_FILE)
+    const target = join(vaultPath, rootDirName(getSetting), PROFILE_FILE)
+    if (existsSync(legacy) && !existsSync(target)) {
+      mkdirSync(join(target, '..'), { recursive: true })
+      writeFileSync(target, readFileSync(legacy, 'utf-8'), 'utf-8')
+    }
+  } catch { /* 迁移失败不阻塞读取 */ }
 }
 
 /** UI 优化条目8.2.2：工作区画像第三层——{产物根}/{工作区文件夹}/PROFILE.md（课程目标/整体进度/跨会话薄弱点） */
@@ -78,24 +94,81 @@ export const WORKSPACE_PROFILE_SKELETON = [
 ].join('\n')
 
 export interface ProfileResult { ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }
+export interface ProfileEnsureResult { ok: boolean; relPath?: string; created?: boolean; error?: string }
 
-/** 全局画像读取（不存在=返回骨架草稿供编辑，不落盘；abs 路径回传展示） */
-export function readGlobalProfile(): ProfileResult {
+/** 全局画像读取（仓库内 {aiTeachRootDir}/PROFILE.md；不存在=返回空文本；首次触发 userData 旧文件迁移） */
+export function readGlobalProfile(getSetting: (key: string) => unknown): ProfileResult {
   try {
-    const p = globalProfilePath()
-    return { ok: true, text: existsSync(p) ? readFileSync(p, 'utf-8') : '', relPath: p, skeleton: GLOBAL_PROFILE_SKELETON }
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    migrateLegacyGlobalProfile(vault.rootPath, getSetting)
+    const p = globalProfilePath(getSetting)
+    return { ok: true, text: existsSync(p) ? readFileSync(p, 'utf-8') : '', relPath: `${rootDirName(getSetting)}/${PROFILE_FILE}`, skeleton: GLOBAL_PROFILE_SKELETON }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
 }
 
-/** 全局画像写入（userData，mkdir 幂等） */
-export function writeGlobalProfile(text: string): ProfileResult {
+/** 全局画像写入（仓库内，mkdir 幂等） */
+export function writeGlobalProfile(text: string, getSetting: (key: string) => unknown): ProfileResult {
   try {
-    const p = globalProfilePath()
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const p = globalProfilePath(getSetting)
     mkdirSync(join(p, '..'), { recursive: true })
-    writeFileSync(p, String(text ?? '').replace(/\r\n/g, '\n'), 'utf-8')
-    return { ok: true, text: String(text ?? ''), relPath: p }
+    const body = String(text ?? '').replace(/\r\n/g, '\n')
+    writeFileSync(p, body, 'utf-8')
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('aiTeach:tree-refresh', { dirRel: rootDirName(getSetting) })
+    }
+    return { ok: true, text: body, relPath: `${rootDirName(getSetting)}/${PROFILE_FILE}` }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 全局画像编辑前确保文件存在（不存在=落骨架）——UI 优化第三轮「编辑画像=跳编辑区」 */
+export function ensureGlobalProfile(getSetting: (key: string) => unknown): ProfileEnsureResult {
+  try {
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    migrateLegacyGlobalProfile(vault.rootPath, getSetting)
+    const rel = `${rootDirName(getSetting)}/${PROFILE_FILE}`
+    const p = globalProfilePath(getSetting)
+    if (!existsSync(p)) {
+      const r = writeGlobalProfile(GLOBAL_PROFILE_SKELETON, getSetting)
+      if (!r.ok) return { ok: false, error: r.error }
+      return { ok: true, relPath: rel, created: true }
+    }
+    return { ok: true, relPath: rel, created: false }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 工作区画像编辑前确保文件存在（懒建文件夹 + 骨架落盘） */
+export function ensureWorkspaceProfile(wsId: string, getSetting: (key: string) => unknown): ProfileEnsureResult {
+  try {
+    const cur = readWorkspaceProfile(wsId, getSetting)
+    if (!cur.ok) return { ok: false, error: cur.error }
+    if (existsSync(join(getCurrentVault()!.rootPath, cur.relPath ?? ''))) return { ok: true, relPath: cur.relPath!, created: false }
+    const r = writeWorkspaceProfile(wsId, WORKSPACE_PROFILE_SKELETON, getSetting)
+    if (!r.ok) return { ok: false, error: r.error }
+    return { ok: true, relPath: r.relPath!, created: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 会话画像编辑前确保文件存在（懒建会话文件夹 + 骨架落盘） */
+export function ensureSessionProfile(sessionId: string, getSetting: (key: string) => unknown): ProfileEnsureResult {
+  try {
+    const cur = readSessionProfile(sessionId, getSetting)
+    if (!cur.ok) return { ok: false, error: cur.error }
+    if (cur.relPath && existsSync(join(getCurrentVault()!.rootPath, cur.relPath))) return { ok: true, relPath: cur.relPath, created: false }
+    const r = writeSessionProfile(sessionId, SESSION_PROFILE_SKELETON, getSetting)
+    if (!r.ok) return { ok: false, error: r.error }
+    return { ok: true, relPath: r.relPath!, created: true }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
@@ -174,7 +247,7 @@ export function writeSessionProfile(sessionId: string, text: string, getSetting:
  */
 export function resolveProfilesForInjection(sessionId: string, getSetting: (key: string) => unknown): string {
   try {
-    const g = readGlobalProfile()
+    const g = readGlobalProfile(getSetting)
     const wsId = getWorkspaceOfSession(sessionId)
     const w = wsId ? readWorkspaceProfile(wsId, getSetting) : null
     const s = readSessionProfile(sessionId, getSetting)
@@ -196,10 +269,13 @@ export function resolveProfilesForInjection(sessionId: string, getSetting: (key:
 
 /** IPC 注册（main/index.ts） */
 export function registerAiTeachingProfileHandlers(getSetting: (key: string) => unknown): void {
-  ipcMain.handle('aiTeachProfile:readGlobal', () => readGlobalProfile())
-  ipcMain.handle('aiTeachProfile:writeGlobal', (_e, text: string) => writeGlobalProfile(String(text ?? '')))
+  ipcMain.handle('aiTeachProfile:readGlobal', () => readGlobalProfile(getSetting))
+  ipcMain.handle('aiTeachProfile:writeGlobal', (_e, text: string) => writeGlobalProfile(String(text ?? ''), getSetting))
   ipcMain.handle('aiTeachProfile:readSession', (_e, sessionId: string) => readSessionProfile(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeachProfile:writeSession', (_e, sessionId: string, text: string) => writeSessionProfile(String(sessionId ?? ''), String(text ?? ''), getSetting))
   ipcMain.handle('aiTeachProfile:readWorkspace', (_e, wsId: string) => readWorkspaceProfile(String(wsId ?? ''), getSetting))
   ipcMain.handle('aiTeachProfile:writeWorkspace', (_e, wsId: string, text: string) => writeWorkspaceProfile(String(wsId ?? ''), String(text ?? ''), getSetting))
+  ipcMain.handle('aiTeachProfile:ensureGlobal', () => ensureGlobalProfile(getSetting))
+  ipcMain.handle('aiTeachProfile:ensureSession', (_e, sessionId: string) => ensureSessionProfile(String(sessionId ?? ''), getSetting))
+  ipcMain.handle('aiTeachProfile:ensureWorkspace', (_e, wsId: string) => ensureWorkspaceProfile(String(wsId ?? ''), getSetting))
 }

@@ -120,8 +120,9 @@ ok('8.2.2 第三层落盘 {工作区文件夹}/PROFILE.md：read/write 双通道
   PF.includes('export function readWorkspaceProfile') && PF.includes('export function writeWorkspaceProfile') &&
   PF.includes('workspaceFolderRel(wsId, getSetting)') && PF.includes('getWorkspaceOfSession(sessionId)') &&
   PF.includes('if (!gt && !wt && !st)') && TY.includes('aiTeachProfileReadWorkspace') && IPC.includes('aiTeachProfileWriteWorkspace'))
-ok('8.2.2 弹层三层切换 + 建议卡片三层落点（工作区按钮仅在有工作区时出现）',
-  MOD.includes("['global', '全局'], ['workspace', '工作区'], ['session', '本主题']") &&
+ok('8.2.2 画像编辑改跳编辑区 + 建议卡片三层落点（第三轮拍板：弹层/textarea 移除，openProfile=ensure→编辑器）',
+  !MOD.includes("['global', '全局'], ['workspace', '工作区'], ['session', '本主题']") &&
+  !MOD.includes('profileModal') && MOD.includes('aiTeachProfileEnsureGlobal') &&
   MOD.includes("acceptProfileSuggestion('workspace')") && MOD.includes('{wsActive && ('))
 
 // ---------- 条目9：用量指示迁输入区 + 上下文圆环 ----------
@@ -149,6 +150,16 @@ rep('条目10.3 用户帮助文档')
 ok('帮助文档收录「AI 教学 · 素材与代码」（三种登记方式 / 行号区间 / 大文件建议 / 代码闭环）',
   fs.existsSync(path.join(ROOT, 'src/modules/help/docs/AI 教学素材与代码.md')) &&
   rd('src/modules/help/docs/AI 教学素材与代码.md').includes('大文件请标行号区间'))
+
+// ---------- R26 真机验证补口 ----------
+rep('真机验证补口')
+ok('条目1 补口：透明无边框窗口 maximize() 后 OS 不置 isMaximized / 不发 maximize 事件 → 主进程按几何判定覆盖工作区并广播 window:maximizeChange',
+  (() => { const M = rd('electron/main/index.ts'); return M.includes('function coversWorkArea') && M.includes('function isWinMaximized') && M.includes("webContents.send('window:maximizeChange'") && M.includes("mainWindow?.on('resize', () => syncMaxState())") })())
+ok('条目8 补口：Esc 在非禅模式下也优先关闭本模块浮层（提问卡/素材表单/工作区弹层/会话要求/明细/菜单），不再只在 zenActive 时生效',
+  MOD.includes('if (!isActive) return') && MOD.includes('if (askVisible && askPending) { setAskDismissed(askPending.id); return }') &&
+  MOD.includes('if (srcForm) { setSrcForm(null); return }') && MOD.includes('if (!zenActive) return'))
+ok('条目10 补口：手编 SOURCE.md 的「行号区间 / 区间」＝「页码区间」别名（写盘仍统一页码区间）',
+  (() => { const S = rd('electron/lib/aiTeachingSources.ts'); return S.includes('页码区间|行号区间|区间') && S.includes("m[1] === '行号区间' || m[1] === '区间'") })())
 
 console.log(`\n结果: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

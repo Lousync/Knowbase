@@ -38,6 +38,9 @@ export const isMaximized = () => a().isMaximized()
 /** 抽屉式日程面板：上报面板期望宽度（0 = 收回），主进程以打开时刻基准宽为锚点调整窗口 */
 export const resizeForSidebar = (width: number, animate?: boolean) => a().resizeForSidebar(width, animate)
 export const onMaximizeChange = (cb: (v: boolean) => void) => a().onMaximizeChange(cb)
+/** UI 优化条目1.7：最大化边缘拖拽恢复（热区 mousedown 启动 / mouseup 收尾） */
+export const edgeResizeStart = (edge: string) => a().edgeResizeStart(edge)
+export const edgeResizeEnd = () => a().edgeResizeEnd()
 export const openDirDialog = () => a().openDirDialog()
 
 // ===== Data =====
@@ -524,6 +527,9 @@ export const aiTeachProfileReadSession = (id: string) => a().aiTeachProfileReadS
 export const aiTeachProfileWriteSession = (id: string, text: string) => a().aiTeachProfileWriteSession(id, text)
 export const aiTeachProfileReadWorkspace = (id: string) => a().aiTeachProfileReadWorkspace(id)
 export const aiTeachProfileWriteWorkspace = (id: string, text: string) => a().aiTeachProfileWriteWorkspace(id, text)
+export const aiTeachProfileEnsureGlobal = () => a().aiTeachProfileEnsureGlobal()
+export const aiTeachProfileEnsureSession = (id: string) => a().aiTeachProfileEnsureSession(id)
+export const aiTeachProfileEnsureWorkspace = (id: string) => a().aiTeachProfileEnsureWorkspace(id)
 /** P3b：模型是否支持思考强度（主进程单一真相源正则） */
 export const llmReasoningCapable = (model: string): Promise<boolean> => a().llmReasoningCapable(model)
 export const onAiTeachTreeRefresh = (cb: (p: { dirRel: string }) => void) => a().onAiTeachTreeRefresh(cb)

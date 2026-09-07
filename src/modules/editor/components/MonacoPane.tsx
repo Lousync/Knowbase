@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useRef } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, Component, type ReactNode } from 'react'
 import { forwardRef } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
@@ -57,6 +57,33 @@ async function getPagesCached(): Promise<KnowledgePage[]> {
     return pages
   } catch {
     return pageCache?.pages ?? []
+  }
+}
+
+/** 编辑器面板级错误边界（UI 优化 §15）：Monaco 渲染循环崩溃（如切 Tab 时序竞态的 domNode undefined）
+ *  只塌本面板并就地重挂载恢复，不再冒泡到根（根边界是最后防线）。children 变化自动清除错误态 */
+class PaneErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null; key: number }> {
+  state: { err: Error | null; key: number } = { err: null, key: 0 }
+  static getDerivedStateFromError(err: Error): { err: Error | null } {
+    return { err }
+  }
+  componentDidUpdate(prev: { children: ReactNode }): void {
+    // 换文档/换仓库（children 元素变化）时自动清错重试一次
+    if (this.props.children !== prev.children && this.state.err) this.setState({ err: null })
+  }
+  render(): ReactNode {
+    if (this.state.err) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-2 text-[13px] text-[var(--text-muted)]">
+          <span>编辑器渲染出错（内容不会丢失，磁盘即真相源）</span>
+          <button
+            onClick={() => this.setState(s => ({ err: null, key: s.key + 1 }))}
+            className="rounded-md border border-[var(--border-color)] px-3 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+          >重新加载编辑器</button>
+        </div>
+      )
+    }
+    return <div key={this.state.key} className="h-full min-h-0">{this.props.children}</div>
   }
 }
 
@@ -339,26 +366,28 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
     }, [layoutKey])
 
     return (
-      <Editor
-        path={doc.relPath}
-        language={doc.language}
-        value={doc.content}
-        theme="knowbase-auto"
-        beforeMount={bindEditorTheme}
-        onMount={onMount}
-        onChange={(v) => onChange(doc.relPath, v ?? '')}
-        options={{
-          minimap: { enabled: false },
-          fontSize: 13,
-          wordWrap: 'on',
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          tabSize: 2,
-          renderLineHighlight: 'line',
-          scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-          padding: { top: 8 },
-        }}
-      />
+      <PaneErrorBoundary>
+        <Editor
+          path={doc.relPath}
+          language={doc.language}
+          value={doc.content}
+          theme="knowbase-auto"
+          beforeMount={bindEditorTheme}
+          onMount={onMount}
+          onChange={(v) => onChange(doc.relPath, v ?? '')}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 13,
+            wordWrap: 'on',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            tabSize: 2,
+            renderLineHighlight: 'line',
+            scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+            padding: { top: 8 },
+          }}
+        />
+      </PaneErrorBoundary>
     )
   },
 )
