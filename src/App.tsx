@@ -618,15 +618,18 @@ export default function App() {
             <div className={`transition-all duration-300 ease-out ${zenLevel >= 2 || winMax ? 'flex min-w-0 flex-1' : 'm-1.5 flex min-w-0 flex-1'}`}>
               <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-out ${zenLevel >= 2 || winMax ? 'bg-[color-mix(in_srgb,var(--bg-primary)_92%,transparent)]' : 'rounded-xl border border-[var(--border-color)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-[inset_0_1px_0_var(--glass-edge),0_6px_24px_rgba(0,0,0,0.16)]'}`}>
               {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同。
-                  Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1）；禅模式 Z1+ 收起侧栏槽 */}
+                  Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1）；禅模式 Z1+ 收起侧栏槽。
+                  槽仅在编辑器组激活时渲染（卸载而非收起）——2026-09-08 用户实锤：切到 blog/knowledge
+                  等内嵌侧栏模块时，本槽 6px 折叠把手常驻与其侧栏把手构成双手柄（学 sidebarHosted
+                  的「不渲染代替收起」思路）。卸载→ref 置 null→editor sidebarHosted 不渲染树（保活不可见，无碍） */}
               <div className="flex min-h-0 flex-1">
-                {workbench && (
+                {workbench && (activeTab === 'editor' || secondaryTab === 'editor') && (
                   <ResizablePanel
                     storageKey="wb.sidebarWidth"
                     defaultWidth={220}
                     minWidth={180}
                     maxWidth={420}
-                    visible={sidebarOpen && zenLevel < 1 && (activeTab === 'editor' || secondaryTab === 'editor')}
+                    visible={sidebarOpen && zenLevel < 1}
                     initialWidth={sidebarWidths?.['wb.sidebarWidth']}
                     collapsedWidth={6}
                     onSnapClose={() => setSidebarOpen(false)}
