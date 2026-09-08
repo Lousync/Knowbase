@@ -1214,7 +1214,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             <span>画像</span>
             {profileSuggestion && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" title="AI 有画像更新建议待确认" />}
           </button>
-          {/* 会话要求（UI 优化条目8.1 方案 A：中型编辑弹层，规格对齐画像弹层；Ctrl+Enter 保存；阅读视图次级入口） */}
+          {/* 会话要求（UI 优化条目8.1 方案 A：中型编辑弹层，规格对齐画像弹层；Ctrl+Enter 保存；阅读视图次级入口）。
+              约束随会话存放（CONSTRAINTS.md 在会话夹内）——工作区没有任何会话时整个入口不渲染
+              （2026-09-08 用户拍板：删除全部会话后也不出现，不只首次进入） */}
+          {wsSessions.length > 0 && (
           <div className="relative shrink-0">
             <button
               onClick={() => { setInstrDraft(activeInstr); setInstrOpen(v => !v); if (activeId) void aiTeachReadConstraints(activeId).then(r => { const t = r?.ok && r.relPath ? (r.text ?? '').trim() : ''; setActiveInstr(t); setInstrDraft(t); if (r?.relPath) setInstrRel(r.relPath) }).catch(() => null) }}
@@ -1225,7 +1228,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               {activeInstr && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
             </button>
           </div>
-          {instrOpen && (
+          )}
+          {instrOpen && wsSessions.length > 0 && (
             <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setInstrOpen(false)}>
               <div className="w-[560px] max-w-[94vw] max-h-[86vh] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-xl" onClick={e => e.stopPropagation()}>
                 <div className="shrink-0 px-4 pt-3.5 pb-2">
