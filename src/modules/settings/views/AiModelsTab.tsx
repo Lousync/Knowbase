@@ -185,6 +185,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
   onSetDefault: () => Promise<void>
 }) {
   const [confirming, setConfirming] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<LlmTestResultInfo | null>(null)
   const [manualModel, setManualModel] = useState('')
@@ -224,6 +225,10 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
           className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-40">
           {testing && <Loader2 size={11} className="animate-spin" />} 测试
         </button>
+        <button onClick={() => setEditing(v => !v)} title="编辑服务商（名称/地址/自定义请求头；Key 留空保留）"
+          className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${editing ? 'border-[var(--accent)]/50 text-[var(--accent)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+          编辑
+        </button>
         <button onClick={() => { void onSetDefault() }} title="设为默认"
           className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${p.isDefault ? 'border-yellow-500/50 text-yellow-400' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
           <Star size={11} /> 设默认
@@ -236,6 +241,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
           <Trash2 size={11} />
         </button>
       </div>
+      {editing && <ProviderForm initial={p} onDone={async () => { setEditing(false); await onChanged() }} />}
       {testResult && (
         <p className={`text-[11px] mt-1.5 ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
           {testResult.ok ? `✓ 连接成功（${testResult.latencyMs}ms，${testResult.models?.length ?? 0} 个模型）` : `✗ ${testResult.error}`}
@@ -245,12 +251,12 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
   )
 }
 
-function ProviderForm({ onDone }: { onDone: () => Promise<void> }) {
-  const [name, setName] = useState('')
-  const [type, setType] = useState<LlmProviderType>('openai-compatible')
-  const [baseUrl, setBaseUrl] = useState('')
+function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initial?: LlmProviderInfo }) {
+  const [name, setName] = useState(initial?.name ?? '')
+  const [type, setType] = useState<LlmProviderType>(initial?.type ?? 'openai-compatible')
+  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? '')
   const [apiKey, setApiKey] = useState('')
-  const [headersText, setHeadersText] = useState('')
+  const [headersText, setHeadersText] = useState(initial?.headers && Object.keys(initial.headers).length ? JSON.stringify(initial.headers, null, 2) : '')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<LlmTestResultInfo | null>(null)
@@ -298,7 +304,7 @@ function ProviderForm({ onDone }: { onDone: () => Promise<void> }) {
             } catch { showToast({ type: 'error', message: '自定义请求头不是合法的 JSON 对象（{"头名":"值"}）' }); return }
           }
           setSaving(true)
-          try { const r = await llmSaveProvider({ name, type, baseUrl, apiKey: apiKey || undefined, headers }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
+          try { const r = await llmSaveProvider({ id: initial?.id, name, type, baseUrl, apiKey: apiKey || undefined, headers }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
         }}
           className="px-3 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
           保存

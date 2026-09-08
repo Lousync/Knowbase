@@ -584,6 +584,7 @@ export interface LlmProviderInfo {
   enabled: boolean
   hasKey: boolean
   models: string[]
+  headers?: Record<string, string>
   isDefault: boolean
 }
 
