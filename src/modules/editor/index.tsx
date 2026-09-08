@@ -30,6 +30,10 @@ interface Props {
   isActive?: boolean
   /** Workbench 外壳（R1-W1）：全局侧栏容器节点。传入时文件树 portal 到该节点、内嵌列收起；null/缺省 = 模块内嵌布局 */
   sidebarEl?: HTMLElement | null
+  /** Workbench 外壳托管侧栏（App 传 workbench）：文件树只渲染到 sidebarEl，槽未就绪（折叠中/可见性翻转瞬间）
+   *  时渲染 null 等槽回来——绝不回落内嵌 ResizablePanel。否则收起态 App 槽 6px 把手 + 内嵌 4px 把手同屏（双手柄），
+   *  展开瞬间还会先闪内嵌面板再切 portal（2026-09-08 验收实锤） */
+  sidebarHosted?: boolean
   /** Markdown 标记淡化（设置 markdownDim 透传；默认开） */
   markdownDim?: boolean
   /** 知识库「在编辑器中打开」跳转：待打开的仓库相对路径（App state 传入，实例重建不丢，ISS-2026-09-04-07） */
@@ -62,7 +66,7 @@ interface InputBoxState {
   onSubmit: (value: string) => void
 }
 
-export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange, openFrom = null, onBackFrom, sidebarOpen, sidebarWidths, onSnapCloseSidebar, onSnapOpenSidebar }: Props) {
+export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted = false, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange, openFrom = null, onBackFrom, sidebarOpen, sidebarWidths, onSnapCloseSidebar, onSnapOpenSidebar }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
@@ -920,6 +924,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
           if (sidebarEl) {
             // Workbench 外壳：文件树 portal 到全局侧栏槽（App 侧栏槽自带标题区），此处不再内嵌树列
             return createPortal(<div className="flex h-full w-full flex-col overflow-hidden">{treeColumn}</div>, sidebarEl)
+          }
+          if (sidebarHosted) {
+            // Workbench 托管但槽未就绪（visible=false 时 ResizablePanel 不渲染 children → ref 置 null）：
+            // 渲染 null 等槽重新挂载后 portal，绝不回落内嵌列——内嵌列与 App 槽折叠把手同屏 = 双手柄
+            return null
           }
           // 内嵌侧栏：ResizablePanel 拖拽调宽 + Ctrl+B 开合 + 贴边收放（与 blog/schedule/knowledge 同款；
           // sidebarOpen 未传时恒开，兼容 Workbench 等旧调用方）
