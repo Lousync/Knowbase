@@ -2052,6 +2052,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           </div>
           </div>
         </ResizablePanel>
+        {/* 右缘透明拉出条（2026-09-08 用户拍板：收起后面板彻底消失，但右缘保留透明拉出条——
+            默认透明，悬停显示蓝色高亮竖条，点击展开素材库；顶栏「素材库」按钮为等效入口） */}
+        {!rightOpen && (
+          <div
+            onClick={() => toggleSide('right')}
+            title="点击展开素材库"
+            className="shrink-0 w-2 group relative cursor-col-resize"
+          >
+            <div className="absolute top-0 bottom-0 right-0 w-1 bg-[var(--accent)]/0 group-hover:bg-[var(--accent)]/60 transition-colors duration-150" />
+          </div>
+        )}
       </div>
       </>
       ) : (
