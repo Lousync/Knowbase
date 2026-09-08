@@ -1069,7 +1069,7 @@ export interface ElectronAPI {
   workspaceOpenDir: () => Promise<VaultOpenResult | null>
   workspaceInitPendingVault: (accept: boolean) => Promise<{ ok: boolean; rootId?: string; name?: string; path?: string; error?: string }>
   workspaceCreateVault: (name: string, parentPath?: string) => Promise<({ rootId: string; name: string; path: string } & { error?: string }) | null>
-  workspaceListDir: (rootId: string, relPath?: string) => Promise<{ entries?: WorkspaceEntry[]; error?: string }>
+  workspaceListDir: (rootId: string, relPath?: string) => Promise<{ entries?: WorkspaceEntry[]; softNames?: string[]; error?: string }>
   workspaceReadFile: (rootId: string, relPath: string) => Promise<WorkspaceReadResult & { error?: string }>
   workspaceReadImage: (rootId: string, relPath: string) => Promise<{ dataUrl?: string; error?: string }>
   workspacePickImages: (rootId: string) => Promise<{ ok: boolean; images?: VaultStagedImage[]; error?: string }>

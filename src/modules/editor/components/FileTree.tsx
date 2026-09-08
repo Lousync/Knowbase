@@ -20,6 +20,9 @@ interface Props {
   hiddenRelPaths?: Set<string>
   /** 草稿页 path 集合：树内命中 .md 文件名旁显示「草稿」徽标（辨识写作中/待归档） */
   draftRelPaths?: Set<string>
+  /** 软件生成项名单（根层 .ignore / AI教学 产物根等，ws:listDir 附带）：
+   *  命中条目从主列表移到底部「软件文件」折叠节（VS Code 时间线式，默认收起） */
+  softNames?: string[]
 }
 
 const DRAG_MIME = 'text/x-kb-rel'
@@ -45,8 +48,18 @@ function FileIcon({ name }: { name: string }) {
  * 拖拽：条目均可拖（mime: text/x-kb-rel）；目录与根容器是落点，
  * drop 时把源相对路径移动到目标目录下（主进程 ws:rename 跨目录移动）。
  */
-export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths, draftRelPaths }: Props) {
+export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths, draftRelPaths, softNames }: Props) {
   const [dragOver, setDragOver] = useState<string | null>(null)
+  // 「软件文件」折叠节开合（默认收起，localStorage 记忆——VS Code 时间线式）
+  const [softOpen, setSoftOpen] = useState(() => {
+    try { return localStorage.getItem('kb.treeSoftOpen') === '1' } catch { return false }
+  })
+  const toggleSoftOpen = () => {
+    setSoftOpen((v) => {
+      try { localStorage.setItem('kb.treeSoftOpen', v ? '0' : '1') } catch { /* 隐私模式静默 */ }
+      return !v
+    })
+  }
 
   const startDrag = (e: React.DragEvent, relPath: string) => {
     e.dataTransfer.setData(DRAG_MIME, relPath)
@@ -60,6 +73,26 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
     const src = e.dataTransfer.getData(DRAG_MIME)
     if (src && src !== dirRel) onMove(src, dirRel)
   }
+
+  const renderFileRow = (e: TreeNode, depth: number): React.ReactNode => (
+    <div
+      key={e.relPath}
+      draggable
+      onDragStart={(ev) => startDrag(ev, e.relPath)}
+      className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${activePath === e.relPath ? 'bg-[var(--bg-selected)]/40' : ''}`}
+      style={{ paddingLeft: 6 + depth * 12 }}
+      onClick={() => onOpenFile(e)}
+      onContextMenu={(ev) => onContextMenu(ev, e)}
+      title={e.relPath}
+    >
+      <span className="w-[12px] shrink-0" />
+      <FileIcon name={e.name} />
+      <span className={`truncate text-[12.5px] ${activePath === e.relPath ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{e.name}</span>
+      {draftRelPaths?.has(e.relPath) && (
+        <span className="ml-auto shrink-0 rounded bg-[var(--warning)]/15 px-1 text-[9px] leading-[14px] text-[var(--warning)]" title="草稿（修改中）— 右键可归档为知识页">草稿</span>
+      )}
+    </div>
+  )
 
   const renderDir = (relPath: string, depth: number): React.ReactNode => {
     const entries = dirCache[relPath] ?? []
@@ -93,31 +126,40 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             <span className="truncate text-[12.5px] text-[var(--text-primary)]">{dirNode.name}</span>
           </div>
         )}
-        {isOpen && entries.map((e) => {
-          // 双态模型：已归档知识页在编辑器中隐藏（目录骨架/草稿/代码文件保留）
-          if (e.type === 'file' && hiddenRelPaths?.has(e.relPath)) return null
-          return e.type === 'dir'
-            ? renderDir(e.relPath, depth + 1)
-            : (
-              <div
-                key={e.relPath}
-                draggable
-                onDragStart={(ev) => startDrag(ev, e.relPath)}
-                className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${activePath === e.relPath ? 'bg-[var(--bg-selected)]/40' : ''}`}
-                style={{ paddingLeft: 6 + (depth + 1) * 12 }}
-                onClick={() => onOpenFile(e)}
-                onContextMenu={(ev) => onContextMenu(ev, e)}
-                title={e.relPath}
-              >
-                <span className="w-[12px] shrink-0" />
-                <FileIcon name={e.name} />
-                <span className={`truncate text-[12.5px] ${activePath === e.relPath ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{e.name}</span>
-                {draftRelPaths?.has(e.relPath) && (
-                  <span className="ml-auto shrink-0 rounded bg-[var(--warning)]/15 px-1 text-[9px] leading-[14px] text-[var(--warning)]" title="草稿（修改中）— 右键可归档为知识页">草稿</span>
-                )}
-              </div>
-            )
-        })}
+        {isOpen && (() => {
+          // 软件生成项分组（仅根层）：命中名单的条目移到底部「软件文件」折叠节（VS Code 时间线式）
+          const softSet = depth === 0 && softNames?.length ? new Set(softNames) : null
+          const main = softSet ? entries.filter((e) => !softSet.has(e.name)) : entries
+          const softItems = softSet ? entries.filter((e) => softSet.has(e.name)) : []
+          return (
+            <>
+              {main.map((e) => {
+                // 双态模型：已归档知识页在编辑器中隐藏（目录骨架/草稿/代码文件保留）
+                if (e.type === 'file' && hiddenRelPaths?.has(e.relPath)) return null
+                return e.type === 'dir'
+                  ? renderDir(e.relPath, depth + 1)
+                  : renderFileRow(e, depth + 1)
+              })}
+              {softItems.length > 0 && (
+                <div className="mt-1 border-t border-[var(--border-color)] pt-1">
+                  <div
+                    onClick={toggleSoftOpen}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)]"
+                    style={{ paddingLeft: 6 }}
+                    title="软件生成的目录与文件（AI教学 产物、.ignore 过滤规则等）"
+                  >
+                    {softOpen ? <ChevronDown size={12} className="shrink-0 text-[var(--text-muted)]" /> : <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />}
+                    <span className="truncate text-[12px] text-[var(--text-muted)]">软件文件</span>
+                    <span className="ml-auto shrink-0 pr-1 text-[10px] text-[var(--text-muted)]">{softItems.length}</span>
+                  </div>
+                  {softOpen && softItems.map((e) =>
+                    e.type === 'dir' ? renderDir(e.relPath, 1) : renderFileRow(e, 1)
+                  )}
+                </div>
+              )}
+            </>
+          )
+        })()}
         {/* VS Code 式内联创建行：目标目录已展开时显示在条目末尾 */}
         {isOpen && creating && creating.dirRel === relPath && (
           <InlineCreateRow

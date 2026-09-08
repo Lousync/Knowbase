@@ -103,9 +103,10 @@ export interface WorkspaceEntry {
   mtime: number
 }
 
-/** 枚举目录：跳过符号链接与隐藏目录。排序三档：普通目录 → 普通文件 → 软件生成项沉底；
- *  sinkNames 传软件生成项名单（小写），仅在仓库根层由 ws:listDir 传入（子目录同名内容不受影响） */
-export function listDirEntries(absPath: string, sinkNames?: Set<string>): WorkspaceEntry[] {
+/** 枚举目录：跳过符号链接与隐藏目录，文件夹优先 + 中文友好字典序。
+ *  软件生成项（.ignore / AI教学 产物根等）不在此隐藏/排序——由 ws:listDir 附 softNames，
+ *  渲染层在文件树底部以「软件文件」折叠节分组呈现（2026-09-08 用户拍板，VS Code 时间线式） */
+export function listDirEntries(absPath: string): WorkspaceEntry[] {
   const out: WorkspaceEntry[] = []
   let names: string[] = []
   try {
@@ -128,14 +129,8 @@ export function listDirEntries(absPath: string, sinkNames?: Set<string>): Worksp
       /* skip 瞬时不可读条目 */
     }
   }
-  const groupOf = (e: WorkspaceEntry): number => {
-    if (sinkNames?.has(e.name.toLowerCase())) return 2
-    return e.type === 'dir' ? 0 : 1
-  }
   out.sort((a, b) => {
-    const ga = groupOf(a)
-    const gb = groupOf(b)
-    if (ga !== gb) return ga - gb
+    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
     return a.name.localeCompare(b.name, 'zh-Hans-CN')
   })
   return out
@@ -647,13 +642,17 @@ export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown)
   ipcMain.handle('ws:listDir', (_e, rootId: string, relPath: string) => {
     try {
       const abs = requireInside(rootId, relPath ?? '')
-      // 软件生成项沉底（2026-09-08）：仅仓库根层生效——AI教学 产物根（按设置动态）+ SOFT_ENTRY_NAMES 固定项。
-      // 新增软件生成的文件/目录 → 登记 SOFT_ENTRY_NAMES 即自动沉底
+      const entries = listDirEntries(abs)
+      // 软件生成项名单（2026-09-08）：仅仓库根层返回——SOFT_ENTRY_NAMES 固定项（.ignore 等，
+      // 新增软件生成文件登记此集合）+ AI教学 产物根（aiTeachRootDir 设置动态）。渲染层据
+      // softNames 在文件树底部渲染「软件文件」折叠节（默认收起）；子目录不受影响
       const atRoot = !relPath || relPath === '' || relPath === '.' || relPath === './'
-      const sinkNames = atRoot
-        ? new Set<string>([...SOFT_ENTRY_NAMES, ...(getSetting ? [rootDirName(getSetting).toLowerCase()] : [])])
-        : undefined
-      return { entries: listDirEntries(abs, sinkNames) }
+      let softNames: string[] | undefined
+      if (atRoot) {
+        const sink = new Set<string>([...SOFT_ENTRY_NAMES, ...(getSetting ? [rootDirName(getSetting).toLowerCase()] : [])])
+        softNames = entries.filter((e) => sink.has(e.name.toLowerCase())).map((e) => e.name)
+      }
+      return { entries, softNames }
     } catch (e) {
       return { error: (e as Error).message }
     }

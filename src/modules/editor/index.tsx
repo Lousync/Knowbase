@@ -70,6 +70,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
   const [rootId, setRootId] = useState<string | null>(null)
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
+  /** 软件生成项名单（根层 .ignore / AI教学 产物根等，ws:listDir 附带）：文件树底部「软件文件」折叠节 */
+  const [softNames, setSoftNames] = useState<string[]>([])
   /** R5：分栏预览开关（左侧 Monaco 编辑 / 右侧 MarkdownPreview 实时渲染），localStorage 记忆 */
   const [previewOpen, setPreviewOpen] = useState<boolean>(() => {
     try { return localStorage.getItem('kb.editor.previewOpen') === '1' } catch { return false }
@@ -156,6 +158,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     if (res.error) { showToast({ type: 'error', message: res.error }); return }
     const nodes: TreeNode[] = (res.entries ?? []).map((e) => ({ ...e, relPath: joinRel(dirRel, e.name) }))
     setDirCache((prev) => ({ ...prev, [dirRel]: nodes }))
+    // 软件生成项名单（仅根层返回）：FileTree 据此把 .ignore/AI教学 等归入底部「软件文件」折叠节
+    if (dirRel === '') setSoftNames(res.softNames ?? [])
   }, [])
 
   const enterWorkspace = useCallback(async (rid: string, _name?: string) => {
@@ -167,6 +171,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     rootIdRef.current = rid
     setRootId(rid)
     setDirCache({})
+    setSoftNames([])
     setExpanded(new Set())
     setOpenFiles({})
     setActivePath(null)
@@ -899,6 +904,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
               </div>
               <FileTree
                 dirCache={dirCache}
+                softNames={softNames}
                 expanded={expanded}
                 activePath={activePath}
                 onToggleDir={(p) => void toggleDir(p)}
