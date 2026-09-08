@@ -13,6 +13,9 @@ import type * as Monaco from 'monaco-editor'
 
 let monacoRef: typeof Monaco | null = null
 let observerInstalled = false
+/** 上次合成主题签名：颜色与变体都没变就不 define/setTheme——setTheme 是全局广播，
+ *  html class 的无关变化（非主题类）反复广播会放大 monaco dispose 竞态的残留错误（V-7） */
+let lastThemeSig = ''
 
 /** css 颜色 → Monaco 接受的 #rrggbb / #rrggbbaa；无法解析返回 null */
 function toHex(raw: string): string | null {
@@ -81,6 +84,11 @@ export function applyEditorTheme(): void {
   // 纸感氛围色跟随「实际主题明暗」（按 --bg-primary 亮度判定，任意主题 id 均正确，
   // 不依赖 theme-light 类名）。容器 .zen-paper-bg 消费该变量，CSS 过渡出入场
   document.documentElement.style.setProperty('--zen-paper', light ? '#f6f1e7' : '#211d18')
+
+  // 幂等闸：签名（颜色+变体）未变则跳过 define/setTheme，避免无关 class 变化触发全局广播
+  const sig = JSON.stringify({ light, colors, themeVariant })
+  if (sig === lastThemeSig) return
+  lastThemeSig = sig
 
   monacoRef.editor.defineTheme('knowbase-auto', {
     base: light ? 'vs' : 'vs-dark',
