@@ -1892,14 +1892,16 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   <button onClick={() => { void openDocView(srcFileRel) }} title="中栏阅读 SOURCE.md"
                     className="px-1 py-0.5 rounded-md hover:bg-[var(--bg-hover)] transition-colors">SOURCE</button>
                 )}
-                <button onClick={() => {
-                    if (!activeId) { showToast({ type: 'warning', message: '先选择或新建一个对话（素材随对话登记）' }); return } // 条目5.2.1：置灰静默 → 可点引导 toast
+                {/* 素材随对话登记：未选/未建会话时不渲染添加入口（点了也只会被引导，徒增噪音——2026-09-08 用户拍板） */}
+                {activeId && (
+                  <button onClick={() => {
                     setSrcForm({ name: '', type: 'pdf', path: '', storage: '已入库', rangeFrom: '', rangeTo: '', note: '' })
                   }}
-                  title="添加素材（写入 SOURCE.md）"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                  <Plus size={11} /> 素材
-                </button>
+                    title="添加素材（写入 SOURCE.md）"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                    <Plus size={11} /> 素材
+                  </button>
+                )}
               </div>
             </div>
             {/* 条目5.3：手编 / AI 直写 SOURCE.md 的形状异常提示（不静默丢失，指回文件改正） */}
