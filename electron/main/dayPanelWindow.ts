@@ -438,7 +438,7 @@ export function initDayPanel(opts: {
     globalShortcut.register('Control+Alt+Up', () => { setPanelMode('top-dock') })
     globalShortcut.register('Control+Alt+Down', () => { setPanelMode('desktop-widget') })
   } catch (e) {
-    console.warn('[DayPanel] 全局快捷键注册失败:', e)
+    console.warn('[DayPanel] Global shortcut registration failed:', e)
   }
 }
 

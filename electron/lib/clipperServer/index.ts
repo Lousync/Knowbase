@@ -45,12 +45,12 @@ export function startClipperServer(): void {
       serverRef = server
       boundPort = port
       startError = ''
-      if (port !== CLIPPER_DEFAULT_PORT) console.log(`[clipper] 默认端口被占，漂移到 ${port}`)
-      console.log(`[clipper] 剪藏服务监听 http://127.0.0.1:${port}`)
+      if (port !== CLIPPER_DEFAULT_PORT) console.log(`[clipper] Default port busy, drifted to ${port}`)
+      console.log(`[clipper] Clipper service listening on http://127.0.0.1:${port}`)
     })
     .catch((err: Error) => {
       startError = err.message
-      console.error('[clipper] 启动失败:', err.message)
+      console.error('[clipper] Failed to start:', err.message)
       try { server.close() } catch { /* 半开状态兜底 */ }
     })
 }

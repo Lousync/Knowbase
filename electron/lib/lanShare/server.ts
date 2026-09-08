@@ -122,7 +122,7 @@ export function createLanShareServer(opts: LanShareServerOptions): ReturnType<ty
           } catch (e) {
             if (e instanceof HttpError) deny(res, e.status, e.message)
             else {
-              console.error('[lanShare] 上传解析失败', e)
+              console.error('[lanShare] Upload parse failed', e)
               deny(res, 500, '上传处理失败')
             }
           }
@@ -153,7 +153,7 @@ export function createLanShareServer(opts: LanShareServerOptions): ReturnType<ty
 
       deny(res, 404, '接口不存在')
     } catch (e) {
-      console.error('[lanShare] 请求处理异常', e)
+      console.error('[lanShare] Request handling error', e)
       deny(res, 500, '内部错误')
     }
   })

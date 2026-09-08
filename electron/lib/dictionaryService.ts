@@ -37,7 +37,7 @@ function ensureLoaded(): DictData {
   try {
     data = JSON.parse(readFileSync(dictPath(), 'utf-8')) as DictData
   } catch (err) {
-    console.error('[dict] 词典数据加载失败:', dictPath(), err)
+    console.error('[dict] Failed to load dictionary:', dictPath(), err)
     data = { v: 1, words: {}, lemma: {} }
   }
   return data

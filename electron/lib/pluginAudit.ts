@@ -51,7 +51,7 @@ export function appendAudit(pluginId: string, action: string, detail: Record<str
     globalWriteJson(AUDIT_FILE, rows)
   } catch (err) {
     // 审计失败不阻断业务调用
-    console.error('[audit] 写入失败:', err)
+    console.error('[audit] Failed to write:', err)
   }
 }
 

@@ -104,7 +104,7 @@ export function registerVaultArchiveHandlers(): void {
       }))
       const buf = zipBuffer(entries)
       writeFileSync(save.filePath, buf)
-      console.log(`[vaultArchive] 导出 ${entries.length} 个文件 → ${save.filePath} (${Math.round(buf.length / 1024)}KB)`)
+      console.log(`[vaultArchive] Exported ${entries.length} files -> ${save.filePath} (${Math.round(buf.length / 1024)}KB)`)
       return { ok: true, path: save.filePath, files: entries.length, bytes: buf.length }
     } catch (e) {
       return { error: (e as Error).message }

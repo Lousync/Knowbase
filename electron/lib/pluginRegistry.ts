@@ -174,7 +174,7 @@ function writeIndex(idx: InstalledIndex): void {
   try {
     writeFileSync(indexPath(), JSON.stringify(idx, null, 2), 'utf-8')
   } catch (err) {
-    console.error('[Plugins] 写入 installed.json 失败:', err)
+    console.error('[Plugins] Failed to write installed.json:', err)
   }
 }
 
@@ -647,7 +647,7 @@ function installFromBuffer(buf: Buffer, grantedCapabilities?: string[], opts?: {
     try { ensurePluginTables(manifest.id, declaredTables) } catch { /* ignore */ }
   }
   auditWrite(manifest.id, isUpdate ? 'update' : 'install', { version: manifest.version, riskLevel, granted: granted ?? null })
-  console.log(`[Plugins] 已安装插件 ${manifest.id}@${manifest.version} (${riskLevel} 级)`)
+  console.log(`[Plugins] Installed plugin ${manifest.id}@${manifest.version} (risk ${riskLevel})`)
   notifyPluginsChanged()
   return { success: true, manifest, riskLevel, isUpdate }
 }
@@ -670,7 +670,7 @@ export function onPluginsChanged(cb: () => void): void {
 
 function notifyPluginsChanged(): void {
   for (const cb of changeSubscribers) {
-    try { cb() } catch (err) { console.error('[Plugins] 变更订阅回调失败:', err) }
+    try { cb() } catch (err) { console.error('[Plugins] Change subscriber callback failed:', err) }
   }
   // V3-2d：通知所有渲染窗口（插件页/后台 code 宿主容器刷新）
   try {
@@ -1069,7 +1069,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
         const mfPath = join(builtinDir, ent.name, 'plugin.json')
         if (!existsSync(mfPath)) continue
         const parsed = readManifestFromBuffer(readFileSync(mfPath))
-        if ('error' in parsed) { console.warn(`[Plugins] 内置插件清单非法(${ent.name}):`, parsed.error); continue }
+        if ('error' in parsed) { console.warn(`[Plugins] Invalid builtin plugin manifest (${ent.name}):`, parsed.error); continue }
         const id = parsed.manifest.id
         builtinIds.add(id)
         if (idx[id]?.userRemoved) continue          // 用户明确卸载过,不再自动恢复
@@ -1088,21 +1088,21 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
           ...(parsed.manifest.type === 'ui' ? { grantedCapabilities: parsed.manifest.capabilities || [], grantedAt: new Date().toISOString() } : {}),
         }
         changed = true
-        console.log(`[Plugins] 内置插件已就位: ${id}@${parsed.manifest.version}${existsSync(dest) ? '(升级)' : ''}`)
+        console.log(`[Plugins] Builtin plugin in place: ${id}@${parsed.manifest.version}${existsSync(dest) ? ' (upgraded)' : ''}`)
       }
       // 存量清理:已不再随应用分发的内置插件,降级为普通插件(解锁卸载,如强密码生成器转市场)
       for (const [id, entry] of Object.entries(idx)) {
         if (entry.builtin && !builtinIds.has(id)) {
           idx[id] = { ...entry, builtin: false }
           changed = true
-          console.log(`[Plugins] 内置插件已转为普通插件(可卸载): ${id}`)
+          console.log(`[Plugins] Builtin plugin converted to normal (uninstallable): ${id}`)
         }
       }
       if (changed) writeIndex(idx)
       if (changed) notifyPluginsChanged()
     }
   } catch (err) {
-    console.error('[Plugins] 内置插件落位失败:', err)
+    console.error('[Plugins] Failed to place builtin plugin:', err)
   }
 
   // ========== v2 协议：Plugin Host Gateway（V3-2，裁决点单一化到主进程）==========

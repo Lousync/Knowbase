@@ -23,7 +23,7 @@ const origOn = ipcMain.on.bind(ipcMain)
 
 ;(ipcMain as unknown as { handle: typeof ipcMain.handle }).handle = (channel, listener) => {
   if (seenHandle.has(channel)) {
-    console.warn(`[ipcSafe] 重复注册 handler，已覆盖为最后一份实现: ${channel}`)
+    console.warn(`[ipcSafe] duplicate handler registration, overridden by the last one: ${channel}`)
     ipcMain.removeHandler(channel)
   }
   seenHandle.add(channel)
@@ -32,7 +32,7 @@ const origOn = ipcMain.on.bind(ipcMain)
 
 ;(ipcMain as unknown as { on: typeof ipcMain.on }).on = (channel, listener) => {
   if (seenOn.has(channel)) {
-    console.warn(`[ipcSafe] 重复注册 listener，已替换（防叠加执行两次）: ${channel}`)
+    console.warn(`[ipcSafe] duplicate listener registration, replaced (prevent double-fire): ${channel}`)
     ipcMain.removeAllListeners(channel)
   }
   seenOn.add(channel)

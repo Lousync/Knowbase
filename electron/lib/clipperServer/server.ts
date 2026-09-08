@@ -154,7 +154,7 @@ export function createClipperServer(opts: ClipperServerOptions): Server {
         try {
           markdown = (await extractArticle(payload.html, payload.url)).markdown
         } catch (e) {
-          console.warn('[clipper] 提取失败，转仅存链接:', (e as Error).message?.slice(0, 120))
+          console.warn('[clipper] Extraction failed, fallback to link-only:', (e as Error).message?.slice(0, 120))
         }
         if (!markdown || markdown.length < 80) {
           // 无可提取正文（SPA/登录墙/极简页）→ 自动降级「仅存链接」，回执标 fallback 供扩展提示

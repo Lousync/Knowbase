@@ -60,9 +60,9 @@ export async function startBridge(deps: BridgeDeps = {}): Promise<void> {
   const preferred = Number(process.env.KNOWBASE_DEV_BRIDGE_PORT) || DEFAULT_PORT
   try {
     const { url } = await startServer(preferred)
-    console.log(`[AI-BRIDGE] ${url}   (dev only, 生产构建不包含本模块)`)
+    console.log(`[AI-BRIDGE] ${url}   (dev only, not included in production build)`)
   } catch (e) {
-    console.error('[AI-BRIDGE] 启动失败:', e instanceof Error ? e.message : e)
+    console.error('[AI-BRIDGE] Failed to start:', e instanceof Error ? e.message : e)
   }
 }
 

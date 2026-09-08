@@ -124,6 +124,6 @@ export function recordActivity(activity: Activity, sender?: WebContents): void {
       sender.send('habit:autoChecked', checked)
     }
   } catch (err) {
-    console.error('[habitLink] 自动打卡判定失败:', err)
+    console.error('[habitLink] Auto check-in evaluation failed:', err)
   }
 }

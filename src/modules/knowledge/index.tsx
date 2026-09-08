@@ -208,7 +208,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const fp = list.join('\n')
       if (fp === lastWarnFingerprintRef.current) return
       lastWarnFingerprintRef.current = fp
-      list.forEach((w) => console.warn('[KnowledgeIndex]', w))
+      // 终端（Windows GBK）只打英文计数防乱码；中文详情走 UI Toast，DevTools 需要时可在此断点
+      console.warn(`[KnowledgeIndex] ${list.length} index warning(s) (details: UI toast / DevTools breakpoint)`)
       const actionable = list.filter((w) => w.startsWith('规则「') || w.includes('.ignore'))
       if (actionable.length > 0) {
         showToast({ type: 'warning', message: actionable.length === 1 ? actionable[0] : `${actionable[0]}（等 ${actionable.length} 条，详见控制台）` })

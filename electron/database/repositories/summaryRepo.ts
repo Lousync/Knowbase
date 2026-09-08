@@ -24,7 +24,7 @@ export function registerSummaryHandlers(): void {
       void recordActivity({ source: 'pomodoro', date: row.date }, e.sender)
       return true
     } catch (err) {
-      console.error('[summary] 记录番茄钟失败:', err)
+      console.error('[summary] Failed to record pomodoro:', err)
       return false
     }
   })

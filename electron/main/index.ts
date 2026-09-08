@@ -85,9 +85,9 @@ if (!app.isPackaged && process.env.KNOWBASE_SHARED_DATA !== '1') {
         recursive: true,
         filter: src => !/[\\/](Cache|Code Cache|GPUCache|DawnCache|DawnGraphiteCache|DawnWebGPUCache|Crashpad|crashpad|blob_storage|Session Storage)([\\/]|$)/i.test(src),
       })
-      console.log('[DataIsolation] 已从共享目录复制数据到开发目录:', devDir)
+      console.log('[DataIsolation] Copied data from shared dir to dev dir:', devDir)
     } catch (e) {
-      console.warn('[DataIsolation] 复制旧数据失败（可能为缓存文件占用），开发目录将使用已复制部分:', e)
+      console.warn('[DataIsolation] Failed to copy legacy data (file may be locked), dev dir will use the copied subset:', e)
     }
     try { writeFileSync(marker, new Date().toISOString()) } catch { /* ignore */ }
   }
@@ -207,7 +207,7 @@ function createTray(): void {
       // 兜底：所有候选路径都失败时用内置 16px 彩色占位（拒绝 Windows 空白托盘白块）
       img = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAApUlEQVR4nK3MWwvBAByG8X00KZnTNNNY5jDMSkkppZSUUj6U8/k8p8/zuvN3/fLcPz9F+UeB8AtB9YlQ5AE1ekcsfoOW8KFrPozkFaZ+gZU6wzZOKKaPcMwDqpk9PgAze9mdAMxct7YCMHMjtxGAmZv2WgBmbuVXAjBzu7AUgJk7pYUAzNx15gIwc6/8BTBzvzITgJkH7lQAZh7WJgIw88gbC/BLb/8X7Gi3iexmAAAAAElFTkSuQmCC'
       )
-      console.warn('[Tray] 图标候选路径全部加载失败 → 使用内置占位图标')
+      console.warn('[Tray] All icon candidates failed to load -> using builtin placeholder')
     }
     if (process.platform === 'win32') img = img.resize({ width: 16, height: 16 })
     tray = new Tray(img)
@@ -229,9 +229,9 @@ function createTray(): void {
     // 模式变化时刷新托盘单选状态
     onPanelModeChanged(rebuildMenu)
     tray.on('click', showMainWindow)
-    console.log('[Tray] 托盘已创建')
+    console.log('[Tray] Tray created')
   } catch (e) {
-    console.warn('[Tray] 创建失败（不影响使用）:', e)
+    console.warn('[Tray] Failed to create (non-fatal):', e)
   }
 }
 
@@ -266,7 +266,7 @@ function createWindow(): void {
     event.preventDefault()
   })
 
-  console.log('[Boot] Knowbase main ready · net-v2 ·', app.getVersion())
+  console.log('[Boot] Knowbase main ready - net-v2 -', app.getVersion())
 
   // 开发模式：F12 切换 DevTools（默认菜单已禁用）
   mainWindow.webContents.on('before-input-event', (_event, input) => {
@@ -594,7 +594,7 @@ function registerWindowHandlers(): void {
     try {
       // 1) 全部已登记仓库 → 回收站并移除注册（护栏校验失败的仓库跳过并中止，绝不半途强删）
       const { trashed, errors } = await trashAllRegisteredVaults()
-      console.log(`[clearAllData] 已送回收站 ${trashed} 个仓库${errors.length ? '；异常：' + errors.join('；') : ''}`)
+      console.log(`[clearAllData] ${trashed} vault(s) moved to trash${errors.length ? '; errors: ' + errors.join('; ') : ''}`)
       if (errors.length > 0 && trashed === 0) {
         return { success: false, error: errors[0] }
       }
@@ -642,17 +642,17 @@ app.whenReady().then(async () => {
       const id = url.hostname
       const rel = decodeURIComponent(url.pathname).replace(/^\//, '')
       if (!id || !/^[a-z0-9][a-z0-9._-]*$/.test(id) || !rel) {
-        pluginDebugLog(`400 校验失败 — hostname=${JSON.stringify(id)} rel=${JSON.stringify(rel)}`)
+        pluginDebugLog(`400 validation failed - hostname=${JSON.stringify(id)} rel=${JSON.stringify(rel)}`)
         return new Response('Bad Request', { status: 400 })
       }
       const dir = join(getPluginsRoot(), id)
       const resolved = resolve(dir, rel)
       if (!resolved.startsWith(dir.endsWith(sep) ? dir : dir + sep)) {
-        pluginDebugLog(`403 越界 — resolved=${resolved}`)
+        pluginDebugLog(`403 out-of-bounds - resolved=${resolved}`)
         return new Response('Forbidden', { status: 403 })
       }
       if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-        pluginDebugLog(`404 不存在 — resolved=${resolved}`)
+        pluginDebugLog(`404 not found - resolved=${resolved}`)
         return new Response('Not Found', { status: 404 })
       }
       const ext = (resolved.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
@@ -673,8 +673,8 @@ app.whenReady().then(async () => {
         },
       })
     } catch (e) {
-      pluginDebugLog(`handler 异常: ${e}`)
-      console.error('[plugin://] handler 异常:', request.url, e)
+      pluginDebugLog(`handler error: ${e}`)
+      console.error('[plugin://] handler error:', request.url, e)
       return new Response('Bad Request', { status: 400 })
     }
   })
@@ -770,7 +770,7 @@ app.whenReady().then(async () => {
     if (resolved.startsWith(rootWithSep) && existsSync(resolved)) {
       await shell.openPath(resolved)
     } else {
-      console.warn('[Security] 拒绝打开数据目录外的路径:', target)
+      console.warn('[Security] Blocked opening path outside data dir:', target)
     }
   })
   // 番茄钟状态跨窗口中转：主进程维护快照，渲染层上报 + 接收广播（让 popout 独立窗口也能显示番茄钟状态）
@@ -884,19 +884,19 @@ app.whenReady().then(async () => {
             if (typeof mf.id === 'string' && mf.id) manifestId = mf.id
           } catch { /* 用目录名兜底 */ }
           const testUrl = `plugin://${manifestId}/index.html`
-          pluginDebugLog(`自测开始: ${testUrl}`)
+          pluginDebugLog(`self-test start: ${testUrl}`)
           net.fetch(testUrl)
             .then(async r => {
               const body = r.ok ? await r.text() : ''
-              pluginDebugLog(`自测结果: HTTP ${r.status}${r.ok ? `, body ${body.length} bytes, head=${JSON.stringify(body.slice(0, 50))}` : ''}`)
-              console.log(`[plugin://] 自测: ${manifestId}/index.html → HTTP ${r.status}`)
+              pluginDebugLog(`self-test result: HTTP ${r.status}${r.ok ? `, body ${body.length} bytes, head=${JSON.stringify(body.slice(0, 50))}` : ''}`)
+              console.log(`[plugin://] self-test: ${manifestId}/index.html -> HTTP ${r.status}`)
             })
-            .catch(e => { pluginDebugLog(`自测失败: ${e}`); console.error('[plugin://] 自测失败:', e) })
+            .catch(e => { pluginDebugLog(`self-test failed: ${e}`); console.error('[plugin://] self-test failed:', e) })
         }
       } else {
-        pluginDebugLog(`自测跳过: builtin 目录不存在 ${builtinDir}`)
+        pluginDebugLog(`self-test skipped: builtin dir missing ${builtinDir}`)
       }
-    } catch (e) { pluginDebugLog(`自测初始化异常: ${e}`) }
+    } catch (e) { pluginDebugLog(`self-test init error: ${e}`) }
   }
 
   createWindow()
@@ -905,7 +905,7 @@ app.whenReady().then(async () => {
   startSuperviseScheduler()
 
   // MCP：恢复上次启用状态的外部服务器连接（异步，不阻断首帧）
-  void restoreMcpConnections().catch((e) => console.warn('[MCP] 启动恢复连接异常（不阻断）:', (e as Error)?.message || e))
+  void restoreMcpConnections().catch((e) => console.warn('[MCP] Startup connection restore error (non-blocking):', (e as Error)?.message || e))
 
   // Init password auto-fill popup (global shortcut)
   initPasswordFiller()

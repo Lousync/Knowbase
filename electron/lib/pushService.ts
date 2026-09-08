@@ -250,7 +250,7 @@ export async function deliverLog(id: number): Promise<{ ok: boolean; error?: str
       return { ok: true }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
-      console.warn(`[supervise] 推送失败(第 ${attempt + 1} 次):`, lastError)
+      console.warn(`[supervise] Push failed (attempt ${attempt + 1}):`, lastError)
       if (attempt < RETRY_DELAYS_MS.length) {
         await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]))
       }
@@ -317,12 +317,12 @@ export async function notifyCheckin(habitId: string, date: string): Promise<void
     ].filter(Boolean).join('\n')
     const id = insertLog('instant', habitId, title, content)
     if (isInQuietHours(cfg)) {
-      console.log('[supervise] 免打扰时段，推送挂起待补发:', id)
+      console.log('[supervise] Quiet hours, push deferred:', id)
       return
     }
     await deliverLog(id)
   } catch (err) {
-    console.error('[supervise] 即时推送异常:', err)
+    console.error('[supervise] Immediate push error:', err)
   }
 }
 
@@ -403,7 +403,7 @@ export function startSuperviseScheduler(): void {
       }
       await flushPending()
     } catch (err) {
-      console.error('[supervise] 调度器异常:', err)
+      console.error('[supervise] Scheduler error:', err)
     }
   }
   void tick()

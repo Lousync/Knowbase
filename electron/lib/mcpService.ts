@@ -211,6 +211,6 @@ export async function restoreMcpConnections(): Promise<void> {
   const rows = readMcpServerRows().filter(r => r.enabled === 1)
   for (const row of rows) {
     const r = await connectWithRegistrySync(row)
-    if (!r.ok) console.warn(`[MCP] 恢复连接失败 ${row.name}:`, r.error)
+    if (!r.ok) console.warn(`[MCP] Failed to restore connection ${row.name}:`, r.error)
   }
 }

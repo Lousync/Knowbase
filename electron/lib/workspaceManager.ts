@@ -462,7 +462,7 @@ function runLayoutMigrations(rootPath: string): void {
   try {
     migrateBlogLayoutIntoKnowbase(rootPath)
   } catch (e) {
-    console.warn('[vault-layout] 博客布局迁移失败（不阻断）:', (e as Error)?.message || e)
+    console.warn('[vault-layout] Blog layout migration failed (non-blocking):', (e as Error)?.message || e)
   }
 }
 

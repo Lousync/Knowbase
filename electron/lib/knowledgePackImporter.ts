@@ -47,7 +47,7 @@ function parsePack(mf: { knowledgePages?: unknown }): KPPackNormalized | null {
     for (const nb of kp.notebooks as unknown[]) {
       const n = nb as KPNotebook
       if (!n || typeof n !== 'object' || typeof n.name !== 'string' || !isChapterArr(n.chapters)) {
-        pluginDebugLog(`[knowledgePack] 笔记本校验失败: name=${(n as KPNotebook)?.name} nameType=${typeof (n as KPNotebook)?.name} chaptersIsArr=${Array.isArray(n?.chapters)} chLen=${Array.isArray(n?.chapters) ? n.chapters.length : -1}`)
+        pluginDebugLog(`[knowledgePack] notebook validation failed: name=${(n as KPNotebook)?.name} nameType=${typeof (n as KPNotebook)?.name} chaptersIsArr=${Array.isArray(n?.chapters)} chLen=${Array.isArray(n?.chapters) ? n.chapters.length : -1}`)
         return null
       }
       notebooks.push({ name: n.name, coverColor: typeof n.coverColor === 'string' ? n.coverColor : undefined, chapters: n.chapters })

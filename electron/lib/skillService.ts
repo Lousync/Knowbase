@@ -357,7 +357,7 @@ function installSkillFromBuffer(buf: Buffer): SkillInstallResult {
     return { success: false, message: 'Skill 安装后无法读取（元信息缺失或不完整）' }
   }
   refreshSkillRegistrations()
-  console.log(`[Skills] 已安装独立 skill ${id}`)
+  console.log(`[Skills] Installed standalone skill ${id}`)
   return { success: true, skill }
 }
 
@@ -392,7 +392,7 @@ export function registerSkillHandlers(deps?: { getSettingValue?: (key: string) =
     else disabled.add(registryName)
     if (!writeDisabledSkillNames(disabled)) return { success: false, message: '设置写入失败' }
     refreshSkillRegistrations()
-    console.log(`[Skills] ${enabled ? '启用' : '停用'} ${registryName}`)
+    console.log(`[Skills] ${enabled ? 'Enabled' : 'Disabled'} ${registryName}`)
     return { success: true, disabled: !enabled }
   })
 
@@ -441,7 +441,7 @@ export function registerSkillHandlers(deps?: { getSettingValue?: (key: string) =
       return { success: false, message: `删除失败: ${e?.message || e}` }
     }
     refreshSkillRegistrations()
-    console.log(`[Skills] 已卸载独立 skill ${id}`)
+    console.log(`[Skills] Uninstalled standalone skill ${id}`)
     return { success: true }
   })
 }

@@ -182,7 +182,7 @@ class McpManagerImpl {
       target.last_error = lastError
       writeMcpServerRows(rows)
     } catch (err) {
-      console.error('[MCP] 状态写入失败:', err)
+      console.error('[MCP] Failed to persist state:', err)
     }
   }
 }
