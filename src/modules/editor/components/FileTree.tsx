@@ -105,7 +105,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
       relPath,
     }
     return (
-      <div key={relPath}>
+      <div key={relPath} className={depth === 0 ? 'flex flex-1 flex-col' : undefined}>
         {dirNode && (
           <div
             draggable
@@ -141,7 +141,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                   : renderFileRow(e, depth + 1)
               })}
               {softItems.length > 0 && (
-                <div className="mt-1 border-t border-[var(--border-color)] pt-1">
+                <div className="mt-auto border-t border-[var(--border-color)] pt-1">
                   <div
                     onClick={toggleSoftOpen}
                     className="flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)]"
@@ -177,7 +177,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
 
   return (
     <div
-      className={`flex-1 overflow-y-auto px-1.5 py-1 ${dragOver === '' ? 'bg-[var(--accent)]/10' : ''}`}
+      className={`flex flex-1 flex-col overflow-y-auto px-1.5 py-1 ${dragOver === '' ? 'bg-[var(--accent)]/10' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDragOver('') }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(null) }}
       onDrop={(e) => dropToDir(e, '')}
