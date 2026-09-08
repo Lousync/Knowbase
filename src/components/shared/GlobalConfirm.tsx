@@ -36,7 +36,7 @@ export function GlobalConfirm() {
     resolve(ok)
   }
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50" onClick={() => done(false)}>
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50" onClick={() => done(false)}>
       <div
         className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[420px] shadow-2xl"
         onClick={(e) => e.stopPropagation()}

@@ -66,6 +66,9 @@ export function WelcomeOverlay({ onDone }: Props) {
           <div className="text-center text-[12.5px] leading-relaxed text-[var(--text-secondary)]">
             仓库是一个文件夹：知识内容直接存放其中，应用数据保存在隐藏的 <code className="rounded bg-[var(--bg-secondary)] px-1 text-[var(--text-primary)]">.knowbase</code> 目录里
           </div>
+          <div className="text-center text-[11.5px] text-[var(--text-muted)]">
+            第一次使用？在弹出的窗口中选一个位置并「新建文件夹」，然后确认初始化即可
+          </div>
         </div>
 
         <button
