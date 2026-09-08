@@ -9,6 +9,7 @@ import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
 import { globalReadJson, globalWriteJson } from './globalJsonStore'
 import { isAllowedClearRoot, trashVaultFolder } from './vaultDelete'
+import { rootDirName } from './aiTeachingFolders'
 
 /**
  * 编辑器工作区（Vault 仓库）文件服务。
@@ -33,6 +34,10 @@ const HIDDEN_DIRS = new Set([
  *  注1：根级 .attachments 因「.」前缀天然隐藏（listDirEntries），无需登记
  *  注2：D3（P4）后 'blog' 不再是内部目录——博客已收进 .knowbase/blog/ */
 const APP_INTERNAL_DIRS = new Set(['_attachments', '_inbox'])
+
+/** 软件生成项沉底（2026-09-08 用户拍板）：.ignore 等非用户内容不与用户目录混排，固定沉在文件树根列表最下。
+ *  新增软件生成文件/目录时登记进此集合即可（AI教学 产物根按设置动态传入，见 ws:listDir）。 */
+const SOFT_ENTRY_NAMES = new Set(['.ignore'])
 
 interface RootInfo {
   id: string
@@ -98,8 +103,9 @@ export interface WorkspaceEntry {
   mtime: number
 }
 
-/** 枚举目录：跳过符号链接与隐藏目录，文件夹优先 + 中文友好字典序 */
-export function listDirEntries(absPath: string): WorkspaceEntry[] {
+/** 枚举目录：跳过符号链接与隐藏目录。排序三档：普通目录 → 普通文件 → 软件生成项沉底；
+ *  sinkNames 传软件生成项名单（小写），仅在仓库根层由 ws:listDir 传入（子目录同名内容不受影响） */
+export function listDirEntries(absPath: string, sinkNames?: Set<string>): WorkspaceEntry[] {
   const out: WorkspaceEntry[] = []
   let names: string[] = []
   try {
@@ -122,8 +128,14 @@ export function listDirEntries(absPath: string): WorkspaceEntry[] {
       /* skip 瞬时不可读条目 */
     }
   }
+  const groupOf = (e: WorkspaceEntry): number => {
+    if (sinkNames?.has(e.name.toLowerCase())) return 2
+    return e.type === 'dir' ? 0 : 1
+  }
   out.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+    const ga = groupOf(a)
+    const gb = groupOf(b)
+    if (ga !== gb) return ga - gb
     return a.name.localeCompare(b.name, 'zh-Hans-CN')
   })
   return out
@@ -549,7 +561,7 @@ export async function trashWorkspacePath(rootId: string, relPath: string): Promi
   invalidateIndexIfCurrentVault(rootId)
 }
 
-export function registerWorkspaceHandlers(): void {
+export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown): void {
   loadVaults()
 
   // 打开/登记仓库：系统对话框授权（用户意图的唯一来源）
@@ -635,7 +647,13 @@ export function registerWorkspaceHandlers(): void {
   ipcMain.handle('ws:listDir', (_e, rootId: string, relPath: string) => {
     try {
       const abs = requireInside(rootId, relPath ?? '')
-      return { entries: listDirEntries(abs) }
+      // 软件生成项沉底（2026-09-08）：仅仓库根层生效——AI教学 产物根（按设置动态）+ SOFT_ENTRY_NAMES 固定项。
+      // 新增软件生成的文件/目录 → 登记 SOFT_ENTRY_NAMES 即自动沉底
+      const atRoot = !relPath || relPath === '' || relPath === '.' || relPath === './'
+      const sinkNames = atRoot
+        ? new Set<string>([...SOFT_ENTRY_NAMES, ...(getSetting ? [rootDirName(getSetting).toLowerCase()] : [])])
+        : undefined
+      return { entries: listDirEntries(abs, sinkNames) }
     } catch (e) {
       return { error: (e as Error).message }
     }

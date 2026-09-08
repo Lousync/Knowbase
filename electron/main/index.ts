@@ -813,8 +813,8 @@ app.whenReady().then(async () => {
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
   // 设备传输：局域网短时双向互传（工具箱）
   registerLanShareHandlers()
-  // 编辑器工作区（Vault 仓库）：文件服务 + 授权根管理
-  registerWorkspaceHandlers()
+  // 编辑器工作区（Vault 仓库）：文件服务 + 授权根管理（getSetting 供 AI教学 产物根沉底名单）
+  registerWorkspaceHandlers((key) => settingsCache[key])
   // 整仓归档：导出 zip / 导入（剥壳→校验→冲突逐条决策→登记重建，P6）
   registerVaultArchiveHandlers()
   registerPluginHandlers({ getSettingValue: (key) => settingsCache[key] })
