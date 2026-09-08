@@ -137,3 +137,9 @@ rebuildKnowledgeIndex → cache/knowledge-index.json
 4. 注：.ignore 本身不触发此链（stale 判定 statSync 磁盘，目录在就不解绑）；**单纯改名（不含 .ignore）也会退化**，.ignore 折腾改名只是诱因
 
 **修复方案（P4 挂账）**：认领失败、新建 folder 之前，对「已 stale 解绑」的节点做一次**空白归一化宽松认领**（`name.replace(/\s+/g, '') === seg.replace(/\s+/g, '')`，仅当唯一候选时生效）——目录改名只动空格/大小写时保住 space/notebook 类型与排序；归一化后仍有歧义（多个候选）则维持现状新建 folder。
+
+### 10.3 「你好呀 / AI教学 也忽略不掉」——dev 进程跑的旧主进程代码（已修指纹对账）
+
+**实测现场**（2026-09-08 10:00）：磁盘 `.ignore` 规则正确（模拟主进程逻辑三目录全部剪枝 ✓），应用 09:59 重建的索引却仍含 148 个目标页面——**当前 electron 进程加载的主进程代码早于 .ignore 落码提交（09-07 21:56）**。沙箱写文件时 vite/chokidar watcher 收不到事件（09-08 已知问题），dev 主进程不会自动重载；旧代码无 `isKnowledgeIndexSensitive`，应用内保存 `.ignore` 也不触发失效。**结论：测试前必须重启 dev。**
+
+**顺手修复（已落码）**：`ignoreFile.ts` 新增 `getVaultIgnoreState()`（mtime+size 指纹）；`knowledgeIndex.ts` 的 `KnowledgeIndex` 增加 `ignoreState` 字段，`getKnowledgeIndex` 读缓存时对账指纹——不一致（外部增删改 `.ignore`）即自动重建，图谱经 `graphCacheStale` 连锁重建。外部改规则不再需要应用内保存触发。tsc node 门禁零新增错误（现存 2 错为 updateService/ipcSafe 存量债）。
