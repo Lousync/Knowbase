@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
+  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
   workspaceGetCurrent, workspaceReadFile, docsPptxPages, workspaceListDir,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachUnassignSession, aiTeachSetLastWorkspace,
@@ -18,7 +18,7 @@ import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, AiTeachInjectionStats, LlmUsageInfo, LlmProviderInfo, AiTeachWorkspaceInfo, AiTeachSourceEntry } from '../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, AiTeachInjectionStats, LlmUsageInfo, LlmProviderInfo, LlmVisionModelInfo, AiTeachWorkspaceInfo, AiTeachSourceEntry } from '../../types'
 
 /**
  * 「AI教学」模块（原 id immersive / 沉浸式 Agent；总纲 docs/ai-teaching-module-rework.md，
@@ -266,6 +266,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   /** 视觉转写模型（素材转写用，全局级与回答模型分开）：'' = 自动按模型名识别；格式 providerId:model */
   const [visionModel, setVisionModel] = useState(() => localStorage.getItem('aiTeach.visionModel') ?? '')
+  const [visionList, setVisionList] = useState<LlmVisionModelInfo[]>([])
+  const [showAllVision, setShowAllVision] = useState(false)
   const pickVision = (val: string): void => {
     setVisionModel(val)
     try { if (val) localStorage.setItem('aiTeach.visionModel', val); else localStorage.removeItem('aiTeach.visionModel') } catch { /* 隐私模式忽略 */ }
@@ -1175,7 +1177,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setConvoEffort(e)
   }
   const openModelMenu = (): void => {
-    if (!modelMenuOpen) void llmListProviders().then(res => setProviderList(res.providers ?? [])).catch(() => null)
+    if (!modelMenuOpen) {
+      void llmListProviders().then(res => setProviderList(res.providers ?? [])).catch(() => null)
+      void llmVisionModels().then(r => setVisionList(r.models ?? [])).catch(() => null)
+    }
     setModelMenuOpen(v => !v)
   }
 
@@ -1813,19 +1818,36 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                             <span className="truncate flex-1">自动识别（按模型名：qwen-vl / glm-4v / gpt-4o…）</span>
                             {!visionModel && <span className="shrink-0">✓</span>}
                           </button>
-                          {providerList.filter(p => p.enabled && p.type === 'openai-compatible' && p.models.length > 0).flatMap(p =>
-                            p.models.map(mm => {
-                              const val = `${p.id}:${mm}`
-                              const sel = visionModel === val
-                              return (
-                                <button key={val} onClick={() => pickVision(val)}
-                                  className={`w-full flex items-center gap-1.5 px-3 py-1 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors ${sel ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
-                                  <span className="text-[9.5px] text-[var(--text-muted)] shrink-0">{p.name}</span>
-                                  <span className="truncate flex-1">{mm}</span>
-                                  {sel && <span className="shrink-0">✓</span>}
-                                </button>
-                              )
-                            }))}
+                          {(() => {
+                            // 只列视觉特征模型（vision/vl/4o/glm-4v/gemini/kimi-vision…）；正则漏判时「显示全部」兜底
+                            const list = showAllVision
+                              ? providerList.filter(p => p.enabled && p.type === 'openai-compatible' && p.models.length > 0).flatMap(p => p.models.map(mm => ({ spec: `${p.id}:${mm}`, providerName: p.name, model: mm })))
+                              : visionList
+                            return (
+                              <>
+                                {list.map(v => {
+                                  const sel = visionModel === v.spec
+                                  return (
+                                    <button key={v.spec} onClick={() => pickVision(v.spec)}
+                                      className={`w-full flex items-center gap-1.5 px-3 py-1 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors ${sel ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                                      <span className="text-[9.5px] text-[var(--text-muted)] shrink-0">{v.providerName}</span>
+                                      <span className="truncate flex-1">{v.model}</span>
+                                      {sel && <span className="shrink-0">✓</span>}
+                                    </button>
+                                  )
+                                })}
+                                {list.length === 0 && (
+                                  <div className="px-3 py-2 text-[11px] text-[var(--text-muted)]">没有识别到视觉模型（模型名需含 vision/vl/4o/glm-4v 等特征）。</div>
+                                )}
+                                {providerList.some(p => p.enabled && p.type === 'openai-compatible' && p.models.length > 0) && (
+                                  <button onClick={() => setShowAllVision(v => !v)}
+                                    className="w-full px-3 py-1 text-left text-[10.5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                                    {showAllVision ? '▲ 收起，只看视觉模型' : '▼ 显示全部模型（若你确认某模型支持图片但未被识别）'}
+                                  </button>
+                                )}
+                              </>
+                            )
+                          })()}
                         </div>
                         <div className="px-3 py-1.5 text-[10px] text-[var(--text-muted)] border-t border-[var(--border-color)] bg-[var(--bg-secondary)] space-y-0.5">
                           <div>本月用量 · 回答：{(usage?.monthTokens ?? 0).toLocaleString()} tokens</div>

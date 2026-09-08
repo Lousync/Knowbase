@@ -595,6 +595,18 @@ export function registerLlmHandlers(deps: {
 
   ipcMain.handle('llm:visionCapable', (_e, model: string) => VISION_MODEL_RE.test(String(model ?? '')))
 
+  // 视觉模型清单（2026-09-08）：按 VISION_MODEL_RE 过滤出能胜任图片输入的模型——
+  // 视觉转写模型选择列表只显示这些，非视觉模型不再出现
+  ipcMain.handle('llm:visionModels', () => {
+    const models: Array<{ spec: string; providerName: string; model: string }> = []
+    for (const p of getProviders().filter(p => p.enabled && p.type === 'openai-compatible')) {
+      for (const m of p.models) {
+        if (VISION_MODEL_RE.test(m)) models.push({ spec: `${p.id}:${m}`, providerName: p.name, model: m })
+      }
+    }
+    return { models }
+  })
+
   ipcMain.handle('llm:refreshModels', async (_e, id: string) => {
     const list = getProviders()
     const p = list.find(x => x.id === id)

@@ -588,6 +588,8 @@ export interface LlmProviderInfo {
   isDefault: boolean
 }
 
+export interface LlmVisionModelInfo { spec: string; providerName: string; model: string }
+
 export interface LlmProviderDraft {
   id?: string
   name: string
@@ -1260,6 +1262,7 @@ export interface ElectronAPI {
   llmRemoveProvider: (id: string) => Promise<{ ok: boolean }>
   llmToggleProvider: (id: string, enabled: boolean) => Promise<{ ok: boolean }>
   llmTestConnection: (draft: { type: LlmProviderType; baseUrl: string; apiKey?: string; id?: string; headers?: Record<string, string> }) => Promise<LlmTestResultInfo>
+  llmVisionModels: () => Promise<{ models: LlmVisionModelInfo[] }>
   llmRefreshModels: (id: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmAddModel: (id: string, model: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>

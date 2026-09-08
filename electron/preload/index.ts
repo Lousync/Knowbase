@@ -181,6 +181,7 @@ const api = {
   llmRefreshModels: (id: string) => ipcRenderer.invoke('llm:refreshModels', id),
   llmAddModel: (id: string, model: string) => ipcRenderer.invoke('llm:addModel', id, model),
   llmSetDefaultModel: (value: string) => ipcRenderer.invoke('llm:setDefaultModel', value),
+  llmVisionModels: () => ipcRenderer.invoke('llm:visionModels'),
   llmTestModel: (providerId: string, model: string) => ipcRenderer.invoke('llm:testModel', { providerId, model }),
   llmGetUsage: () => ipcRenderer.invoke('llm:getUsage'),
   llmReasoningCapable: (model: string) => ipcRenderer.invoke('llm:reasoningCapable', model),
