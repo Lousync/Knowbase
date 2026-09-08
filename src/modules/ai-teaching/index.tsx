@@ -6,7 +6,7 @@ import {
   workspaceGetCurrent, workspaceReadFile, docsPptxPages, workspaceListDir,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachUnassignSession, aiTeachSetLastWorkspace,
-  aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick,
+  aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick, aiTeachSrcPickDir,
   aiTeachSrcPdfBytes, aiTeachSrcTranscribe,
   aiTeachProfileEnsureGlobal, aiTeachProfileEnsureSession, aiTeachProfileEnsureWorkspace,
   aiTeachProfileWriteGlobal, aiTeachProfileWriteSession, aiTeachProfileWriteWorkspace,
@@ -751,6 +751,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const pickSrcFile = async () => {
     const r = await aiTeachSrcPick().catch(() => null)
     if (r?.ok && r.path) setSrcForm(f => (f ? { ...f, path: r.path as string, storage: '已入库' } : f))
+  }
+  // 登记仓库目录为素材：仅引用（不拷贝），主进程按目录自动检测类型 dir，注入时展开文件清单
+  const pickSrcDir = async () => {
+    const r = await aiTeachSrcPickDir().catch(() => null)
+    if (!r) return
+    if (r.ok && r.path) setSrcForm(f => (f ? { ...f, path: r.path as string, type: 'dir', storage: '仅引用' } : f))
+    else if (!r.ok) showToast({ type: 'error', message: r.error ?? '选择目录失败' })
   }
   const doExtract = async (no: number) => {
     if (!activeId) return
@@ -2280,7 +2287,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 <div className="flex items-center gap-2">
                   <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">类型</label>
                   <span className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] text-[var(--text-secondary)]">
-                    自动识别：{inferSrcType(srcForm.path)}
+                    自动识别：{srcForm.type === 'dir' ? '目录（目录下所有文件都是素材）' : inferSrcType(srcForm.path)}
                   </span>
                   <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
                   <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
@@ -2295,11 +2302,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 {srcForm.storage === '已入库' ? (
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     <button onClick={() => void pickSrcFile()} className="shrink-0 rounded-md border border-[var(--border-color)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">浏览…</button>
+                    <button onClick={() => void pickSrcDir()} title="登记仓库内某个目录：目录下所有文件都成为素材（文本文件 AI 直接读，非文本 AI 会先询问）"
+                      className="shrink-0 rounded-md border border-[var(--border-color)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">仓库目录…</button>
                     <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-muted)]" title={srcForm.path}>{srcForm.path || '未选择文件'}</span>
                   </div>
                 ) : (
-                  <input value={srcForm.path} onChange={e => setSrcForm({ ...srcForm, path: e.target.value })} placeholder={inferSrcType(srcForm.path) === 'url' ? 'https://…' : '仓库内相对路径 / 绝对路径'}
-                    className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]" />
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <input value={srcForm.path} onChange={e => setSrcForm({ ...srcForm, path: e.target.value })} placeholder={inferSrcType(srcForm.path) === 'url' ? 'https://…' : '仓库内相对路径 / 绝对路径'}
+                      className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]" />
+                    <button onClick={() => void pickSrcDir()} title="登记仓库内某个目录：目录下所有文件都成为素材（文本文件 AI 直接读，非文本 AI 会先询问）"
+                      className="shrink-0 rounded-md border border-[var(--border-color)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">仓库目录…</button>
+                  </div>
                 )}
               </div>
               {(() => {

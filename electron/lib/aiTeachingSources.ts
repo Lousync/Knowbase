@@ -1,5 +1,5 @@
-import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'fs'
-import { join, basename, isAbsolute } from 'path'
+import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, statSync, readdirSync } from 'fs'
+import { join, basename, isAbsolute, relative } from 'path'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder } from './aiTeachingFolders'
@@ -23,7 +23,7 @@ import { visionChat } from './llmService'
 
 const SOURCE_FILE = 'SOURCE.md'
 const SOURCES_DIR = 'SOURCES'
-const TYPE_ENUM = ['url', 'pptx', 'pdf', 'image', 'md', 'code', 'other'] as const
+const TYPE_ENUM = ['url', 'pptx', 'pdf', 'image', 'md', 'code', 'dir', 'other'] as const
 export type SourceType = (typeof TYPE_ENUM)[number]
 
 export interface SourceEntry {
@@ -317,11 +317,18 @@ export function addSource(sessionId: string, input: AddSourceInput, getSetting: 
       path = `./${copied}`
     }
     if (!explicitType) {
-      // 全自动检测（用户不再选类型）：URL → url；本地/仓库路径按扩展名映射；未知 → other
+      // 全自动检测（用户不再选类型）：URL → url；仓库内/绝对路径的**目录** → dir（目录素材，
+      // 注入时自动展开文件清单，2026-09-08 用户需求）；文件按扩展名映射；未知 → other
       if (/^https?:\/\//i.test(path)) type = 'url'
       else {
-        const inferred = inferTypeFromPath(path)
-        if (inferred) type = inferred
+        try {
+          const probeAbs = isAbsolute(path) || /^[a-zA-Z]:[\\/]/.test(path) ? path : join(l.rootPath, path)
+          if (existsSync(probeAbs) && statSync(probeAbs).isDirectory()) type = 'dir'
+        } catch { /* 探测失败按文件处理 */ }
+        if (type !== 'dir') {
+          const inferred = inferTypeFromPath(path)
+          if (inferred) type = inferred
+        }
       }
     } else if (type !== 'url' && !/^https?:\/\//i.test(path)) {
       const inferred = inferTypeFromPath(path)
@@ -552,7 +559,31 @@ export async function transcribeVision(sessionId: string, no: number, pages: { n
 /**
  * AgentRunner 注入（每轮重读，与 CONSTRAINTS 同哲学）：素材目录 + 编号制引用规则（3-29）。
  * 无登记文件/零条目 → 空串（零注入，存量会话不受扰）。
+ * dir 条目（2026-09-08 用户需求）自动展开目录内文件清单：文本文件 AI 直接按路径读；
+ * 非文本（扫描 pdf/图片等）标注「读取会得到空内容，先询问用户处理方式」。
  */
+/** 文本扩展名集合（目录素材清单的二进制粗判；无法识别的扩展名一律按非文本标注） */
+const TEXT_EXTS = new Set(['md', 'markdown', 'txt', 'csv', 'json', 'yml', 'yaml', 'toml', 'ini', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'c', 'h', 'cpp', 'java', 'cs', 'go', 'rs', 'rb', 'php', 'sh', 'bat', 'sql', 'vue'])
+const DIR_LIST_LIMIT = 120
+const DIR_LIST_DEPTH = 4
+
+function listDirFilesRecursive(dirAbs: string, out: { rel: string; bin: boolean }[], relBase = '', depth = 0): void {
+  if (depth > DIR_LIST_DEPTH || out.length >= DIR_LIST_LIMIT) return
+  let names: import('fs').Dirent[]
+  try { names = readdirSync(dirAbs, { withFileTypes: true }) } catch { return }
+  for (const de of names) {
+    if (out.length >= DIR_LIST_LIMIT) return
+    if (de.name.startsWith('.') || de.name === 'SOURCE.md') continue
+    const abs = join(dirAbs, de.name)
+    const rel = relBase ? `${relBase}/${de.name}` : de.name
+    if (de.isDirectory()) listDirFilesRecursive(abs, out, rel, depth + 1)
+    else if (de.isFile()) {
+      const ext = (/[.]([A-Za-z0-9]+)$/.exec(de.name)?.[1] ?? '').toLowerCase()
+      out.push({ rel, bin: !TEXT_EXTS.has(ext) })
+    }
+  }
+}
+
 export function resolveSourcesForInjection(sessionId: string, getSetting: (key: string) => unknown): string {
   try {
     const l = layout(sessionId, getSetting, false)
@@ -564,7 +595,19 @@ export function resolveSourcesForInjection(sessionId: string, getSetting: (key: 
       if (e.range && e.range !== '-') bits.push(`${e.type === 'code' ? '行号区间' : '页码区间'} ${e.range}`)
       const ext = /^✓\s*→\s*(.+)$/.exec(e.extracted)
       bits.push(ext ? `**提取稿 ${l.dirRel}/${ext[1].trim()}（优先读此文件）**` : '未提取')
-      return `- [${e.no}] ${e.name}（${bits.join(' · ')}）${e.note ? ` 备注：${e.note}` : ''}`
+      const base = `- [${e.no}] ${e.name}（${bits.join(' · ')}）${e.note ? ` 备注：${e.note}` : ''}`
+      // 目录素材：展开文件清单（文本可读；非文本标注需询问用户），上限 120 条防注入爆炸
+      if (e.type === 'dir' && e.path && e.path !== '-') {
+        const dirAbs = resolveMaterialAbs(l, e.path)
+        const files: { rel: string; bin: boolean }[] = []
+        try { listDirFilesRecursive(dirAbs, files) } catch { return `${base}\n  ⚠ 目录不可读或不存在：${e.path}` }
+        if (files.length === 0) return `${base}\n  （目录为空）`
+        const shown = files.slice(0, 120)
+        const items = shown.map(f => `  - ${f.rel}${f.bin ? '（非文本：直接读会得到空内容，需要内容时先询问用户是否转写/整理）' : ''}`)
+        if (files.length > shown.length) items.push(`  - …（其余 ${files.length - shown.length} 个文件，可用读取工具按需列出）`)
+        return `${base}\n  目录内 ${files.length} 个文件，路径均相对仓库根，可直接读取：\n${items.join('\n')}`
+      }
+      return base
     })
     const hint = [
       '【素材目录（本对话 SOURCE.md，实时读取）】用户登记的素材如下。需要使用素材内容时：',
@@ -605,5 +648,17 @@ export function registerAiTeachingSourceHandlers(getSetting: (key: string) => un
       ],
     })
     return r.canceled || r.filePaths.length === 0 ? { ok: true, path: null } : { ok: true, path: r.filePaths[0] }
+  })
+  // 登记仓库目录为素材（2026-09-08）：系统对话框选目录 → 必须在当前仓库内 → 返回仓库相对路径
+  ipcMain.handle('aiTeachSrc:pickDir', async () => {
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+    const r = await dialog.showOpenDialog(win, { title: '选择仓库内要登记为素材的目录', properties: ['openDirectory'] })
+    if (r.canceled || r.filePaths.length === 0) return { ok: true, path: null }
+    const rel = relative(vault.rootPath, r.filePaths[0]).replace(/\\/g, '/')
+    if (rel.startsWith('..') || isAbsolute(rel)) return { ok: false, error: '所选目录必须在当前仓库内' }
+    if (!rel) return { ok: false, error: '不能登记仓库根目录本身' }
+    return { ok: true, path: rel }
   })
 }
