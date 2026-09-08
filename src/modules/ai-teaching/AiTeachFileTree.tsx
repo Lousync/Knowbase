@@ -107,13 +107,14 @@ export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenExtern
     nameModal(type === 'file' ? '新建文件' : '新建文件夹', '', '名称（含扩展名）', '创建', async (raw) => {
       const name = raw.trim()
       setModal(null)
-      if (!name || !rootId) return
+      if (!name) { showToast({ type: 'warning', message: '名称不能为空' }); return }
+      if (!rootId) { showToast({ type: 'error', message: '尚未打开仓库，无法创建' }); return }
       const rel = dirRel ? `${dirRel}/${name}` : name
       const full = `${base}/${rel}`
       const r = type === 'file'
-        ? await workspaceCreateFile(rootId, full).catch(() => null)
-        : await workspaceMkdir(rootId, full).catch(() => null)
-      if (r && r.ok === false) { showToast({ type: 'error', message: `创建失败：${r.error ?? ''}` }); return }
+        ? await workspaceCreateFile(rootId, full).catch((e) => ({ ok: false as const, error: String((e as Error)?.message ?? e) }))
+        : await workspaceMkdir(rootId, full).catch((e) => ({ ok: false as const, error: String((e as Error)?.message ?? e) }))
+      if (!r || r.ok === false) { showToast({ type: 'error', message: `创建失败：${(r as { error?: string })?.error ?? 'IPC 无响应'}` }); return }
       void loadDir(dirRel)
       showToast({ type: 'info', message: `已创建 ${name}` })
     })

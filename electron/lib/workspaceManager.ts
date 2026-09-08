@@ -769,12 +769,13 @@ export function registerWorkspaceHandlers(): void {
     }
   })
 
-  // 新建目录（重名自动加后缀）
+  // 新建目录（重名自动加后缀；父链缺失自动补建——FileTree 在懒建的工作区子层下新建时父目录尚不存在）
   ipcMain.handle('ws:mkdir', (_e, rootId: string, relPath: string) => {
     try {
       const requestedAbs = requireInside(rootId, relPath)
       const dir = dirname(requestedAbs)
       const requestedName = basename(requestedAbs)
+      mkdirSync(dir, { recursive: true })
       const finalName = uniqueFileName(dir, requestedName)
       const finalAbs = join(dir, finalName)
       mkdirSync(finalAbs, { recursive: false })
