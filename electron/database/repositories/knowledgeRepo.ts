@@ -11,6 +11,7 @@ import {
 } from '../../lib/kbStore/knowledgeVaultRepo'
 import { getCurrentVault } from '../../lib/kbStore/vaultContext'
 import { getGraphIndex } from '../../lib/kbStore/graphIndex'
+import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 
 type CategoryType = 'notebook' | 'folder' | 'space'
 
@@ -35,6 +36,8 @@ const VAULT_ALLOWED = new Set([
   'knowledge:createPage',
   // 2026-09-07 重命名/排序放行：重命名=磁盘改名+字典级联；排序=字典/frontmatter 规范化互换
   'knowledge:updateCategory', 'knowledge:updatePage', 'knowledge:moveCategory', 'knowledge:movePage',
+  // 2026-09-08 .ignore 规则对账提示：索引 warnings（坏行/未命中规则）透出给知识库 UI（§10.1）
+  'knowledge:getIndexWarnings',
 ])
 
 const VAULT_REJECT_MSG = '仓库读源模式下该操作暂不支持：请在编辑器模块中编辑内容'
@@ -52,6 +55,9 @@ export function registerKnowledgeHandlers(): void {
 
   // 获取所有分类
   kHandle('knowledge:getCategories', () => vaultGetCategories())
+
+  // 索引 warnings（.ignore 坏行 / 规则未命中磁盘条目等）：只读，读索引走缓存不触发 rebuild
+  kHandle('knowledge:getIndexWarnings', () => getKnowledgeIndex().warnings)
 
   // 创建分类 — mkdir 仓库文件夹 + categories.json 追加条目（空间/笔记本=顶层，文件夹可挂父目录）
   kHandle('knowledge:createCategory', (_e, data: { name: string; parentId?: string | null; categoryType?: CategoryType }) => {

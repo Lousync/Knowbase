@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
 import type { DirCache, TreeNode, CreateIntent } from '../types'
 import { getFileIcon } from '../../../lib/fileIcons'
+import ignoreRuleSvg from '../../../assets/ignore.svg?raw'
 
 interface Props {
   dirCache: DirCache
@@ -24,10 +25,12 @@ interface Props {
 const DRAG_MIME = 'text/x-kb-rel'
 
 function FileIcon({ name }: { name: string }) {
+  // .ignore 文件名精确匹配分支（先于 ext 提取；不做 'ignore' 后缀注册——避免 a.ignore 等误命中，§9.3-2）。
   // 复用 src/lib/fileIcons 知识库已建好的 vscode-icons 库（CC BY 4.0）；
   // 按扩展名映射 27 种文件类型，未命中走 default.svg。无扩展名（新建知识页）默认 md。
+  const isIgnoreRule = name.toLowerCase() === '.ignore'
   const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''
-  const svg = getFileIcon(ext)
+  const svg = isIgnoreRule ? ignoreRuleSvg : getFileIcon(ext)
   return (
     <span
       className="shrink-0 inline-flex items-center justify-center"

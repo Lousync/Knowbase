@@ -124,7 +124,7 @@ rebuildKnowledgeIndex → cache/knowledge-index.json
 
 **缓解方案**：
 1. 帮助文档加操作指引：**在编辑器文件树右键目录 →「复制相对路径」→ 粘贴到 `.ignore` 再补 `/`**——从源头避免手打名字
-2. （P4 挂账）规则无效行提示升级：rebuild 时对每条规则做磁盘条目对账，**未命中任何文件/目录的规则**进 warnings（「规则 `408␣学习空间/` 未匹配到任何文件或目录，请检查空格/名字」）——与 §8 验收 6 的坏行警告共用 UI 透出通道
+2. （P4 挂账 → ✅ 已落码 2026-09-08）规则无效行提示升级：rebuild 时对每条规则做磁盘条目对账，**未命中任何文件/目录的规则**进 warnings（「规则 `408␣学习空间/` 未匹配到任何文件或目录，请检查空格/名字」）——与 §8 验收 6 的坏行警告共用 UI 透出通道。实现：`ignoreFile.auditIgnoreRules`（剪枝前收集完整磁盘清单，避免把命中条目误报）+ `knowledge:getIndexWarnings` 通道 + 知识库模块激活时指纹去重 Toast
 
 ### 10.2 目录改名后「空间」退化为「普通文件夹」（既有缺陷，与 .ignore 无关但被其暴露）
 
@@ -136,7 +136,7 @@ rebuildKnowledgeIndex → cache/knowledge-index.json
 3. 认领失败 → L234-248 新建节点**一律 `categoryType: 'folder'`** → 旧 space 节点被 stale 清理物理删除
 4. 注：.ignore 本身不触发此链（stale 判定 statSync 磁盘，目录在就不解绑）；**单纯改名（不含 .ignore）也会退化**，.ignore 折腾改名只是诱因
 
-**修复方案（P4 挂账）**：认领失败、新建 folder 之前，对「已 stale 解绑」的节点做一次**空白归一化宽松认领**（`name.replace(/\s+/g, '') === seg.replace(/\s+/g, '')`，仅当唯一候选时生效）——目录改名只动空格/大小写时保住 space/notebook 类型与排序；归一化后仍有歧义（多个候选）则维持现状新建 folder。
+**修复方案（P4 挂账 → ✅ 已落码 2026-09-08）**：认领失败、新建 folder 之前，对「已 stale 解绑」的节点做一次**空白归一化宽松认领**（`name.replace(/\s+/g, '') === seg.replace(/\s+/g, '')`，仅当唯一候选时生效）——目录改名只动空格/大小写时保住 space/notebook 类型与排序；归一化后仍有歧义（多个候选）则维持现状新建 folder。实现：`ensureDirCategories` 精确认领失败后插入宽松认领段（tmp/verify-ignore-fix.cjs 场景 3a/3b/3c 验证通过）
 
 ### 10.3 「你好呀 / AI教学 也忽略不掉」——dev 进程跑的旧主进程代码（已修指纹对账）
 

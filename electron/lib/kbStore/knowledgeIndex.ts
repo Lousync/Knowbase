@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
 import { readJson, writeJson, deleteFile } from './jsonStore'
 import { parseMarkdown } from './mdStore'
-import { getVaultIgnore, isDirIgnored, getVaultIgnoreState, type VaultIgnoreResult, type VaultIgnoreState } from './ignoreFile'
+import { getVaultIgnore, isDirIgnored, getVaultIgnoreState, auditIgnoreRules, type VaultIgnoreResult, type VaultIgnoreState } from './ignoreFile'
 import type { Ignore } from 'ignore'
 
 export type KnowledgeCategoryType = 'space' | 'notebook' | 'folder'
@@ -80,7 +80,7 @@ function asStringArray(value: unknown): string[] {
  * 系统目录（. 开头 / _inbox / _attachments / 嵌套 .knowbase）先按固有规则跳过，
  * 用户规则对系统区无效（不可被 ! 取反救回）；目录命中 → 整棵剪枝不递归。
  */
-function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: string[], ign?: Ignore | null): void {
+function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: string[], ign?: Ignore | null, audit?: { files: string[]; dirs: string[] }): void {
   let entries: Dirent[]
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -98,6 +98,13 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
     // 注：Web 剪藏草稿已迁至 .knowbase/_draft/clipper（随 . 前缀规则天然跳过，不依赖本行）
     if (entry.isDirectory() && entry.name.toLowerCase() === '_inbox') continue
     const abs = join(dir, entry.name)
+    // 规则对账收集（§10.1）：必须在 .ignore 剪枝判定**之前**记录——命中的条目会被剪枝排除，
+    // 事后对过滤后清单对账会把「正常命中」误报成「未匹配」。文件只收 .md（知识可见性口径）
+    if (audit) {
+      const relAudit = relative(root, abs).replace(/\\/g, '/')
+      if (entry.isDirectory()) audit.dirs.push(relAudit)
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) audit.files.push(relAudit)
+    }
     // .ignore 过滤：目录命中整棵剪枝；文件命中不入扫描结果（rel = 仓库内 posix 相对路径）
     if (ign) {
       const rel = relative(root, abs).replace(/\\/g, '/')
@@ -119,11 +126,11 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
         if (entry.name.startsWith('.')) {
           if (entry.name === '.knowbase') {
             const inbox = join(abs, '_inbox')
-            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out, warnings, ign)
+            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out, warnings, ign, audit)
           }
           continue
         }
-        scanMarkdownFiles(root, abs, out, warnings, ign)
+        scanMarkdownFiles(root, abs, out, warnings, ign, audit)
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
         out.push(abs)
       }
@@ -231,6 +238,23 @@ function ensureDirCategories(
           node.path = prefix
           if ((node.parentId ?? null) !== parentId) node.parentId = parentId
           claimed++
+        }
+      }
+      if (!node) {
+        // §10.2 宽松认领（2026-09-08 P4 挂账落码）：目录改名只动空格（连续空格肉眼不可辨，
+        // 用户对齐 .ignore 规则时高频发生）时，精确认领失败后按空白归一化认领**唯一**候选，
+        // 保住 space/notebook 类型与排序；归一化后仍有歧义（多个候选）不认领，维持新建 folder
+        const segNorm = seg.replace(/\s+/g, '')
+        const looseAll = categories.filter((c) => !c.path && c.name.replace(/\s+/g, '') === segNorm)
+        const looseSame = looseAll.filter((c) => (c.parentId ?? null) === parentId)
+        const loose =
+          looseSame.length === 1 ? looseSame[0]
+          : (looseSame.length === 0 && looseAll.length === 1 ? looseAll[0] : undefined)
+        if (loose) {
+          loose.path = prefix
+          if ((loose.parentId ?? null) !== parentId) loose.parentId = parentId
+          claimed++
+          node = loose
         }
       }
       if (!node) {
@@ -387,7 +411,13 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   // .ignore 过滤层：规则解析警告随索引 warnings 透出；命中文件/目录不参与索引（连带不参与目录派生分类）
   const ignoreResult: VaultIgnoreResult = getVaultIgnore()
   warnings.push(...ignoreResult.warnings)
-  scanMarkdownFiles(current.rootPath, current.rootPath, files, warnings, ignoreResult.ign)
+  // §10.1 规则对账：未命中任何磁盘条目的规则（典型=目录名连续空格肉眼不可对齐）进 warnings 提示，
+  // 不再静默不生效——用户能立刻看出是规则写错而非「功能不稳定」
+  const ignoreAudit = ignoreResult.ign ? { files: [] as string[], dirs: [] as string[] } : undefined
+  scanMarkdownFiles(current.rootPath, current.rootPath, files, warnings, ignoreResult.ign, ignoreAudit)
+  if (ignoreResult.ign && ignoreAudit) {
+    warnings.push(...auditIgnoreRules(ignoreResult, ignoreAudit))
+  }
 
   // 第一遍：读入全部 md（目录派生需先知道「所有知识页所在目录」，再统一补建分类）
   const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown> }> = []

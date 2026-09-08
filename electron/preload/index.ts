@@ -67,6 +67,8 @@ const api = {
   updateKnowledgeCategory: (id: string, data: unknown) => ipcRenderer.invoke('knowledge:updateCategory', id, data),
   deleteKnowledgeCategory: (id: string) => ipcRenderer.invoke('knowledge:deleteCategory', id),
   getKnowledgePages: (categoryId?: string | null) => ipcRenderer.invoke('knowledge:getPages', categoryId),
+  // 索引 warnings（.ignore 坏行/规则未命中）：知识库 UI 消费（2026-09-08 §10.1）
+  getKnowledgeIndexWarnings: () => ipcRenderer.invoke('knowledge:getIndexWarnings'),
   getKnowledgePageById: (id: string) => ipcRenderer.invoke('knowledge:getPageById', id),
   createKnowledgePage: (data: unknown) => ipcRenderer.invoke('knowledge:createPage', data),
   updateKnowledgePage: (id: string, data: unknown) => ipcRenderer.invoke('knowledge:updatePage', id, data),

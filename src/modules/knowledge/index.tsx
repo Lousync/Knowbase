@@ -14,6 +14,7 @@ import {
   duplicateKnowledgePage, duplicateKnowledgeCategory,
   showExportSaveDialog, writeExportTextFile,
   getKnowledgeTags, pluginListViews, getKnowledgeGraph,
+  getKnowledgeIndexWarnings,
   workspaceRename, workspaceGetCurrent
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
@@ -195,6 +196,25 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     // A8：图谱视图挂载中时同步刷新（编辑器保存/删除/重命名后切回知识 Tab）
     window.dispatchEvent(new Event('kb-graph-refresh'))
   }, [isActive])
+
+  // .ignore 规则提示（§10.1）：索引 warnings 非空才透出，且与上次内容相同不重复打扰——
+  // 外部改 .ignore / 编辑器保存规则后激活本模块即见最新提示（读索引走主进程缓存对账，自动重建）
+  const lastWarnFingerprintRef = useRef('')
+  const checkIndexWarnings = useCallback(async () => {
+    try {
+      const list = (await getKnowledgeIndexWarnings()) ?? []
+      if (list.length === 0) { lastWarnFingerprintRef.current = ''; return }
+      const fp = list.join('\n')
+      if (fp === lastWarnFingerprintRef.current) return
+      lastWarnFingerprintRef.current = fp
+      list.forEach((w) => console.warn('[KnowledgeIndex]', w))
+      showToast({ type: 'warning', message: list.length === 1 ? list[0] : `${list[0]}（等 ${list.length} 条，详见控制台）` })
+    } catch { /* 旧主进程无此通道时静默 */ }
+  }, [])
+  useEffect(() => {
+    if (!isActive) return
+    void checkIndexWarnings()
+  }, [isActive, checkIndexWarnings])
 
   // 监听数据导入事件 — 导入完成后刷新所有数据
   useEffect(() => {

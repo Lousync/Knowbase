@@ -790,6 +790,11 @@ export function registerWorkspaceHandlers(): void {
   ipcMain.handle('ws:setMdStatus', (_e, rootId: string, relPath: string, draft: unknown) => {
     try {
       const abs = requireInside(rootId, relPath)
+      // §9.3-3 双保险：.ignore 是过滤规则文件，拒绝被归档注入 frontmatter id（UI 层已隐藏入口，
+      // 此守卫防 AI/插件直调 IPC 绕过；大小写不敏感与 findIgnoreFile 同口径）
+      if (basename(abs).toLowerCase() === IGNORE_FILE_NAME) {
+        return { ok: false, error: '.ignore 是过滤规则文件，不能归档为知识页' }
+      }
       const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
       if (draft === true) {
         doc.frontmatter.status = 'draft'

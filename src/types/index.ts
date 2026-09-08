@@ -921,6 +921,8 @@ export interface ElectronAPI {
   updateKnowledgeCategory: (id: string, d: UpdateKnowledgeCategoryDTO) => Promise<KnowledgeCategory>
   deleteKnowledgeCategory: (id: string) => Promise<void>
   getKnowledgePages: (categoryId?: string | null) => Promise<KnowledgePage[]>
+  /** 知识索引 warnings（.ignore 坏行/规则未命中磁盘条目等）；空数组 = 无警告 */
+  getKnowledgeIndexWarnings: () => Promise<string[]>
   getKnowledgePageById: (id: string) => Promise<KnowledgePage | null>
   createKnowledgePage: (d: CreateKnowledgePageDTO) => Promise<KnowledgePage>
   updateKnowledgePage: (id: string, d: UpdateKnowledgePageDTO) => Promise<KnowledgePage>

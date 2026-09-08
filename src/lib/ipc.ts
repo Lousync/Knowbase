@@ -79,6 +79,8 @@ export const createKnowledgeCategory = (d: CreateKnowledgeCategoryDTO) => a().cr
 export const updateKnowledgeCategory = (id: string, d: UpdateKnowledgeCategoryDTO) => a().updateKnowledgeCategory(id, d)
 export const deleteKnowledgeCategory = (id: string) => a().deleteKnowledgeCategory(id)
 export const getKnowledgePages = (categoryId?: string | null) => a().getKnowledgePages(categoryId)
+/** 知识索引 warnings（.ignore 坏行/规则未命中磁盘条目）：知识库模块激活时检查透出 */
+export const getKnowledgeIndexWarnings = () => a().getKnowledgeIndexWarnings()
 export const getKnowledgePageById = (id: string) => a().getKnowledgePageById(id)
 export const createKnowledgePage = (d: CreateKnowledgePageDTO) => a().createKnowledgePage(d)
 export const updateKnowledgePage = (id: string, d: UpdateKnowledgePageDTO) => a().updateKnowledgePage(id, d)

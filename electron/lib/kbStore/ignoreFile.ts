@@ -22,6 +22,8 @@ export interface VaultIgnoreResult {
   ign: Ignore | null
   /** 解析警告（坏行等），随知识索引 warnings 透出 */
   warnings: string[]
+  /** 有效规则行原文（去空行/# 注释；含 ! 否定规则）。供 rebuild 规则对账（§10.1：未命中任何磁盘条目的规则提示空格/名字问题） */
+  ruleLines: string[]
 }
 
 /** .ignore 指纹：mtime + size。null = 未打开仓库或仓库根无 .ignore */
@@ -56,12 +58,12 @@ export function getVaultIgnore(): VaultIgnoreResult {
   const current = getCurrentVault()
   if (!current) {
     cache = null
-    return { ign: null, warnings: [] }
+    return { ign: null, warnings: [], ruleLines: [] }
   }
   const abs = findIgnoreFile(current.rootPath)
   if (!abs) {
     cache = null
-    return { ign: null, warnings: [] }
+    return { ign: null, warnings: [], ruleLines: [] }
   }
   try {
     const st = statSync(abs)
@@ -71,20 +73,25 @@ export function getVaultIgnore(): VaultIgnoreResult {
     const raw = readFileSync(abs, 'utf-8')
     const ign = ignore()
     const warnings: string[] = []
+    const ruleLines: string[] = []
     const lines = raw.split(/\r?\n/)
     for (let i = 0; i < lines.length; i++) {
       // 逐行 add：ignore 包自行消化空行/注释；坏行只丢一行并记警告，绝不影响其余规则
+      const line = lines[i]
+      // 有效规则行记录（供对账）：空行/# 注释跳过；! 否定规则语义是「恢复可见」，不参与命中对账
+      const trimmed = line.trim()
+      if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('!')) ruleLines.push(line)
       try {
-        ign.add(lines[i])
+        ign.add(line)
       } catch (e) {
         warnings.push(`.ignore 第 ${i + 1} 行无效，已跳过：${(e as Error).message}`)
       }
     }
-    const result: VaultIgnoreResult = { ign, warnings }
+    const result: VaultIgnoreResult = { ign, warnings, ruleLines }
     cache = { absPath: abs, mtimeMs: st.mtimeMs, size: st.size, result }
     return result
   } catch {
-    return { ign: null, warnings: [] }
+    return { ign: null, warnings: [], ruleLines: [] }
   }
 }
 
@@ -114,4 +121,34 @@ export function getVaultIgnoreState(): VaultIgnoreState | null {
   } catch {
     return null
   }
+}
+
+/**
+ * §10.1 规则对账（2026-09-08 P4 挂账落码）：逐条有效规则独立编译，在**未过滤**的完整磁盘
+ * 清单（剪枝前收集，文件=.md 口径）上测试命中。未命中任何条目的规则（典型 = 目录名含连续
+ * 空格，规则里空格数写错，肉眼无法对齐）进 warnings——从「静默不生效」变「明确提示」。
+ * ! 否定规则已在 ruleLines 收集时排除（语义是恢复可见，不做命中对账）。
+ */
+export function auditIgnoreRules(
+  result: VaultIgnoreResult,
+  audit: { files: string[]; dirs: string[] }
+): string[] {
+  if (!result.ign || result.ruleLines.length === 0) return []
+  const out: string[] = []
+  for (const line of result.ruleLines) {
+    try {
+      const single = ignore().add(line)
+      const hit =
+        audit.files.some((f) => single.ignores(f)) ||
+        audit.dirs.some((d) => isDirIgnored(single, d))
+      if (!hit) {
+        out.push(
+          `规则「${line.trim()}」未匹配到任何知识页或目录，该条不生效——请检查目录名（注意连续空格肉眼不可见，建议在编辑器文件树右键目录「复制相对路径」粘贴补 /）`
+        )
+      }
+    } catch {
+      // 单条试编译失败：逐行 add 时已记坏行警告，这里不重复
+    }
+  }
+  return out
 }
