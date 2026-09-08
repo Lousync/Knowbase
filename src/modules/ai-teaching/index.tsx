@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
@@ -1214,6 +1214,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             <span>画像</span>
             {profileSuggestion && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" title="AI 有画像更新建议待确认" />}
           </button>
+          {/* 右栏展开入口：右栏收起（面板彻底消失）时顶栏显示，点击恢复素材库（参照外部产品：入口在顶栏） */}
+          {!rightOpen && (
+            <button onClick={() => toggleSide('right')} title="展开右栏（素材库）"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              <PanelRightOpen size={12} />
+              <span>素材库</span>
+              {srcEntries.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
+            </button>
+          )}
           {/* 会话要求（UI 优化条目8.1 方案 A：中型编辑弹层，规格对齐画像弹层；Ctrl+Enter 保存；阅读视图次级入口）。
               约束随会话存放（CONSTRAINTS.md 在会话夹内）——工作区没有任何会话时整个入口不渲染
               （2026-09-08 用户拍板：删除全部会话后也不出现，不只首次进入） */}
@@ -1884,8 +1893,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           )}
         </section>
 
-        {/* 右栏（UI 优化条目2/5）：ResizablePanel 可调宽持久化 + 贴边条折叠；「素材库/资料来源」双区块合并为素材库单一区块 */}
+        {/* 右栏（UI 优化条目2/5）：ResizablePanel 可调宽持久化 + 折叠贴边条；「素材库/资料来源」双区块合并为素材库单一区块。
+            收起 = 面板彻底消失（collapsedWidth=0，2026-09-08 用户拍板参照外部产品），展开入口在顶栏工具组 */}
         <ResizablePanel side="right" storageKey="aiTeach.rightWidth" defaultWidth={280} minWidth={240} maxWidth={420}
+          collapsedWidth={0}
           visible={rightOpen} onSnapClose={() => toggleSide('right')} onSnapOpen={() => toggleSide('right')}>
           <div className="h-full min-h-0 overflow-y-auto flex flex-col">
           <div className="shrink-0">
