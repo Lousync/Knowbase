@@ -74,7 +74,8 @@ function verifyPassword(password: string, stored: string): boolean {
 export function registerUserHandlers(): void {
   // ===== Get profile =====
   ipcMain.handle('user:getProfile', () => {
-    const row = vaultUserProfile()
+    let row: ReturnType<typeof vaultUserProfile> = null
+    try { row = vaultUserProfile() } catch (err) { console.error('[user:getProfile] 读取失败:', err); return null }
     if (!row) return null
     return {
       username: row.username,
@@ -192,19 +193,23 @@ export function registerUserHandlers(): void {
   })
 
   // ===== Get stats =====
+  // 2026-09-08 修复「用户模块永远加载中」：getStats 读四路 vault 数据源，任一路抛异常
+  // （json 损坏/索引未初始化/仓库切换竞态）整个 handler reject → 渲染层 Promise.all 无 catch
+  // → 永远「加载中」。改为每路独立隔离（坏源置 0 不拖垮整体），handler 永不抛。
+  const safe = <T,>(fn: () => T, fallback: T): T => { try { return fn() } catch (err) { console.error('[user:getStats] 数据源读取失败（已置兜底值）:', err); return fallback } }
   ipcMain.handle('user:getStats', (): UserStats => {
     // R6 去库化（D9）：统计全部读 vault 数据源（博客 md / knowledgeIndex / schedule json）
-    const entries = vaultListEntries()
-    const scheduleRows = vaultTodosAll()
+    const entries = safe(() => vaultListEntries(), [])
+    const scheduleRows = safe(() => vaultTodosAll(), [])
     const scheduleDates = new Set(scheduleRows.map((r) => r.date))
     const blogCount = entries.length
-    const knowledgePages = getKnowledgeIndex().pages.length
+    const knowledgePages = safe(() => getKnowledgeIndex().pages.length, 0)
     const scheduleTodos = scheduleRows.length
     const blogTags = new Set(entries.flatMap((e) => e.tags.map((t) => t.id))).size
-    const knowledgeTags = vaultGetTags().length
-    const scheduleTags = vaultTagsAll().length
+    const knowledgeTags = safe(() => vaultGetTags().length, 0)
+    const scheduleTags = safe(() => vaultTagsAll().length, 0)
     const totalWords = entries.reduce((sum, e) => sum + (e.wordCount || 0), 0)
-    const totalCategories = getKnowledgeIndex().categories.length
+    const totalCategories = safe(() => getKnowledgeIndex().categories.length, 0)
 
     // Consecutive days: count backward from today how many consecutive days have entries
     const entryDates = new Set(entries.map((e) => e.date))

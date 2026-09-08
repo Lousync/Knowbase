@@ -20,10 +20,17 @@ export function UserModule() {
   // ---- Lock screen password（已移除：锁屏功能删除，2026-08-31） ----
 
   const loadData = useCallback(async () => {
-    const [p, s] = await Promise.all([getUserProfile(), getUserStats()])
-    setProfile(p)
-    setStats(s)
-    if (p) setUsername(p.username)
+    // 兜底：IPC 异常也要退出加载态（此前无 catch，异常即永远「加载中」——2026-09-08 修复）
+    try {
+      const [p, s] = await Promise.all([getUserProfile(), getUserStats()])
+      setProfile(p ?? { username: '', avatarPath: '', hasPassword: false, createdAt: '', updatedAt: '' })
+      setStats(s)
+      if (p) setUsername(p.username)
+    } catch (err) {
+      console.error('[user] 资料加载失败:', err)
+      showToast({ type: 'error', message: '账户资料加载失败，请重试' })
+      setProfile({ username: '', avatarPath: '', hasPassword: false, createdAt: '', updatedAt: '' })
+    }
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
