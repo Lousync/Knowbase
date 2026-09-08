@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable,
@@ -2022,18 +2022,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           </div>
           </div>
         </ResizablePanel>
-        {/* 收起态显式展开入口（2026-09-08 用户实锤：4px 隐藏热区拉不出/不易发现）——
-            竖条按钮常驻右缘，点击即展开右栏；带素材计数徽标 */}
-        {!rightOpen && (
-          <button onClick={() => toggleSide('right')} title="展开右栏（素材库）"
-            className="shrink-0 w-6 flex flex-col items-center justify-center gap-1.5 border-l border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-            <PanelRightOpen size={14} />
-            <span className="text-[9px] [writing-mode:vertical-rl] tracking-widest">素材库</span>
-            {srcEntries.length > 0 && (
-              <span className="w-4 h-4 flex items-center justify-center rounded-full bg-[var(--accent)]/15 text-[9px] text-[var(--accent)]">{srcEntries.length}</span>
-            )}
-          </button>
-        )}
       </div>
       </>
       ) : (
