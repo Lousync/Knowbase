@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, renameSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, renameSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
@@ -130,7 +130,7 @@ export function listWorkspaces(getSetting: (key: string) => unknown): { workspac
   return { workspaces, sessionWs: m.sessionWs, unassignedCount, lastWorkspaceId: m.lastWorkspaceId && m.workspaces.some((w) => w.id === m.lastWorkspaceId) ? m.lastWorkspaceId : null }
 }
 
-export function createWorkspace(name: string): { ok: boolean; workspace?: AiWorkspace; error?: string } {
+export function createWorkspace(name: string, getSetting?: (key: string) => unknown): { ok: boolean; workspace?: AiWorkspace; error?: string } {
   const m = meta()
   if (!m) return { ok: false, error: '尚未打开仓库' }
   const clean = wsFolderName(name)
@@ -139,6 +139,15 @@ export function createWorkspace(name: string): { ok: boolean; workspace?: AiWork
   const ws: AiWorkspace = { id: `ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, name: clean, createdAt: new Date().toISOString() }
   m.workspaces.push(ws)
   persist(m)
+  // 素材夹预建（2026-09-08 用户拍板）：建工作区即建 `{产物根}/{工作区}/SOURCES/`，
+  // 对话素材目录 `SOURCES/{对话名}/` 由 ensureSessionFolder 预建播种——不再等首次登记懒建
+  try {
+    const vault = getCurrentVault()
+    if (vault && getSetting) {
+      const rootDir = rootDirName(getSetting)
+      mkdirSync(join(vault.rootPath, rootDir, clean, 'SOURCES'), { recursive: true })
+    }
+  } catch { /* 预建失败不阻断工作区创建（懒建兜底仍在） */ }
   return { ok: true, workspace: ws }
 }
 
@@ -217,7 +226,11 @@ function broadcastTree(dirRel: string): void {
 
 export function registerAiTeachingWorkspaceHandlers(getSetting: (key: string) => unknown): void {
   ipcMain.handle('aiTeach:listWorkspaces', () => listWorkspaces(getSetting))
-  ipcMain.handle('aiTeach:createWorkspace', (_e, name: string) => createWorkspace(String(name ?? '')))
+  ipcMain.handle('aiTeach:createWorkspace', (_e, name: string) => {
+    const r = createWorkspace(String(name ?? ''), getSetting)
+    if (r.ok) broadcastTree(rootDirName(getSetting))
+    return r
+  })
   ipcMain.handle('aiTeach:renameWorkspace', (_e, id: string, name: string) => {
     const r = renameWorkspace(String(id ?? ''), String(name ?? ''), getSetting)
     if (r.ok) broadcastTree(rootDirName(getSetting))

@@ -139,6 +139,41 @@ export function ensureSessionFolder(sessionId: string, getSetting: (key: string)
     writeFileSync(join(folderAbs, ANCHOR_FILE), JSON.stringify(anchor, null, 2), 'utf-8')
     // P2（§2.3）建夹即播种会话专属 CONSTRAINTS.md；P5 起优先工作区层模板，回退产物根层
     seedConstraintsFromTemplate(folderAbs, wsId && join(vault.rootPath, baseRel, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS), join(vault.rootPath, rootDir, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS))
+    // 素材目录预建 + SOURCE.md 播种（2026-09-08 用户拍板）：建对话即建 `{父层}/SOURCES/{夹名}/`
+    // 并落空白登记模板（用户填空/表单登记）。幂等：已存在不覆盖。格式与 aiTeachingSources
+    // emptyTemplate 一致（YAML frontmatter + 字段说明；此处内联避免 folders←sources 循环依赖）。
+    // 懒建兜底保留：老对话/播种失败时首次登记素材仍会自动建。
+    try {
+      const srcDirAbs = join(join(baseAbs, 'SOURCES'), name)
+      mkdirSync(srcDirAbs, { recursive: true })
+      const srcFile = join(srcDirAbs, 'SOURCE.md')
+      if (!existsSync(srcFile)) {
+        const wsSeg = baseRel !== rootDir && baseRel.startsWith(`${rootDir}/`) ? baseRel.slice(rootDir.length + 1) : ''
+        const d = new Date()
+        const p2 = (n: number): string => String(n).padStart(2, '0')
+        writeFileSync(
+          srcFile,
+          [
+            '---',
+            `workspace: ${wsSeg || '（未归一层）'}`,
+            `conversation: ${name}`,
+            `updated: ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`,
+            '---',
+            '',
+            '# 素材来源登记',
+            '',
+            '每个素材一个小节（`### 编号. 名称` + 固定字段行）。可在右栏「素材库 → ＋ 添加素材」登记，',
+            '直接编辑本文件，或在对话里让 AI 按此格式登记。字段：类型(url/pptx/pdf/image/md/code/other)、路径、',
+            '页码区间(pdf/pptx 页码，或 code 行号；如 12-34，无则 -)、存放方式(已入库/仅引用)、已提取(程序维护)、备注。',
+            '',
+            '小节格式（复制本行填空即用）：`### 1. 名称` 换行 `- 类型：pdf` `- 路径：./文件名` `- 页码区间：-` `- 存放方式：已入库` `- 已提取：-` `- 备注：-`',
+
+            '',
+          ].join('\n'),
+          'utf-8'
+        )
+      }
+    } catch { /* 素材预建失败不阻断建夹（懒建兜底仍在） */ }
     broadcastTreeRefresh(baseRel)
     return { ok: true, relPath: `${baseRel}/${name}` }
   } catch (e) {
