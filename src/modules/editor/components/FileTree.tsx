@@ -105,7 +105,17 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
       relPath,
     }
     return (
-      <div key={relPath} className={depth === 0 ? 'flex flex-1 flex-col' : undefined}>
+      <div
+        key={relPath}
+        className={depth === 0 ? 'flex flex-1 flex-col' : undefined}
+        onContextMenu={depth === 0 ? (e) => {
+          // 根层容器铺满整个树区（flex-1）：空白处右键的 target 是本容器而非 FileTree 根，
+          // 在此以工作区根目录打开右键菜单（行内右键 target≠容器，不受影响）
+          if (e.target === e.currentTarget) {
+            onContextMenu(e, { name: '工作区', type: 'dir', size: 0, mtime: 0, relPath: '' })
+          }
+        } : undefined}
+      >
         {dirNode && (
           <div
             draggable
@@ -140,6 +150,17 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                   ? renderDir(e.relPath, depth + 1)
                   : renderFileRow(e, depth + 1)
               })}
+              {/* VS Code 式内联创建行：归位到主条目末尾——此前渲染在「软件文件」折叠节之后，命名框视觉上落进折叠节 */}
+              {creating && creating.dirRel === relPath && (
+                <InlineCreateRow
+                  key={`__create__${creating.type}`}
+                  depth={depth + 1}
+                  type={creating.type}
+                  initial={creating.initial}
+                  onCommit={(rawName) => onCommitCreate?.(creating.dirRel, creating.type, rawName)}
+                  onCancel={onCancelCreate ?? (() => {})}
+                />
+              )}
               {softItems.length > 0 && (
                 <div className="mt-auto border-t border-[var(--border-color)] pt-1">
                   <div
@@ -160,17 +181,6 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             </>
           )
         })()}
-        {/* VS Code 式内联创建行：目标目录已展开时显示在条目末尾 */}
-        {isOpen && creating && creating.dirRel === relPath && (
-          <InlineCreateRow
-            key={`__create__${creating.type}`}
-            depth={depth + 1}
-            type={creating.type}
-            initial={creating.initial}
-            onCommit={(rawName) => onCommitCreate?.(creating.dirRel, creating.type, rawName)}
-            onCancel={onCancelCreate ?? (() => {})}
-          />
-        )}
       </div>
     )
   }
