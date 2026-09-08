@@ -2063,6 +2063,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             className="shrink-0 w-2 group relative cursor-col-resize"
             onMouseDown={(e) => {
               e.preventDefault()
+              // React 合成事件 currentTarget 在派发结束后被置 null——异步回调（onUp）里
+              // 不能再读，必须在 mousedown 同步期捕获元素引用（2026-09-08 实锤报错点）
+              const strip = e.currentTarget as HTMLElement
               const startX = e.clientX
               let opened = false
               const onMove = (ev: MouseEvent): void => {
@@ -2074,7 +2077,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 window.removeEventListener('mousemove', onMove)
                 window.removeEventListener('mouseup', onUp)
                 if (opened) {
-                  const strip = e.currentTarget as HTMLElement
                   const suppress = (ev: Event): void => { ev.stopPropagation(); strip.removeEventListener('click', suppress, true) }
                   strip.addEventListener('click', suppress, true)
                   setTimeout(() => strip.removeEventListener('click', suppress, true), 0)
