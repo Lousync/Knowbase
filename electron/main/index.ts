@@ -135,12 +135,8 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 function loadSettingsFromDisk(): Record<string, unknown> {
   let raw: Record<string, unknown> = {}
   try { raw = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf-8')) : {} } catch { raw = {} }
-  // 数据源默认值兜底（对齐渲染层 settings.ts default）。R6 D9 后 storageData /
-  // storageKnowledge 两键已随 sqlite 读源退役（知识库/结构化模块恒 vault），
-  // 仅存 storageBlog（博客读源灰度开关）仍需缺省兜底。
-  for (const k of ['storageBlog'] as const) {
-    if (raw[k] === undefined) raw[k] = 'vault'
-  }
+  // 数据源默认值兜底已全部退役（R6 去库化收官：storageData/storageKnowledge/storageBlog
+  // 三键随 sqlite 读源退役，知识库/博客/结构化模块恒 vault 文件，无读源分支残留）。
   // 仓库状态键唯一属主是 vaultContext（直写文件）：主进程缓存绝不能持有其快照，
   // 否则任何一次 flush（含退出前）都会把 currentVaultId/recentVaults 覆盖回启动时
   // 的旧值——用户表现为「切换仓库重启后被打回原仓库」。

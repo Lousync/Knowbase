@@ -129,8 +129,8 @@ const ENTRY_ITEMS: SettingItem[] = [
     desc: '博客 / 知识库 / 目录 / 章节删除时是否弹确认框', keywords: ['删除确认', '确认', '对话框', '弹窗', '跳过', 'confirm'] },
   { id: 'advanced.onboarding', section: 'about', group: '新手引导', label: '新手引导',
     desc: '重新查看新手引导', keywords: ['引导', '新手', '教程', 'onboarding', '向导', '引导页'] },
-  { id: 'advanced.storage', section: 'data', group: '读源与备份', label: '博客读源 / 整仓备份',
-    desc: '博客读源（sqlite/vault 灰度）；整仓备份恢复（.knowbase 整包 zip）与数据导出', keywords: ['读源', '仓库', 'vault', '博客', '备份', '恢复', '导出', 'storage', '存储'] },
+  { id: 'advanced.storage', section: 'data', group: '备份与恢复', label: '整仓备份',
+    desc: '整仓备份恢复（.knowbase 整包 zip）与数据导出', keywords: ['仓库', 'vault', '备份', '恢复', '导出', 'storage', '存储'] },
   // ===== 快捷键 =====
   { id: 'shortcuts.global', section: 'shortcuts', group: '全局', label: '全局快捷键',
     desc: '侧栏折叠、命令面板、快速打开、缩放、AI 助手、全局搜索等', keywords: ['全局', '侧栏', '折叠', 'escape', 'esc', '关闭弹窗', 'ctrl b', '命令面板', 'ctrl shift p', '快速打开', 'ctrl o', '缩放', 'ctrl j', 'ai 助手', '全局搜索'] },
