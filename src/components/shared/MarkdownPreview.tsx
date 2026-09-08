@@ -8,7 +8,7 @@ import 'katex/dist/katex.min.css'
 import { Copy } from 'lucide-react'
 import { showToast } from '../../lib/toast'
 import { copyImageUrlToClipboard, workspaceGetCurrent, workspaceReadImage } from '../../lib/ipc'
-import { preprocessContent, parseQuizFence } from './QuizParser'
+import { preprocessContent, parseQuizFence, parseQuizFenceLoose } from './QuizParser'
 import { QuizCard } from './QuizCard'
 import { normalizeAnswerLayout } from '../../lib/answerLayout'
 
@@ -119,9 +119,13 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
             const cls = (React.isValidElement(child) && ((child.props as { className?: string }).className || '')) || ''
             if (/language-(spoiler|anim)/.test(cls)) return <>{children}</>
             // ```quiz 围栏（新规范或旧格式预处理产物）→ 判题卡片；解析失败回退普通代码块
-            if (/language-quiz/.test(cls)) {
+            if (/language-(quiz|json)/.test(cls)) {
               const quiz = parseQuizFence(extractText(children))
               if (quiz) return <QuizCard quiz={quiz} pageId={pageId} pageTitle={pageTitle} />
+              if (/language-quiz/.test(cls)) {
+                const fixed = parseQuizFenceLoose(extractText(children))
+                if (fixed) return <QuizCard quiz={fixed} pageId={pageId} pageTitle={pageTitle} />
+              }
             }
             return <pre>{children}</pre>
           },

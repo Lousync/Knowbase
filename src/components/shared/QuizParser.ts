@@ -137,6 +137,14 @@ export function parseQuizFence(text: string): QuizItem | null {
   }
 }
 
+/** 宽容解析：AI 输出常见 JSON 瑕疵修复（全角引号/逗号→半角、尾逗号去除）后二次尝试 */
+export function parseQuizFenceLoose(text: string): QuizItem | null {
+  let t = text.trim()
+  if (!t) return null
+  t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[，,]\s*([}\]])/g, '$1')
+  return parseQuizFence(t)
+}
+
 /** 从页面 Markdown 中提取全部可判题选择题（供刷题模式与卡片渲染共用） */
 export function extractQuizzes(content: string): QuizItem[] {
   if (!content) return []
