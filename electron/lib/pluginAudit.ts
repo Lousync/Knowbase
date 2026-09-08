@@ -120,6 +120,34 @@ export function countMonthInvocations(): number {
 }
 
 /** 本月 LLM 消耗 token 总量（读审计聚合，供预算硬限制使用；无记录返回 0） */
+/** 视觉转写月度用量（与回答模型 llm.invoke 分开统计：action = llm.vision） */
+export function countMonthVisionTokens(): number {
+  const month = currentMonthKey()
+  let total = 0
+  for (const r of readAuditRows()) {
+    if (r.action !== 'llm.vision' || !r.created_at.startsWith(month)) continue
+    try {
+      const d = JSON.parse(r.detail || '{}') as { tokens?: number }
+      if (Number.isFinite(d.tokens)) total += Number(d.tokens)
+    } catch { /* 跳过损坏条目 */ }
+  }
+  return total
+}
+
+/** 视觉转写月度页数（转写的素材页数量级，比 tokens 更直观） */
+export function countMonthVisionPages(): number {
+  const month = currentMonthKey()
+  let total = 0
+  for (const r of readAuditRows()) {
+    if (r.action !== 'llm.vision' || !r.created_at.startsWith(month)) continue
+    try {
+      const d = JSON.parse(r.detail || '{}') as { pages?: number }
+      if (Number.isFinite(d.pages)) total += Number(d.pages)
+    } catch { /* 跳过损坏条目 */ }
+  }
+  return total
+}
+
 export function countMonthLlmTokens(): number {
   const month = currentMonthKey()
   let total = 0

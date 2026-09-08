@@ -1,6 +1,6 @@
 import { ipcMain, net } from 'electron'
 import { randomUUID } from 'crypto'
-import { appendAudit, countMonthLlmTokens } from './pluginAudit'
+import { appendAudit, countMonthLlmTokens, countMonthVisionTokens, countMonthVisionPages } from './pluginAudit'
 import { encryptSecret, decryptSecret } from './secretBox'
 import { scanCcSwitch, importCcSwitchIds, bindCcSwitchSaver } from './ccSwitchImport'
 
@@ -630,6 +630,8 @@ export function registerLlmHandlers(deps: {
 
   ipcMain.handle('llm:getUsage', () => ({
     monthTokens: countMonthLlmTokens(),
+    visionMonthTokens: countMonthVisionTokens(),
+    visionPages: countMonthVisionPages(),
   }))
 }
 
@@ -654,7 +656,7 @@ export interface VisionChatRequest {
   signal?: AbortSignal
 }
 
-export interface VisionChatResponse { ok: boolean; text?: string; model?: string; providerName?: string; error?: string }
+export interface VisionChatResponse { ok: boolean; text?: string; model?: string; providerName?: string; tokens?: number; error?: string }
 
 /** 找一个疑似支持图片的模型（仅 openai-compatible——visionChat 的线格式为 OpenAI 多模态） */
 export function findVisionModel(preferredSpec?: string): { provider: ProviderConfig; model: string } | null {
@@ -691,7 +693,8 @@ export async function visionChat(req: VisionChatRequest): Promise<VisionChatResp
       maxTokens: Math.max(1024, Math.min(16384, Math.floor(req.maxTokens ?? 8192))),
       signal: req.signal,
     })
-    return { ok: true, text: String(r.content ?? ''), model: found.model, providerName: found.provider.name }
+    const totalTokens = (r.usage?.promptTokens ?? 0) + (r.usage?.completionTokens ?? 0)
+    return { ok: true, text: String(r.content ?? ''), model: found.model, providerName: found.provider.name, tokens: totalTokens }
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message ?? e), model: found.model }
   }

@@ -264,6 +264,12 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [convoModel, setConvoModel] = useState('')
   const [convoEffort, setConvoEffort] = useState<Effort>('off')
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  /** 视觉转写模型（素材转写用，全局级与回答模型分开）：'' = 自动按模型名识别；格式 providerId:model */
+  const [visionModel, setVisionModel] = useState(() => localStorage.getItem('aiTeach.visionModel') ?? '')
+  const pickVision = (val: string): void => {
+    setVisionModel(val)
+    try { if (val) localStorage.setItem('aiTeach.visionModel', val); else localStorage.removeItem('aiTeach.visionModel') } catch { /* 隐私模式忽略 */ }
+  }
   const [providerList, setProviderList] = useState<LlmProviderInfo[]>([])
   const [modelCapable, setModelCapable] = useState(false)
   const [organized, setOrganized] = useState<Record<string, string>>({})
@@ -834,7 +840,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         }
         if (pages.length === 0) continue
         setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 视觉模型转写 ${pages.length} 页…（已转 ${doneTotal} 页）`, done: doneTotal, total: to - from + 1 })
-        const r = await aiTeachSrcTranscribe(activeId, no, pages).catch((err: Error) => ({ ok: false as const, error: err.message }))
+        const r = await aiTeachSrcTranscribe(activeId, no, pages, visionModel || undefined).catch((err: Error) => ({ ok: false as const, error: err.message }))
         if (!r?.ok) { failMsg = `视觉转写失败：${(r as { error?: string }).error ?? ''}（已完成 ${doneTotal} 页保留，可重发续转）`; break }
         lastRel = r.relPath ?? lastRel
         lastModel = r.model ?? lastModel
@@ -1781,8 +1787,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                     </button>
                     {modelMenuOpen && (
                       <div className="absolute bottom-full right-0 mb-1.5 w-[280px] z-30 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl overflow-hidden select-none">
-                        <div className="px-3 py-1.5 text-[10.5px] text-[var(--text-muted)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">模型 · 仅本对话生效</div>
-                        <div className="max-h-[220px] overflow-y-auto py-1">
+                        <div className="px-3 py-1.5 text-[10.5px] text-[var(--text-muted)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">回答模型 · 仅本对话生效</div>
+                        <div className="max-h-[300px] overflow-y-auto py-1">
                           {providerList.filter(p => p.enabled && p.models.length > 0).flatMap(p =>
                             p.models.map(mm => {
                               const val = `${p.id}:${mm}`
@@ -1799,6 +1805,31 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                           {providerList.filter(p => p.enabled && p.models.length > 0).length === 0 && (
                             <div className="px-3 py-3 text-[11px] text-[var(--text-muted)]">尚无启用的供应商（设置 → AI 模型中添加）</div>
                           )}
+                        </div>
+                        <div className="px-3 py-1.5 text-[10.5px] text-[var(--text-muted)] bg-[var(--bg-secondary)] border-t border-b border-[var(--border-color)]">视觉转写模型（素材转写用 · 全局）</div>
+                        <div className="max-h-[180px] overflow-y-auto py-1">
+                          <button onClick={() => pickVision('')}
+                            className={`w-full flex items-center gap-1.5 px-3 py-1 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors ${!visionModel ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                            <span className="truncate flex-1">自动识别（按模型名：qwen-vl / glm-4v / gpt-4o…）</span>
+                            {!visionModel && <span className="shrink-0">✓</span>}
+                          </button>
+                          {providerList.filter(p => p.enabled && p.type === 'openai-compatible' && p.models.length > 0).flatMap(p =>
+                            p.models.map(mm => {
+                              const val = `${p.id}:${mm}`
+                              const sel = visionModel === val
+                              return (
+                                <button key={val} onClick={() => pickVision(val)}
+                                  className={`w-full flex items-center gap-1.5 px-3 py-1 text-left text-[11.5px] hover:bg-[var(--bg-hover)] transition-colors ${sel ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
+                                  <span className="text-[9.5px] text-[var(--text-muted)] shrink-0">{p.name}</span>
+                                  <span className="truncate flex-1">{mm}</span>
+                                  {sel && <span className="shrink-0">✓</span>}
+                                </button>
+                              )
+                            }))}
+                        </div>
+                        <div className="px-3 py-1.5 text-[10px] text-[var(--text-muted)] border-t border-[var(--border-color)] bg-[var(--bg-secondary)] space-y-0.5">
+                          <div>本月用量 · 回答：{(usage?.monthTokens ?? 0).toLocaleString()} tokens</div>
+                          <div>本月用量 · 视觉转写：{(usage?.visionMonthTokens ?? 0).toLocaleString()} tokens / {(usage?.visionPages ?? 0)} 页</div>
                         </div>
                         <div className="px-3 pt-1.5 flex items-center justify-between border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
                           <span className="text-[10.5px] text-[var(--text-muted)]">思考强度</span>

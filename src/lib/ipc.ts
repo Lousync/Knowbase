@@ -513,7 +513,7 @@ export const aiTeachSrcPickDir = () => a().aiTeachSrcPickDir()
 export const aiTeachSrcVisionCheck = () => a().aiTeachSrcVisionCheck()
 // 3-21 视觉转写（手动档）
 export const aiTeachSrcPdfBytes = (id: string, no: number) => a().aiTeachSrcPdfBytes(id, no)
-export const aiTeachSrcTranscribe = (id: string, no: number, pages: { n: number; dataUrl: string }[]) => a().aiTeachSrcTranscribe(id, no, pages)
+export const aiTeachSrcTranscribe = (id: string, no: number, pages: { n: number; dataUrl: string }[], modelSpec?: string) => a().aiTeachSrcTranscribe(id, no, pages, modelSpec)
 // P8 用户画像（§3.14 两层 PROFILE.md）；UI 优化条目8.2.2 加工作区第三层（全局/工作区/会话）
 export const aiTeachProfileReadGlobal = () => a().aiTeachProfileReadGlobal()
 export const aiTeachProfileWriteGlobal = (text: string) => a().aiTeachProfileWriteGlobal(text)

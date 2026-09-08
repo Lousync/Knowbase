@@ -619,6 +619,10 @@ export interface LlmUsageInfo {
   monthTokens: number
   /** 月度预算上限（已随 faf1b0f 移除限额概念；可选保留兼容沉浸面板） */
   budget?: number
+  /** 视觉转写月度 tokens（与回答模型分开统计，2026-09-08） */
+  visionMonthTokens?: number
+  /** 视觉转写月度页数 */
+  visionPages?: number
 }
 
 // ===== CC Switch 一键导入 =====
@@ -1335,7 +1339,7 @@ export interface ElectronAPI {
   aiTeachSrcPickDir: () => Promise<{ ok: boolean; path: string | null; error?: string }>
   aiTeachSrcVisionCheck: () => Promise<{ ok: boolean; model?: string; error?: string }>
   aiTeachSrcPdfBytes: (id: string, no: number) => Promise<{ ok: boolean; base64?: string; error?: string }>
-  aiTeachSrcTranscribe: (id: string, no: number, pages: { n: number; dataUrl: string }[]) => Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }>
+  aiTeachSrcTranscribe: (id: string, no: number, pages: { n: number; dataUrl: string }[], modelSpec?: string) => Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }>
   aiTeachProfileReadGlobal: () => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
   aiTeachProfileWriteGlobal: (text: string) => Promise<{ ok: boolean; error?: string }>
   aiTeachProfileReadSession: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>

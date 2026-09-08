@@ -6,6 +6,7 @@ import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder } from '
 import { uniqueFileName } from './workspaceManager'
 import { extractPdfRange, extractPptxPages } from './docsReader'
 import { visionChat, findVisionModel } from './llmService'
+import { appendAudit, countMonthVisionTokens, countMonthVisionPages } from './pluginAudit'
 
 /**
  * AI教学模块 · 素材库（总纲 docs/ai-teaching-module-rework.md §3.13 结构 v3，P6）
@@ -494,7 +495,7 @@ const VISION_SYSTEM = '你是教材视觉转写助手。把你收到的教材页
 /** 逐页转写并并入提取稿。pages = 渲染层栅格化的 {n 页码, dataUrl}（≤12 页，单页失败不中断其余）。
  *  断点续转（2026-09-08 分批流水线）：提取稿中已有的 p{n} 自动跳过不重复调用视觉模型——
  *  渲染层按 12 页/批逐批发送，中断后重发同区间即可续转，已完成批次零消耗。 */
-export async function transcribeVision(sessionId: string, no: number, pages: { n: number; dataUrl: string }[], getSetting: (key: string) => unknown): Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }> {
+export async function transcribeVision(sessionId: string, no: number, pages: { n: number; dataUrl: string }[], getSetting: (key: string) => unknown, modelSpec?: string): Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }> {
   try {
     const l = layout(sessionId, getSetting, false)
     if ('error' in l) return { ok: false, error: l.error }
@@ -521,10 +522,11 @@ export async function transcribeVision(sessionId: string, no: number, pages: { n
     const failed: number[] = []
     let model = ''
     let failedReason = ''
+    let visionTokens = 0
     for (const p of list) {
-      const r = await visionChat({ system: VISION_SYSTEM, prompt: `这是教材第 ${p.n} 页，请转写整页。`, images: [p.dataUrl] })
+      const r = await visionChat({ system: VISION_SYSTEM, prompt: `这是教材第 ${p.n} 页，请转写整页。`, images: [p.dataUrl], modelSpec })
       const t = (r.text ?? '').trim()
-      if (r.ok && t) { done.push({ n: p.n, md: t }); model = r.model ?? model }
+      if (r.ok && t) { done.push({ n: p.n, md: t }); model = r.model ?? model; visionTokens += (r as { tokens?: number }).tokens ?? 0 }
       else { failed.push(p.n); if (!failedReason && r.error) failedReason = r.error }
     }
     if (done.length === 0) {
@@ -554,6 +556,8 @@ export async function transcribeVision(sessionId: string, no: number, pages: { n
       const w = rewriteEntries(l, entries.map(x => x.no === e.no ? { ...x, extracted: `✓ → ${extName}` } : x))
       if (!w.ok) return { ok: false, error: w.error }
     }
+    // 视觉转写用量审计（与回答模型 llm.invoke 分开：llm.vision）——按批记录 tokens 与页数
+    try { appendAudit('aiTeaching', 'llm.vision', { tokens: visionTokens, pages: done.length, model }) } catch { /* 审计失败不阻断 */ }
     broadcastTreeRefresh(l.dirRel)
     return { ok: true, relPath: `${l.dirRel}/${extName}`, model, done: done.map(d => d.n), skipped: skippedAll, failed }
   } catch (err) {
@@ -637,9 +641,9 @@ export function registerAiTeachingSourceHandlers(getSetting: (key: string) => un
   ipcMain.handle('aiTeachSrc:extract', (_e, sessionId: string, no: number) => extractRange(String(sessionId ?? ''), Number(no), getSetting))
   // 3-21 视觉转写（手动档）：原件字节交给渲染层栅格化；转写结果并入提取稿
   ipcMain.handle('aiTeachSrc:pdfBytes', (_e, sessionId: string, no: number) => readSourceBytes(String(sessionId ?? ''), Number(no), getSetting))
-  ipcMain.handle('aiTeachSrc:transcribe', async (_e, sessionId: string, no: number, pages: { n: number; dataUrl: string }[]) => {
+  ipcMain.handle('aiTeachSrc:transcribe', async (_e, sessionId: string, no: number, pages: { n: number; dataUrl: string }[], modelSpec?: string) => {
     const list = Array.isArray(pages) ? pages.map(p => ({ n: Number(p?.n), dataUrl: String(p?.dataUrl ?? '') })) : []
-    return transcribeVision(String(sessionId ?? ''), Number(no), list, getSetting)
+    return transcribeVision(String(sessionId ?? ''), Number(no), list, getSetting, modelSpec ? String(modelSpec) : undefined)
   })
   // 入库浏览：系统文件选择器（表单「已入库」用；返回绝对路径给 add 拷贝）
   ipcMain.handle('aiTeachSrc:pick', async () => {
