@@ -221,7 +221,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
           className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
           <RefreshCw size={11} /> 刷新模型
         </button>
-        <button disabled={testing} onClick={async () => { setTesting(true); try { setTestResult(await llmTestConnection({ type: p.type, baseUrl: p.baseUrl })) } finally { setTesting(false) } }}
+        <button disabled={testing} onClick={async () => { setTesting(true); try { setTestResult(await llmTestConnection({ type: p.type, baseUrl: p.baseUrl, id: p.id })) } finally { setTesting(false) } }}
           className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-40">
           {testing && <Loader2 size={11} className="animate-spin" />} 测试
         </button>

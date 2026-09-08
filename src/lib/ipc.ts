@@ -420,7 +420,7 @@ export const llmListProviders = (): Promise<{ providers: LlmProviderInfo[]; defa
 export const llmSaveProvider = (d: LlmProviderDraft): Promise<{ ok: boolean; id?: string; error?: string }> => a().llmSaveProvider(d)
 export const llmRemoveProvider = (id: string): Promise<{ ok: boolean }> => a().llmRemoveProvider(id)
 export const llmToggleProvider = (id: string, enabled: boolean): Promise<{ ok: boolean }> => a().llmToggleProvider(id, enabled)
-export const llmTestConnection = (d: { type: LlmProviderType; baseUrl: string; apiKey?: string }): Promise<LlmTestResultInfo> => a().llmTestConnection(d)
+export const llmTestConnection = (d: { type: LlmProviderType; baseUrl: string; apiKey?: string; id?: string; headers?: Record<string, string> }): Promise<LlmTestResultInfo> => a().llmTestConnection(d)
 export const llmRefreshModels = (id: string): Promise<{ ok: boolean; models: string[]; error?: string }> => a().llmRefreshModels(id)
 export const llmAddModel = (id: string, model: string): Promise<{ ok: boolean; models: string[]; error?: string }> => a().llmAddModel(id, model)
 export const llmSetDefaultModel = (value: string): Promise<{ ok: boolean }> => a().llmSetDefaultModel(value)

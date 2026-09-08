@@ -1255,7 +1255,7 @@ export interface ElectronAPI {
   llmSaveProvider: (draft: LlmProviderDraft) => Promise<{ ok: boolean; id?: string; error?: string }>
   llmRemoveProvider: (id: string) => Promise<{ ok: boolean }>
   llmToggleProvider: (id: string, enabled: boolean) => Promise<{ ok: boolean }>
-  llmTestConnection: (draft: { type: LlmProviderType; baseUrl: string; apiKey?: string }) => Promise<LlmTestResultInfo>
+  llmTestConnection: (draft: { type: LlmProviderType; baseUrl: string; apiKey?: string; id?: string; headers?: Record<string, string> }) => Promise<LlmTestResultInfo>
   llmRefreshModels: (id: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmAddModel: (id: string, model: string) => Promise<{ ok: boolean; models: string[]; error?: string }>
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>

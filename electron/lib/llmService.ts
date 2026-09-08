@@ -547,17 +547,22 @@ export function registerLlmHandlers(deps: {
     return { ok: true }
   })
 
-  ipcMain.handle('llm:testConnection', async (_e, draft: { type: ProviderType; baseUrl: string; apiKey?: string }) => {
+  ipcMain.handle('llm:testConnection', async (_e, draft: { type: ProviderType; baseUrl: string; apiKey?: string; id?: string; headers?: Record<string, string> }) => {
     const urlCheck = validateProviderUrl(String(draft?.baseUrl ?? ''))
     if (!urlCheck.ok) return { ok: false, error: urlCheck.error, latencyMs: 0 }
-    const temp: ProviderConfig = {
-      id: '__test__', name: 'test', type: draft.type, baseUrl: urlCheck.url,
-      apiKeyEncrypted: typeof draft.apiKey === 'string' && draft.apiKey ? encryptSecret(draft.apiKey) : '',
-      enabled: true, models: [],
-    }
+    // 传 id（服务商卡片测试）= 用存档 Key 与自定义头测——裸测不带鉴权，对要求鉴权的
+    // 网关必然 401（2026-09-08 用户实锤）。添加表单无 id，用表单明文 apiKey/headers。
+    const saved = draft?.id ? getProviders().find(x => x.id === draft.id) : undefined
+    const temp: ProviderConfig = saved
+      ? { ...saved, headers: { ...(saved.headers ?? {}), ...(draft.headers ?? {}) } }
+      : {
+          id: '__test__', name: 'test', type: draft.type, baseUrl: urlCheck.url,
+          apiKeyEncrypted: typeof draft.apiKey === 'string' && draft.apiKey ? encryptSecret(draft.apiKey) : '',
+          enabled: true, models: [], headers: draft.headers,
+        }
     const started = Date.now()
     try {
-      const models = await getAdapter(draft.type).listModels(temp)
+      const models = await getAdapter(temp.type).listModels(temp)
       return { ok: true, latencyMs: Date.now() - started, models }
     } catch (err) {
       return { ok: false, latencyMs: Date.now() - started, error: String((err as Error)?.message ?? err) }
