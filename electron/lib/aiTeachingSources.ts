@@ -103,7 +103,7 @@ function emptyTemplate(l: SourcesLayout): string {
     '',
     '下面第 1 条是空位：把【】里的占位换成实际内容、填上「路径」就登记生效（路径是识别关键，不填不登记）。',
     '新增素材复制第 1 条小节、编号 +1。也可在右栏「素材库 → ＋ 添加素材」用表单登记，或在对话里让 AI 登记。',
-    '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(pdf/pptx 页码或 code 行号，如 12-34，无则 -)、',
+    '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(按 PDF/幻灯片自身的第几页=阅读器显示页码，不是书页印刷页码；code 用行号；如 12-34，无则 -)、',
     '存放方式(已入库=原件拷进本目录/仅引用=只记地址)、已提取(程序维护)、备注。',
     '',
     '### 1. 【素材名称】',
@@ -442,7 +442,7 @@ export async function extractRange(sessionId: string, no: number, getSetting: (k
     const body = [
       `# ${e.name} · 第 ${rg.from}-${rg.to} 页提取稿`,
       '',
-      `> 来源：${SOURCE_FILE} 素材 #${e.no}（${e.path}） · 提取于 ${today()} · 由文本层自动抽取`,
+      `> 来源：${SOURCE_FILE} 素材 #${e.no}（${e.path}） · 提取于 ${today()} · 由文本层自动抽取（页码为 PDF/幻灯片自身物理页序，非书页印刷页码）`,
       '> 公式/图形以文本层为准可能失真；本页**可直接编辑修正**，AI 后续按修正版引用。',
       '',
       ...pages.flatMap(p => [`## p${p.n}`, '', p.text || '（本页无可提取文本）', '']),

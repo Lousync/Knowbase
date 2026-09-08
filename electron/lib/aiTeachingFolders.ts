@@ -164,7 +164,7 @@ export function ensureSessionFolder(sessionId: string, getSetting: (key: string)
             '',
             '下面第 1 条是空位：把【】里的占位换成实际内容、填上「路径」就登记生效（路径是识别关键，不填不登记）。',
             '新增素材复制第 1 条小节、编号 +1。也可在右栏「素材库 → ＋ 添加素材」用表单登记，或在对话里让 AI 登记。',
-            '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(pdf/pptx 页码或 code 行号，如 12-34，无则 -)、',
+            '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(按 PDF/幻灯片自身的第几页=阅读器显示页码，不是书页印刷页码；code 用行号；如 12-34，无则 -)、',
             '存放方式(已入库=原件拷进本目录/仅引用=只记地址)、已提取(程序维护)、备注。',
             '',
             '### 1. 【素材名称】',

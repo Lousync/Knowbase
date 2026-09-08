@@ -2254,7 +2254,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 const detected = inferSrcType(srcForm.path)
                 return (detected === 'pdf' || detected === 'pptx' || detected === 'code') ? (
                   <div className="flex items-center gap-2">
-                    <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">{detected === 'code' ? '行号' : '页码'}</label>
+                    <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]" title="按 PDF/幻灯片自身的第几页（阅读器显示页码），不是书页印刷页码">{detected === 'code' ? '行号' : '页码'}</label>
                     <input value={srcForm.rangeFrom} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeFrom: e.target.value.replace(/\D/g, '') })} placeholder={detected === 'code' ? '起始行' : '起始页'}
                       className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
                     <span className="text-[var(--text-muted)]">–</span>
