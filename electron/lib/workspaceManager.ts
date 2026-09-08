@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, dialog, app, shell } from 'electron'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync } from 'fs'
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
-import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, setVaultMetaName } from './kbStore/vaultContext'
+import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, markRecentDeleted, clearRecentDeleted, setVaultMetaName } from './kbStore/vaultContext'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
@@ -316,11 +316,14 @@ function loadVaults(): void {
   // P8 设备级自愈：settings.json.recentVaults 有而登记表没有的条目（库缺/损坏），
   // 磁盘上确实存在且含 .knowbase → 回登记（最近列表即第二注册表）。
   try {
-    for (const rv of readRecentVaults()) {
+    // 含墓碑（deleted）条目：用户从系统回收站恢复目录后，这里自动复活登记并清标记
+    // （2026-09-08 用户需求：删除仓库 → 回收站恢复 → 重启回到仓库切换列表）
+    for (const rv of readRecentVaults(true)) {
       if (roots.has(rv.rootId)) continue
       if (existsSync(rv.path) && existsSync(join(rv.path, '.knowbase'))) {
         roots.set(rv.rootId, { id: rv.rootId, name: rv.name, rootPath: rv.path })
         upsertVault(rv.rootId, rv.name, rv.path)
+        if (rv.deleted) clearRecentDeleted(rv.rootId)
       }
     }
   } catch { /* ignore */ }
@@ -943,7 +946,8 @@ export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown)
     }
     roots.delete(rootId)
     try { removeVault(rootId) } catch { /* 登记表行可能已不在，忽略 */ }
-    forgetRecentVault(rootId)
+    // 2026-09-08 墓碑：保留最近列表记录并标记 deleted（用户从回收站恢复目录后重启自动复活登记）
+    markRecentDeleted(rootId)
     const wasCurrent = getCurrentVault()?.rootId === rootId
     if (wasCurrent) {
       setCurrentVault(null)

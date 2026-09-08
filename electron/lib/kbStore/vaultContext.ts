@@ -80,12 +80,35 @@ export interface RecentVault {
   name: string
   path: string
   updatedAt: string
+  /** 删除墓碑（2026-09-08）：仓库目录已进回收站但保留最近列表记录——用户从系统回收站
+   *  恢复目录后，重启 loadVaults 自愈发现磁盘目录回来即自动复活登记并清标记 */
+  deleted?: boolean
 }
 
-export function readRecentVaults(): RecentVault[] {
+export function readRecentVaults(includeDeleted = false): RecentVault[] {
   const raw = readSettingsFile()['recentVaults']
   if (!Array.isArray(raw)) return []
   return raw.filter((x): x is RecentVault => !!x && typeof x === 'object' && typeof (x as RecentVault).rootId === 'string' && typeof (x as RecentVault).path === 'string')
+    .filter((x) => includeDeleted || !x.deleted)
+}
+
+/** 删除仓库时的墓碑（2026-09-08）：不直接忘掉最近记录，标记 deleted——
+ *  用户从系统回收站恢复目录后，重启 loadVaults 自愈自动复活登记（清标记） */
+export function markRecentDeleted(rootId: string): void {
+  writeSettingsFile((s) => {
+    if (Array.isArray(s['recentVaults'])) {
+      s['recentVaults'] = (s['recentVaults'] as RecentVault[]).map((x) => x.rootId === rootId ? { ...x, deleted: true } : x)
+    }
+  })
+}
+
+/** 墓碑复活：清 deleted 标记（loadVaults 自愈发现目录回归时调用） */
+export function clearRecentDeleted(rootId: string): void {
+  writeSettingsFile((s) => {
+    if (Array.isArray(s['recentVaults'])) {
+      s['recentVaults'] = (s['recentVaults'] as RecentVault[]).map((x) => x.rootId === rootId ? { ...x, deleted: false } : x)
+    }
+  })
 }
 
 /** 把仓库从最近列表移除（删除仓库时调用，防切换器列出死条目） */
