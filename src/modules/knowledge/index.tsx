@@ -197,23 +197,20 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     window.dispatchEvent(new Event('kb-graph-refresh'))
   }, [isActive])
 
-  // .ignore 规则提示（§10.1）：索引 warnings 分级透出——只有用户可行动的 .ignore 规则问题才
-  // Toast（内容不变不重复打扰）；信息性警告（如 frontmatter.id 缺失 = 草稿机制，属既定行为）
-  // 只进控制台，否则每次进知识库都被正常现象警告一次，反成噪音
-  const lastWarnFingerprintRef = useRef('')
+  // .ignore 规则提示（§10.1）：只有用户可行动的 .ignore 规则问题才 Toast + 终端计数；
+  // 信息性警告（frontmatter.id 缺失=草稿机制等）完全静默——fingerprint 只记 actionable，
+  // 过程性警告（清理/补建计数）随 rebuild 变化若也打印，终端会被无行动价值的计数刷屏
+  const lastActionableRef = useRef('')
   const checkIndexWarnings = useCallback(async () => {
     try {
       const list = (await getKnowledgeIndexWarnings()) ?? []
-      if (list.length === 0) { lastWarnFingerprintRef.current = ''; return }
-      const fp = list.join('\n')
-      if (fp === lastWarnFingerprintRef.current) return
-      lastWarnFingerprintRef.current = fp
-      // 终端（Windows GBK）只打英文计数防乱码；中文详情走 UI Toast，DevTools 需要时可在此断点
-      console.warn(`[KnowledgeIndex] ${list.length} index warning(s) (details: UI toast / DevTools breakpoint)`)
       const actionable = list.filter((w) => w.startsWith('规则「') || w.includes('.ignore'))
-      if (actionable.length > 0) {
-        showToast({ type: 'warning', message: actionable.length === 1 ? actionable[0] : `${actionable[0]}（等 ${actionable.length} 条，详见控制台）` })
-      }
+      const fp = actionable.join('\n')
+      if (fp === lastActionableRef.current) return
+      lastActionableRef.current = fp
+      if (actionable.length === 0) return
+      console.warn(`[KnowledgeIndex] ${actionable.length} .ignore rule warning(s) (details: UI toast / DevTools breakpoint)`)
+      showToast({ type: 'warning', message: actionable.length === 1 ? actionable[0] : `${actionable[0]}（等 ${actionable.length} 条，详见控制台）` })
     } catch { /* 旧主进程无此通道时静默 */ }
   }, [])
   useEffect(() => {

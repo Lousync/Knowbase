@@ -203,23 +203,23 @@ function dirRelOf(relPath: string): string {
  *
  * 对账规则（目录被移动 / 重命名 / 删除后仍不产生僵尸或重复节点）：
  *  1. 先失效解绑：path 指向的目录已不存在 → 解绑 path，等后续按「父级 + 目录名」认领
- *     —— .ignore 命中的目录同口径（磁盘存在但知识层不可见，节点一并 stale；
- *     否则分类树残留「空分类」被误读为忽略不生效；恢复规则后由目录派生重建）
+ *     注意：.ignore 命中的目录**不走** stale（磁盘还在）——节点保留在 categories.json、
+ *     仅在 rebuild 产出层隐藏（2026-09-08 教训：物理删除会让取消忽略后 space/notebook
+ *     类型永久丢失、学习空间视图不可见；读层隐藏才能原样恢复）
  *  2. 认领优先：同级同名且已解绑（或历史无 path）的节点 → 复用其 id（保住 notebook/space 类型与排序）
  *  3. 仍无节点才新建，一律 folder（语义升级交给用户在知识库改类型）
  */
 function ensureDirCategories(
   dirs: string[],
   categories: KnowledgeCategoryIndexEntry[],
-  root: string,
-  ign?: Ignore | null
+  root: string
 ): { created: number; claimed: number; staleIds: Set<string> } {
   const isDir = (rel: string): boolean => {
     try { return statSync(join(root, rel)).isDirectory() } catch { return false }
   }
   const staleIds = new Set<string>()
   for (const c of categories) {
-    if (c.path && (!isDir(c.path) || (ign ? isDirIgnored(ign, c.path) : false))) {
+    if (c.path && !isDir(c.path)) {
       staleIds.add(c.id)
       c.path = undefined
     }
@@ -439,7 +439,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   // 目录即分类（2026-09-04）：为知识页所在目录补建分类节点，随后按 path 定归属。
   // 编辑器是唯一写入方（vault 模式知识库只读），位置变化一律由文件路径表达。
   const dirs = [...new Set(docs.map((d) => dirRelOf(d.rel)).filter((d) => d && d !== KB_INBOX_DIR))].sort()
-  const { created, claimed, staleIds } = ensureDirCategories(dirs, categories, current.rootPath, ignoreResult.ign)
+  const { created, claimed, staleIds } = ensureDirCategories(dirs, categories, current.rootPath)
   if (created > 0) {
     categoriesDirty = true
     warnings.push(`已按仓库目录补建 ${created} 个分类节点（目录即分类）`)
@@ -459,9 +459,16 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
       if (i !== -1) categories.splice(i, 1)
     }
     categoriesDirty = true
-    warnings.push(`已清理 ${removedIds.size} 个目录已消失或被 .ignore 隐藏的分类节点`)
+    warnings.push(`已清理 ${removedIds.size} 个目录已消失的分类节点`)
   }
   if (categoriesDirty) writeCategories(categories, categoryResult.rawById, categoryResult.isArray)
+
+  // .ignore 读层隐藏（2026-09-08 改版）：path 命中规则的分类节点从**产出**剔除（categories.json
+  // 保留全量），取消忽略后节点原样恢复（类型/排序不丢）；子节点由规则前缀语义自然一并命中
+  const activeIgn = ignoreResult.ign
+  const visibleCategories = activeIgn
+    ? categories.filter((c) => !(c.path && isDirIgnored(activeIgn, c.path)))
+    : categories
 
   const pages: KnowledgePageIndexEntry[] = []
   const byId: Record<string, KnowledgePageIndexEntry> = {}
@@ -507,7 +514,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     source: 'vault',
-    categories: categoryResult.categories.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hans')),
+    categories: visibleCategories.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hans')),
     pages,
     byId,
     warnings,
