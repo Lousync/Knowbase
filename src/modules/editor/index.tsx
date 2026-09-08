@@ -23,7 +23,7 @@ import { PdfReaderView } from './components/PdfReaderView'
 import { extractOutline } from '../../lib/markdownOutline'
 import type { EditorDoc, DirCache, TreeNode, CreateIntent } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
-import { ConfirmDialog } from '../../components/shared'
+import { ConfirmDialog, ResizablePanel } from '../../components/shared'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 
 interface Props {
@@ -44,6 +44,14 @@ interface Props {
   openFrom?: string | null
   /** 点「返回来源」：App 切回来源 Tab（保活上下文不丢） */
   onBackFrom?: () => void
+  /** 内嵌侧栏开合（Ctrl+B / 贴边收放联动；缺省=恒开，兼容 Workbench 等旧调用） */
+  sidebarOpen?: boolean
+  /** 侧栏宽度持久化集（sidebarWidth_editor） */
+  sidebarWidths?: Record<string, number>
+  /** 拖拽过半贴边收起（ResizablePanel 回调） */
+  onSnapCloseSidebar?: () => void
+  /** 折叠态拖拽/点击拉出（ResizablePanel 回调） */
+  onSnapOpenSidebar?: () => void
 }
 
 interface InputBoxState {
@@ -54,7 +62,7 @@ interface InputBoxState {
   onSubmit: (value: string) => void
 }
 
-export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange, openFrom = null, onBackFrom }: Props) {
+export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = true, pendingOpenRel = null, onPendingConsumed, zenLevel = 0, onZenLevelChange, openFrom = null, onBackFrom, sidebarOpen, sidebarWidths, onSnapCloseSidebar, onSnapOpenSidebar }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
@@ -913,7 +921,22 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
             // Workbench 外壳：文件树 portal 到全局侧栏槽（App 侧栏槽自带标题区），此处不再内嵌树列
             return createPortal(<div className="flex h-full w-full flex-col overflow-hidden">{treeColumn}</div>, sidebarEl)
           }
-          return <div className="flex w-[220px] shrink-0 flex-col border-r border-[var(--border-color)]">{treeColumn}</div>
+          // 内嵌侧栏：ResizablePanel 拖拽调宽 + Ctrl+B 开合 + 贴边收放（与 blog/schedule/knowledge 同款；
+          // sidebarOpen 未传时恒开，兼容 Workbench 等旧调用方）
+          return (
+            <ResizablePanel
+              storageKey="sidebarWidth_editor"
+              defaultWidth={220}
+              minWidth={180}
+              maxWidth={420}
+              visible={sidebarOpen ?? true}
+              initialWidth={sidebarWidths?.sidebarWidth_editor}
+              onSnapClose={onSnapCloseSidebar}
+              onSnapOpen={onSnapOpenSidebar}
+            >
+              <div className="flex h-full w-full flex-col border-r border-[var(--border-color)]">{treeColumn}</div>
+            </ResizablePanel>
+          )
         })()}
 
         <div className="flex min-w-0 flex-1 flex-col">

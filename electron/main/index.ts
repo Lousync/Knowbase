@@ -1,6 +1,11 @@
 // 必须最先引入：IPC 注册幂等包装（dev 下 repo 模块被打包两份时避免重复注册崩溃）
 import './ipcSafe'
 import { app, BrowserWindow, dialog, ipcMain, screen, shell, protocol, clipboard, nativeImage, Menu, net, Tray } from 'electron'
+// 无 GPU/无头环境（AI 驱动真机测试）显式 KNOWBASE_DISABLE_GPU=1 时禁用 GPU 加速，防渲染进程连带崩溃
+if (process.env.KNOWBASE_DISABLE_GPU === '1') {
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('no-sandbox')
+}
 import { join, basename, resolve, sep } from 'path'
 import { readFileSync, writeFileSync, existsSync, createReadStream, cpSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'fs'
 import { Readable } from 'stream'
