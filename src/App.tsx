@@ -621,12 +621,22 @@ export default function App() {
                   Workbench 模式下编辑器文件树 portal 到下方全局侧栏槽（R1-W1）；禅模式 Z1+ 收起侧栏槽 */}
               <div className="flex min-h-0 flex-1">
                 {workbench && (
-                  <div
-                    ref={wbSidebarRef}
-                    className={`flex shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)] transition-[width] duration-150 ${
-                      zenLevel >= 1 || !(activeTab === 'editor' || secondaryTab === 'editor') ? 'w-0 overflow-hidden border-r-0' : 'w-[220px]'
-                    }`}
-                  />
+                  <ResizablePanel
+                    storageKey="wb.sidebarWidth"
+                    defaultWidth={220}
+                    minWidth={180}
+                    maxWidth={420}
+                    visible={sidebarOpen && zenLevel < 1 && (activeTab === 'editor' || secondaryTab === 'editor')}
+                    initialWidth={sidebarWidths?.['wb.sidebarWidth']}
+                    collapsedWidth={6}
+                    onSnapClose={() => setSidebarOpen(false)}
+                    onSnapOpen={zenLevel >= 1 ? undefined : () => setSidebarOpen(true)}
+                  >
+                    <div
+                      ref={wbSidebarRef}
+                      className="flex h-full flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)]"
+                    />
+                  </ResizablePanel>
                 )}
                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                   {/* 编辑器组（W3 · Editor Groups v1）：主栏 + 可选副栏，两栏模块互不相同 */}

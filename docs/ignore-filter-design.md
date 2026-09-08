@@ -107,7 +107,7 @@ rebuildKnowledgeIndex → cache/knowledge-index.json
 | 1 | `src/assets/ignore.svg`（新增） | 自绘 vscode-icons 风格 SVG：文件轮廓 + 斜杠禁用符（🚫 变体），灰调（`#8a919c` 类 muted 色），风格与其余 27 枚图标一致（自绘，无 CC BY 4.0 署名负担） |
 | 2 | `src/modules/editor/components/FileTree.tsx` `FileIcon` | **文件名精确匹配分支**（在 ext 提取之前）：`name.toLowerCase() === '.ignore'` → 专属图标。不做 `FILE_ICONS['ignore']` 注册——那会把 `a.ignore` 等任意 `.ignore` 后缀文件全部误命中 |
 | 3 | `electron/lib/workspaceManager.ts` `ws:setMdStatus` | 开头硬守卫：取 `basename` 小写 === `.ignore` → `return { ok: false, error: '.ignore 是过滤规则文件，不能归档为知识页' }`。UI 层条件不动（双保险） |
-| 4 | `src/modules/help/docs/.ignore 知识库隐藏规则.md` | 「语法速查」补「忽略目录」常用写法示例（`学习空间/`、`/学习空间/`、嵌套路径写法） |
+| 4 | `src/modules/help/docs/.ignore 知识库隐藏规则.md` | 「语法速查」补「忽略目录」常用写法示例（`学习空间/`、`/学习空间/`、嵌套路径写法）；补空格语义说明：目录名中间的空格原样写即可（整行匹配，不会被拆分），仅行尾空格会被忽略（git 语义 trim，目录名以空格结尾需 `\ ` 转义）。实测见 tmp/ignore-space-test.cjs |
 
 ### 9.4 验收标准
 
