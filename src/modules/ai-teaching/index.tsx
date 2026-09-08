@@ -2221,19 +2221,23 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]"
                   onKeyDown={e => { if (e.key === 'Escape') setSrcForm(null) }} />
               </div>
-              <div className="flex items-center gap-2">
-                <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">类型</label>
-                {/* 类型全自动检测（2026-09-08 用户拍板）：按文件/地址扩展名实时识别，用户无需选择 */}
-                <span className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] text-[var(--text-secondary)]">
-                  {srcForm.path.trim() ? `自动识别：${inferSrcType(srcForm.path)}` : '自动识别（选择文件/填地址后）'}
-                </span>
-                <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
-                <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
-                  className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
-                  <option value="已入库">已入库（拷贝原件）</option>
-                  <option value="仅引用">仅引用（记路径）</option>
-                </select>
-              </div>
+              {/* 类型全自动检测（2026-09-08 用户拍板）：按文件/地址扩展名实时识别，用户无需选择；
+                  未选文件/未填地址时整行不显示（空占位徽标无信息量）。
+                  分工：表单登记自动识别；手编 SOURCE.md / AI 登记则由用户/AI 在文件里写明类型 */}
+              {srcForm.path.trim() && (
+                <div className="flex items-center gap-2">
+                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">类型</label>
+                  <span className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] text-[var(--text-secondary)]">
+                    自动识别：{inferSrcType(srcForm.path)}
+                  </span>
+                  <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
+                  <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
+                    className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
+                    <option value="已入库">已入库（拷贝原件）</option>
+                    <option value="仅引用">仅引用（记路径）</option>
+                  </select>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">{srcForm.storage === '已入库' ? '文件' : '地址'}</label>
                 {srcForm.storage === '已入库' ? (
