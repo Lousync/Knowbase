@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../../components/shared'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'
 import type * as Monaco from 'monaco-editor'
 import { bindEditorTheme } from '../../../lib/editorTheme'
 
@@ -867,6 +868,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 min-h-0">
+              <MonacoErrorBoundary>
               <Editor
                 language={getFileTypeInfo(fileType).monacoLang}
                 value={content}
@@ -905,6 +907,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                   placeholder: getFileTypeInfo(fileType).placeholder,
                 }}
               />
+              </MonacoErrorBoundary>
             </div>
           </div>
         )}

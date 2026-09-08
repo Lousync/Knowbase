@@ -10,6 +10,7 @@ import { getGlobalActiveTab } from '../../../lib/activeTab'
 import { ConfirmDialog } from '../../../components/shared'
 import { SummaryPanel } from './SummaryPanel'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'
 import { bindEditorTheme } from '../../../lib/editorTheme'
 import type * as Monaco from 'monaco-editor'
 import type { Tag } from '../../../types'
@@ -412,14 +413,15 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
             </div>
           </div>
         ) : (
-          <Editor
-            language="markdown"
-            value={contentMd}
-            onChange={handleChange}
-            onMount={handleEditorMount}
-            beforeMount={monaco => bindEditorTheme(monaco)}
-            theme="knowbase-auto"
-            loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
+          <MonacoErrorBoundary>
+            <Editor
+              language="markdown"
+              value={contentMd}
+              onChange={handleChange}
+              onMount={handleEditorMount}
+              beforeMount={monaco => bindEditorTheme(monaco)}
+              theme="knowbase-auto"
+              loading={<div className="flex items-center justify-center h-full text-[var(--text-muted)]">加载编辑器...</div>}
             options={{
               fontSize: Math.round(s.editorFontSize * zoom),
               fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace",
@@ -450,7 +452,8 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
               unicodeHighlight: { nonBasicASCII: false, ambiguousCharacters: false, invisibleCharacters: false },
               placeholder: '开始写作...',
             }}
-          />
+            />
+          </MonacoErrorBoundary>
         )}
       </div>
 

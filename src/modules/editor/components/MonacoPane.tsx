@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, Component, type ReactNode } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef } from 'react'
 import { forwardRef } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 import { bindEditorTheme, applyEditorTheme, setEditorThemeVariant } from '../../../lib/editorTheme'
 import { dimMarkdownText, markdownWikiHighlights, wikiTargetTitle, type DimCls } from '../../../lib/markdownDim'
 import { getKnowledgePages } from '../../../lib/ipc'
+import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'
 import type { KnowledgePage } from '../../../types'
 import type { EditorDoc } from '../types'
 
@@ -60,41 +61,8 @@ async function getPagesCached(): Promise<KnowledgePage[]> {
   }
 }
 
-/** 编辑器面板级错误边界（UI 优化 §15）：Monaco 渲染循环崩溃（如切 Tab 时序竞态的 domNode undefined）
- *  只塌本面板并就地重挂载恢复，不再冒泡到根（根边界是最后防线）。children 变化自动清除错误态 */
-class PaneErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null; key: number; autoRetries: number }> {
-  state: { err: Error | null; key: number; autoRetries: number } = { err: null, key: 0, autoRetries: 0 }
-  static getDerivedStateFromError(err: Error): { err: Error | null } {
-    return { err }
-  }
-  componentDidCatch(err: Error): void {
-    // V-7（monaco 0.56）：HMR/重挂后旧实例 dispose 的时序竞态（InstantiationService/渲染帧
-    // undefined）重挂即愈——瞬时类错误自动重建一次；限一次，再错停面板交用户手动，防循环
-    const transient =
-      /InstantiationService has been disposed|Model is disposed|reading '(setClassName|domNode|getWidgets)'/.test(err.message)
-    if (transient && this.state.autoRetries < 1) {
-      this.setState((s) => ({ err: null, key: s.key + 1, autoRetries: s.autoRetries + 1 }))
-    }
-  }
-  componentDidUpdate(prev: { children: ReactNode }): void {
-    // 换文档/换仓库（children 元素变化）时自动清错重试一次
-    if (this.props.children !== prev.children && this.state.err) this.setState({ err: null })
-  }
-  render(): ReactNode {
-    if (this.state.err) {
-      return (
-        <div className="flex h-full flex-col items-center justify-center gap-2 text-[13px] text-[var(--text-muted)]">
-          <span>编辑器渲染出错（内容不会丢失，磁盘即真相源）</span>
-          <button
-            onClick={() => this.setState(s => ({ err: null, key: s.key + 1 }))}
-            className="rounded-md border border-[var(--border-color)] px-3 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
-          >重新加载编辑器</button>
-        </div>
-      )
-    }
-    return <div key={this.state.key} className="h-full min-h-0">{this.props.children}</div>
-  }
-}
+/** 编辑器面板级错误边界已提升为全仓共享 MonacoErrorBoundary（V-7：blog/knowledge 两处
+ *  Editor 同暴露面，见 src/components/shared/MonacoErrorBoundary.tsx） */
 
 /** 编辑器「大纲」导航句柄透传 */
 export const MonacoPane = forwardRef<MonacoPaneHandle, Props>(function MonacoPane(
@@ -375,7 +343,7 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
     }, [layoutKey])
 
     return (
-      <PaneErrorBoundary>
+      <MonacoErrorBoundary>
         <Editor
           path={doc.relPath}
           language={doc.language}
@@ -396,7 +364,7 @@ const MonacoHost = forwardRef<MonacoPaneHandle, { doc: EditorDoc; onChange: Prop
             padding: { top: 8 },
           }}
         />
-      </PaneErrorBoundary>
+      </MonacoErrorBoundary>
     )
   },
 )
