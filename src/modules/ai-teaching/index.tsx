@@ -1160,6 +1160,27 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           <span className="truncate">{wsActive?.name ?? '工作区'}</span>
           <ChevronDown size={11} className="shrink-0 opacity-60" />
         </button>
+        {/* 新建任务入口：紧贴工作区 chip（2026-09-08 用户验收：加对话按钮应挂在工作区旁）。
+            必须在 overflow-x-auto 滚动容器之外——容器会裁剪 absolute 下拉菜单
+            （2026-09-08 用户验收实锤：菜单在容器内时被裁剪为不可见，表现为「新建对话点不到」） */}
+        <div className="relative shrink-0">
+          <button onClick={() => setShowNewMenu(v => !v)} title="新建任务"
+            className="flex items-center px-1 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><Plus size={13} /></button>
+          {showNewMenu && (
+            <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-30 overflow-hidden">
+              {TEMPLATES.map(t => (
+                <button key={t.id} onClick={() => void newTask(t)}
+                  className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
+                  <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
+                    <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto">
           {wsSessions.map(s => (
             <div key={s.id} onClick={() => { void openSession(s.id, s.title) }}
@@ -1180,26 +1201,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               )}
             </div>
           ))}
-        </div>
-        {/* 新建任务入口：必须在 overflow-x-auto 滚动容器之外——容器会裁剪 absolute 下拉菜单
-            （2026-09-08 用户验收实锤：菜单在容器内时被裁剪为不可见，表现为「新建对话点不到」） */}
-        <div className="relative shrink-0">
-          <button onClick={() => setShowNewMenu(v => !v)} title="新建任务"
-            className="flex items-center px-1 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><Plus size={13} /></button>
-          {showNewMenu && (
-            <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-30 overflow-hidden">
-              {TEMPLATES.map(t => (
-                <button key={t.id} onClick={() => void newTask(t)}
-                  className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">
-                  <span className="mt-0.5 text-[var(--accent)]">{t.icon}</span>
-                  <span className="min-w-0">
-                    <span className="block text-[12px] text-[var(--text-primary)]">{t.label}</span>
-                    <span className="block text-[10.5px] text-[var(--text-muted)]">{t.desc}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
         <div className="shrink-0 flex items-center gap-0.5">
 
