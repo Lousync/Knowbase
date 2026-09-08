@@ -61,7 +61,7 @@ rebuildKnowledgeIndex → cache/knowledge-index.json
 | quiz 已挂被忽略页 | quiz 记录仍在 sqlite，仅 `vaultResolveSource` 来源解析为空（空间/笔记本显示为空），不报错 |
 | 分类对账 | 被忽略文件所在目录仍在磁盘 → `ensureDirCategories` 的 stale 清理不触发，**不产生僵尸分类**；被忽略文件不参与 dirs 派生 |
 | `.ignore` 文件本身 | 非 `.md` 天然不入知识索引；在编辑器文件树正常可见可编辑 |
-| 外部编辑 `.ignore`（记事本等） | 与外部编辑 `.md` 同现状：无 watcher，依赖切模块重读/手动刷新；应用内保存才即时生效 |
+| 外部编辑 `.ignore`（记事本等） | **2026-09-08 修正**：读缓存时对账 `.ignore` 指纹（mtime+size，`getKnowledgeIndex` → `sameIgnoreState`），外部增删改规则在下一次读取索引时自动重建生效，图谱经 `graphCacheStale` 连锁跟进；不再依赖应用内保存。（旧行为「依赖切模块重读」实际读旧缓存，系缺口，已修） |
 | 其他模块 | 博客/书签/单词本等各自独立扫描，**v1 不接入** `.ignore`（挂账） |
 
 ## 6. 边界（明确不做）

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown, ExternalLink, FolderOpen, FolderPlus, Pencil, Layers } from 'lucide-react'
 import { workspaceCreateVault, workspaceGetCurrent, workspaceGetRecent, workspaceOpenById, workspaceRenameVault, workspaceRevealVault } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
@@ -9,6 +10,8 @@ import type { WorkspaceRecent } from '../../types'
  * 仓库切换器（P8 / D8 → UI 打磨点1 迁至编辑器侧栏底部）：条形按钮 → 向上弹出面板
  * （最近仓库 / 打开其他 / 文件管理器打开 / 重命名 / 新建）。
  * 形态从简：切换与新建后整窗重载（数据激活重读约定）；重命名只改展示名（不动文件夹）。
+ * 弹层走 portal + fixed 定位：侧栏面板根是 overflow-hidden，窄侧栏（minWidth 180 < 菜单 260）
+ * 时 absolute 菜单会被裁剪（2026-09-08 用户验收实锤），portal 后不受任何祖先裁剪。
  */
 export function VaultSwitcher() {
   const [cur, setCur] = useState<{ rootId: string; name: string; path: string } | null>(null)
@@ -17,16 +20,33 @@ export function VaultSwitcher() {
   const [mode, setMode] = useState<'list' | 'create' | 'rename'>('list')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ left: number; bottom: number } | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const btnRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => { void workspaceGetCurrent().then(setCur).catch(() => {}) }, [])
+
+  const toggleMenu = (): void => {
+    if (!open) {
+      const r = btnRef.current?.getBoundingClientRect()
+      if (r) {
+        // 菜单 260 宽 + 8px 屏幕边距，右缘防溢出夹取；bottom 锚定按钮顶缘 → 向上弹出且高度自适应
+        const left = Math.max(8, Math.min(r.left, window.innerWidth - 268))
+        setMenuPos({ left, bottom: window.innerHeight - r.top + 6 })
+      }
+    }
+    setOpen((o) => !o)
+  }
 
   useEffect(() => {
     if (!open) return
     void workspaceGetRecent().then(setRecent).catch(() => {})
     setMode('list')
     const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if ((ref.current && ref.current.contains(t)) || (menuRef.current && menuRef.current.contains(t))) return
+      setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('pointerdown', onDown)
@@ -95,7 +115,8 @@ export function VaultSwitcher() {
   return (
     <div className="relative w-full" ref={ref}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={toggleMenu}
         title={cur ? `当前仓库：${cur.name}\n${cur.path}` : '打开仓库'}
         className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] transition-colors ${open ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'} text-[var(--text-primary)]`}
       >
@@ -104,8 +125,12 @@ export function VaultSwitcher() {
         <ChevronDown size={11} className={`shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
-        <div className="absolute left-0 bottom-full mb-1 w-[260px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-2xl py-1 z-[130] text-[var(--text-primary)]">
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed w-[260px] max-h-[min(460px,70vh)] overflow-y-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-2xl py-1 z-[130] text-[var(--text-primary)]"
+          style={{ left: menuPos.left, bottom: menuPos.bottom }}
+        >
           {mode === 'list' && (
             <>
               <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">最近仓库</div>
@@ -153,7 +178,8 @@ export function VaultSwitcher() {
               {mode === 'rename' && <p className="mt-1 text-[10px] text-[var(--text-muted)] leading-snug">只改显示名称，不改磁盘上的文件夹名</p>}
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

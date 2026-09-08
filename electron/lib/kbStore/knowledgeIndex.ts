@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
 import { readJson, writeJson, deleteFile } from './jsonStore'
 import { parseMarkdown } from './mdStore'
-import { getVaultIgnore, isDirIgnored, type VaultIgnoreResult } from './ignoreFile'
+import { getVaultIgnore, isDirIgnored, getVaultIgnoreState, type VaultIgnoreResult, type VaultIgnoreState } from './ignoreFile'
 import type { Ignore } from 'ignore'
 
 export type KnowledgeCategoryType = 'space' | 'notebook' | 'folder'
@@ -58,6 +58,8 @@ export interface KnowledgeIndex {
   pages: KnowledgePageIndexEntry[]
   byId: Record<string, KnowledgePageIndexEntry>
   warnings: string[]
+  /** 构建 时 .ignore 指纹（undefined = 旧版本缓存）。读缓存时对账，外部改 .ignore 也能自动重建 */
+  ignoreState?: VaultIgnoreState | null
 }
 
 function asString(value: unknown): string {
@@ -476,14 +478,31 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
     pages,
     byId,
     warnings,
+    ignoreState: getVaultIgnoreState(),
   }
 }
 
-/** 读取缓存；不存在或 schema 不匹配时自动重建并落盘。 */
+/** .ignore 指纹对账：双方都为空（无 .ignore）视为一致；有一方为空或指纹不同 = 规则文件被增删改 */
+function sameIgnoreState(a: VaultIgnoreState | null | undefined, b: VaultIgnoreState | null | undefined): boolean {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  return a.mtimeMs === b.mtimeMs && a.size === b.size
+}
+
+/** 读取缓存；schema 不匹配或 .ignore 指纹变化（外部增删改规则，无 watcher 也感知）时自动重建并落盘。 */
 export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
   if (!forceRebuild) {
     const cached = readJson<KnowledgeIndex | null>('cache', 'knowledge-index.json', null)
-    if (cached && cached.schemaVersion === 3 && cached.source === 'vault' && Array.isArray(cached.pages) && cached.byId) return cached
+    if (
+      cached &&
+      cached.schemaVersion === 3 &&
+      cached.source === 'vault' &&
+      Array.isArray(cached.pages) &&
+      cached.byId &&
+      sameIgnoreState(cached.ignoreState, getVaultIgnoreState())
+    ) {
+      return cached
+    }
   }
   const fresh = rebuildKnowledgeIndex()
   writeJson('cache', 'knowledge-index.json', fresh)

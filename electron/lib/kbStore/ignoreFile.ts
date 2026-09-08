@@ -24,6 +24,12 @@ export interface VaultIgnoreResult {
   warnings: string[]
 }
 
+/** .ignore 指纹：mtime + size。null = 未打开仓库或仓库根无 .ignore */
+export interface VaultIgnoreState {
+  mtimeMs: number
+  size: number
+}
+
 interface IgnoreCacheEntry {
   absPath: string
   mtimeMs: number
@@ -89,4 +95,23 @@ export function getVaultIgnore(): VaultIgnoreResult {
  */
 export function isDirIgnored(ign: Ignore, rel: string): boolean {
   return ign.ignores(rel + '/') || ign.ignores(rel)
+}
+
+/**
+ * 当前仓库 .ignore 的指纹（与 getVaultIgnore 同一套查找逻辑，Windows 大小写不敏感）。
+ * 供 getKnowledgeIndex 缓存对账：外部编辑器增删改 .ignore（无 watcher、未触发失效链）
+ * 时，下一次读索引也能感知并自动重建（2026-09-08 实测缺口：外部改 .ignore 后切模块
+ * 读到的仍是旧缓存，用户误以为过滤失效）。
+ */
+export function getVaultIgnoreState(): VaultIgnoreState | null {
+  const current = getCurrentVault()
+  if (!current) return null
+  const abs = findIgnoreFile(current.rootPath)
+  if (!abs) return null
+  try {
+    const st = statSync(abs)
+    return { mtimeMs: st.mtimeMs, size: st.size }
+  } catch {
+    return null
+  }
 }
