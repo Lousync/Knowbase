@@ -190,13 +190,13 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
         </div>
       )}
 
-      {/* 拖拽手柄 — 内侧 6px，独立于 border 不重叠 */}
+      {/* 拖拽手柄 — 内侧 6px，独立于 border 不重叠；常显淡色让「可拖拽」可发现，hover 变主题色 */}
       {visible && showHandle && (
         <div
-          className={`absolute top-0 h-full w-1.5 z-30 transition-colors ${
-            dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize hover:bg-[var(--accent)]/20'
+          className={`absolute top-0 h-full w-0.5 z-30 transition-colors ${
+            dragging ? 'bg-[var(--accent)] cursor-col-resize' : 'cursor-col-resize bg-[var(--border-color)] hover:bg-[var(--accent)]/40'
           }`}
-          style={isRight ? { marginLeft: -3, left: 0 } : { marginRight: -3, right: 0 }}
+          style={isRight ? { marginLeft: -1, left: 0 } : { marginRight: -1, right: 0 }}
           onMouseDown={onHandleMouseDown}
         />
       )}

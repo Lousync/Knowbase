@@ -84,3 +84,34 @@ rebuildKnowledgeIndex → cache/knowledge-index.json
 4. `!` 取反、`**`、`dir/` 行为与 git 一致（用 ignore 包的语义）
 5. 被忽略目录不产生僵尸分类节点；图谱无残留
 6. 非法模式行 → warnings 有提示，不影响其余规则生效
+
+## 9. P3 增量方案（2026-09-08 提出，未落代码）：专属图标 + 归档硬守卫
+
+### 9.1 背景
+
+编辑器文件树中 `.ignore` 显示为普通文件图标（走 default.svg），无辨识度；用户要求图标特殊化，并要求程序级保证 `.ignore` 永远不会被归档为知识页。
+
+### 9.2 现状核对（防线盘点）
+
+| 防线 | 位置 | 现状 |
+|---|---|---|
+| 索引层 | `knowledgeIndex.ts` L125 只扫 `.md` | ✅ `.ignore` 天然不入知识索引 |
+| UI 层 | `editor/index.tsx` L1215 / L1253「归档为知识页」条件 `.md` 结尾 | ✅ `.ignore` 不显示归档入口 |
+| 主进程 | `workspaceManager.ts` `ws:setMdStatus`（L790） | ⚠️ 无文件名校验——UI 条件一旦放宽或被 AI/插件直调 IPC，`.ignore` 会被注入 frontmatter id 变成知识页 |
+| 图标 | `FileTree.tsx` `FileIcon` → `fileIcons.ts` `getFileIcon('ignore')` | ⚠️ 无映射 → default.svg 普通文件图标 |
+
+### 9.3 改动点
+
+| # | 位置 | 改动 |
+|---|---|---|
+| 1 | `src/assets/ignore.svg`（新增） | 自绘 vscode-icons 风格 SVG：文件轮廓 + 斜杠禁用符（🚫 变体），灰调（`#8a919c` 类 muted 色），风格与其余 27 枚图标一致（自绘，无 CC BY 4.0 署名负担） |
+| 2 | `src/modules/editor/components/FileTree.tsx` `FileIcon` | **文件名精确匹配分支**（在 ext 提取之前）：`name.toLowerCase() === '.ignore'` → 专属图标。不做 `FILE_ICONS['ignore']` 注册——那会把 `a.ignore` 等任意 `.ignore` 后缀文件全部误命中 |
+| 3 | `electron/lib/workspaceManager.ts` `ws:setMdStatus` | 开头硬守卫：取 `basename` 小写 === `.ignore` → `return { ok: false, error: '.ignore 是过滤规则文件，不能归档为知识页' }`。UI 层条件不动（双保险） |
+| 4 | `src/modules/help/docs/.ignore 知识库隐藏规则.md` | 「语法速查」补「忽略目录」常用写法示例（`学习空间/`、`/学习空间/`、嵌套路径写法） |
+
+### 9.4 验收标准
+
+1. 文件树中 `.ignore` 显示专属禁用符图标；`大写变体`（`.IGNORE`）同样命中
+2. 右键/ tab 右键 `.ignore` 均无「归档为知识页」（现状回归）
+3. 直调 `ws:setMdStatus` 传 `.ignore` 路径 → 被拒绝，frontmatter 不被改写
+4. tsc 双绿；`.ignore` 归档守卫不影响正常 .md 归档流程
