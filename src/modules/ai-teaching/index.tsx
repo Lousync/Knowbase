@@ -2133,16 +2133,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                           <button onClick={() => { void doRemoveSrc(e.no, e.name) }} title="移除登记（不删文件）"
                             className="text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={10} /></button>
                         </div>
-                        {visionBusy?.no === e.no && (
-                          <div className="mt-1 flex items-center gap-2">
-                            <div className="flex-1 h-1.5 rounded-full bg-[var(--bg-primary)] overflow-hidden">
-                              <div className="h-full bg-[var(--accent)] transition-all duration-300" style={{ width: `${visionBusy.total ? Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100)) : 8}%` }} />
-                            </div>
-                            <span className="shrink-0 text-[10px] text-[var(--text-muted)]">{visionBusy.label}</span>
-                            <button onClick={() => { transcribeStopRef.current = true }} title="停止转写（已完成页保留，重发续转）"
-                              className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors">停止</button>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )
@@ -2188,7 +2178,28 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">本轮暂无写入改动</div>
             )}
           </div>
-          <div className="flex-1" />
+          {/* 转写进度卡片（2026-09-08 用户拍板：进度展示移到右栏底部空白区，条目行不再挤塞） */}
+          {visionBusy && (
+            <div className="shrink-0 mx-2 mb-2 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-3 py-2.5">
+              <div className="flex items-center gap-2 mb-2">
+                <Loader2 size={12} className="animate-spin text-[var(--accent)] shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-[var(--text-primary)]">视觉转写 · {visionBusy.label}</span>
+                <button onClick={() => { transcribeStopRef.current = true }} title="停止转写（已完成页保留，重发同区间自动续转）"
+                  className="shrink-0 text-[10.5px] px-2 py-0.5 rounded-md border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors">停止</button>
+              </div>
+              <div className="h-2 rounded-full bg-[var(--bg-primary)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent)]/50 transition-all duration-500 animate-pulse"
+                  style={{ width: `${visionBusy.total ? Math.max(4, Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100))) : 10}%` }}
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                <span>已转写 {visionBusy.done ?? 0} / {visionBusy.total ?? '…'} 页</span>
+                <span>{visionBusy.total ? Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100)) : 0}%</span>
+              </div>
+            </div>
+          )}
+          {!visionBusy && <div className="flex-1" />}
           <div className="p-2 shrink-0 flex items-center justify-between">
             <button onClick={() => { if (activeId) { void refreshMessages(activeId); void refreshSources(activeId); showToast({ type: 'info', message: '已刷新消息与素材列表' }) } }}
               className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors text-left">
