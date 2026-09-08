@@ -2053,12 +2053,38 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           </div>
         </ResizablePanel>
         {/* 右缘透明拉出条（2026-09-08 用户拍板：收起后面板彻底消失，但右缘保留透明拉出条——
-            默认透明，悬停显示蓝色高亮竖条，点击展开素材库；顶栏「素材库」按钮为等效入口） */}
+            默认透明，悬停显示蓝色高亮竖条。两种展开方式：点击直接展开 / 按住向左拖过
+            minWidth 一半即展开（与 ResizablePanel onEdgeMouseDown 同语义）；
+            拖拽展开后抑制随后的 click 派发防二次翻转；顶栏「素材库」按钮为等效入口 */}
         {!rightOpen && (
           <div
-            onClick={() => toggleSide('right')}
-            title="点击展开素材库"
+            data-edge-strip="right"
+            title="点击或向左拖拽展开素材库"
             className="shrink-0 w-2 group relative cursor-col-resize"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              const startX = e.clientX
+              let opened = false
+              const onMove = (ev: MouseEvent): void => {
+                if (opened) return
+                if (startX - ev.clientX > 120) { opened = true; toggleSide('right') }
+              }
+              const onUp = (): void => {
+                document.body.style.cursor = ''
+                window.removeEventListener('mousemove', onMove)
+                window.removeEventListener('mouseup', onUp)
+                if (opened) {
+                  const strip = e.currentTarget as HTMLElement
+                  const suppress = (ev: Event): void => { ev.stopPropagation(); strip.removeEventListener('click', suppress, true) }
+                  strip.addEventListener('click', suppress, true)
+                  setTimeout(() => strip.removeEventListener('click', suppress, true), 0)
+                }
+              }
+              document.body.style.cursor = 'col-resize'
+              window.addEventListener('mousemove', onMove)
+              window.addEventListener('mouseup', onUp)
+            }}
+            onClick={() => toggleSide('right')}
           >
             <div className="absolute top-0 bottom-0 right-0 w-1 bg-[var(--accent)]/0 group-hover:bg-[var(--accent)]/60 transition-colors duration-150" />
           </div>
