@@ -704,7 +704,8 @@ export interface AiTeachSourceEntry {
 /** P6 素材库：登记表单入参（storage=已入库 时 path 为待拷贝原件的来源路径） */
 export interface AiTeachSourceInput {
   name: string
-  type: string
+  /** 可选：缺省 = 主进程按 URL/扩展名自动检测类型（2026-09-08 用户拍板不再手选）；显式传入用于 AI 登记等 */
+  type?: string
   path: string
   rangeFrom?: string
   rangeTo?: string

@@ -259,9 +259,30 @@ export function readSources(sessionId: string, getSetting: (key: string) => unkn
   }
 }
 
+/** 扩展名 → 素材类型（类型纠错依据）：登记时选错类型（pptx 选了 pdf 等）会导致区间提取
+ *  用错解析器（误导性报错）、原件阅读器分派错误、AI 注入描述失真——按扩展名自动纠正 */
+const EXT_TYPE_MAP: Record<string, SourceType> = {
+  pdf: 'pdf', pptx: 'pptx', ppt: 'pptx',
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
+  md: 'md', markdown: 'md', txt: 'md',
+}
+const CODE_EXTS = new Set(['js', 'ts', 'jsx', 'tsx', 'py', 'c', 'h', 'cpp', 'hpp', 'cc', 'java', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'sh', 'bat', 'ps1', 'lua', 'sql', 'vue', 'scss', 'css', 'html', 'xml', 'json', 'yml', 'yaml', 'toml', 'ini'])
+
+/** 由文件名/路径推断素材类型；无法识别返回 null（保留用户所选） */
+function inferTypeFromPath(p: string): SourceType | null {
+  const m = /\.([A-Za-z0-9]+)\s*$/.exec(p.trim())
+  if (!m) return null
+  const ext = m[1].toLowerCase()
+  if (EXT_TYPE_MAP[ext]) return EXT_TYPE_MAP[ext]
+  if (CODE_EXTS.has(ext)) return 'code'
+  return null
+}
+
 export interface AddSourceInput {
   name: string
-  type: string
+  /** 可选（2026-09-08 用户拍板：类型全自动检测，用户不再手选）。缺省/'auto' = 按 URL/扩展名
+   *  自动识别；显式传入（AI 登记等既有调用方）仍尊重并保留扩展名纠错兜底 */
+  type?: string
   /** 仅引用=直接存（URL/仓库相对/绝对路径）；已入库=作为素材文件的来源绝对路径 */
   path: string
   rangeFrom?: string
@@ -271,16 +292,22 @@ export interface AddSourceInput {
 }
 
 /** 添加素材：已入库先拷贝原件进素材夹，再按模板追加条目（3-28「程序解析模板后写入」，非前端拼串） */
-export function addSource(sessionId: string, input: AddSourceInput, getSetting: (key: string) => unknown): SourcesResult & { no?: number } {
+export function addSource(sessionId: string, input: AddSourceInput, getSetting: (key: string) => unknown): SourcesResult & { no?: number; corrected?: { from: string; to: string } } {
   try {
     const name = String(input?.name ?? '').trim()
     if (!name) return { ok: false, error: '素材名称必填' }
-    const type = TYPE_ENUM.includes((input?.type ?? '') as SourceType) ? String(input.type).toLowerCase() : 'other'
+    const explicitType = input?.type && input.type !== 'auto'
+      ? (TYPE_ENUM.includes((input?.type ?? '') as SourceType) ? String(input.type).toLowerCase() : 'other')
+      : null
+    let type: SourceType | string = explicitType ?? 'other'
     const storage = input?.storage === '已入库' ? '已入库' : '仅引用'
     const l = layout(sessionId, getSetting, true)
     if ('error' in l) return { ok: false, error: l.error }
     mkdirSync(l.dirAbs, { recursive: true })
     let path = String(input.path ?? '').trim()
+    // 类型纠错（2026-09-08 用户提问落码）：本地文件路径可按扩展名推断真实类型——
+    // 与所选 type 不符时自动纠正并回传 corrected 提示（url / 未知扩展不纠，尊重用户选择）
+    let corrected: { from: string; to: string } | undefined
     if (storage === '已入库') {
       if (!path) return { ok: false, error: '入库失败：未选择素材文件' }
       const srcAbs = isAbsolute(path) || /^[a-zA-Z]:[\\/]/.test(path) ? path : join(l.rootPath, path)
@@ -288,6 +315,20 @@ export function addSource(sessionId: string, input: AddSourceInput, getSetting: 
       const copied = uniqueFileName(l.dirAbs, basename(srcAbs))
       copyFileSync(srcAbs, join(l.dirAbs, copied))
       path = `./${copied}`
+    }
+    if (!explicitType) {
+      // 全自动检测（用户不再选类型）：URL → url；本地/仓库路径按扩展名映射；未知 → other
+      if (/^https?:\/\//i.test(path)) type = 'url'
+      else {
+        const inferred = inferTypeFromPath(path)
+        if (inferred) type = inferred
+      }
+    } else if (type !== 'url' && !/^https?:\/\//i.test(path)) {
+      const inferred = inferTypeFromPath(path)
+      if (inferred && inferred !== type) {
+        corrected = { from: type, to: inferred }
+        type = inferred
+      }
     }
     const rf = parseInt(String(input.rangeFrom ?? ''), 10)
     const rt = parseInt(String(input.rangeTo ?? ''), 10)
@@ -297,7 +338,7 @@ export function addSource(sessionId: string, input: AddSourceInput, getSetting: 
     const e: SourceEntry = { no, name, type, path, range, storage, extracted: '-', note: String(input.note ?? '').trim() }
     const w = rewriteEntries(l, [...entries, e])
     if (!w.ok) return { ok: false, error: w.error }
-    return { ok: true, relPath: l.fileRel, entries: readEntries(l), no }
+    return { ok: true, relPath: l.fileRel, entries: readEntries(l), no, corrected }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }

@@ -48,6 +48,21 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * 「🩺 诊断问答」模板（3-34）答完生成初稿；入口=选择页「全局画像」chip + 顶栏「画像」chip（3-35）。
  */
 
+/** 素材类型自动识别（与主进程 addSource 检测同口径）：路径/URL → 类型，无法识别 → other。
+ *  表单实时预览用；落盘类型以主进程 addSource 的检测结果为准 */
+function inferSrcType(path: string): string {
+  const p = path.trim()
+  if (/^https?:\/\//i.test(p)) return 'url'
+  const m = /\.([A-Za-z0-9]+)\s*$/.exec(p)
+  const ext = m ? m[1].toLowerCase() : ''
+  if (ext === 'pdf') return 'pdf'
+  if (ext === 'pptx' || ext === 'ppt') return 'pptx'
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'image'
+  if (['md', 'markdown', 'txt'].includes(ext)) return 'md'
+  if (['js', 'ts', 'jsx', 'tsx', 'py', 'c', 'h', 'cpp', 'hpp', 'cc', 'java', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'sh', 'bat', 'ps1', 'lua', 'sql', 'vue', 'scss', 'css', 'html', 'xml', 'json', 'yml', 'yaml', 'toml', 'ini'].includes(ext)) return 'code'
+  return 'other'
+}
+
 /** P5：工作区卡片「最近活跃」相对时间（updated_at 'YYYY-MM-DD HH:MM:SS' 本地串） */
 function wsAgo(iso: string | null): string {
   if (!iso) return '无'
@@ -715,11 +730,18 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     const name = srcForm.name.trim()
     if (!name) { showToast({ type: 'warning', message: '素材名称必填' }); return }
     const r = await aiTeachSrcAdd(activeId, {
-      name, type: srcForm.type, path: srcForm.path.trim(), storage: srcForm.storage,
+      name, path: srcForm.path.trim(), storage: srcForm.storage,
       rangeFrom: srcForm.rangeFrom.trim() || undefined, rangeTo: srcForm.rangeTo.trim() || undefined, note: srcForm.note.trim(),
     }).catch((e: Error) => ({ ok: false as const, error: e.message }))
-    if (r.ok) { await refreshSources(activeId); setSrcForm(null); showToast({ type: 'info', message: '✓ 已写入 SOURCE.md' }) }
-    else showToast({ type: 'error', message: `登记失败：${r.error ?? '未知错误'}` })
+    const rr = r as { ok: boolean; error?: string; corrected?: { from: string; to: string } }
+    if (r.ok) {
+      await refreshSources(activeId); setSrcForm(null)
+      // 类型自动纠错提示：登记类型与文件扩展名不符时主进程已按扩展名纠正（否则提取/阅读器会用错解析器）
+      showToast(rr.corrected
+        ? { type: 'info', message: `✓ 已写入 SOURCE.md（类型已按文件扩展名从 ${rr.corrected.from} 纠正为 ${rr.corrected.to}）` }
+        : { type: 'info', message: '✓ 已写入 SOURCE.md' })
+    }
+    else showToast({ type: 'error', message: `登记失败：${rr.error ?? '未知错误'}` })
   }
   const pickSrcFile = async () => {
     const r = await aiTeachSrcPick().catch(() => null)
@@ -2201,10 +2223,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               </div>
               <div className="flex items-center gap-2">
                 <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">类型</label>
-                <select value={srcForm.type} onChange={e => setSrcForm({ ...srcForm, type: e.target.value })}
-                  className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
-                  {['pdf', 'pptx', 'code', 'url', 'image', 'md', 'other'].map(t => <option key={t} value={t}>{t}</option>)} {/* 条目10：源码文件类型 */}
-                </select>
+                {/* 类型全自动检测（2026-09-08 用户拍板）：按文件/地址扩展名实时识别，用户无需选择 */}
+                <span className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] text-[var(--text-secondary)]">
+                  {srcForm.path.trim() ? `自动识别：${inferSrcType(srcForm.path)}` : '自动识别（选择文件/填地址后）'}
+                </span>
                 <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
                 <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
                   className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
@@ -2220,21 +2242,24 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                     <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-muted)]" title={srcForm.path}>{srcForm.path || '未选择文件'}</span>
                   </div>
                 ) : (
-                  <input value={srcForm.path} onChange={e => setSrcForm({ ...srcForm, path: e.target.value })} placeholder={srcForm.type === 'url' ? 'https://…' : '仓库内相对路径 / 绝对路径'}
+                  <input value={srcForm.path} onChange={e => setSrcForm({ ...srcForm, path: e.target.value })} placeholder={inferSrcType(srcForm.path) === 'url' ? 'https://…' : '仓库内相对路径 / 绝对路径'}
                     className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]" />
                 )}
               </div>
-              {(srcForm.type === 'pdf' || srcForm.type === 'pptx' || srcForm.type === 'code') && (
-                <div className="flex items-center gap-2">
-                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">{srcForm.type === 'code' ? '行号' : '页码'}</label>
-                  <input value={srcForm.rangeFrom} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeFrom: e.target.value.replace(/\D/g, '') })} placeholder={srcForm.type === 'code' ? '起始行' : '起始页'}
-                    className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
-                  <span className="text-[var(--text-muted)]">–</span>
-                  <input value={srcForm.rangeTo} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeTo: e.target.value.replace(/\D/g, '') })} placeholder={srcForm.type === 'code' ? '结束行' : '结束页'}
-                    className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
-                  <span className="text-[10.5px] text-[var(--text-muted)]">登记后可一键出提取稿</span>
-                </div>
-              )}
+              {(() => {
+                const detected = inferSrcType(srcForm.path)
+                return (detected === 'pdf' || detected === 'pptx' || detected === 'code') ? (
+                  <div className="flex items-center gap-2">
+                    <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">{detected === 'code' ? '行号' : '页码'}</label>
+                    <input value={srcForm.rangeFrom} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeFrom: e.target.value.replace(/\D/g, '') })} placeholder={detected === 'code' ? '起始行' : '起始页'}
+                      className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
+                    <span className="text-[var(--text-muted)]">–</span>
+                    <input value={srcForm.rangeTo} inputMode="numeric" onChange={e => setSrcForm({ ...srcForm, rangeTo: e.target.value.replace(/\D/g, '') })} placeholder={detected === 'code' ? '结束行' : '结束页'}
+                      className="w-[72px] rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]" />
+                    <span className="text-[10.5px] text-[var(--text-muted)]">登记后可一键出提取稿</span>
+                  </div>
+                ) : null
+              })()}
               <div className="flex items-center gap-2">
                 <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">备注</label>
                 <input value={srcForm.note} maxLength={80} onChange={e => setSrcForm({ ...srcForm, note: e.target.value })} placeholder="可选（如章节说明）"
