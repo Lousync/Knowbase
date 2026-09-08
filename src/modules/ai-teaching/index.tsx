@@ -6,7 +6,7 @@ import {
   workspaceGetCurrent, workspaceReadFile, docsPptxPages, workspaceListDir,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachUnassignSession, aiTeachSetLastWorkspace,
-  aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick, aiTeachSrcPickDir,
+  aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick, aiTeachSrcPickDir, aiTeachSrcVisionCheck,
   aiTeachSrcPdfBytes, aiTeachSrcTranscribe,
   aiTeachProfileEnsureGlobal, aiTeachProfileEnsureSession, aiTeachProfileEnsureWorkspace,
   aiTeachProfileWriteGlobal, aiTeachProfileWriteSession, aiTeachProfileWriteWorkspace,
@@ -664,7 +664,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [srcFileRel, setSrcFileRel] = useState<string | null>(null)
   const [srcForm, setSrcForm] = useState<null | { name: string; type: string; path: string; storage: '已入库' | '仅引用'; rangeFrom: string; rangeTo: string; note: string }>(null)
   const [srcBusy, setSrcBusy] = useState<number | null>(null)
-  const [visionBusy, setVisionBusy] = useState<null | { no: number; label: string }>(null)
+  const [visionBusy, setVisionBusy] = useState<null | { no: number; label: string; done?: number; total?: number }>(null)
   const [srcAnom, setSrcAnom] = useState<{ unnamed: number; dupNo: number; noPath?: number } | null>(null)
   const refreshSources = useCallback(async (sid: string | null) => {
     if (!sid) { setSrcEntries([]); setSrcFileRel(null); setSrcAnom(null); return }
@@ -789,7 +789,11 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       })
       if (!yes) return
     }
-    setVisionBusy({ no, label: '读取原件…' })
+    // 视觉模型预检：栅格化之前确认可用（否则白跑一堆页面位图才失败），错误含配置指引
+    setVisionBusy({ no, label: '检查视觉模型…' })
+    const vc = await aiTeachSrcVisionCheck().catch(() => null)
+    if (!vc?.ok) { setVisionBusy(null); showToast({ type: 'error', message: vc?.error ?? '视觉模型预检失败' }); return }
+    setVisionBusy({ no, label: `读取原件…（视觉模型：${vc.model}）` })
     transcribeStopRef.current = false
     try {
       const b = await aiTeachSrcPdfBytes(activeId, no)
@@ -806,6 +810,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       const failedPages: number[] = []
       let lastRel: string | undefined
       let lastModel = ''
+      let failMsg = ''
       let bi = 0
       const totalBatches = Math.ceil((to - from + 1) / 12)
       for (let f = from; f <= to; f += 12) {
@@ -815,7 +820,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         const pages: { n: number; dataUrl: string }[] = []
         for (let n = f; n <= t; n++) {
           if (transcribeStopRef.current) break
-          setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 栅格化 p${n}/${t}` })
+          setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 栅格化 p${n}/${t}`, done: doneTotal, total: to - from + 1 })
           const page = await doc.getPage(n)
           const vp = page.getViewport({ scale: 2 })
           const cvs = document.createElement('canvas')
@@ -828,9 +833,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           page.cleanup()
         }
         if (pages.length === 0) continue
-        setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 视觉模型转写 ${pages.length} 页…（已转 ${doneTotal} 页）` })
+        setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 视觉模型转写 ${pages.length} 页…（已转 ${doneTotal} 页）`, done: doneTotal, total: to - from + 1 })
         const r = await aiTeachSrcTranscribe(activeId, no, pages).catch((err: Error) => ({ ok: false as const, error: err.message }))
-        if (!r?.ok) { showToast({ type: 'error', message: `视觉转写失败：${(r as { error?: string }).error ?? ''}（已完成 ${doneTotal} 页保留，可重发续转）` }); break }
+        if (!r?.ok) { failMsg = `视觉转写失败：${(r as { error?: string }).error ?? ''}（已完成 ${doneTotal} 页保留，可重发续转）`; break }
         lastRel = r.relPath ?? lastRel
         lastModel = r.model ?? lastModel
         const d = r.done?.length ?? 0
@@ -840,13 +845,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         await refreshSources(activeId)
       }
       void doc.destroy()
+      if (failMsg) { showToast({ type: 'error', message: failMsg }); return }
+      if (transcribeStopRef.current) { showToast({ type: 'info', message: `视觉转写已停止：已完成 ${doneTotal} 页（重发同区间将自动续转）` }); return }
       if (doneTotal > 0 || skippedTotal > 0) {
         await refreshSources(activeId)
-        if (lastRel && !transcribeStopRef.current) openDocView(lastRel)
+        if (lastRel) openDocView(lastRel)
         const fail = failedPages.length ? ` · ${failedPages.length} 页失败（重发同区间自动重试失败页）` : ''
         showToast({ type: 'info', message: `👁 视觉转写完成（${lastModel || '视觉模型'}）：转写 ${doneTotal} 页 · 跳过已转 ${skippedTotal} 页${fail}` })
-      } else if (!transcribeStopRef.current) {
-        showToast({ type: 'error', message: '视觉转写失败：没有可转写的页' })
       }
     } catch (err) {
       showToast({ type: 'error', message: `视觉转写失败：${(err as Error).message}` })
@@ -2058,7 +2063,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                               title={visionBusy?.no === e.no ? visionBusy.label : '视觉转写：把登记区间的页面交给视觉模型转写（>12 页自动分批、断点续转），并入提取稿后可编辑。点击可中途停止'}
                               className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
                               {visionBusy?.no === e.no ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
-                              {visionBusy?.no === e.no ? <span onClick={(ev) => { ev.stopPropagation(); transcribeStopRef.current = true }} className="hover:text-red-400">停止</span> : '转写'}
+                              {visionBusy?.no === e.no ? '转写中…' : '转写'}
                             </button>
                           )}
                           {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
@@ -2075,6 +2080,16 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                           <button onClick={() => { void doRemoveSrc(e.no, e.name) }} title="移除登记（不删文件）"
                             className="text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={10} /></button>
                         </div>
+                        {visionBusy?.no === e.no && (
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full bg-[var(--bg-primary)] overflow-hidden">
+                              <div className="h-full bg-[var(--accent)] transition-all duration-300" style={{ width: `${visionBusy.total ? Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100)) : 8}%` }} />
+                            </div>
+                            <span className="shrink-0 text-[10px] text-[var(--text-muted)]">{visionBusy.label}</span>
+                            <button onClick={() => { transcribeStopRef.current = true }} title="停止转写（已完成页保留，重发续转）"
+                              className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors">停止</button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

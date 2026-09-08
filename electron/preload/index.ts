@@ -255,6 +255,7 @@ const api = {
   aiTeachSrcExtract: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:extract', id, no),
   aiTeachSrcPick: () => ipcRenderer.invoke('aiTeachSrc:pick'),
   aiTeachSrcPickDir: () => ipcRenderer.invoke('aiTeachSrc:pickDir'),
+  aiTeachSrcVisionCheck: () => ipcRenderer.invoke('aiTeachSrc:visionCheck'),
   aiTeachSrcPdfBytes: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:pdfBytes', id, no),
   aiTeachSrcTranscribe: (id: string, no: number, pages: { n: number; dataUrl: string }[]) => ipcRenderer.invoke('aiTeachSrc:transcribe', id, no, pages),
   aiTeachProfileReadGlobal: () => ipcRenderer.invoke('aiTeachProfile:readGlobal'),

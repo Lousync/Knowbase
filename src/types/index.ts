@@ -1333,6 +1333,7 @@ export interface ElectronAPI {
   aiTeachSrcExtract: (id: string, no: number) => Promise<{ ok: boolean; relPath?: string; error?: string }>
   aiTeachSrcPick: () => Promise<{ ok: boolean; path: string | null; error?: string }>
   aiTeachSrcPickDir: () => Promise<{ ok: boolean; path: string | null; error?: string }>
+  aiTeachSrcVisionCheck: () => Promise<{ ok: boolean; model?: string; error?: string }>
   aiTeachSrcPdfBytes: (id: string, no: number) => Promise<{ ok: boolean; base64?: string; error?: string }>
   aiTeachSrcTranscribe: (id: string, no: number, pages: { n: number; dataUrl: string }[]) => Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }>
   aiTeachProfileReadGlobal: () => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>

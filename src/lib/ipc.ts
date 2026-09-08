@@ -510,6 +510,7 @@ export const aiTeachSrcRemove = (id: string, no: number) => a().aiTeachSrcRemove
 export const aiTeachSrcExtract = (id: string, no: number) => a().aiTeachSrcExtract(id, no)
 export const aiTeachSrcPick = () => a().aiTeachSrcPick()
 export const aiTeachSrcPickDir = () => a().aiTeachSrcPickDir()
+export const aiTeachSrcVisionCheck = () => a().aiTeachSrcVisionCheck()
 // 3-21 视觉转写（手动档）
 export const aiTeachSrcPdfBytes = (id: string, no: number) => a().aiTeachSrcPdfBytes(id, no)
 export const aiTeachSrcTranscribe = (id: string, no: number, pages: { n: number; dataUrl: string }[]) => a().aiTeachSrcTranscribe(id, no, pages)

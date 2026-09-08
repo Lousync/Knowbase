@@ -5,7 +5,7 @@ import { getCurrentVault } from './kbStore/vaultContext'
 import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder } from './aiTeachingFolders'
 import { uniqueFileName } from './workspaceManager'
 import { extractPdfRange, extractPptxPages } from './docsReader'
-import { visionChat } from './llmService'
+import { visionChat, findVisionModel } from './llmService'
 
 /**
  * AI教学模块 · 素材库（总纲 docs/ai-teaching-module-rework.md §3.13 结构 v3，P6）
@@ -520,13 +520,18 @@ export async function transcribeVision(sessionId: string, no: number, pages: { n
     const done: { n: number; md: string }[] = []
     const failed: number[] = []
     let model = ''
+    let failedReason = ''
     for (const p of list) {
       const r = await visionChat({ system: VISION_SYSTEM, prompt: `这是教材第 ${p.n} 页，请转写整页。`, images: [p.dataUrl] })
       const t = (r.text ?? '').trim()
       if (r.ok && t) { done.push({ n: p.n, md: t }); model = r.model ?? model }
-      else failed.push(p.n)
+      else { failed.push(p.n); if (!failedReason && r.error) failedReason = r.error }
     }
-    if (done.length === 0) return { ok: false, failed, error: failed.length ? `全部页转写失败（视觉模型不可用或不支持图片输入）：${model || ''}` : '转写失败' }
+    if (done.length === 0) {
+      // 保留 visionChat 的原始失败原因（含「未找到视觉模型」等配置指引），不再包装截断
+      const firstErr = failedReason || (failed.length ? `全部页转写失败（视觉模型不可用或不支持图片输入）：${model || ''}` : '转写失败')
+      return { ok: false, failed, error: firstErr }
+    }
     // 并入提取稿：已有则文末追补「视觉转写」节（保留文本层与用户手工修正）；没有则以转写新建提取稿并回写 ✓ 指针
     const ext = /^✓\s*→\s*(.+)$/.exec(e.extracted)
     let extName = ext ? ext[1].trim() : ''
@@ -648,6 +653,12 @@ export function registerAiTeachingSourceHandlers(getSetting: (key: string) => un
       ],
     })
     return r.canceled || r.filePaths.length === 0 ? { ok: true, path: null } : { ok: true, path: r.filePaths[0] }
+  })
+  // 视觉转写预检（2026-09-08）：转写前先确认有可用视觉模型——避免渲染层白跑栅格化后才失败，
+  // 且把配置指引完整带回（此前错误被包装截断，用户看不到「去哪配模型」）
+  ipcMain.handle('aiTeachSrc:visionCheck', () => {
+    const v = findVisionModel()
+    return v ? { ok: true, model: `${v.provider.name}:${v.model}` } : { ok: false, error: '未找到可用的视觉模型：请到 设置 → AI 模型 添加支持图片的模型（如 qwen-vl / glm-4v / gpt-4o / kimi-latest，OpenAI 兼容类型），再回来转写' }
   })
   // 登记仓库目录为素材（2026-09-08）：系统对话框选目录 → 必须在当前仓库内 → 返回仓库相对路径
   ipcMain.handle('aiTeachSrc:pickDir', async () => {
