@@ -1227,8 +1227,8 @@ export interface ElectronAPI {
   onDayPanelCollapsedChanged: (cb: (s: { collapsed: boolean }) => void) => () => void
   onDayPanelWidgetInteractiveChanged: (cb: (s: { interactive: boolean }) => void) => () => void
   onDayPanelToggleVisibility: (cb: () => void) => () => void
-  dayPanelOpenInMain: (tab: string) => void
-  onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => () => void
+  dayPanelOpenInMain: (tab: string, tool?: string) => void
+  onMainCommand: (cb: (payload: { type: string; tab?: string; tool?: string }) => void) => () => void
   dataNotify: (payload: { scope: string }) => void
   onDataChanged: (cb: (payload: { scope: string }) => void) => () => void
   fillPopupTheme: string

@@ -97,6 +97,20 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
   },
 ]
 
+/** 可深链激活的内置工具 id 白名单（无效 id 忽略，避免 renderTool 落 default 白屏） */
+const DEEPLINKABLE_TOOL_IDS = new Set([...DATA_TOOLS, ...PRODUCTIVITY_TOOLS].map((t) => t.id))
+
+// 深链入口（2026-09-08）：小窗「在工具箱中管理」等外部入口 → toolbox:open-tool。
+// 工具箱首访才挂载（App 保活机制），事件发出时组件可能还不存在——
+// 模块级监听暂存 pending，挂载 effect 消费；已挂载则由组件内同一事件直接响应。
+let pendingOpenTool: string | null = null
+if (typeof window !== 'undefined') {
+  window.addEventListener('toolbox:open-tool', (e) => {
+    const tool = (e as CustomEvent<{ tool?: string }>).detail?.tool
+    if (tool && DEEPLINKABLE_TOOL_IDS.has(tool)) pendingOpenTool = tool
+  })
+}
+
 export function ToolboxModule() {
   const [activeTool, setActiveTool] = useState<string | null>(null)
   const [pluginTools, setPluginTools] = useState<PluginTool[]>([])
@@ -155,6 +169,20 @@ export function ToolboxModule() {
     }
     setActiveTool(toolId)
   }
+
+  // 深链消费：挂载时吃掉 pending（首访场景），已挂载则实时响应 toolbox:open-tool
+  useEffect(() => {
+    const consume = () => {
+      const t = pendingOpenTool
+      if (!t) return
+      pendingOpenTool = null
+      handleActivateTool(t)
+    }
+    consume()
+    window.addEventListener('toolbox:open-tool', consume)
+    return () => window.removeEventListener('toolbox:open-tool', consume)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const renderTool = () => {
     switch (activeTool) {

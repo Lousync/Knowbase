@@ -509,13 +509,13 @@ function registerHandlers(): void {
     return widgetInteractive
   })
 
-  ipcMain.on('daypanel:open-in-main', (_e, tab: string) => {
+  ipcMain.on('daypanel:open-in-main', (_e, tab: string, tool?: string) => {
     const main = getMainWindow()
     if (!main || main.isDestroyed() || typeof tab !== 'string') return
     if (main.isMinimized()) main.restore()
     main.show()
     main.focus()
-    main.webContents.send('main:command', { type: 'switch-tab', tab })
+    main.webContents.send('main:command', { type: 'switch-tab', tab, tool })
   })
 }
 

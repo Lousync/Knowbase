@@ -118,7 +118,7 @@ export function NavPanel() {
       )}
 
       <button
-        onClick={() => { window.api?.dayPanelOpenInMain?.('toolbox') }}
+        onClick={() => { window.api?.dayPanelOpenInMain?.('toolbox', 'bookmark-nav') }}
         className="mx-auto flex items-center gap-1 rounded-lg border border-dashed border-[var(--border-color)] px-3.5 py-1 text-[11px] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
         title="在工具箱网址导航中添加 / 编辑"
       >

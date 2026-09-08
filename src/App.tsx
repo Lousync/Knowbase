@@ -418,7 +418,12 @@ export default function App() {
     const off = window.api?.onMainCommand?.((p) => {
       if (p?.type === 'switch-tab' && typeof p.tab === 'string') {
         const all: string[] = ['blog', 'schedule', 'knowledge', 'moments', 'toolbox', 'plugins', 'recycle', 'help', 'settings', 'user']
-        if (all.includes(p.tab)) { setActiveTab(p.tab as TabName); setSidebarOpen(true) }
+        if (all.includes(p.tab)) {
+          setActiveTab(p.tab as TabName)
+          setSidebarOpen(true)
+          // 子工具深链（如小窗书签 → 工具箱·网址导航）：目标模块监听 toolbox:open-tool 自行激活
+          if (p.tool) window.dispatchEvent(new CustomEvent('toolbox:open-tool', { detail: { tool: p.tool } }))
+        }
       }
     })
     return () => { off?.() }

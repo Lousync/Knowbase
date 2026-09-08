@@ -502,11 +502,11 @@ const api = {
     ipcRenderer.on('daypanel:toggle-visibility', handler)
     return () => { ipcRenderer.removeListener('daypanel:toggle-visibility', handler) }
   },
-  // - 小窗内唤起主窗口并切 Tab
-  dayPanelOpenInMain: (tab: string) => ipcRenderer.send('daypanel:open-in-main', tab),
+  // - 小窗内唤起主窗口并切 Tab（tool 可选：目标模块内的子工具深链，如 toolbox 的 bookmark-nav）
+  dayPanelOpenInMain: (tab: string, tool?: string) => ipcRenderer.send('daypanel:open-in-main', tab, tool),
   // 主窗口接收小窗指令（如切换模块 Tab）
-  onMainCommand: (cb: (payload: { type: string; tab?: string }) => void) => {
-    const handler = (_e: unknown, p: { type: string; tab?: string }) => cb(p)
+  onMainCommand: (cb: (payload: { type: string; tab?: string; tool?: string }) => void) => {
+    const handler = (_e: unknown, p: { type: string; tab?: string; tool?: string }) => cb(p)
     ipcRenderer.on('main:command', handler)
     return () => { ipcRenderer.removeListener('main:command', handler) }
   },
