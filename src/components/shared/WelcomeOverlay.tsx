@@ -6,7 +6,7 @@ import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { showToast } from '../../lib/toast'
 
 interface Props {
-  onDone: () => void
+  onDone: (created?: boolean) => void
 }
 
 /**
@@ -22,8 +22,8 @@ export function WelcomeOverlay({ onDone }: Props) {
     workspaceGetRecent().then(setRecent).catch(() => {})
   }, [])
 
-  const afterOpen = useCallback(async () => {
-    onDone()
+  const afterOpen = useCallback(async (created?: boolean) => {
+    onDone(created)
   }, [onDone])
 
   const openNew = useCallback(async () => {
@@ -33,7 +33,8 @@ export function WelcomeOverlay({ onDone }: Props) {
       const opened = await openVaultWithGuide()
       if (!opened) return
       workspaceGetRecent().then(setRecent).catch(() => {})
-      await afterOpen()
+      // created=true：首次把目录初始化为仓库 → 父级默认落编辑区
+      await afterOpen(true)
     } catch {
       showToast({ type: 'error', message: '打开仓库失败' })
     } finally {

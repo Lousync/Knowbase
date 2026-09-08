@@ -30,7 +30,7 @@ function relTime(iso: string): string {
  *   已有仓库列表为主入口（点行即进，切换则整窗重载），新建/打开放底部；底部「直接进入」可跳过。
  * 完成后广播 vault:changed——编辑器挂载早于本流程，需据此自动挂载新仓库。
  */
-export function VaultPicker({ onDone, startup = false }: { onDone: () => void; startup?: boolean }) {
+export function VaultPicker({ onDone, startup = false }: { onDone: (created?: boolean) => void; startup?: boolean }) {
   const [mode, setMode] = useState<'home' | 'create'>('home')
   const [version, setVersion] = useState('')
   const [name, setName] = useState('')
@@ -50,17 +50,19 @@ export function VaultPicker({ onDone, startup = false }: { onDone: () => void; s
   }, [startup])
 
   // 选定仓库后的收尾：启动形态可能切换了库，统一广播 + 整窗重载（数据激活重读约定）；
-  // 首启形态保持原行为（广播 + 回调进入引导，不重载）
-  const finish = () => {
+  // 首启形态保持原行为（广播 + 回调进入引导，不重载）。
+  // created = 本流程新建/初始化了仓库（快速开始 / 新建 / 打开目录确认初始化）→
+  // 首启完成后默认落在编辑区（2026-09-08 拍板）；进入已有仓库不带该标记
+  const finish = (created = false) => {
     window.dispatchEvent(new Event('vault:changed'))
     if (startup) setTimeout(() => location.reload(), 350)
-    else onDone()
+    else onDone(created)
   }
 
-  const apply = (res: VaultResult): boolean => {
+  const apply = (res: VaultResult, created = false): boolean => {
     if (!res) return false // 用户取消对话框
     if (res.error) { showToast({ type: 'error', message: res.error }); return false }
-    finish()
+    finish(created)
     return true
   }
 
@@ -78,7 +80,7 @@ export function VaultPicker({ onDone, startup = false }: { onDone: () => void; s
 
   const quickStart = async (): Promise<void> => {
     setBusy(true)
-    try { apply(await workspaceCreateVault('我的仓库', '__default__')) } finally { setBusy(false) }
+    try { apply(await workspaceCreateVault('我的仓库', '__default__'), true) } finally { setBusy(false) }
   }
 
   const openExisting = async (): Promise<void> => {
@@ -86,7 +88,7 @@ export function VaultPicker({ onDone, startup = false }: { onDone: () => void; s
     try {
       // D7：非仓库目录在 openVaultWithGuide 内弹「初始化为仓库？」确认，取消则不建
       const opened = await openVaultWithGuide()
-      if (opened) finish()
+      if (opened) finish(true)
     } finally { setBusy(false) }
   }
 
@@ -99,7 +101,7 @@ export function VaultPicker({ onDone, startup = false }: { onDone: () => void; s
     const trimmed = name.trim()
     if (!trimmed) { showToast({ type: 'warning', message: '请先给仓库起一个名字' }); return }
     setBusy(true)
-    try { apply(await workspaceCreateVault(trimmed, parentPath ?? '__default__')) } finally { setBusy(false) }
+    try { apply(await workspaceCreateVault(trimmed, parentPath ?? '__default__'), true) } finally { setBusy(false) }
   }
 
   const hasRecent = recent.length > 0
@@ -187,14 +189,14 @@ export function VaultPicker({ onDone, startup = false }: { onDone: () => void; s
             <div className="text-center mt-7">
               {startup ? (
                 <button
-                  onClick={onDone}
+                  onClick={() => onDone()}
                   className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   跳过，直接进入上次使用的仓库
                 </button>
               ) : (
                 <button
-                  onClick={onDone}
+                  onClick={() => onDone()}
                   className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   暂不设置，稍后在编辑区打开仓库

@@ -759,7 +759,7 @@ export default function App() {
       {winMax && <WindowResizeHandles />}
       <Toast />
       <GlobalConfirm />
-      {vaultPickOpen && <VaultPicker onDone={() => { setVaultPickOpen(false); setOnboardingOpen(true) }} />}
+      {vaultPickOpen && <VaultPicker onDone={(created) => { setVaultPickOpen(false); setOnboardingOpen(true); if (created) setActiveTab('editor') }} />}
       {startupPickerOpen && <VaultPicker startup onDone={() => setStartupPickerOpen(false)} />}
       {onboardingOpen && (
         <Onboarding
@@ -768,7 +768,7 @@ export default function App() {
         />
       )}
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
-      {welcomeOpen && <WelcomeOverlay onDone={() => setWelcomeOpen(false)} />}
+      {welcomeOpen && <WelcomeOverlay onDone={(created) => { setWelcomeOpen(false); if (created) setActiveTab('editor') }} />}
     </div>
     </RootErrorBoundary>
   )
