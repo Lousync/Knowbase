@@ -265,6 +265,21 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (side === 'left') { const v = !leftOpen; setLeftOpen(v); localStorage.setItem('aiTeach.leftOpen', v ? '1' : '0') }
     else { const v = !rightOpen; setRightOpen(v); localStorage.setItem('aiTeach.rightOpen', v ? '1' : '0') }
   }
+  // Ctrl+B 切左侧栏 / Ctrl+Alt+B 切右侧栏（2026-09-08 用户反馈补齐，对齐 VS Code 侧栏习惯）。
+  // 模块级快捷键：仅本模块激活时生效；焦点在输入控件内不拦截；deps 随开合状态刷新闭包
+  useEffect(() => {
+    if (!isActive) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey || e.key.toLowerCase() !== 'b') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      e.preventDefault()
+      toggleSide(e.altKey ? 'right' : 'left')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, leftOpen, rightOpen])
   const [aiTeachRoot, setAiTeachRoot] = useState('AI教学')
   const [docView, setDocView] = useState<{ rel: string; name: string; content: string } | null>(null)
   const docViewRef = useRef<{ rel: string; name: string; content: string } | null>(null)
