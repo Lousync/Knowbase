@@ -197,8 +197,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     window.dispatchEvent(new Event('kb-graph-refresh'))
   }, [isActive])
 
-  // .ignore 规则提示（§10.1）：索引 warnings 非空才透出，且与上次内容相同不重复打扰——
-  // 外部改 .ignore / 编辑器保存规则后激活本模块即见最新提示（读索引走主进程缓存对账，自动重建）
+  // .ignore 规则提示（§10.1）：索引 warnings 分级透出——只有用户可行动的 .ignore 规则问题才
+  // Toast（内容不变不重复打扰）；信息性警告（如 frontmatter.id 缺失 = 草稿机制，属既定行为）
+  // 只进控制台，否则每次进知识库都被正常现象警告一次，反成噪音
   const lastWarnFingerprintRef = useRef('')
   const checkIndexWarnings = useCallback(async () => {
     try {
@@ -208,7 +209,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       if (fp === lastWarnFingerprintRef.current) return
       lastWarnFingerprintRef.current = fp
       list.forEach((w) => console.warn('[KnowledgeIndex]', w))
-      showToast({ type: 'warning', message: list.length === 1 ? list[0] : `${list[0]}（等 ${list.length} 条，详见控制台）` })
+      const actionable = list.filter((w) => w.startsWith('规则「') || w.includes('.ignore'))
+      if (actionable.length > 0) {
+        showToast({ type: 'warning', message: actionable.length === 1 ? actionable[0] : `${actionable[0]}（等 ${actionable.length} 条，详见控制台）` })
+      }
     } catch { /* 旧主进程无此通道时静默 */ }
   }, [])
   useEffect(() => {

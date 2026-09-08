@@ -19,6 +19,26 @@ interface LogEntry {
 const FLUSH_MS = 200
 const MAX_BATCH = 50
 
+// V-7（monaco 0.56 dispose 竞态，上游修复前）：HMR/重挂后旧实例 dispose 残留的渲染帧错误
+// 会每帧抛一次连环刷屏。同类噪音只保留首条全量，后续按计数汇总——首现仍可见，刷屏被止血
+const NOISE_PATTERNS: RegExp[] = [
+  /InstantiationService has been disposed/,
+  /Model is disposed/,
+  /Cannot read properties of (undefined|null) \(reading '(setClassName|domNode|getWidgets|viewModel)'\)/,
+]
+const noiseCounts = new Map<RegExp, number>()
+
+function dampenNoise(entry: LogEntry): LogEntry | null {
+  if (entry.level !== 'error') return entry
+  const hit = NOISE_PATTERNS.find((re) => re.test(entry.message))
+  if (!hit) return entry
+  const n = (noiseCounts.get(hit) ?? 0) + 1
+  noiseCounts.set(hit, n)
+  if (n <= 3) return entry // 前 3 条逐条保留，便于看清首现场景
+  if (n % 25 !== 0) return null // 之后每 25 条汇总一条，防每帧刷屏拖垮 IPC
+  return { ...entry, message: `[V-7 降噪 ×${n}] ${entry.message.slice(0, 150)}`, stack: undefined }
+}
+
 let queue: LogEntry[] = []
 let timer: ReturnType<typeof setTimeout> | null = null
 let installed = false
@@ -31,8 +51,10 @@ function report(): ReportFn | undefined {
 }
 
 function push(entry: LogEntry): void {
+  const damped = dampenNoise(entry)
+  if (!damped) return
   if (queue.length >= MAX_BATCH * 5) queue.shift()
-  queue.push(entry)
+  queue.push(damped)
   if (timer) return
   timer = setTimeout(flush, FLUSH_MS)
 }

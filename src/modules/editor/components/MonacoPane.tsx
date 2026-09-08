@@ -62,10 +62,19 @@ async function getPagesCached(): Promise<KnowledgePage[]> {
 
 /** 编辑器面板级错误边界（UI 优化 §15）：Monaco 渲染循环崩溃（如切 Tab 时序竞态的 domNode undefined）
  *  只塌本面板并就地重挂载恢复，不再冒泡到根（根边界是最后防线）。children 变化自动清除错误态 */
-class PaneErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null; key: number }> {
-  state: { err: Error | null; key: number } = { err: null, key: 0 }
+class PaneErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null; key: number; autoRetries: number }> {
+  state: { err: Error | null; key: number; autoRetries: number } = { err: null, key: 0, autoRetries: 0 }
   static getDerivedStateFromError(err: Error): { err: Error | null } {
     return { err }
+  }
+  componentDidCatch(err: Error): void {
+    // V-7（monaco 0.56）：HMR/重挂后旧实例 dispose 的时序竞态（InstantiationService/渲染帧
+    // undefined）重挂即愈——瞬时类错误自动重建一次；限一次，再错停面板交用户手动，防循环
+    const transient =
+      /InstantiationService has been disposed|Model is disposed|reading '(setClassName|domNode|getWidgets)'/.test(err.message)
+    if (transient && this.state.autoRetries < 1) {
+      this.setState((s) => ({ err: null, key: s.key + 1, autoRetries: s.autoRetries + 1 }))
+    }
   }
   componentDidUpdate(prev: { children: ReactNode }): void {
     // 换文档/换仓库（children 元素变化）时自动清错重试一次
