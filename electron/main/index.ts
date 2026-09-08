@@ -431,7 +431,10 @@ function registerWindowHandlers(): void {
     if (!win || win.isDestroyed() || typeof width !== 'number' || !Number.isFinite(width)) {
       return { applied: false }
     }
-    if (win.isMaximized() || win.isFullScreen()) return { applied: false, reason: 'maximized' }
+    // 贴满/最大化（isWinMaximized = OS maximize ∪ 覆盖工作区——无边框窗口 isMaximized() 不可靠）
+    // 时窗口由用户管理，侧栏开合不改窗口尺寸。2026-09-08 实锤：裸 isMaximized() 漏判贴满态，
+    // 最大化收侧栏把窗口一起缩了。
+    if (isWinMaximized(win) || win.isFullScreen()) return { applied: false, reason: 'maximized' }
     stopDrawerAnim()
     const b = win.getBounds()
     const { workArea } = screen.getDisplayMatching(b)
