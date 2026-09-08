@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText, ArrowLeft,
@@ -80,6 +80,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
   const [openFiles, setOpenFiles] = useState<Record<string, EditorDoc>>({})
   const [activePath, setActivePath] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: TreeNode } | null>(null)
+  const ctxMenuRef = useRef<HTMLDivElement | null>(null)
+  const tabCtxRef = useRef<HTMLDivElement | null>(null)
   /** 资源管理器标题「+」新建下拉：锚定按钮下方展开（文件 / 文件夹 / 知识页） */
   const [createMenu, setCreateMenu] = useState<{ x: number; y: number } | null>(null)
   const [trashTarget, setTrashTarget] = useState<TreeNode | null>(null)
@@ -93,6 +95,21 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
   const [draftRelPaths, setDraftRelPaths] = useState<Set<string>>(new Set())
   /** tab 右键（状态动作/关闭） */
   const [tabCtx, setTabCtx] = useState<{ x: number; y: number; rel: string } | null>(null)
+
+  // 右键菜单防窗口边缘截断：渲染后实测菜单尺寸，右/下溢出则向内翻转夹取（useLayoutEffect 在绘制前完成，无闪烁）
+  useLayoutEffect(() => {
+    const fix = (el: HTMLDivElement | null, x: number, y: number) => {
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      let left = x, top = y
+      if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width)
+      if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height)
+      el.style.left = `${left}px`
+      el.style.top = `${top}px`
+    }
+    fix(ctxMenuRef.current, ctxMenu?.x ?? 0, ctxMenu?.y ?? 0)
+    fix(tabCtxRef.current, tabCtx?.x ?? 0, tabCtx?.y ?? 0)
+  }, [ctxMenu, tabCtx])
   const [closeTarget, setCloseTarget] = useState<string | null>(null)
   /** 保存冲突（磁盘被外部修改）：弹三选对话框 */
   const [conflictState, setConflictState] = useState<{ relPath: string; diskMtimeMs?: number; missing: boolean } | null>(null)
@@ -1200,8 +1217,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
       {ctxMenu && (
         <div className="fixed inset-0 z-[70]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null) }}>
           <div
+            ref={ctxMenuRef}
             className="absolute min-w-[150px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
-            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 170), top: Math.min(ctxMenu.y, window.innerHeight - 180) }}
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
             {ctxMenu.node.type === 'dir' && (
@@ -1261,8 +1279,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
       {tabCtx && (
         <div className="fixed inset-0 z-[70]" onClick={() => setTabCtx(null)} onContextMenu={(e) => { e.preventDefault(); setTabCtx(null) }}>
           <div
+            ref={tabCtxRef}
             className="absolute min-w-[160px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
-            style={{ left: Math.min(tabCtx.x, window.innerWidth - 180), top: Math.min(tabCtx.y, window.innerHeight - 120) }}
+            style={{ left: tabCtx.x, top: tabCtx.y }}
             onClick={(e) => e.stopPropagation()}
           >
             {tabCtx.rel.toLowerCase().endsWith('.md') && (
