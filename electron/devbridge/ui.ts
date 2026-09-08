@@ -949,3 +949,18 @@ export async function clipboardUi(p: UiClipboardParams): Promise<Record<string, 
   }
   throwErr('E_BAD_REQUEST', 'action 需为 set / get / clear')
 }
+
+// ---------- 调试探针：任意坐标的元素链（AI 驱动 UI 排查用） ----------
+
+export interface UiEvalParams extends UiWindowParam {
+  code?: unknown
+}
+
+/** 在渲染层执行任意 JS（dev-only 调试动作；返回 JSON 可序列化结果） */
+export async function evalUi(p: UiEvalParams): Promise<Record<string, unknown>> {
+  const wc = resolveWebContents(normalizeWindowSel(p.window))
+  const code = String(p.code ?? '')
+  if (!code.trim()) throwErr('E_BAD_REQUEST', '缺少 code')
+  const r = await wc.executeJavaScript(code, true)
+  return { result: r ?? null }
+}

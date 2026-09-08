@@ -12,6 +12,7 @@ import {
   dialogStateUi,
   windowUi,
   clipboardUi,
+  evalUi,
 } from '../ui'
 
 /**
@@ -59,6 +60,7 @@ const REGISTRY: Record<string, ActionHandler> = {
   'ui.dialog.state': () => dialogStateUi(),
   'ui.window': (p) => windowUi(p),
   'ui.clipboard': (p) => clipboardUi(p),
+  'ui.eval': (p) => evalUi(p),
 }
 
 export function listActions(): string[] {

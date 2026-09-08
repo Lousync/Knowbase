@@ -934,7 +934,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, markdownDim = 
               onSnapClose={onSnapCloseSidebar}
               onSnapOpen={onSnapOpenSidebar}
             >
-              <div className="flex h-full w-full flex-col border-r border-[var(--border-color)]">{treeColumn}</div>
+              <div className="flex h-full w-full flex-col">{treeColumn}</div>
             </ResizablePanel>
           )
         })()}

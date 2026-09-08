@@ -634,7 +634,7 @@ export default function App() {
                   >
                     <div
                       ref={wbSidebarRef}
-                      className="flex h-full flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)]"
+                      className="flex h-full flex-col bg-[var(--bg-secondary)]"
                     />
                   </ResizablePanel>
                 )}

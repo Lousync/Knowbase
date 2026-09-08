@@ -135,7 +135,6 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
 
   // 折叠时重置为边条宽度（贴窗缘的面板用 collapsedWidth 避开系统缩放热区）
   const displayWidth = visible ? width : (onSnapOpen ? collapsedWidth : 0)
-  const showBorder = visible && !dragging
 
   // 从折叠状态拖拽以拉出侧边栏（right 侧：向左拖出）
   const onEdgeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -170,8 +169,6 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       className={`shrink-0 relative flex flex-col bg-[var(--bg-secondary)] overflow-hidden ${className}`}
       style={{
         width: displayWidth,
-        [isRight ? 'borderLeftWidth' : 'borderRightWidth']: showBorder ? 1 : 0,
-        borderColor: showBorder ? 'var(--border-color)' : 'transparent',
         transition: dragging ? 'none' : 'width 200ms ease-out'
       }}
     >
