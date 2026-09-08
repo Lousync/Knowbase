@@ -1653,9 +1653,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 )}
                 <div ref={bottomRef} />
                 </div>
-                {/* 右缘快速定位条（§3.8-1，3-13）：每条回答一个刻度，hover 预览标题，点击滚动定位 */}
+                {/* 右缘快速定位条（§3.8-1，3-13）：每条回答一个刻度，hover 预览标题，点击滚动定位。
+                    2026-09-08 用户拍板：锚点紧凑聚拢（顶部起 + 固定间距），不再 evenly 拉满整条高度 */}
                 {anchors.length > 1 && (
-                  <div className="absolute right-1 top-2 bottom-2 w-3 flex flex-col items-center justify-evenly z-10">
+                  <div className="absolute right-1 top-2 w-3 flex flex-col items-center justify-start gap-1.5 z-10">
                     {anchors.map((a, i) => (
                       <button key={a.idx} onClick={() => jumpToAnchor(a.idx)}
                         title={a.title}
