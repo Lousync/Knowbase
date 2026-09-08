@@ -405,6 +405,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const bottomRef = useRef<HTMLDivElement>(null)
   // P3a 快速定位条：消息滚动容器 + 当前锚点高亮
   const scrollRef = useRef<HTMLDivElement>(null)
+  /** 对话流滚动记忆（2026-09-08）：跳文档阅读视图会卸载对话容器（scrollTop 丢失）——
+   *  onConvScroll 持续记录，返回对话时恢复（对齐 docScrollPos 的文档滚动记忆模式） */
+  const convScrollTop = useRef(0)
   const [activeAnchor, setActiveAnchor] = useState(0)
   const liveRef = useRef(liveSteps)
 
@@ -1132,7 +1135,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [])
   const onConvScroll = useCallback(() => {
     const c = scrollRef.current
-    if (!c || anchors.length === 0) return
+    if (!c) return
+    convScrollTop.current = c.scrollTop
+    if (anchors.length === 0) return
     const top = c.getBoundingClientRect().top
     let cur = 0
     anchors.forEach((a, i) => {
@@ -1142,6 +1147,12 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setActiveAnchor(cur)
   }, [anchors])
   useEffect(() => { setActiveAnchor(0) }, [activeId])
+  // 返回对话视图（docView 清空）后恢复滚动位置；切换会话则归零（从顶部看新会话）
+  useEffect(() => {
+    if (docView) return
+    const t = convScrollTop.current
+    if (t > 0) requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = t })
+  }, [docView, activeId])
 
   // P3b：切会话时同步模型/思考强度控件到该会话的覆盖值（未覆盖=跟随全局默认）
   useEffect(() => {
