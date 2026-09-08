@@ -25,6 +25,9 @@ export interface ProviderConfig {
   apiKeyEncrypted: string
   enabled: boolean
   models: string[]
+  /** 自定义请求头（明文存设置，勿放 API Key 类敏感值——密钥走 apiKey 字段走 DPAPI）。
+   *  2026-09-08：opencode 等网关要求 x-opencode-session 之类的会话/路由头，按服务商在设置里配 */
+  headers?: Record<string, string>
 }
 
 interface ChatMessage {
@@ -124,7 +127,7 @@ function authHeaders(p: ProviderConfig): Record<string, string> {
     const key = decryptSecret(p.apiKeyEncrypted)
     if (key) h['Authorization'] = `Bearer ${key}`
   }
-  return h
+  return { ...h, ...(p.headers ?? {}) }
 }
 
 function anthropicBase(p: ProviderConfig): string {
@@ -150,7 +153,7 @@ function anthropicHeaders(p: ProviderConfig): Record<string, string> {
     const key = decryptSecret(p.apiKeyEncrypted)
     if (key) h['x-api-key'] = key
   }
-  return h
+  return { ...h, ...(p.headers ?? {}) }
 }
 
 function normalizeOpenAiToolCalls(raw: any[]): ToolCallNormalized[] {
@@ -463,6 +466,7 @@ function sanitizeInfo(p: ProviderConfig, defaultChatModel: string) {
     enabled: p.enabled,
     hasKey: !!p.apiKeyEncrypted,
     models: p.models,
+    headers: p.headers ?? {},
     isDefault: defaultChatModel.startsWith(`${p.id}:`),
   }
 }
@@ -470,11 +474,20 @@ function sanitizeInfo(p: ProviderConfig, defaultChatModel: string) {
 /** 保存供应商（校验 + Key 即时加密落盘）；IPC 与 CC Switch 导入共用 */
 function saveProviderDraft(draft: {
   id?: string; name: string; type: ProviderType; baseUrl: string; apiKey?: string; enabled?: boolean
+  headers?: Record<string, string>
 }): { ok: boolean; id?: string; error?: string } {
   if (!draft || typeof draft.name !== 'string' || !draft.name.trim()) return { ok: false, error: '名称不能为空' }
   if (!['openai-compatible', 'ollama', 'anthropic'].includes(draft.type)) return { ok: false, error: '不支持的类型' }
   const urlCheck = validateProviderUrl(String(draft.baseUrl ?? ''))
   if (!urlCheck.ok) return { ok: false, error: urlCheck.error }
+  // 自定义请求头校验：扁平 string→string 对象（opencode 网关的 x-opencode-session 等路由头）
+  let headers: Record<string, string> | undefined
+  if (draft.headers != null) {
+    if (typeof draft.headers !== 'object' || Array.isArray(draft.headers)) return { ok: false, error: '自定义请求头必须是 JSON 对象（{"头名":"值"}）' }
+    const bad = Object.entries(draft.headers).find(([k, v]) => !k.trim() || typeof v !== 'string')
+    if (bad) return { ok: false, error: '自定义请求头格式非法（键值需为非空字符串）' }
+    headers = Object.fromEntries(Object.entries(draft.headers).map(([k, v]) => [k.trim(), v]))
+  }
 
   const list = getProviders()
   let p = draft.id ? list.find(x => x.id === draft.id) : undefined
@@ -485,6 +498,7 @@ function saveProviderDraft(draft: {
   p.name = draft.name.trim()
   p.type = draft.type
   p.baseUrl = urlCheck.url
+  p.headers = headers
   if (typeof draft.apiKey === 'string' && draft.apiKey.length > 0) {
     p.apiKeyEncrypted = encryptSecret(draft.apiKey) // 明文只在此瞬间存在，随即加密
   }
@@ -506,6 +520,7 @@ export function registerLlmHandlers(deps: {
 
   ipcMain.handle('llm:saveProvider', (_e, draft: {
     id?: string; name: string; type: ProviderType; baseUrl: string; apiKey?: string; enabled?: boolean
+    headers?: Record<string, string>
   }) => saveProviderDraft(draft))
 
   ipcMain.handle('llm:ccswitch:list', () => scanCcSwitch())

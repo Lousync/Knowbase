@@ -250,6 +250,7 @@ function ProviderForm({ onDone }: { onDone: () => Promise<void> }) {
   const [type, setType] = useState<LlmProviderType>('openai-compatible')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [headersText, setHeadersText] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<LlmTestResultInfo | null>(null)
@@ -276,12 +277,29 @@ function ProviderForm({ onDone }: { onDone: () => Promise<void> }) {
         <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
           className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono outline-none focus:border-[var(--accent)]" />
       </Row>
+      <Row label="自定义请求头（JSON，可选——opencode 等网关要求的路由头在此填，如 {&quot;x-opencode-session&quot;:&quot;knowbase&quot;}）">
+        <textarea value={headersText} onChange={e => setHeadersText(e.target.value)} rows={2}
+          placeholder='{"x-opencode-session": "knowbase"}'
+          className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono outline-none focus:border-[var(--accent)] resize-none" />
+      </Row>
       <div className="flex items-center gap-2">
         <button disabled={testing || !baseUrl.trim()} onClick={async () => { setTesting(true); try { setTestResult(await llmTestConnection({ type, baseUrl })) } finally { setTesting(false) } }}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[12px] border border-[var(--border-color)] hover:bg-[var(--bg-hover)] disabled:opacity-40 transition-colors">
           {testing && <Loader2 size={12} className="animate-spin" />} 测试连通
         </button>
-        <button disabled={saving || !name.trim() || !baseUrl.trim()} onClick={async () => { setSaving(true); try { const r = await llmSaveProvider({ name, type, baseUrl, apiKey: apiKey || undefined }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) } }}
+        <button disabled={saving || !name.trim() || !baseUrl.trim()} onClick={async () => {
+          let headers: Record<string, string> | undefined
+          const t = headersText.trim()
+          if (t) {
+            try {
+              const parsed = JSON.parse(t)
+              if (typeof parsed !== 'object' || Array.isArray(parsed) || Object.values(parsed).some(v => typeof v !== 'string')) throw new Error('格式')
+              headers = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k.trim(), String(v)]))
+            } catch { showToast({ type: 'error', message: '自定义请求头不是合法的 JSON 对象（{"头名":"值"}）' }); return }
+          }
+          setSaving(true)
+          try { const r = await llmSaveProvider({ name, type, baseUrl, apiKey: apiKey || undefined, headers }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
+        }}
           className="px-3 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
           保存
         </button>

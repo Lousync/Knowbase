@@ -595,6 +595,8 @@ export interface LlmProviderDraft {
   /** 仅新增/更换时传入；编辑留空保留旧密文 */
   apiKey?: string
   enabled?: boolean
+  /** 自定义请求头（opencode 等网关要求 x-opencode-session 之类路由头时在此配置） */
+  headers?: Record<string, string>
 }
 
 export interface LlmTestResultInfo {
