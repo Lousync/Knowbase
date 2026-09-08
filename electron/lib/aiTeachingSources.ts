@@ -484,16 +484,32 @@ const VISION_SYSTEM = '你是教材视觉转写助手。把你收到的教材页
   + '公式一律用 LaTeX（行内 $…$，独立公式 $$…$$）；表格转 Markdown 表格；图片/几何图给一句【图：…】客观描述；'
   '保留标题层级与题号。只转写页面上实际可见的内容，看不清就标注（不清晰），**严禁编造或补全**。直接输出该页 Markdown，不要任何开场白或评论。'
 
-/** 逐页转写并并入提取稿。pages = 渲染层栅格化的 {n 页码, dataUrl}（≤12 页，单页失败不中断其余） */
-export async function transcribeVision(sessionId: string, no: number, pages: { n: number; dataUrl: string }[], getSetting: (key: string) => unknown): Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; failed?: number[]; error?: string }> {
+/** 逐页转写并并入提取稿。pages = 渲染层栅格化的 {n 页码, dataUrl}（≤12 页，单页失败不中断其余）。
+ *  断点续转（2026-09-08 分批流水线）：提取稿中已有的 p{n} 自动跳过不重复调用视觉模型——
+ *  渲染层按 12 页/批逐批发送，中断后重发同区间即可续转，已完成批次零消耗。 */
+export async function transcribeVision(sessionId: string, no: number, pages: { n: number; dataUrl: string }[], getSetting: (key: string) => unknown): Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }> {
   try {
     const l = layout(sessionId, getSetting, false)
     if ('error' in l) return { ok: false, error: l.error }
     const entries = readEntries(l)
     const e = entries.find(x => x.no === no)
     if (!e) return { ok: false, error: `没有编号为 ${no} 的素材条目` }
-    const list = (Array.isArray(pages) ? pages : []).filter(p => Number.isFinite(p.n) && typeof p.dataUrl === 'string' && p.dataUrl.startsWith('data:image/')).slice(0, 12)
-    if (list.length === 0) return { ok: false, error: '没有可用的页面位图（渲染失败？请重试）' }
+    // 断点续转：提取稿里已有的 p{n}（新建模式 `## p{n}` / 追加模式 `### p{n}`）不再重转
+    const already = new Set<number>()
+    const extPtr = /^✓\s*→\s*(.+)$/.exec(e.extracted)
+    if (extPtr) {
+      try {
+        const old = readFileSync(join(l.dirAbs, extPtr[1].trim()), 'utf-8')
+        for (const m of old.matchAll(/^#{2,3}\s*p(\d+)\s*$/gm)) already.add(parseInt(m[1], 10))
+      } catch { /* 提取稿读取失败视作无历史 */ }
+    }
+    const list = (Array.isArray(pages) ? pages : []).filter(p => Number.isFinite(p.n) && typeof p.dataUrl === 'string' && p.dataUrl.startsWith('data:image/') && !already.has(p.n)).slice(0, 12)
+    const skippedAll = (Array.isArray(pages) ? pages : []).filter(p => Number.isFinite(p.n) && already.has(p.n)).map(p => p.n)
+    if (list.length === 0) {
+      // 本批全部已转：零消耗幂等返回（断点续转收敛/重发同区间时命中）
+      const extNow = /^✓\s*→\s*(.+)$/.exec(e.extracted)
+      return { ok: true, relPath: extNow ? `${l.dirRel}/${extNow[1].trim()}` : undefined, model: '-', done: [], skipped: skippedAll, failed: [] }
+    }
     const done: { n: number; md: string }[] = []
     const failed: number[] = []
     let model = ''
@@ -527,7 +543,7 @@ export async function transcribeVision(sessionId: string, no: number, pages: { n
       if (!w.ok) return { ok: false, error: w.error }
     }
     broadcastTreeRefresh(l.dirRel)
-    return { ok: true, relPath: `${l.dirRel}/${extName}`, model, done: done.map(d => d.n), failed }
+    return { ok: true, relPath: `${l.dirRel}/${extName}`, model, done: done.map(d => d.n), skipped: skippedAll, failed }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }

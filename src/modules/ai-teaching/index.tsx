@@ -729,8 +729,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (!activeId || !srcForm) return
     const name = srcForm.name.trim()
     if (!name) { showToast({ type: 'warning', message: '素材名称必填' }); return }
+    // 「再加区间」条目自动派生名：区间有效且名称未手动区分（不含 ·p 标记）时补「·p{起}-{终}」——
+    // 同一原件多条目在素材库/AI 注入中可辨识
+    const rf = srcForm.rangeFrom.trim()
+    const rt = srcForm.rangeTo.trim()
+    const finalName = rf && !/·p\d+/.test(name) ? `${name}·p${rf}${rt && rt !== rf ? `-${rt}` : ''}` : name
     const r = await aiTeachSrcAdd(activeId, {
-      name, path: srcForm.path.trim(), storage: srcForm.storage,
+      name: finalName, path: srcForm.path.trim(), storage: srcForm.storage,
       rangeFrom: srcForm.rangeFrom.trim() || undefined, rangeTo: srcForm.rangeTo.trim() || undefined, note: srcForm.note.trim(),
     }).catch((e: Error) => ({ ok: false as const, error: e.message }))
     const rr = r as { ok: boolean; error?: string; corrected?: { from: string; to: string } }
@@ -755,12 +760,30 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (r.ok && r.relPath) { await refreshSources(activeId); showToast({ type: 'info', message: `提取完成：${r.relPath.split('/').pop()}` }); openSrcFile(r.relPath) }
     else showToast({ type: 'error', message: `提取失败：${(r as { error?: string }).error ?? '未知错误'}` })
   }
-  /** 3-21 视觉转写（手动档）：pdf 原件页区间 → 渲染层 pdf.js 栅格化 → 视觉模型逐页转写 → 并入提取稿（非破坏） */
+  /** 3-21 视觉转写（2026-09-08 升级为分批流水线）：区间 ≤12 页即时转；>12 页按 12 页/批
+   *  逐批「栅格化→视觉模型转写→并入提取稿」，进度可停（已完成批保留），断点续转靠主进程
+   *  跳过提取稿中已有页（重发同区间零重复消耗）。 */
+  const transcribeStopRef = useRef(false)
   const doTranscribe = async (no: number) => {
     if (!activeId || visionBusy) return
     const e = srcEntries.find(x => x.no === no)
     if (!e) return
+    const rm = /^(\d+)\s*(?:-\s*(\d+))?$/.exec(e.range.trim())
+    if (e.range.trim() === '-' || !rm) { showToast({ type: 'warning', message: '先登记页码区间（编辑 SOURCE.md 或重新登记），再视觉转写' }); return }
+    const from0 = Math.max(1, parseInt(rm[1], 10))
+    const to0 = rm[2] ? parseInt(rm[2], 10) : from0
+    const total = Math.max(1, to0 - from0 + 1)
+    if (total > 12) {
+      const batches = Math.ceil(total / 12)
+      const yes = await showGlobalConfirm({
+        title: '分批视觉转写',
+        message: `区间 p${from0}-${to0} 共 ${total} 页，将按 12 页/批分 ${batches} 批逐批转写（每批一次视觉模型调用）。可随时停止，已完成批保留、重发自动续转。开始？`,
+        confirmLabel: `开始转写 ${total} 页`,
+      })
+      if (!yes) return
+    }
     setVisionBusy({ no, label: '读取原件…' })
+    transcribeStopRef.current = false
     try {
       const b = await aiTeachSrcPdfBytes(activeId, no)
       if (!b?.ok || !b.base64) { showToast({ type: 'error', message: `视觉转写失败：${b?.error ?? '原件不可读'}` }); return }
@@ -769,39 +792,60 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
       const bytes = Uint8Array.from(atob(b.base64), c => c.charCodeAt(0))
       const doc = await pdfjs.getDocument({ data: bytes }).promise
-      const m = /^(\d+)\s*(?:-\s*(\d+))?$/.exec(e.range.trim())
-      let from = m ? Math.max(1, parseInt(m[1], 10)) : 1
-      let to = m?.[2] ? parseInt(m[2], 10) : (e.range.trim() === '-' || !m ? Math.min(doc.numPages, 12) : from)
-      to = Math.min(doc.numPages, Math.max(from, to))
-      if (to - from + 1 > 12) { to = from + 11; showToast({ type: 'warning', message: '单次转写上限 12 页，已截取前 12 页' }) }
-      const pages: { n: number; dataUrl: string }[] = []
-      for (let n = from; n <= to; n++) {
-        setVisionBusy({ no, label: `栅格化 p${n}/${to}` })
-        const page = await doc.getPage(n)
-        const vp = page.getViewport({ scale: 2 })
-        const cvs = document.createElement('canvas')
-        cvs.width = Math.floor(vp.width); cvs.height = Math.floor(vp.height)
-        const ctx = cvs.getContext('2d')
-        if (!ctx) { page.cleanup(); continue }
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cvs.width, cvs.height)
-        await page.render({ canvasContext: ctx, viewport: vp }).promise
-        pages.push({ n, dataUrl: cvs.toDataURL('image/jpeg', 0.82) })
-        page.cleanup()
+      const from = from0
+      const to = Math.min(doc.numPages, Math.max(from0, to0))
+      let doneTotal = 0
+      let skippedTotal = 0
+      const failedPages: number[] = []
+      let lastRel: string | undefined
+      let lastModel = ''
+      let bi = 0
+      const totalBatches = Math.ceil((to - from + 1) / 12)
+      for (let f = from; f <= to; f += 12) {
+        bi++
+        if (transcribeStopRef.current) { showToast({ type: 'info', message: `视觉转写已停止：已完成 ${doneTotal} 页（重发同区间将自动续转）` }); break }
+        const t = Math.min(to, f + 11)
+        const pages: { n: number; dataUrl: string }[] = []
+        for (let n = f; n <= t; n++) {
+          if (transcribeStopRef.current) break
+          setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 栅格化 p${n}/${t}` })
+          const page = await doc.getPage(n)
+          const vp = page.getViewport({ scale: 2 })
+          const cvs = document.createElement('canvas')
+          cvs.width = Math.floor(vp.width); cvs.height = Math.floor(vp.height)
+          const ctx = cvs.getContext('2d')
+          if (!ctx) { page.cleanup(); continue }
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cvs.width, cvs.height)
+          await page.render({ canvasContext: ctx, viewport: vp }).promise
+          pages.push({ n, dataUrl: cvs.toDataURL('image/jpeg', 0.82) })
+          page.cleanup()
+        }
+        if (pages.length === 0) continue
+        setVisionBusy({ no, label: `第 ${bi}/${totalBatches} 批 · 视觉模型转写 ${pages.length} 页…（已转 ${doneTotal} 页）` })
+        const r = await aiTeachSrcTranscribe(activeId, no, pages).catch((err: Error) => ({ ok: false as const, error: err.message }))
+        if (!r?.ok) { showToast({ type: 'error', message: `视觉转写失败：${(r as { error?: string }).error ?? ''}（已完成 ${doneTotal} 页保留，可重发续转）` }); break }
+        lastRel = r.relPath ?? lastRel
+        lastModel = r.model ?? lastModel
+        const d = r.done?.length ?? 0
+        doneTotal += d
+        skippedTotal += r.skipped?.length ?? 0
+        if (r.failed?.length) failedPages.push(...r.failed)
+        await refreshSources(activeId)
       }
       void doc.destroy()
-      if (pages.length === 0) { showToast({ type: 'error', message: '页面栅格化失败' }); return }
-      setVisionBusy({ no, label: `视觉模型转写 ${pages.length} 页…` })
-      const r = await aiTeachSrcTranscribe(activeId, no, pages).catch((err: Error) => ({ ok: false as const, error: err.message }))
-      if (r?.ok) {
+      if (doneTotal > 0 || skippedTotal > 0) {
         await refreshSources(activeId)
-        if (r.relPath) openDocView(r.relPath)
-        const fail = r.failed?.length ? ` · ${r.failed.length} 页失败` : ''
-        showToast({ type: 'info', message: `👁 视觉转写完成（${r.model ?? '视觉模型'}）：${r.done?.length ?? 0} 页已并入提取稿${fail}` })
-      } else showToast({ type: 'error', message: `视觉转写失败：${(r as { error?: string }).error ?? ''}` })
+        if (lastRel && !transcribeStopRef.current) openDocView(lastRel)
+        const fail = failedPages.length ? ` · ${failedPages.length} 页失败（重发同区间自动重试失败页）` : ''
+        showToast({ type: 'info', message: `👁 视觉转写完成（${lastModel || '视觉模型'}）：转写 ${doneTotal} 页 · 跳过已转 ${skippedTotal} 页${fail}` })
+      } else if (!transcribeStopRef.current) {
+        showToast({ type: 'error', message: '视觉转写失败：没有可转写的页' })
+      }
     } catch (err) {
       showToast({ type: 'error', message: `视觉转写失败：${(err as Error).message}` })
     } finally {
       setVisionBusy(null)
+      transcribeStopRef.current = false
     }
   }
   const doRemoveSrc = async (no: number, nm: string) => {
@@ -2001,13 +2045,21 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                             </button>
                           )}
                           {e.type === 'pdf' && e.path && e.path !== '-' && (
-                            /* 3-21 手动档：区间页栅格化→视觉模型忠实转写（公式/图形/扫描件），结果非破坏并入提取稿 */
+                            /* 3-21 手动档→分批流水线：区间页栅格化→视觉模型转写（公式/图形/扫描件），
+                               >12 页自动分批+断点续转（提取稿已有页跳过），结果非破坏并入提取稿 */
                             <button onClick={() => { void doTranscribe(e.no) }} disabled={!!visionBusy}
-                              title={visionBusy?.no === e.no ? visionBusy.label : '视觉转写：把登记区间的页面交给视觉模型转写（公式/图形/扫描件兜底），并入提取稿后可编辑'}
+                              title={visionBusy?.no === e.no ? visionBusy.label : '视觉转写：把登记区间的页面交给视觉模型转写（>12 页自动分批、断点续转），并入提取稿后可编辑。点击可中途停止'}
                               className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
                               {visionBusy?.no === e.no ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
-                              {visionBusy?.no === e.no ? '转写中…' : '转写'}
+                              {visionBusy?.no === e.no ? <span onClick={(ev) => { ev.stopPropagation(); transcribeStopRef.current = true }} className="hover:text-red-400">停止</span> : '转写'}
                             </button>
+                          )}
+                          {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
+                            /* 同一原件再加区间（2026-09-08 用户需求）：一个 PDF 多章 = 多条目共享同一份
+                               已入库原件（不再重复拷贝），各条目独立转写/提取/编号引用 */
+                            <button onClick={() => setSrcForm({ name: e.name, type: e.type, path: e.path, storage: '仅引用', rangeFrom: '', rangeTo: '', note: '' })}
+                              title="同一文件换个页码区间再登记一条（如另一章）——不重复拷贝原件"
+                              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">再加区间</button>
                           )}
                           {inRepo && e.path.startsWith('./') && dirRel && e.type === 'pptx' && (
                             <button onClick={() => { void openPptxReader(`${dirRel}/${e.path.slice(2)}`, e.name) }} title="逐页阅读原件"
