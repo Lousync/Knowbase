@@ -635,7 +635,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [srcForm, setSrcForm] = useState<null | { name: string; type: string; path: string; storage: '已入库' | '仅引用'; rangeFrom: string; rangeTo: string; note: string }>(null)
   const [srcBusy, setSrcBusy] = useState<number | null>(null)
   const [visionBusy, setVisionBusy] = useState<null | { no: number; label: string }>(null)
-  const [srcAnom, setSrcAnom] = useState<{ unnamed: number; dupNo: number } | null>(null)
+  const [srcAnom, setSrcAnom] = useState<{ unnamed: number; dupNo: number; noPath?: number } | null>(null)
   const refreshSources = useCallback(async (sid: string | null) => {
     if (!sid) { setSrcEntries([]); setSrcFileRel(null); setSrcAnom(null); return }
     const r = await aiTeachSrcRead(sid).catch(() => null)
@@ -1903,15 +1903,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               </div>
             </div>
             {/* 条目5.3：手编 / AI 直写 SOURCE.md 的形状异常提示（不静默丢失，指回文件改正） */}
-            {srcAnom && (srcAnom.unnamed > 0 || srcAnom.dupNo > 0) && (
+            {srcAnom && (srcAnom.unnamed > 0 || srcAnom.dupNo > 0 || (srcAnom.noPath ?? 0) > 0) && (
               <button onClick={() => { if (srcFileRel) void openDocView(srcFileRel) }}
                 className="w-full flex items-start gap-1.5 px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--warning-bg)]/40 text-left text-[10.5px] text-[var(--warning)] hover:opacity-80 transition-opacity"
-                title={`小节标题需为「### 编号. 名称」，字段行「- 字段: 值」。点击打开 SOURCE.md 修正。`}>
+                title={`小节标题需为「### 编号. 名称」，字段行「- 字段: 值」。「路径」是登记必要信息，缺路径的小节不会出现在素材库。点击打开 SOURCE.md 修正。`}>
                 <span className="shrink-0">⚠</span>
                 <span className="min-w-0">
                   {srcAnom.unnamed > 0 && <span>{srcAnom.unnamed} 个小节缺「编号.」未登记</span>}
-                  {srcAnom.unnamed > 0 && srcAnom.dupNo > 0 && <span> · </span>}
+                  {srcAnom.unnamed > 0 && (srcAnom.dupNo > 0 || (srcAnom.noPath ?? 0) > 0) && <span> · </span>}
                   {srcAnom.dupNo > 0 && <span>{srcAnom.dupNo} 处编号重复被忽略</span>}
+                  {srcAnom.dupNo > 0 && (srcAnom.noPath ?? 0) > 0 && <span> · </span>}
+                  {(srcAnom.noPath ?? 0) > 0 && <span>{srcAnom.noPath} 个小节缺「路径」未登记</span>}
                   <span className="text-[var(--text-muted)]">（点开 SOURCE.md 修正）</span>
                 </span>
               </button>

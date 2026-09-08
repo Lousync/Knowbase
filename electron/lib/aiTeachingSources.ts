@@ -45,8 +45,8 @@ export interface SourcesResult {
   ok: boolean
   relPath?: string | null
   entries?: SourceEntry[]
-  /** 条目5.3：手编/AI 直写的异常统计（缺编号的小节、编号重复被丢弃数） */
-  anomalies?: { unnamed: number; dupNo: number }
+  /** 条目5.3：手编/AI 直写的异常统计（缺编号的小节、编号重复被丢弃数、缺路径未登记数） */
+  anomalies?: { unnamed: number; dupNo: number; noPath?: number }
   error?: string
 }
 
@@ -99,11 +99,20 @@ function emptyTemplate(l: SourcesLayout): string {
     `updated: ${today()}`,
     '---',
     '',
-    '# 素材来源登记',
+    '# 素材来源登记（填空即用）',
     '',
-    '每个素材一个小节（`### 编号. 名称` + 固定字段行）。可在右栏「素材库 → ＋ 添加素材」登记，',
-    '直接编辑本文件，或在对话里让 AI 按此格式登记。字段：类型(url/pptx/pdf/image/md/code/other)、路径、',
-    '页码区间(pdf/pptx 页码，或 code 行号；如 12-34，无则 -)、存放方式(已入库/仅引用)、已提取(程序维护)、备注。',
+    '下面第 1 条是空位：把【】里的占位换成实际内容、填上「路径」就登记生效（路径是识别关键，不填不登记）。',
+    '新增素材复制第 1 条小节、编号 +1。也可在右栏「素材库 → ＋ 添加素材」用表单登记，或在对话里让 AI 登记。',
+    '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(pdf/pptx 页码或 code 行号，如 12-34，无则 -)、',
+    '存放方式(已入库=原件拷进本目录/仅引用=只记地址)、已提取(程序维护)、备注。',
+    '',
+    '### 1. 【素材名称】',
+    '- 类型：pdf',
+    '- 路径：',
+    '- 页码区间：-',
+    '- 存放方式：已入库',
+    '- 已提取：-',
+    '- 备注：',
     '',
   ].join('\n')
 }
@@ -116,7 +125,11 @@ export function parseSourceMd(text: string): SourceEntry[] {
   const out: SourceEntry[] = []
   const seen = new Set<number>()
   let cur: SourceEntry | null = null
-  const flush = () => { if (cur && !seen.has(cur.no)) { seen.add(cur.no); out.push(cur) } cur = null }
+  // 【】开头 = 填空模板占位（SOURCE.md 模板预置的空位条目），与未填完的手编小节一并跳过：
+  // 路径是登记的必要信息，无路径条目（无论占位还是手编漏填）都不进素材库——
+  // 用户填上路径的瞬间条目即生效；表单登记第一条时 rewrite 会连带清掉占位小节
+  const isPlaceholder = (e: SourceEntry) => e.name.startsWith('【') || !e.path.trim()
+  const flush = () => { if (cur && !seen.has(cur.no) && !isPlaceholder(cur)) { seen.add(cur.no); out.push(cur) } cur = null }
   const clean = (v: string) => v.trim().replace(/^`+|`+$/g, '').trim()
   for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
     const head = /^#{1,6}\s*(\d+)\s*[.、]\s*(.+?)\s*$/.exec(raw)
@@ -145,21 +158,44 @@ export function parseSourceMd(text: string): SourceEntry[] {
 
 /** 手编/AI 直写 SOURCE.md 的异常统计（UI 优化条目5.3）：
  *  `unnamed`=缺「编号.」的小节标题（整节不会被登记）、`dupNo`=编号重复被丢弃的节数。
- *  仅统计（不改动文件），供右栏一行提示——否则用户只会看到「列表没变化」而无处排查。 */
-export function sourceAnomalies(text: string): { unnamed: number; dupNo: number } {
+ *  仅统计（不改动文件），供右栏一行提示——否则用户只会看到「列表没变化」而无处排查。
+ *  noPath = 手编小节缺「路径：」非空值（路径是登记必要信息，缺失即不登记）；模板【】占位小节不计。 */
+export function sourceAnomalies(text: string): { unnamed: number; dupNo: number; noPath: number } {
   let unnamed = 0
   let numbered = 0
+  let noPath = 0
   let fmCount = 0
   let inFm = false
+  let curNo = 0
+  let curPlaceholder = false
+  let curPath = ''
+  const closeSection = (): void => {
+    if (curNo && !curPlaceholder && !curPath) noPath++
+    curNo = 0
+    curPlaceholder = false
+    curPath = ''
+  }
   for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
     const line = raw.trim()
     if (line === '---') { fmCount++; inFm = fmCount % 2 === 1; continue }
-    if (inFm || !/^#{1,6}\s*\S/.test(line)) continue
-    if (/^#{1,6}\s*\d+\s*[.、]\s*\S/.test(line)) { numbered++; continue }
+    if (inFm) continue
+    const head = /^#{1,6}\s*(\d+)\s*[.、]/.exec(line)
+    if (head) {
+      closeSection()
+      curNo = parseInt(head[1], 10)
+      curPlaceholder = line.includes('【')
+      if (!curPlaceholder) numbered++ // 占位小节不进 dupNo 分母（parse 同样排除，否则虚报编号重复）
+      continue
+    }
     if (/^#{1,6}\s*素材来源登记\s*$/.test(line)) continue
-    unnamed++
+    if (/^#{1,6}\s*\S/.test(line)) { closeSection(); unnamed++; continue }
+    if (curNo) {
+      const m = /^[-*]?\s*路径(?:\s*[：:]\s*|\s+)(.*)$/.exec(line)
+      if (m && !curPath) curPath = m[1].trim().replace(/^`+|`+$/g, '')
+    }
   }
-  return { unnamed, dupNo: Math.max(0, numbered - parseSourceMd(text).length) }
+  closeSection()
+  return { unnamed, dupNo: Math.max(0, numbered - parseSourceMd(text).length), noPath }
 }
 
 function entryToBlock(e: SourceEntry): string {
