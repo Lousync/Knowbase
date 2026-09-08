@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSy
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, markRecentDeleted, clearRecentDeleted, setVaultMetaName } from './kbStore/vaultContext'
+import { writeWelcomeDocOnce } from './kbStore/welcomeDoc'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
@@ -409,7 +410,10 @@ function adoptVaultDirectory(rootPath: string, name?: string): { rootId: string;
   roots.set(id, { id, name: vaultName, rootPath })
   upsertVault(id, vaultName, rootPath)
   setCurrentVault({ rootId: id, name: vaultName, rootPath })
+  // 首次初始化（meta.json 尚不存在）→ 落一份欢迎文档到仓库根：已登记仓库重开/删除后重开均不复活
+  const isFirstInit = !existsSync(join(rootPath, '.knowbase', 'meta.json'))
   ensureKbRoot(vaultName)
+  if (isFirstInit) writeWelcomeDocOnce(rootPath)
   runLayoutMigrations(rootPath)
   return { rootId: id, name: vaultName, path: rootPath }
 }
