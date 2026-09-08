@@ -3,7 +3,8 @@ import type { BookmarkCategory, BookmarkItem } from '../../../../types'
 /**
  * 网址导航导入导出：
  * - JSON：完整备份（分类+书签），可再导入合并
- * - HTML：Netscape 书签格式，可直接导入 Chrome / Edge / Firefox
+ * - HTML：Netscape 书签格式——导出可直接导入 Chrome / Edge / Firefox；
+ *   导入支持浏览器「导出收藏夹」生成的同格式 HTML 文件
  */
 
 export interface ExportPayload {
@@ -119,6 +120,119 @@ export function parseJsonImport(text: string): ParsedImport {
   }
 
   return { payload: { categories, bookmarks } }
+}
+
+// ===== 浏览器书签 HTML 导入（Netscape Bookmark 格式）=====
+
+function unescapeHtml(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, d: string) => {
+      const code = Number(d)
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ''
+    })
+    .replace(/&amp;/g, '&') // 必须最后反转义
+}
+
+interface HtmlFolderNode {
+  name: string
+  children: HtmlFolderNode[]
+  bookmarks: { title: string; url: string; description?: string }[]
+}
+
+/** 浏览器导出时代表「根栏位」的文件夹名——拍平时跳过，不进入分类路径 */
+const STANDARD_ROOT_NAMES = new Set([
+  '收藏夹栏', '书签栏', '收藏夹',
+  'bookmarks bar', 'bookmark bar', 'favorites bar', 'favorites', 'bookmarks',
+])
+
+function isStandardRootName(name: string): boolean {
+  return STANDARD_ROOT_NAMES.has(name.trim().toLowerCase())
+}
+
+const A_TAG_RE = /<a\b([^>]*)>([\s\S]*?)<\/a>/i
+const HREF_RE = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s">]+))/i
+
+/**
+ * 解析浏览器导出的收藏夹 HTML（Chrome / Edge / Firefox 的 Netscape 书签格式）。
+ * 映射规则：文件夹 → 分类（「收藏夹栏 / 书签栏」等标准根名跳过；嵌套文件夹拍平为「父/子」路径名）；
+ * 无文件夹归属的书签 → 未分类；仅保留 http(s) 链接，其余（javascript:、place: 等）跳过。
+ */
+export function parseHtmlImport(text: string): ParsedImport {
+  const root: HtmlFolderNode = { name: '', children: [], bookmarks: [] }
+  const stack: HtmlFolderNode[] = [root]
+  let pending: HtmlFolderNode | null = null // 已见 <H3>、待其 <DL> 开启的文件夹
+  let last: HtmlFolderNode['bookmarks'][number] | null = null // 供 <DD> 描述挂靠
+
+  for (const line of text.split(/\r?\n/)) {
+    const h3 = line.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i)
+    if (h3) {
+      pending = { name: unescapeHtml(h3[1]).trim(), children: [], bookmarks: [] }
+    }
+
+    if (/<dl\b/i.test(line)) {
+      const parent = stack[stack.length - 1]
+      const folder = pending ?? { name: '', children: [], bookmarks: [] }
+      parent.children.push(folder)
+      pending = null
+      stack.push(folder)
+    }
+
+    if (/<\/dl/i.test(line)) {
+      if (stack.length > 1) stack.pop()
+      last = null
+    }
+
+    const a = line.match(A_TAG_RE)
+    if (a) {
+      const href = a[1].match(HREF_RE)
+      const rawUrl = (href?.[1] ?? href?.[2] ?? href?.[3] ?? '').trim()
+      const url = normalizeUrl(unescapeHtml(rawUrl))
+      if (url && isValidUrl(url)) {
+        const title = unescapeHtml(a[2]).replace(/\s+/g, ' ').trim()
+        last = { title: title || domainOf(url), url }
+        stack[stack.length - 1].bookmarks.push(last)
+      }
+    }
+
+    const dd = line.match(/<dd\b[^>]*>([\s\S]*)$/i)
+    if (dd && last) {
+      const desc = unescapeHtml(dd[1]).replace(/\s+/g, ' ').trim()
+      if (desc) last.description = desc
+    }
+  }
+
+  // 拍平：文件夹路径 → 分类名
+  const imported: ExportPayload['bookmarks'] = []
+  const walk = (folder: HtmlFolderNode, path: string[]) => {
+    const category = path.length > 0 ? path.join('/') : undefined
+    for (const b of folder.bookmarks) {
+      imported.push({ title: b.title, url: b.url, description: b.description, category })
+    }
+    for (const child of folder.children) {
+      walk(child, child.name && !isStandardRootName(child.name) ? [...path, child.name] : path)
+    }
+  }
+  walk(root, [])
+
+  if (imported.length === 0) {
+    throw new Error('未识别到书签，请确认是浏览器「导出收藏夹」生成的 HTML 文件')
+  }
+
+  // 收集分类（保持出现顺序，同名自动合并）
+  const categories: ExportPayload['categories'] = []
+  const seenCats = new Set<string>()
+  for (const b of imported) {
+    if (b.category && !seenCats.has(b.category)) {
+      seenCats.add(b.category)
+      categories.push({ name: b.category })
+    }
+  }
+
+  return { payload: { categories, bookmarks: imported } }
 }
 
 /** 无协议自动补 https:// */

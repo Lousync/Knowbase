@@ -8,7 +8,7 @@ import {
 import { showToast } from '../../../../lib/toast'
 import { notifyDataChanged } from '../../../../lib/dataChanged'
 import { ConfirmDialog } from '../../../../components/shared'
-import { buildJsonExport, buildHtmlExport, parseJsonImport, domainOf } from './io'
+import { buildJsonExport, buildHtmlExport, parseJsonImport, parseHtmlImport, domainOf } from './io'
 import { CategorySidebar } from './components/CategorySidebar'
 import { BookmarkEditModal, CategoryEditModal } from './components/BookmarkModals'
 import { localToday } from '../../../../lib/date'
@@ -154,7 +154,8 @@ export function BookmarkNav({ onBack }: Props) {
       if (!path) return
       const text = await window.api.readImportFile(path)
       if (!text) throw new Error('无法读取文件')
-      const { payload } = parseJsonImport(text)
+      // JSON = 本应用完整备份；HTML = 浏览器导出的收藏夹（Chrome / Edge / Firefox）
+      const { payload } = /\.json$/i.test(path) ? parseJsonImport(text) : parseHtmlImport(text)
 
       // 分类按名合并
       const catByName = new Map(categories.map(c => [c.name, c]))

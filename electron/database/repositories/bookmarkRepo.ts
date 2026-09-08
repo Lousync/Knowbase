@@ -62,7 +62,9 @@ export function registerBookmarkHandlers(): void {
     if (!win) return null
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
-      filters: [{ name: '书签 JSON', extensions: ['json'] }],
+      filters: [
+        { name: '书签文件（JSON / 浏览器收藏夹 HTML）', extensions: ['json', 'html', 'htm'] },
+      ],
       title: '选择要导入的书签文件',
     })
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
