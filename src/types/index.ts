@@ -1101,6 +1101,7 @@ export interface ElectronAPI {
   workspaceRenameVault: (name: string) => Promise<{ ok?: boolean; name?: string; error?: string }>
   workspaceForget: (rootId: string) => Promise<{ ok: boolean }>
   workspaceDeleteVault: (rootId: string) => Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }>
+  workspaceClearCurrentVault: () => Promise<{ ok: boolean; cleared?: string | null }>
   // P6 整仓归档（zip 全量导出/导入；冲突逐条决策：覆盖/跳过/重命名）
   vaultArchiveExport: () => Promise<{ ok?: boolean; canceled?: boolean; path?: string; files?: number; bytes?: number; error?: string }>
   vaultArchiveImportStart: () => Promise<VaultArchiveImportResult>

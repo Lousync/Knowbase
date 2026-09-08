@@ -956,6 +956,16 @@ export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown)
     }
     return { ok: true, deletedCurrent: wasCurrent }
   })
+
+  // 退出当前仓库（2026-09-08 dev「模拟新用户」用；语义 = 回到未进入状态，仓库数据/登记不动）：
+  // 清内存与 settings 的 currentVaultId → 渲染层重载后 workspaceGetCurrent 为空 → 走欢迎/选择仓库页
+  ipcMain.handle('ws:clearCurrentVault', () => {
+    const was = getCurrentVault()?.rootId ?? null
+    setCurrentVault(null)
+    invalidateKnowledgeIndex()
+    invalidateGraphIndex()
+    return { ok: true, cleared: was }
+  })
 }
 
 /**

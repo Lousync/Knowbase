@@ -277,6 +277,7 @@ export const workspaceRevealVault = (): Promise<{ ok: boolean; error?: string }>
 export const workspaceForget = (rootId: string) => a().workspaceForget(rootId)
 // P7（D6）：删除当前仓库 = 整仓进 OS 回收站（不弹提醒窗，回收站可还原兜底）
 export const workspaceDeleteVault = (rootId: string): Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }> => a().workspaceDeleteVault(rootId)
+export const workspaceClearCurrentVault = () => a().workspaceClearCurrentVault()
 // P6：整仓归档（导出 zip / 导入 + 冲突逐条决策）
 export const vaultArchiveExport = () => a().vaultArchiveExport()
 export const vaultArchiveImportStart = () => a().vaultArchiveImportStart()

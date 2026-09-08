@@ -30,17 +30,15 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
   const { s: settings, update: updateSetting } = useSettings()
   const badgeEgg = settings.badgeEggActivated
   const [isMaximized, setIsMaximized] = useState(false)
-  // DEV 专属：模拟新用户第一次进入（两段式确认防误触）——清首启标记后整页重载，
-  // 重载后 settings.onboardingDone=false 会自动弹出新手引导（App.tsx 首启效应接管）
+  // DEV 专属：模拟新用户第一次进入（两段式确认防误触）——模拟的是「选择仓库阶段」：
+  // 退出当前仓库（清 currentVaultId）→ 重载 → workspaceGetCurrent 为空 → 走欢迎/仓库选择页。
+  // 不动新手引导（onboarding 是另一阶段，设置页已有重看入口）；仓库数据/登记不受影响
   const [freshUserArm, setFreshUserArm] = useState(false)
   const isDevSession = typeof location !== 'undefined' && location.protocol === 'http:'
-  const simulateFirstRun = (): void => {
-    updateSetting('onboardingDone', false)
-    try {
-      sessionStorage.removeItem('kb-startup-picker-shown')
-      sessionStorage.clear()
-    } catch { /* 隐私模式忽略 */ }
-    showToastSafe('已重置为首启状态，正在重新加载…')
+  const simulateFirstRun = async (): Promise<void> => {
+    try { await window.api.workspaceClearCurrentVault() } catch { /* ignore */ }
+    try { sessionStorage.clear() } catch { /* 隐私模式忽略 */ }
+    showToastSafe('已退出当前仓库，正在重载（进入仓库选择阶段）…')
     setTimeout(() => location.reload(), 400)
   }
   const [isPinned, setIsPinned] = useState(false)
@@ -155,8 +153,8 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
         {/* DEV 专属：模拟新用户第一次进入（清 onboardingDone + 首启标记 → reload 弹引导）；打包版不显示 */}
         {isDevSession && (
           <button
-            onClick={() => { if (freshUserArm) { setFreshUserArm(false); simulateFirstRun() } else { setFreshUserArm(true); setTimeout(() => setFreshUserArm(false), 3000) } }}
-            title={freshUserArm ? '再点一次确认：重置为首启状态并重载（仓库/内容数据不受影响）' : '模拟新用户第一次进入（清首启标记并重载，dev 专属）'}
+            onClick={() => { if (freshUserArm) { setFreshUserArm(false); void simulateFirstRun() } else { setFreshUserArm(true); setTimeout(() => setFreshUserArm(false), 3000) } }}
+            title={freshUserArm ? '再点一次确认：退出当前仓库并重载（进入选择仓库阶段，数据不受影响）' : '模拟新用户第一次进入（退出当前仓库 → 选择仓库阶段，dev 专属）'}
             className={`ml-2.5 flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded border select-none transition-colors ${freshUserArm ? 'bg-amber-500/25 text-amber-500 border-amber-500/60' : 'bg-amber-500/10 text-amber-500/70 border-amber-500/30 hover:text-amber-500 hover:bg-amber-500/20'}`}>
             <UserPlus size={10} />
             {freshUserArm ? '确认重置?' : '模拟新用户'}
