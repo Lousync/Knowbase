@@ -392,11 +392,14 @@ function registerWindowHandlers(): void {
   mainWindow?.on('enter-full-screen', () => mainWindow?.webContents.send('window:fullscreenChange', true))
   mainWindow?.on('leave-full-screen', () => mainWindow?.webContents.send('window:fullscreenChange', false))
 
-  // 抽屉式日程面板：renderer 发送「面板期望宽度」（0 = 收回），主进程以抽屉打开时刻的
-  // 基准宽度为锚点计算窗口宽度。绝对值协议 —— 重复/乱序/HMR 重挂载的消息不会累积漂移。
+  // 抽屉式日程面板：renderer 发送「面板期望宽度」（0 = 收回）。增量协议（2026-09-08 重写）——
+  // 打开/拖拽 = 当前窗口宽 + (期望宽 − 上次期望宽)，收回 = 当前窗口宽 − 上次期望宽。
+  // 旧「打开时刻基准锚点」的绝对值协议在用户展开态手动放大/缩小窗口后锚点过期：
+  // 收起回跳旧基准宽（窗口骤缩，用户实锤），拖拽也会把放大后的窗口拉回旧基准+面板宽。
+  // 增量语义下任意窗口尺寸变化后开合都正确；重复/乱序/HMR 重发的同值消息 delta=0 不漂移。
   // 最大化/全屏时窗口由系统管理，自动跳过；右缘越界则整体左移夹回工作区。
   // animate = true 时窗口宽度缓动过渡（开合平滑展开/收回），拖拽调宽传 false 即时跟随。
-  let drawerBaseWidth = 0 // 0 = 抽屉未开（收回动画 settle 时才清零，中途重开复用原基准）
+  let lastDrawerWidth = 0 // 最近一次上报的面板期望宽（>0 = 抽屉开；收回 settle 后清零）
   let drawerAnimTimer: ReturnType<typeof setInterval> | null = null
   const stopDrawerAnim = () => {
     if (drawerAnimTimer) { clearInterval(drawerAnimTimer); drawerAnimTimer = null }
@@ -432,26 +435,31 @@ function registerWindowHandlers(): void {
     stopDrawerAnim()
     const b = win.getBounds()
     const { workArea } = screen.getDisplayMatching(b)
+    const req = Math.max(0, Math.round(width))
 
-    // 收回：回到打开时刻的基准宽度
-    if (width <= 0) {
-      if (drawerBaseWidth === 0) return { applied: false }
-      const base = drawerBaseWidth
-      const w = Math.max(900, Math.min(workArea.width, base))
+    // 收回：当前窗口宽 − 上次面板宽（增量语义，见上；动画进行中忽略重复请求防目标漂移）
+    if (req <= 0) {
+      if (lastDrawerWidth === 0) return { applied: false }
+      const w = Math.max(900, Math.min(workArea.width, b.width - lastDrawerWidth))
       if (w === b.width) {
-        drawerBaseWidth = 0
+        lastDrawerWidth = 0
         return { applied: false }
       }
       const target = { ...b, width: w }
-      if (animate) animateWindowTo(win, target, () => { drawerBaseWidth = 0 })
-      else { win.setBounds(target); drawerBaseWidth = 0 }
+      if (animate) animateWindowTo(win, target, () => { lastDrawerWidth = 0 })
+      else { win.setBounds(target); lastDrawerWidth = 0 }
       return { applied: true, width: w }
     }
 
-    // 打开/拖拽：基准 + 面板宽（首次打开时锁定基准，并夹回工作区防膨胀）。
-    // 收回动画中途再次打开（HMR 重挂载/快速切换）：基准尚未清零，自动复用原基准重新锚定。
-    if (drawerBaseWidth === 0) drawerBaseWidth = Math.min(b.width, workArea.width)
-    const w = Math.max(900, Math.min(workArea.width, drawerBaseWidth + Math.round(width)))
+    // 开合缓动进行中忽略重复请求（否则中间态 bounds 参与计算会漂移目标）
+    if (drawerAnimTimer) return { applied: false, reason: 'animating' }
+
+    // 打开/拖拽：当前窗口宽 + 宽度增量。首次打开 lastDrawerWidth=0 → delta=期望宽（整体外扩）；
+    // 拖拽每帧 delta=与上帧差（跟手）；用户手动改窗后 delta 基于实时 bounds 永远正确。
+    // 右缘越界则整体左移夹回工作区防膨胀。
+    const delta = req - lastDrawerWidth
+    const w = Math.max(900, Math.min(workArea.width, b.width + delta))
+    lastDrawerWidth = req
     let x = b.x
     if (w > b.width && x + w > workArea.x + workArea.width) {
       x = Math.max(workArea.x, workArea.x + workArea.width - w)
