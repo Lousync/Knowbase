@@ -195,6 +195,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     refreshCategories(); refreshAllPages(); refreshStarred(); refreshTags()
     // A8：图谱视图挂载中时同步刷新（编辑器保存/删除/重命名后切回知识 Tab）
     window.dispatchEvent(new Event('kb-graph-refresh'))
+    // 阅读详情页也是 keep-alive：编辑器改过磁盘后必须重读（2026-09-09 修复"回知识库看不到修改"）
+    window.dispatchEvent(new Event('kb-reload-detail'))
   }, [isActive])
 
   // .ignore 规则提示（§10.1）：只有用户可行动的 .ignore 规则问题才 Toast + 终端计数；
@@ -539,7 +541,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [])
 
   const handlePageDeleted = useCallback(async (id: string) => {
-    if (writeBlocked('删除页面')) return
+    // 2026-09-09：删除页面在 vault 模式已放行（主进程 knowledge:deletePage 走系统回收站），不再走 writeBlocked 老挡板
     await deleteWithAnimation(id, async () => {
       await deleteKnowledgePage(id)
       // 页面已删除，清除脏标记后直接关闭标签页（无需确认未保存）

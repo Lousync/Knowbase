@@ -179,7 +179,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
     return () => { cancelled = true }
   }, [page?.id, page?.attachmentId, page?.fileType, page?.contentMd])
 
-  useEffect(() => {
+  const loadPage = useCallback(() => {
     Promise.all([
       getKnowledgePageById(pageId).then(p => {
         if (p) {
@@ -194,14 +194,33 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
           // 非 md/txt 类型(pdf/代码)强制编辑视图;md/txt 保持阅读优先
           const ft = (p.fileType || 'md').toLowerCase()
           setPreview(ft === 'md' || ft === '' || ft === 'txt')
+        } else if (pageRef.current) {
+          // 重读时页面消失 = 编辑器侧已删除或保存转草稿 → 退出阅读并说明（知识库列表已由激活刷新移除）
+          onBack()
         }
       }),
       getKnowledgeBacklinkContext(pageId).then(setBacklinks),
-      getKnowledgeManualLinks(pageId).then(setManualLinks),
+      // 手动关联是旧 DB-only 通道，仓库读源模式下主进程统一拒绝（抛错刷屏）→ vault 模式直接空态，不发调用
+      vaultModeRef.current ? Promise.resolve(setManualLinks([])) : getKnowledgeManualLinks(pageId).then(setManualLinks),
       getKnowledgeTags().then(setAllTags)
     ])
     setShowBacklinks(true)  // reset when switching pages
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageId])
+
+  useEffect(() => { loadPage() }, [loadPage])
+
+  // keep-alive 阅读页重读：激活时（编辑器保存/删除后切回知识库）广播 kb-reload-detail
+  const loadPageRef = useRef(loadPage)
+  useEffect(() => { loadPageRef.current = loadPage }, [loadPage])
+  useEffect(() => {
+    const onReload = () => {
+      if (isDirtyRef.current) return // 本地有未保存编辑 → 不打断
+      loadPageRef.current()
+    }
+    window.addEventListener('kb-reload-detail', onReload)
+    return () => window.removeEventListener('kb-reload-detail', onReload)
+  }, [])
 
   useEffect(() => {
     getSetting('skipDeleteConfirm_knowledge').then(v => {
@@ -1092,7 +1111,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
-                {/* 手动关联 */}
+                {/* 手动关联（DB-only 通道，仓库读源模式无持久化路径 → vault 模式整节隐藏） */}
+                {!vaultMode && (
+                  <>
                 <div className="flex items-center gap-1 px-3 pt-2 pb-1">
                   <Link2 size={11} className="text-[var(--text-muted)]" />
                   <span className="flex-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">手动关联 · {manualLinks.length}</span>
@@ -1117,6 +1138,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 ))}
                 {manualLinks.length === 0 && (
                   <p className="px-3 py-1 text-[10px] text-[var(--text-muted)] leading-relaxed">暂无。点 + 把相关页面连进来。</p>
+                )}
+                  </>
                 )}
 
                 {/* 反向链接（带上下文摘录） */}

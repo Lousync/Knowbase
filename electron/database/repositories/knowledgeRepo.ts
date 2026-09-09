@@ -11,7 +11,7 @@ import {
 } from '../../lib/kbStore/knowledgeVaultRepo'
 import { getCurrentVault } from '../../lib/kbStore/vaultContext'
 import { getGraphIndex } from '../../lib/kbStore/graphIndex'
-import { getKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
+import { getKnowledgeIndex, invalidateKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 
 type CategoryType = 'notebook' | 'folder' | 'space'
 
@@ -34,6 +34,8 @@ const VAULT_ALLOWED = new Set([
   'knowledge:createCategory',
   // 2026-09-07 导入放行：vault 分支 = 写 frontmatter md 到目标目录/收件箱
   'knowledge:createPage',
+  // 2026-09-09 知识库直接删除页面：vault 分支 = 页面 .md 移入系统回收站（与编辑器 ws:trash / 目录删除同语义）
+  'knowledge:deletePage',
   // 2026-09-07 重命名/排序放行：重命名=磁盘改名+字典级联；排序=字典/frontmatter 规范化互换
   'knowledge:updateCategory', 'knowledge:updatePage', 'knowledge:moveCategory', 'knowledge:movePage',
   // 2026-09-08 .ignore 规则对账提示：索引 warnings（坏行/未命中规则）透出给知识库 UI（§10.1）
@@ -136,6 +138,19 @@ export function registerKnowledgeHandlers(): void {
     vaultRenamePage(id, String(data.title))
   })
 
+  // 删除页面 — 2026-09-09 放行：页面 = 仓库内真实 .md → 移入系统回收站（与目录删除/编辑器 ws:trash 同语义，绝不 rm）
+  kHandle('knowledge:deletePage', async (_e, id: string) => {
+    const cur = getCurrentVault()
+    if (!cur) throw new Error('当前没有打开的仓库')
+    const entry = getKnowledgeIndex().byId[id]
+    if (!entry) return
+    const rootAbs = resolvePath(cur.rootPath)
+    const abs = resolvePath(rootAbs, entry.path)
+    if (abs === rootAbs || !abs.startsWith(rootAbs + sep)) throw new Error('页面路径越界，已阻止删除')
+    await shell.trashItem(abs)
+    invalidateKnowledgeIndex()
+  })
+
   // 移动页面（上下排序）— 同目录页面 frontmatter.sortOrder 互换
   kHandle('knowledge:movePage', (_e, id: string, direction: 'up' | 'down') => {
     vaultMovePageOrder(id, direction)
@@ -180,7 +195,7 @@ export function registerKnowledgeHandlers(): void {
   // ===== 旧 DB-only 通道：vault 模式下无实现，保留注册由白名单统一拒绝 =====
   // （页面拖拽重排/删除、手动关联、标签写入、深拷贝——删除页面等已收口编辑器模块的 vault 路径）
   const DB_ONLY_CHANNELS = [
-    'knowledge:reorderPage', 'knowledge:deletePage',
+    'knowledge:reorderPage',
     'knowledge:getManualLinks', 'knowledge:addManualLink', 'knowledge:removeManualLink', 'knowledge:updateLinks',
     'knowledge:createTag', 'knowledge:deleteTag',
     'knowledge:duplicatePage', 'knowledge:duplicateCategory',

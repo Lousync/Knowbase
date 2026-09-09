@@ -70,6 +70,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
   const [rootId, setRootId] = useState<string | null>(null)
   const [recent, setRecent] = useState<WorkspaceRecent[]>([])
   const [dirCache, setDirCache] = useState<DirCache>({})
+  /** dirCache 的同步引用：vault:tree-refresh 广播时需遍历已加载目录重拉（事件回调闭包不进依赖） */
+  const dirCacheRef = useRef<DirCache>({})
+  useEffect(() => { dirCacheRef.current = dirCache }, [dirCache])
   /** 软件生成项名单（根层 .ignore / AI教学 产物根等，ws:listDir 附带）：文件树底部「软件文件」折叠节 */
   const [softNames, setSoftNames] = useState<string[]>([])
   /** R5：分栏预览开关（左侧 Monaco 编辑 / 右侧 MarkdownPreview 实时渲染），localStorage 记忆 */
@@ -91,6 +94,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
   const [creating, setCreating] = useState<CreateIntent | null>(null)
   /** 双态模型：已归档（published）知识页 path 集合——编辑器树隐藏它们（树只留目录+草稿/非知识文件） */
   const [archivedPaths, setArchivedPaths] = useState<Set<string>>(new Set())
+  /** archivedPaths 的同步引用：saveDoc（闭包稳定）判定「保存的是已归档页 → 编辑即转草稿」 */
+  const archivedRef = useRef<Set<string>>(new Set())
+  useEffect(() => { archivedRef.current = archivedPaths }, [archivedPaths])
   /** 草稿页 path 集合：树内 .md 文件显示「草稿」徽标（辨识写作中） */
   const [draftRelPaths, setDraftRelPaths] = useState<Set<string>>(new Set())
   /** tab 右键（状态动作/关闭） */
@@ -219,6 +225,15 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     window.addEventListener('vault:changed', onChange)
     return () => window.removeEventListener('vault:changed', onChange)
   }, [enterWorkspace])
+
+  // 知识库落盘写（建空间/笔记本/页）后广播：编辑器树目录缓存重拉，新条目即时可见（2026-09-09 修复）
+  useEffect(() => {
+    const onTreeRefresh = (): void => {
+      for (const dirRel of Object.keys(dirCacheRef.current)) void refreshDir(dirRel)
+    }
+    window.addEventListener('vault:tree-refresh', onTreeRefresh)
+    return () => window.removeEventListener('vault:tree-refresh', onTreeRefresh)
+  }, [refreshDir])
 
   const handleOpenDir = useCallback(async () => {
     // D7：非仓库目录 → 弹「初始化为仓库？」确认，取消则不建
@@ -396,27 +411,41 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     const root = rootIdRef.current
     const doc = openFilesRef.current[relPath]
     if (!root || !doc || fullContent(doc) === savedFullContent(doc)) return true
+    // 编辑即转草稿（2026-09-09 拍板）：已归档（published）知识页被编辑器保存 = 进入「修改中」——
+    // frontmatter status 随本次保存一起翻成 draft（改缓冲区而非另写盘，避免后续保存把 published 翻回来）
+    const prefix = doc.frontmatterPrefix ?? ''
+    const autoDraft = /\.md$/i.test(relPath) && archivedRef.current.has(relPath) && prefix.length > 0
+    const writePrefix = !autoDraft ? prefix
+      : /^status:/im.test(prefix)
+        ? prefix.replace(/^(status:\s*).*$/im, '$1draft')
+        : prefix.replace(/(\r?\n---\s*$)/, `\nstatus: draft$1`) // 无 status 行 → 补一行（缺省语义=published）
     // frontmatter 前缀拼回（如曾被编辑），保证磁盘文件完整
-    const res = await workspaceWriteFile(root, relPath, joinFrontmatter(doc), forceMtimeMs ?? doc.mtimeMs)
+    const res = await workspaceWriteFile(root, relPath, joinFrontmatter({ frontmatterPrefix: writePrefix || undefined, content: doc.content }), forceMtimeMs ?? doc.mtimeMs)
     if (res.ok) {
       setOpenFiles((prev) => (prev[relPath]
         ? {
           ...prev,
           [relPath]: {
             ...prev[relPath],
+            frontmatterPrefix: writePrefix || undefined,
             savedContent: doc.content,
-            savedPrefix: doc.frontmatterPrefix,
+            savedPrefix: writePrefix || undefined,
             mtimeMs: res.mtimeMs ?? prev[relPath].mtimeMs,
             size: res.size ?? prev[relPath].size,
             lastSavedAt: Date.now(),
           },
         }
         : prev))
+      if (autoDraft) {
+        // 本地即时生效：树解除隐藏并显「草稿」徽标（知识库侧由其激活重读拿到 draft）
+        setArchivedPaths((prev) => { const n = new Set(prev); n.delete(relPath); return n })
+        setDraftRelPaths((prev) => new Set(prev).add(relPath))
+      }
       if (zenLevelRef.current > 0) {
         // 禅模式：不用 toast 打断沉浸，悬浮条闪现「已保存 HH:MM」（§4）
         setZenSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
       } else {
-        showToast({ type: 'info', message: '已保存' })
+        showToast({ type: 'info', message: autoDraft ? '已保存 · 转为草稿（知识库隐藏，完成后可右键归档）' : '已保存' })
       }
       // 保存后该文档不再脏：若非当前激活，回收其驻留（干净文件不长期占 openFiles/标签）
       pruneCleanNonActive(activePathRef.current)
