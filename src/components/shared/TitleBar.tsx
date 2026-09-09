@@ -3,7 +3,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import {
   X, Pin, ArrowDownToLine, Loader2, Play,
   Pause, Download, AlertTriangle, RefreshCw, SlidersHorizontal, ExternalLink,
-  CalendarCheck2, UserPlus,
+  CalendarCheck2, UserPlus, MonitorPlay,
 } from 'lucide-react'
 import {
   useUpdateStore, updateStartupCheck, updateDownload, updatePause, updateCancel, updateInstall,
@@ -40,6 +40,19 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
     try { sessionStorage.clear() } catch { /* 隐私模式忽略 */ }
     showToastSafe('已退出当前仓库，正在重载（进入仓库选择阶段）…')
     setTimeout(() => location.reload(), 400)
+  }
+  // DEV 专属：开始界面轮巡预览——应用共 2 个「选仓库/开始」界面（WelcomeOverlay 已于 2026-09-09 删除，
+  // 无仓库统一走 VaultPicker），点一次切一个，第三下关闭。只拨 App.tsx 里的开关（dev:startScreen 事件）
+  const START_SCREENS = [
+    { key: 'first', label: '仓库选择页（无当前仓库 · VaultPicker 首启形态）' },
+    { key: 'startup', label: '仓库选择页（每次启动 · VaultPicker startup 形态）' },
+  ] as const
+  const [startScreenIdx, setStartScreenIdx] = useState(-1)
+  const cycleStartScreen = (): void => {
+    const next = startScreenIdx + 1 >= START_SCREENS.length ? -1 : startScreenIdx + 1
+    setStartScreenIdx(next)
+    window.dispatchEvent(new CustomEvent('dev:startScreen', { detail: next < 0 ? null : START_SCREENS[next].key }))
+    showToastSafe(next < 0 ? '开始界面预览已关闭' : `${next + 1}/${START_SCREENS.length} · ${START_SCREENS[next].label}`)
   }
   const [isPinned, setIsPinned] = useState(false)
 
@@ -158,6 +171,17 @@ export function TitleBar({ dayPanelActive = false, onToggleDayPanel, drawerWidth
             className={`ml-2.5 flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded border select-none transition-colors ${freshUserArm ? 'bg-amber-500/25 text-amber-500 border-amber-500/60' : 'bg-amber-500/10 text-amber-500/70 border-amber-500/30 hover:text-amber-500 hover:bg-amber-500/20'}`}>
             <UserPlus size={10} />
             {freshUserArm ? '确认重置?' : '模拟新用户'}
+          </button>
+        )}
+
+        {/* DEV 专属：轮巡预览 2 个仓库选择界面（无当前仓库首启 / 每次启动 startup 形态） */}
+        {isDevSession && (
+          <button
+            onClick={cycleStartScreen}
+            title="预览开始界面（dev 专属）：每点一次切换下一个——无仓库首启选择 / 每次启动选择，第三下关闭"
+            className={`ml-1.5 flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded border select-none transition-colors ${startScreenIdx >= 0 ? 'bg-sky-500/25 text-sky-400 border-sky-500/60' : 'bg-sky-500/10 text-sky-400/70 border-sky-500/30 hover:text-sky-400 hover:bg-sky-500/20'}`}>
+            <MonitorPlay size={10} />
+            {startScreenIdx < 0 ? '开始界面' : `${startScreenIdx + 1}/${START_SCREENS.length}`}
           </button>
         )}
 

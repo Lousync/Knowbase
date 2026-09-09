@@ -4,7 +4,7 @@ import { showToast } from './toast'
 
 /**
  * 「打开本地文件夹作为仓库」统一流程（D7 / P1）。
- * 三个入口（首启 VaultPicker / 引导 WelcomeOverlay / 编辑器打开按钮）共用：
+ * 三个入口（VaultPicker 打开本地仓库 / 编辑器打开按钮 / 启动选择页）共用：
  * 系统对话框选目录 → 顶层无 .knowbase 时明确弹「初始化为仓库？」确认，
  * 取消则不建（不再静默自动初始化）。错误已 toast，调用方拿 null 即视为放弃。
  */

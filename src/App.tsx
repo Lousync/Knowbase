@@ -43,7 +43,6 @@ import { PluginsModule } from './modules/plugins'
 import { EditorModule } from './modules/editor'
 import { AiTeachingModule } from './modules/ai-teaching'
 import { FillPopup } from './modules/toolbox/components/FillPopup'
-import { WelcomeOverlay } from './components/shared/WelcomeOverlay'
 import { VaultPicker } from './components/shared/VaultPicker'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
 import { PomodoroPanel } from './modules/toolbox/components/PomodoroPanel'
@@ -74,9 +73,8 @@ export default function App() {
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importBackupPath, setImportBackupPath] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
-  // 首次引导：无「当前仓库」时全屏选择页（对标 Obsidian 打开 vault）
-  const [welcomeOpen, setWelcomeOpen] = useState(false)
-  const [welcomeChecked, setWelcomeChecked] = useState(false)
+  // 启动检测一次性标记（无当前仓库 → 出 VaultPicker；见下方 startupChecked 效应）
+  const [startupChecked, setStartupChecked] = useState(false)
   // 启动仓库选择页（startupVaultPicker，默认开）：已有仓库时每次进入先给一次选择/快速直入的机会
   const [startupPickerOpen, setStartupPickerOpen] = useState(false)
   // 日程打卡侧边栏（WeChat 模式）：内嵌/脱离状态由 React + 主进程共同管理
@@ -263,26 +261,25 @@ export default function App() {
   useHabitAutoCheckinToast()
   const mountedTabs = useRef<Set<TabName>>(new Set(['blog']))  // keep modules alive after first visit
 
-  // 启动检测当前仓库：无 → 引导页；有且开启「每次启动选择仓库」→ 启动仓库选择页（在 loaded 后执行一次）
-  // 首启未完成新手引导时不出启动选择页——下方 onboarding 效应已按首启流程接管，避免双浮层
+  // 启动检测当前仓库：无 → 仓库选择页（VaultPicker，新老用户统一）；有且开启「每次启动选择仓库」→ 启动形态选择页
   // sessionStorage 一次性标记：应用内切库会整窗 reload（数据激活重读约定），热重载不再打扰；冷启动才重新出页
   useEffect(() => {
-    if (!loaded || welcomeChecked || !settingsReady) return
+    if (!loaded || startupChecked || !settingsReady) return
     let alive = true
     window.api?.workspaceGetCurrent?.()
       .then((cur) => {
         if (!alive) return
-        if (!cur) setWelcomeOpen(true)
+        if (!cur) setVaultPickOpen(true)
         else if (s.startupVaultPicker && s.onboardingDone && !sessionStorage.getItem('kb-startup-picker-shown')) {
           sessionStorage.setItem('kb-startup-picker-shown', '1')
           setStartupPickerOpen(true)
         }
       })
-      .catch(() => { if (alive) setWelcomeOpen(true) })
-      .finally(() => { if (alive) setWelcomeChecked(true) })
+      .catch(() => { if (alive) setVaultPickOpen(true) })
+      .finally(() => { if (alive) setStartupChecked(true) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, welcomeChecked, settingsReady])
+  }, [loaded, startupChecked, settingsReady])
 
   // Set startup tab from settings — only on initial load, NOT on subsequent setting changes
   useEffect(() => {
@@ -468,6 +465,16 @@ export default function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   // 首启仓库选择（Obsidian 式）：新手引导的前置步骤——无当前仓库时先选/建仓库，完成后再进引导
   const [vaultPickOpen, setVaultPickOpen] = useState(false)
+  // DEV「开始界面」预览（TitleBar 轮巡按钮发事件）：三个开始界面三选一开关，null=全关
+  useEffect(() => {
+    const onPreview = (e: Event) => {
+      const mode = (e as CustomEvent).detail as 'first' | 'startup' | null
+      setVaultPickOpen(mode === 'first')
+      setStartupPickerOpen(mode === 'startup')
+    }
+    window.addEventListener('dev:startScreen', onPreview)
+    return () => window.removeEventListener('dev:startScreen', onPreview)
+  }, [])
   useEffect(() => {
     if (!settingsReady || !loaded || s.onboardingDone) return
     let cancelled = false
@@ -764,7 +771,7 @@ export default function App() {
       {winMax && <WindowResizeHandles />}
       <Toast />
       <GlobalConfirm />
-      {vaultPickOpen && <VaultPicker onDone={(created) => { setVaultPickOpen(false); setOnboardingOpen(true); if (created) setActiveTab('editor') }} />}
+      {vaultPickOpen && <VaultPicker onDone={(created) => { setVaultPickOpen(false); if (!s.onboardingDone) setOnboardingOpen(true); if (created) setActiveTab('editor') }} />}
       {startupPickerOpen && <VaultPicker startup onDone={() => setStartupPickerOpen(false)} />}
       {onboardingOpen && (
         <Onboarding
@@ -773,7 +780,6 @@ export default function App() {
         />
       )}
       {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} initialBackupPath={importBackupPath} />}
-      {welcomeOpen && <WelcomeOverlay onDone={(created) => { setWelcomeOpen(false); if (created) setActiveTab('editor') }} />}
     </div>
     </RootErrorBoundary>
   )

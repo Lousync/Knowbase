@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Star, ListTree, ChevronLeft, ChevronRight, X, FileText } from 'lucide-react'
 import { Entry, Tag } from '../../types'
-import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags } from '../../lib/ipc'
+import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags, workspaceGetCurrent } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
 import { registerAssistantContext } from '../../lib/assistantContext'
@@ -59,6 +59,9 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
 
   const loadEntries = useCallback(async () => {
     try {
+      // blog 随 App 启动即挂载（mountedTabs），首启/选库阶段可能尚无当前仓库——
+      // 无仓库时静默跳过，避免主进程 requireRoot 抛错刷屏；选定仓库后由 vault:changed 补拉
+      if (!(await workspaceGetCurrent())) { setLoading(false); return }
       const [es, ts] = await Promise.all([getEntries(), getTags()])
       setEntries(es)
       setAllTags(ts)
@@ -68,6 +71,13 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       setLoading(false)
     }
   }, [])
+
+  // VaultPicker（无当前仓库形态）选定仓库后广播 vault:changed → 补拉一次
+  useEffect(() => {
+    const onChange = () => { void loadEntries() }
+    window.addEventListener('vault:changed', onChange)
+    return () => window.removeEventListener('vault:changed', onChange)
+  }, [loadEntries])
 
   // 回到列表：清除选中态，显示当月文章
   const goToList = useCallback(() => {
