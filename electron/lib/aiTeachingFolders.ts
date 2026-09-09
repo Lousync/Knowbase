@@ -140,44 +140,16 @@ export function ensureSessionFolder(sessionId: string, getSetting: (key: string)
     // P2（§2.3）建夹即播种会话专属 CONSTRAINTS.md；P5 起优先工作区层模板，回退产物根层
     seedConstraintsFromTemplate(folderAbs, wsId && join(vault.rootPath, baseRel, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS), join(vault.rootPath, rootDir, ...CONSTRAINTS_TEMPLATE_REL_SEGMENTS))
     // 素材目录预建 + SOURCE.md 播种（2026-09-08 用户拍板）：建对话即建 `{父层}/SOURCES/{夹名}/`
-    // 并落空白登记模板（用户填空/表单登记）。幂等：已存在不覆盖。格式与 aiTeachingSources
-    // emptyTemplate 一致（YAML frontmatter + 字段说明；此处内联避免 folders←sources 循环依赖）。
-    // 懒建兜底保留：老对话/播种失败时首次登记素材仍会自动建。
+    // 并落空白登记模板（用户填空/表单登记）。幂等：已存在不覆盖。
+    // 模板唯一真相源 = 本文件 sourceTemplateText()（2026-09-09 收尾合并：此前与 aiTeachingSources.emptyTemplate
+    // 双份内联拷贝，改模板必须两处同改，已踩过不同步的坑；懒建兜底保留：老对话/播种失败时首次登记素材仍会自动建）。
     try {
       const srcDirAbs = join(join(baseAbs, 'SOURCES'), name)
       mkdirSync(srcDirAbs, { recursive: true })
       const srcFile = join(srcDirAbs, 'SOURCE.md')
       if (!existsSync(srcFile)) {
         const wsSeg = baseRel !== rootDir && baseRel.startsWith(`${rootDir}/`) ? baseRel.slice(rootDir.length + 1) : ''
-        const d = new Date()
-        const p2 = (n: number): string => String(n).padStart(2, '0')
-        writeFileSync(
-          srcFile,
-          [
-            '---',
-            `workspace: ${wsSeg || '（未归一层）'}`,
-            `conversation: ${name}`,
-            `updated: ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`,
-            '---',
-            '',
-            '# 素材来源登记（填空即用）',
-            '',
-            '下面第 1 条是空位：把【】里的占位换成实际内容、填上「路径」就登记生效（路径是识别关键，不填不登记）。',
-            '新增素材复制第 1 条小节、编号 +1。也可在右栏「素材库 → ＋ 添加素材」用表单登记，或在对话里让 AI 登记。',
-            '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(按 PDF/幻灯片自身的第几页=阅读器显示页码，不是书页印刷页码；code 用行号；如 12-34，无则 -)、',
-            '存放方式(已入库=原件拷进本目录/仅引用=只记地址)、已提取(程序维护)、备注。',
-            '',
-            '### 1. 【素材名称】',
-            '- 类型：pdf',
-            '- 路径：',
-            '- 页码区间：-',
-            '- 存放方式：已入库',
-            '- 已提取：-',
-            '- 备注：',
-            '',
-          ].join('\n'),
-          'utf-8'
-        )
+        writeFileSync(srcFile, sourceTemplateText(wsSeg, name), 'utf-8')
       }
     } catch { /* 素材预建失败不阻断建夹（懒建兜底仍在） */ }
     broadcastTreeRefresh(baseRel)
@@ -397,6 +369,39 @@ export function organizeDoc(sessionId: string, title: string, content: string, g
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
+}
+
+/**
+ * SOURCE.md 空白登记模板 —— 唯一真相源（2026-09-09 收尾合并）：
+ * 建夹预建（ensureSessionFolder）与懒建兜底（aiTeachingSources.emptyTemplate）共用。
+ * 此前两处内联拷贝，改模板必须两处同改，已踩过不同步的坑（类型预设 pdf 只改了一处就会漏）。
+ */
+export function sourceTemplateText(wsName: string, convName: string): string {
+  const d = new Date()
+  const p2 = (n: number): string => String(n).padStart(2, '0')
+  return [
+    '---',
+    `workspace: ${wsName || '（未归一层）'}`,
+    `conversation: ${convName}`,
+    `updated: ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`,
+    '---',
+    '',
+    '# 素材来源登记（填空即用）',
+    '',
+    '下面第 1 条是空位：把【】里的占位换成实际内容、填上「路径」就登记生效（路径是识别关键，不填不登记）。',
+    '新增素材复制第 1 条小节、编号 +1。也可在右栏「素材库 → ＋ 添加素材」用表单登记，或在对话里让 AI 登记。',
+    '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(按 PDF/幻灯片自身的第几页=阅读器显示页码，不是书页印刷页码；code 用行号；如 12-34，无则 -)、',
+    '存放方式(已入库=原件拷进本目录/仅引用=只记地址)、已提取(程序维护)、备注。',
+    '',
+    '### 1. 【素材名称】',
+    '- 类型：',
+    '- 路径：',
+    '- 页码区间：-',
+    '- 存放方式：已入库',
+    '- 已提取：-',
+    '- 备注：',
+    '',
+  ].join('\n')
 }
 
 export function registerAiTeachingFolderHandlers(getSetting: (key: string) => unknown): void {

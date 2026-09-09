@@ -40,6 +40,12 @@ export interface AgentTool {
   requires?: 'read' | 'write'
   /** vaultFile 文件域级别（vault.* 文件工具用）：缺省=不受文件域约束（业务模块工具） */
   vaultFile?: 'read' | 'write'
+  /**
+   * 装载层（P3）：缺省 'core'（常驻每轮 schema）；'ondemand' 默认不装载，
+   * AI 通过 builtin.tool.request 申请后（会话内持久）才进入视野。
+   * 写类工具全部 ondemand——典型会话 0~3 次写，却占近半 schema。
+   */
+  tier?: 'core' | 'ondemand'
 }
 
 export type ToolHandler = (args: Record<string, unknown>) => unknown | Promise<unknown>

@@ -16,9 +16,10 @@ const MODULES: ModuleDef[] = [
   { id: 'blog',      label: '博客/日记', desc: '查询日记',             writeDesc: '按日期新建日记（每天一篇）' },
   { id: 'schedule',  label: '日程',     desc: '查询待办事项',         writeDesc: '创建待办' },
   { id: 'checkin',   label: '习惯打卡', desc: '习惯列表与统计',       writeDesc: '按名称为今天打卡' },
-  { id: 'bookmarks', label: '书签导航', desc: '搜索书签',             writeDesc: '（暂无写操作）' },
   { id: 'pomodoro',  label: '番茄专注', desc: '专注统计',             writeDesc: '（暂无写操作）' },
 ]
+// 注：bookmarks 模块已随 2026-09-09 工具重构退役（bookmarks.search → vault.search）；
+// 旧设置数据中残留的 bookmarks 键无害（无工具引用即不生效），解析层自动忽略。
 
 const PERM_LABEL: Record<Perm, string> = {
   off: '禁止',

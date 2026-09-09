@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
-  agentChat, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
+  agentChat, agentStartScene, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
   workspaceGetCurrent, workspaceReadFile, docsPptxPages, workspaceListDir,
   agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachUnassignSession, aiTeachSetLastWorkspace,
@@ -112,8 +112,11 @@ interface Template {
   desc: string
   goal: string
   steps: string[]
-  /** 模板会话新建后自动发出的开场指令 */
-  opening: string
+  /**
+   * 场景流程规则：新建会话时播种进会话文件夹 CONSTRAINTS.md（会话约束唯一真相源）。
+   * 不再作为开场白伪装成用户消息发送——主进程每轮重读该文件注入，用户可在编辑器直接改。
+   */
+  rule: string
 }
 
 const TEMPLATES: Template[] = [
@@ -122,41 +125,42 @@ const TEMPLATES: Template[] = [
     desc: '喂资料，学到大纲确认与测验',
     goal: '把我提供的资料教到我会：先出大纲待我确认，再分步精讲，最后出题检验。',
     steps: ['通读资料', '学习大纲', '分章精讲', '随堂测验', '沉淀复习笔记'],
-    opening: '【教学任务】我接下来会提供学习资料（网址/文件/仓库笔记均可）。请按教学流程：① 通读我给的资料后产出学习大纲并等待我确认（不要直接开讲）；② 确认后分步精讲，每步讲完停一下让我提问；③ 最后出几道题检验并讲解。全程用简体中文。',
+    rule: '## 场景流程（跟我学）\n用户会提供学习资料（网址/文件/仓库笔记均可）。按此流程执行：\n① 通读资料后产出学习大纲，等用户确认后再开讲（未确认不要直接讲）；\n② 确认后分步精讲，每步讲完停一下让用户提问；\n③ 最后出题检验并讲解。\n全程用简体中文。',
   },
   {
     id: 'research', label: '深度研读（织网）', icon: <Compass size={13} />,
     desc: '把相关笔记读透并整理成专题页',
     goal: '把一个主题在仓库里的所有相关内容研读一遍，讲给我听，并产出一张带双链的专题页草稿待确认写入。',
     steps: ['定位相关笔记', '批量通读', '综合讲解', '专题页草稿', '确认写入'],
-    opening: '【研读任务】我要研究一个主题，会告诉你主题关键词。请用 vault.search 找出仓库内相关笔记并通读，向我综合讲解，然后产出一张「主题专题」.md 草稿（含指向来源页的 [[双链]]）等待我确认后再写入。',
+    rule: '## 场景流程（深度研读）\n用户会给出研究主题关键词。按此流程执行：\n① 用 vault.search 找出仓库内相关笔记并通读；\n② 向用户综合讲解；\n③ 产出一张「主题专题」.md 草稿（含指向来源页的 [[双链]]），等用户确认后再写入。',
   },
   {
     id: 'review', label: '周复盘', icon: <CalendarClock size={13} />,
     desc: '读日程/日记/打卡生成周报',
     goal: '总结我指定的一段时间：成就、回落与下周建议，产出周报草稿。',
     steps: ['读取模块数据', '生成周报草稿', '确认写入'],
-    opening: '【复盘任务】请读取我的日程待办、日记、习惯打卡与番茄钟统计，生成一份复盘报告草稿（成就/回落/下周建议），等待我确认后写入周总结。',
+    rule: '## 场景流程（周复盘）\n读取用户的日程待办、日记、习惯打卡与番茄钟统计，生成一份复盘报告草稿（成就/回落/下周建议），等用户确认后再写入周总结。',
   },
   {
     id: 'profile-diagnose', label: '画像诊断', icon: <User size={13} />,
     desc: '答几道题生成初始学习者画像',
     goal: '通过诊断问答了解我的身份/基础/薄弱点/目标/偏好，产出学习者画像初稿待确认。',
     steps: ['AI 出 3~5 道诊断题', '我作答', 'AI 产出画像初稿', '确认写入 PROFILE.md'],
-    opening: '【画像诊断】请以 ```ask 整卷模式做入学诊断：输出一个 ```ask 围栏代码块，块内是 JSON 数组，包含 3~5 个诊断问题（身份/学科背景、当前水平、薄弱点、学习目标、偏好），每个元素形如 {"question":"诊断问题","options":["选项A","选项B","选项C","其他（自由说明）"]}，选项每项不超过 20 字。用户会整卷点选、答完后统一发回；收到回答后，据答案产出一份**本主题**学习者画像初稿（Markdown，含当前水平/薄弱点/学习进度/学习目标/偏好），作为 ```profile 围栏代码块输出，等待我确认后再写入本主题画像文件（会话文件夹 PROFILE.md）——先不要直接写文件。注意：诊断只针对本主题层；全局与工作区画像由我在编辑区直接编辑对应 PROFILE.md，不需要你生成。',
+    // 注：ask/profile 围栏的具体协议由主进程每轮注入（askRuleHint / profileHint），此处只写流程，不重复协议细节
+    rule: '## 场景流程（画像诊断）\n用 ask 整卷模式做入学诊断：先输出整卷问卷（3~5 题，覆盖身份/学科背景、当前水平、薄弱点、学习目标、偏好；每题选项 ≤20 字）。用户整卷作答后，据答案产出**本主题**学习者画像初稿（含当前水平/薄弱点/学习进度/学习目标/偏好），以 profile 围栏输出，等用户确认后再写入会话文件夹 PROFILE.md——确认前不要写文件。诊断只针对本主题层，全局与工作区画像不需要生成。',
   },
 ]
 
-/** 内置工具 → 中文简称（缺省回退短名） */
+/** 内置工具 → 中文简称（缺省回退短名）。2026-09-09 P1/P2 退役项已删：habits.list / docs.read-text / bookmarks.search / knowledge.read / knowledge.append-page */
 const TOOL_CN: Record<string, string> = {
-  'builtin.vault.list': '列目录', 'builtin.vault.read': '读笔记文件', 'builtin.vault.search': '搜笔记内容',
-  'builtin.vault.write': '写笔记文件', 'builtin.vault.edit': '修改笔记', 'builtin.vault.rename': '重命名',
+  'builtin.vault.list': '列目录', 'builtin.vault.read': '读仓库文件', 'builtin.vault.search': '搜笔记内容',
+  'builtin.vault.write': '写笔记文件', 'builtin.vault.edit': '修改/追加笔记', 'builtin.vault.rename': '重命名',
   'builtin.vault.trash': '移回收站', 'builtin.vault.resolve-ref': '校验引用',
-  'builtin.knowledge.search': '搜知识库', 'builtin.knowledge.read': '读知识页', 'builtin.knowledge.create-page': '建知识页',
-  'builtin.knowledge.append-page': '追加知识页', 'builtin.blog.create-entry': '写日记', 'builtin.schedule.create-todo': '建待办',
-  'builtin.checkin.check-habit': '打卡', 'builtin.habits.list': '查习惯', 'builtin.habits.stats': '习惯统计',
-  'builtin.bookmarks.search': '搜书签', 'builtin.pomodoro.summary': '专注统计', 'builtin.schedule.list-todos': '查待办',
-  'builtin.web.search': '联网搜索', 'builtin.web.read': '读网页', 'builtin.docs.read-text': '提取 PDF/PPT',
+  'builtin.knowledge.search': '搜知识库', 'builtin.knowledge.create-page': '建知识页',
+  'builtin.blog.create-entry': '写日记', 'builtin.schedule.create-todo': '建待办',
+  'builtin.checkin.check-habit': '打卡', 'builtin.habits.stats': '习惯查询统计',
+  'builtin.pomodoro.summary': '专注统计', 'builtin.schedule.list-todos': '查待办',
+  'builtin.web.search': '联网搜索', 'builtin.web.read': '读网页',
 }
 function toolName(name?: string): string {
   const s = String(name ?? '')
@@ -531,28 +535,48 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     await sendText(text, cid) // 失败 toast 已下沉 sendText（V-2），此处不再重复提示
   }, [input, pending, sendText])
 
-  // 新建任务（模板）：自动发开场指令并选中该会话
+  // 场景启动：不落任何用户消息，用虚拟首轮触发（主进程 allowEmptyHistory）
+  // ——聊天区第一条即 AI 回复，不再出现程序伪造的开场白气泡
+  const startScene = useCallback(async (sid: string) => {
+    setPending(true); setLiveSteps([])
+    const cid = crypto.randomUUID()
+    chatIdRef.current = cid
+    const ov = convoLlm.current.get(sid)
+    const r = await agentStartScene(sid, cid, 'aiTeaching', ov?.modelId)
+    if (r && !r.ok && r.code !== 'ABORTED') showToast({ type: 'error', message: `AI 调用失败：${r.error ?? ''}` })
+    if (r?.injection) setInjectionMap(prev => ({ ...prev, [sid]: r.injection as AiTeachInjectionStats }))
+    void llmGetUsage().then(setUsage).catch(() => null)
+    setLastChanges(r?.changes && r.changes.length ? r.changes : null)
+    await refreshMessages(sid)
+    setPending(false)
+  }, [refreshMessages])
+
+  // 新建任务（模板）：播种场景规则到 CONSTRAINTS.md，再用虚拟首轮触发 AI 开口
   const newTask = useCallback(async (tpl: Template) => {
     const row = await agentNewSession(`${tpl.label}`).catch(() => null)
     if (!row) return
     // P5：先归属当前工作区（元数据真相源），再建夹——ensure 在主进程读归属决定两层路径
     if (activeWs && activeWs !== '__none__') await aiTeachAssignSession(row.id, activeWs).catch(() => null)
-    // P1（2-2）：新建对话确认即建会话文件夹（懒建语义下空会话也不删）；P2 模板播种后载入展示
-    void aiTeachEnsureSessionFolder(row.id).then(async r => {
-      if (r && !r.ok && r.error) showToast({ type: 'error', message: `会话文件夹创建失败：${r.error}` })
-      await loadConstraints(row.id, '')
-      await refreshWorkspaces()
-    })
+    // P1（2-2）：新建对话确认即建会话文件夹（懒建语义下空会话也不删）
+    const folder = await aiTeachEnsureSessionFolder(row.id).catch(() => null)
+    if (folder && !folder.ok && folder.error) showToast({ type: 'error', message: `会话文件夹创建失败：${folder.error}` })
+    // 场景流程播种进 CONSTRAINTS.md（会话约束唯一真相源，用户可编辑；主进程每轮重读注入）。
+    // 必须 await 完成再触发首轮，否则 AI 第一轮读到的还是播种前的约束。
+    const cur = await aiTeachReadConstraints(row.id).catch(() => null)
+    const base = (cur?.text ?? '').trim()
+    if (!base.includes(tpl.rule)) {
+      await aiTeachWriteConstraints(row.id, [base, tpl.rule].filter(Boolean).join('\n\n')).catch(() => null)
+    }
+    void loadConstraints(row.id, '')
+    void refreshWorkspaces()
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
     setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false); setDocView(null)
     setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
-    const cid = crypto.randomUUID()
-    chatIdRef.current = cid
-    void sendText(tpl.opening, cid)
     void refreshSessions()
-  }, [sendText, refreshSessions, loadConstraints, activeWs, refreshWorkspaces])
+    void startScene(row.id)
+  }, [startScene, refreshSessions, loadConstraints, activeWs, refreshWorkspaces])
 
   // ---------- P5：工作区进出与管理 ----------
   const enterWs = useCallback((id: string) => {
@@ -1281,8 +1305,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         <div className="relative shrink-0">
           <button onClick={() => setShowNewMenu(v => !v)} title="新建任务"
             className="flex items-center px-1 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"><Plus size={13} /></button>
+          {/* z-40：须高于左栏 ResizablePanel 拖拽手柄（w-0.5 z-30，内贴在左栏右缘＝中栏左缘）。
+              旧的 z-30 与手柄同级 → 菜单左缘骑在手柄上、分界线压在菜单之上（2026-09-09 用户报障） */}
           {showNewMenu && (
-            <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-30 overflow-hidden">
+            <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl z-40 overflow-hidden">
               {TEMPLATES.map(t => (
                 <button key={t.id} onClick={() => void newTask(t)}
                   className="w-full flex items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors">

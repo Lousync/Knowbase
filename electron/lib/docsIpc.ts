@@ -1,7 +1,7 @@
 /**
  * 文档读取 IPC（界面阅读用，非 AI 工具）：
  * - docs:pptxPages —— 当前仓库内 .pptx 按页返回文字（沉浸工作台逐页阅读）
- * AI 侧读取复用 builtin.docs.read-text（docsReader 同源解析）
+ * AI 侧读取复用 builtin.vault.read（2026-09-09 P1 收编，docsReader 同源解析）
  */
 
 import { ipcMain } from 'electron'

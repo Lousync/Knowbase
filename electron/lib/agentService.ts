@@ -22,13 +22,16 @@ import { resolveProfilesForInjection } from './aiTeachingProfile'
 
 const MAX_ITERATIONS = 8
 
-/** 单次请求内 vault 写工具次数上限（防失控循环刷盘；docs/agent-file-tools-design.md §5.5） */
-const MAX_SESSION_WRITES = 5
-/** vault 写工具集合（F2 write/edit；F3 rename/trash 预留同口径） */
-const VAULT_WRITE_TOOLS = new Set([
-  'builtin.vault.write', 'builtin.vault.edit',
-  'builtin.vault.rename', 'builtin.vault.trash',
-])
+/**
+ * 单次请求内「写入类工具」调用次数上限（防失控循环刷盘；docs/agent-file-tools-design.md §5.5）。
+ *
+ * 判定不背硬编码名单（原 VAULT_WRITE_TOOLS 只含 4 个 vault.*，漏掉了 create-page/append-page/
+ * create-entry/create-todo/check-habit 五个写工具，防刷盘在这几路上失效）：
+ * 改为由 buildToolsPayload 按 tool.requires === 'write' 动态构造集合，
+ * 覆盖全部 9 个内置写工具。外部 mcp.* / skill.* 不设 requires 字段，故不计入
+ * （mcp 工具的 readOnly:false 是「不保证只读」的保守标记，不等于写操作，计入会大量误伤）。
+ */
+const MAX_SESSION_WRITES = 7
 
 /** 注册表名含点号，OpenAI function name 仅允许 [a-zA-Z0-9_-] —— 双向映射 */
 function toFnName(registryName: string): string {
@@ -125,27 +128,39 @@ const CHANGE_LABELS: Record<string, string> = {
   'builtin.vault.rename': '重命名文件',
   'builtin.vault.trash': '移入回收站',
   'builtin.knowledge.create-page': '新建知识页',
-  'builtin.knowledge.append-page': '追加知识页',
   'builtin.blog.create-entry': '新建日记',
   'builtin.schedule.create-todo': '创建待办',
   'builtin.checkin.check-habit': '习惯打卡',
 }
 
-function buildToolsPayload(): {
+/**
+ * 会话内已启用的 ondemand 工具（P3）：key=sessionId。
+ * tool.request 成功后写入，本会话后续所有请求持续可用；应用重启即清零（AI 重新申请即可）。
+ */
+const enabledOnDemand = new Map<string, Set<string>>()
+
+function buildToolsPayload(sessionId?: string): {
   payload: unknown[]
   nameMap: Map<string, string>
+  /** 本轮可用的写入类工具注册名集合（requires==='write'），供会话写上限计数 */
+  writeTools: Set<string>
   /** 因模块权限被过滤掉的工具所属模块（用于 system prompt 给出可操作指引） */
   deniedModules: Set<string>
   /** 是否有 vault.* 工具被 vaultFile 文件域权限拦截（指引文案用） */
   deniedVaultFile: boolean
+  /** 是否存在被 tier=ondemand 折叠、且尚未启用的工具（system prompt 指引 tool.request 用） */
+  hasOnDemandHidden: boolean
   /** 权限过滤后仍可用的 skill 清单（注入 system prompt，让 AI 感知已配置的能力包） */
   skills: Array<{ registryName: string; title: string; description: string }>
 } {
   const reader = getSettingReader()
+  // 本会话已启用的 ondemand 工具（tool.request 申请，会话内持久）
+  const extraTools = sessionId ? enabledOnDemand.get(sessionId) : undefined
   // 按模块权限预过滤：AI 无权使用的操作不进入其视野（invoke 处另有硬校验兜底）
   const all = listTools().filter(t => t.enabled)
   const deniedModules = new Set<string>()
   let deniedVaultFile = false
+  let hasOnDemandHidden = false
   const tools: ToolDescription[] = all.filter(t => {
     const denied = checkModulePermission(t, reader)
     if (denied && t.module) deniedModules.add(t.module)
@@ -153,7 +168,13 @@ function buildToolsPayload(): {
       deniedVaultFile = true
       return false
     }
-    return !denied
+    if (denied) return false
+    // P3 装载层：ondemand 工具仅在会话内被 tool.request 启用后才进入视野
+    if (t.tier === 'ondemand' && !extraTools?.has(t.name)) {
+      hasOnDemandHidden = true
+      return false
+    }
+    return true
   })
   const payload = tools.map(t => ({
     type: 'function',
@@ -165,6 +186,8 @@ function buildToolsPayload(): {
   }))
   const nameMap = new Map<string, string>()
   for (const t of tools) nameMap.set(toFnName(t.name), t.name)
+  // 写入类工具集合：按注册声明的 requires 判定，不背名单（新增写工具自动纳入，无需同步此处）
+  const writeTools = new Set(tools.filter(t => t.requires === 'write').map(t => t.name))
   const skills = tools
     .filter(t => t.source === 'skill')
     .map(t => ({
@@ -172,7 +195,7 @@ function buildToolsPayload(): {
       title: t.title,
       description: t.description.replace(/^\[Skill\]\s*/, ''),
     }))
-  return { payload, nameMap, deniedModules, deniedVaultFile, skills }
+  return { payload, nameMap, writeTools, deniedModules, deniedVaultFile, hasOnDemandHidden, skills }
 }
 
 const SYSTEM_PROMPT_BASE = [
@@ -224,23 +247,37 @@ async function runAgentLoop(
   signal: AbortSignal,
   trace: AgentTraceStep[],
   source?: string,
-  llmOpts?: { modelId?: string; effort?: 'off' | 'low' | 'medium' | 'high' }
+  llmOpts?: { modelId?: string; effort?: 'off' | 'low' | 'medium' | 'high' },
+  /**
+   * allowEmptyHistory：场景/模板启动专用。会话刚建、尚无用户消息时放行，
+   * 用一条**不落库**的虚拟首轮触发——聊天区第一条即 AI 回复，
+   * 避免把程序化的场景开场白伪造成用户消息（2026-09-09 体验优化）。
+   */
+  opts?: { allowEmptyHistory?: boolean }
 ): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
   const history = getAgentMessages(sessionId)
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-40)
     .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
-  if (history.length === 0 || history[history.length - 1].role !== 'user') {
+  const virtualKickoff = opts?.allowEmptyHistory === true && history.length === 0
+  if (!virtualKickoff && (history.length === 0 || history[history.length - 1].role !== 'user')) {
     return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
   }
 
-  const { payload: toolPayload, nameMap, deniedModules, deniedVaultFile, skills } = buildToolsPayload()
+  // P3 装载层：工具 payload 可能在循环中重建（tool.request 启用新工具后下一轮生效）
+  let toolsState = buildToolsPayload(sessionId)
+  let toolPayload = toolsState.payload
+  const { nameMap, deniedModules, deniedVaultFile, skills } = toolsState
   const deniedHint = deniedModules.size > 0
     ? `\n\n【权限提示】以下模块用户尚未授权 AI 操作：${[...deniedModules].join('、')}。若用户请求这些模块的操作，请如实说明当前未授权，并提示可在 设置 → AI 工具 → 权限 中开启后重试。`
     : ''
   const vaultFileHint = deniedVaultFile
     ? '\n\n【权限提示】仓库文件读写（vault.* 工具）当前被权限限制。若用户请求操作仓库内笔记文件（列目录/读文件/搜内容），请如实说明需在 设置 → AI 工具 → 权限 → 仓库文件 中开启后重试。'
+    : ''
+  // P3：存在被折叠的 ondemand 工具时，告知申请机制（写类工具默认不在视野）
+  const toolsHint = toolsState.hasOnDemandHidden
+    ? '\n\n【扩展工具提示】写入类工具（写文件/建页面/写日记/建待办/打卡等）默认不在上方工具列表中。需要执行写操作时，先调用 builtin.tool.request 申请（tools 传逗号分隔的工具注册名），确认后本会话内持续可用；申请通过后按工具描述使用。不要申请当前任务用不到的工具。'
     : ''
   // 注入 skill 清单：让 AI 明确知道自己配置了多少个提示词能力包及其用途（描述截断防 token 膨胀）
   const skillHint = skills.length > 0
@@ -293,9 +330,12 @@ async function runAgentLoop(
       }
     : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + sourcesHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + sourcesHint + toolsHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
+  // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。
+  // 场景规则本身随 CONSTRAINTS.md 每轮注入（持久），这里只负责「让 AI 开口说第一句」。
+  if (virtualKickoff) convo.push({ role: 'user', content: '（请按上述会话要求开始）' })
   let sessionWrites = 0
   const changes: AgentChange[] = []
   // P3b：本对话模型覆盖（'pid:mid' 串拆分）——解析一次，全轮次复用
@@ -342,16 +382,17 @@ async function runAgentLoop(
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
 
-      // 会话写上限：单次请求内 vault 写工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）
-      if (VAULT_WRITE_TOOLS.has(realName)) {
+      // 会话写上限：单次请求内写入类工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）。
+      // 动态读 toolsState.writeTools——tool.request 启用新写工具后重建的集合要立即生效
+      if (toolsState.writeTools.has(realName)) {
         if (sessionWrites >= MAX_SESSION_WRITES) {
-          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写上限 ${MAX_SESSION_WRITES}` }
+          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写入上限 ${MAX_SESSION_WRITES}` }
           trace.push(denyStep)
           stepEmitters.get(signal)?.(denyStep)
           convo.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: JSON.stringify({ ok: false, error: `已达本次会话文件写入上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
+            content: JSON.stringify({ ok: false, error: `已达本次会话写入操作上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
           })
           continue
         }
@@ -361,6 +402,22 @@ async function runAgentLoop(
       const t1 = Date.now()
       const exec = await invokeToolInternal(realName, args)
       const durationMs = Date.now() - t1
+      // P3：tool.request 成功 → 并入会话启用集合并重建工具 payload（下一轮 LLM 调用生效）
+      if (realName === 'builtin.tool.request' && exec.ok) {
+        const enabled = (typeof exec.data === 'object' && exec.data !== null && Array.isArray((exec.data as Record<string, unknown>).enabled))
+          ? ((exec.data as Record<string, unknown>).enabled as unknown[]).filter((x): x is string => typeof x === 'string')
+          : []
+        if (enabled.length > 0) {
+          const cur = enabledOnDemand.get(sessionId) ?? new Set<string>()
+          const before = cur.size
+          for (const n of enabled) cur.add(n)
+          enabledOnDemand.set(sessionId, cur)
+          if (cur.size !== before) {
+            toolsState = buildToolsPayload(sessionId)
+            toolPayload = toolsState.payload
+          }
+        }
+      }
       const toolStep: AgentTraceStep = {
         kind: 'tool',
         name: realName,
@@ -409,6 +466,18 @@ async function agentRegenerate(req: AgentChatRequest, signal: AbortSignal): Prom
   return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
 
+/**
+ * 场景/模板启动（2026-09-09 体验优化）：新建场景会话后不再把开场白伪装成用户消息发送。
+ * 场景规则由前端播种进会话 CONSTRAINTS.md（每轮重读注入、用户可编辑），
+ * 这里不落任何用户消息，只用虚拟首轮触发 → 聊天区第一条即 AI 回复。
+ */
+async function agentStartScene(req: AgentChatRequest, signal: AbortSignal): Promise<AgentChatResult> {
+  const trace: AgentTraceStep[] = []
+  const sessionId = String(req?.sessionId ?? '')
+  if (!sessionId || !sessionExists(sessionId)) return { ok: false, error: '会话不存在', trace }
+  return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort }, { allowEmptyHistory: true })
+}
+
 /** 改写某条用户消息并重新生成其后的回复 */
 async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, signal: AbortSignal): Promise<AgentChatResult> {
   const trace: AgentTraceStep[] = []
@@ -449,6 +518,8 @@ export function registerAgentHandlers(): void {
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentChat(req, signal, String(req?.chatId ?? ''))))
   ipcMain.handle('agent:regenerate', (e, req: AgentChatRequest) =>
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentRegenerate(req, signal)))
+  ipcMain.handle('agent:startScene', (e, req: AgentChatRequest) =>
+    withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentStartScene(req, signal)))
   ipcMain.handle('agent:editMessage', (e, req: AgentChatRequest & { messageId: string }) =>
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentEditAndRegen(req, signal)))
   ipcMain.handle('agent:deleteMessage', (_e, messageId: string) => {

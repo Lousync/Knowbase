@@ -74,17 +74,24 @@ export const createScheduleTag = (n: string, c?: string) => a().createScheduleTa
 export const deleteScheduleTag = (id: string) => a().deleteScheduleTag(id)
 
 // knowledge (Scheme A)
+/**
+ * 知识库落盘写操作成功 → 广播 vault:tree-refresh：空间/笔记本/页 = 仓库内真实目录与 md 文件，
+ * 编辑器文件树的 dirCache 是懒加载缓存（根节点无折叠入口），不重拉会一直看不到新建目录（2026-09-09 修复）。
+ */
+function notifyKnowledgeTreeChanged(): void {
+  window.dispatchEvent(new Event('vault:tree-refresh'))
+}
 export const getKnowledgeCategories = () => a().getKnowledgeCategories()
-export const createKnowledgeCategory = (d: CreateKnowledgeCategoryDTO) => a().createKnowledgeCategory(d)
-export const updateKnowledgeCategory = (id: string, d: UpdateKnowledgeCategoryDTO) => a().updateKnowledgeCategory(id, d)
-export const deleteKnowledgeCategory = (id: string) => a().deleteKnowledgeCategory(id)
+export const createKnowledgeCategory = async (d: CreateKnowledgeCategoryDTO) => { const r = await a().createKnowledgeCategory(d); notifyKnowledgeTreeChanged(); return r }
+export const updateKnowledgeCategory = async (id: string, d: UpdateKnowledgeCategoryDTO) => { const r = await a().updateKnowledgeCategory(id, d); notifyKnowledgeTreeChanged(); return r }
+export const deleteKnowledgeCategory = async (id: string) => { const r = await a().deleteKnowledgeCategory(id); notifyKnowledgeTreeChanged(); return r }
 export const getKnowledgePages = (categoryId?: string | null) => a().getKnowledgePages(categoryId)
 /** 知识索引 warnings（.ignore 坏行/规则未命中磁盘条目）：知识库模块激活时检查透出 */
 export const getKnowledgeIndexWarnings = () => a().getKnowledgeIndexWarnings()
 export const getKnowledgePageById = (id: string) => a().getKnowledgePageById(id)
-export const createKnowledgePage = (d: CreateKnowledgePageDTO) => a().createKnowledgePage(d)
-export const updateKnowledgePage = (id: string, d: UpdateKnowledgePageDTO) => a().updateKnowledgePage(id, d)
-export const deleteKnowledgePage = (id: string) => a().deleteKnowledgePage(id)
+export const createKnowledgePage = async (d: CreateKnowledgePageDTO) => { const r = await a().createKnowledgePage(d); notifyKnowledgeTreeChanged(); return r }
+export const updateKnowledgePage = async (id: string, d: UpdateKnowledgePageDTO) => { const r = await a().updateKnowledgePage(id, d); notifyKnowledgeTreeChanged(); return r }
+export const deleteKnowledgePage = async (id: string) => { const r = await a().deleteKnowledgePage(id); notifyKnowledgeTreeChanged(); return r }
 export const searchKnowledgePages = (q: string) => a().searchKnowledgePages(q)
 export const getKnowledgeBacklinks = (pageId: string) => a().getKnowledgeBacklinks(pageId)
 export const getKnowledgeBacklinkContext = (pageId: string) => a().getKnowledgeBacklinkContext(pageId)
@@ -467,6 +474,8 @@ export const docsPptxPages = (relPath: string): Promise<{ ok: boolean; pages?: A
 
 export const agentChat = (sessionId: string, message: string, context?: AgentContextInfo, chatId?: string, source?: string, modelId?: string, effort?: 'off' | 'low' | 'medium' | 'high'): Promise<AgentChatResult> => a().agentChat({ sessionId, message, context, chatId, source, modelId, effort })
 export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentRegenerate({ sessionId, context, chatId })
+/** 场景/模板启动：不落任何用户消息，用虚拟首轮触发（聊天区第一条即 AI 回复） */
+export const agentStartScene = (sessionId: string, chatId?: string, source?: string, modelId?: string): Promise<AgentChatResult> => a().agentStartScene({ sessionId, chatId, source, modelId })
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
 export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
 export const agentAbort = (chatId: string): Promise<boolean> => a().agentAbort(chatId)

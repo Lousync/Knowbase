@@ -2,7 +2,7 @@ import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, statS
 import { join, basename, isAbsolute, relative } from 'path'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
-import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder } from './aiTeachingFolders'
+import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder, sourceTemplateText } from './aiTeachingFolders'
 import { uniqueFileName } from './workspaceManager'
 import { extractPdfRange, extractPptxPages } from './docsReader'
 import { visionChat, findVisionModel } from './llmService'
@@ -92,30 +92,9 @@ function layout(sessionId: string, getSetting: (key: string) => unknown, create:
   return { rootPath: vault.rootPath, rootId: vault.rootId, dirRel, dirAbs: join(vault.rootPath, dirRel), fileRel: `${dirRel}/${SOURCE_FILE}`, convName, wsName }
 }
 
+/** 懒建兜底模板：唯一真相源 = aiTeachingFolders.sourceTemplateText（2026-09-09 收尾合并，勿在此内联） */
 function emptyTemplate(l: SourcesLayout): string {
-  return [
-    '---',
-    `workspace: ${l.wsName || '（未归一层）'}`,
-    `conversation: ${l.convName}`,
-    `updated: ${today()}`,
-    '---',
-    '',
-    '# 素材来源登记（填空即用）',
-    '',
-    '下面第 1 条是空位：把【】里的占位换成实际内容、填上「路径」就登记生效（路径是识别关键，不填不登记）。',
-    '新增素材复制第 1 条小节、编号 +1。也可在右栏「素材库 → ＋ 添加素材」用表单登记，或在对话里让 AI 登记。',
-    '字段说明：类型(url/pptx/pdf/image/md/code/other)、页码区间(按 PDF/幻灯片自身的第几页=阅读器显示页码，不是书页印刷页码；code 用行号；如 12-34，无则 -)、',
-    '存放方式(已入库=原件拷进本目录/仅引用=只记地址)、已提取(程序维护)、备注。',
-    '',
-    '### 1. 【素材名称】',
-    '- 类型：pdf',
-    '- 路径：',
-    '- 页码区间：-',
-    '- 存放方式：已入库',
-    '- 已提取：-',
-    '- 备注：',
-    '',
-  ].join('\n')
+  return sourceTemplateText(l.wsName, l.convName)
 }
 
 /** 解析 SOURCE.md → 条目数组（宽容：缺字段回退默认，编号重复保留先到者）
@@ -188,7 +167,7 @@ export function sourceAnomalies(text: string): { unnamed: number; dupNo: number;
       if (!curPlaceholder) numbered++ // 占位小节不进 dupNo 分母（parse 同样排除，否则虚报编号重复）
       continue
     }
-    if (/^#{1,6}\s*素材来源登记\s*$/.test(line)) continue
+    if (/^#{1,6}\s*素材来源登记/.test(line)) continue // 前缀豁免：模板 H1「素材来源登记（填空即用）」带后缀，精确匹配会把标题本身误计为缺编号小节
     if (/^#{1,6}\s*\S/.test(line)) { closeSection(); unnamed++; continue }
     if (curNo) {
       const m = /^[-*]?\s*路径(?:\s*[：:]\s*|\s+)(.*)$/.exec(line)

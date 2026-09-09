@@ -1,5 +1,5 @@
 /**
- * 文档文本提取服务（builtin.docs.read-text 数据源，docs/agent-file-tools-design.md §13）
+ * 文档文本提取服务（界面阅读 + builtin.vault.read 文档分派共用；docs/agent-file-tools-design.md §13）
  * - .pdf → pdfjs-dist legacy（Node 主进程 + workerSrc 本机 worker，2026-09-03 实测可行）
  * - .pptx → 复用 zip.ts 解压 + 手读 ppt/slides/slide*.xml 的 <a:t>（零新依赖）
  * - 仅纯文本提取（供 LLM 通读），不做渲染/OCR；扫描件（图片型 PDF）提取为空属预期

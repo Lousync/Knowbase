@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { readdirSync, lstatSync, readFileSync, statSync, mkdirSync } from 'fs'
 import { join, relative, extname, sep, dirname } from 'path'
-import { registerTool } from './aiTools'
+import { listTools, registerTool } from './aiTools'
 import { webSearch, webReadPage } from './webSearch'
 import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
@@ -9,7 +9,6 @@ import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
-import { vaultBookmarksAll } from './kbStore/bookmarkVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
 import { vaultTodosAll, vaultCreateTodo } from './kbStore/scheduleVaultRepo'
 import { extractDocText } from './docsReader'
@@ -311,85 +310,21 @@ export function registerBuiltinTools(): void {
     }
   })
 
-  // 2. builtin.knowledge.read —— 按 id 读页面全文
-  registerTool({
-    name: 'builtin.knowledge.read',
-    title: '阅读知识库页面',
-    description: '按 id 读页面 Markdown 全文, 超长截断',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: '页面 id' },
-        maxChars: { type: 'number', description: '最多返回字符, 默认8000' },
-      },
-      required: ['id'],
-    },
-    source: 'builtin',
-    enabled: true,
-    readOnly: true,
-    module: 'knowledge',
-  }, args => {
-    const id = str(args.id)
-    const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
-    // 与知识库 UI 同一份磁盘 .md（id 为页面 frontmatter id，与 search 返回同体系）
-    let page
-    try {
-      page = vaultGetPageById(id)
-    } catch (err) {
-      throw new Error(`读取失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
-    }
-    if (!page) throw new Error(`页面不存在: ${id}`)
-    const content = page.contentMd
-    const truncated = content.length > maxChars
-    return {
-      id: page.id,
-      title: page.title,
-      contentMd: truncated ? content.slice(0, maxChars) : content,
-      truncated,
-      totalChars: content.length,
-      updatedAt: page.updatedAt,
-    }
-  })
+  // 2. builtin.knowledge.read 已退役（2026-09-09 P2）：vault.read(path|id) 收编（id=knowledge.search 返回的页面 id）
 
-  // 3. builtin.habits.list —— 列习惯与今日状态
-  registerTool({
-    name: 'builtin.habits.list',
-    title: '列出打卡习惯',
-    description: '列出全部习惯与今日打卡状态',
-    inputSchema: { type: 'object', properties: {} },
-    source: 'builtin',
-    enabled: true,
-    readOnly: true,
-    module: 'checkin',
-  }, () => {
-    const today = formatLocalDate(new Date())
-    // 读 .knowbase/modules/checkin/*.json（排序语义同 SQL）
-    const habits = sortHabitRows(vaultHabitsAll())
-    const checkedToday = new Set(vaultRecordsAll().filter(r => r.date === today).map(r => r.habit_id))
-    return habits.map(h => {
-      const ruleType = str(h.rule_type, 'daily')
-      const ruleDays = parseDays(str(h.rule_days, '[]'))
-      return {
-        id: h.id,
-        name: h.name,
-        rule: ruleSummary(ruleType, ruleDays, num(h.weekly_target, 3)),
-        plannedToday: !h.archived && isPlannedOn(ruleType, ruleDays, new Date()),
-        checkedToday: checkedToday.has(h.id),
-        archived: !!h.archived,
-      }
-    })
-  })
+  // 3. builtin.habits.list 已退役（2026-09-09 P1）：并入 habits.stats(mode='list')
 
-  // 4. builtin.habits.stats —— 连续天数 / 完成率
+  // 4. builtin.habits.stats —— 习惯查询与统计（P1 收编原 habits.list：mode 二选一）
   registerTool({
     name: 'builtin.habits.stats',
-    title: '习惯统计数据',
-    description: '习惯连续天数/最长连续/完成率/累计次数',
+    title: '习惯查询与统计',
+    description: "mode='list' 列出全部习惯与今日打卡状态；mode='stats'（默认）习惯连续天数/最长连续/完成率/累计次数",
     inputSchema: {
       type: 'object',
       properties: {
+        mode: { type: 'string', enum: ['stats', 'list'], description: 'stats=统计（默认）/ list=列表' },
         habitId: { type: 'string', description: '习惯 id, 缺省全部' },
-        days: { type: 'number', description: '统计窗口天数, 默认30' },
+        days: { type: 'number', description: '统计窗口天数, 默认30（仅 stats 用）' },
       },
     },
     source: 'builtin',
@@ -397,13 +332,30 @@ export function registerBuiltinTools(): void {
     readOnly: true,
     module: 'checkin',
   }, args => {
+    // list 模式（原 habits.list 输出）：全部习惯与今日打卡状态
+    if (str(args.mode, 'stats') === 'list') {
+      const today = formatLocalDate(new Date())
+      const checkedToday = new Set(vaultRecordsAll().filter(r => r.date === today).map(r => r.habit_id))
+      return sortHabitRows(vaultHabitsAll()).map(h => {
+        const ruleType = str(h.rule_type, 'daily')
+        const ruleDays = parseDays(str(h.rule_days, '[]'))
+        return {
+          id: h.id,
+          name: h.name,
+          rule: ruleSummary(ruleType, ruleDays, num(h.weekly_target, 3)),
+          plannedToday: !h.archived && isPlannedOn(ruleType, ruleDays, new Date()),
+          checkedToday: checkedToday.has(h.id),
+          archived: !!h.archived,
+        }
+      })
+    }
+    // stats（默认）：连续天数/最长连续/完成率/累计次数
     const windowDays = clamp(Math.floor(num(args.days, 30)), 1, 365)
-    const wanted = typeof args.habitId === 'string' && args.habitId ? [args.habitId] : null
-    // 读 .knowbase/modules/checkin/*.json（含归档习惯）
-    const habits = sortHabitRows(vaultHabitsAll()).filter(h => !wanted || wanted.includes(h.id))
-    if (wanted && habits.length === 0) throw new Error(`习惯不存在: ${str(args.habitId)}`)
+    const wantedIds = typeof args.habitId === 'string' && args.habitId ? [args.habitId] : null
+    const statHabits = sortHabitRows(vaultHabitsAll()).filter(h => !wantedIds || wantedIds.includes(h.id))
+    if (wantedIds && statHabits.length === 0) throw new Error(`习惯不存在: ${str(args.habitId)}`)
     const allRecords = vaultRecordsAll()
-    return habits.map(h => {
+    return statHabits.map(h => {
       const done = new Set<string>()
       for (const rec of allRecords) {
         if (rec.habit_id === h.id) done.add(rec.date)
@@ -423,35 +375,8 @@ export function registerBuiltinTools(): void {
     })
   })
 
-  // 5. builtin.bookmarks.search —— 搜索书签
-  registerTool({
-    name: 'builtin.bookmarks.search',
-    title: '搜索书签',
-    description: '关键词搜索书签, 返回标题/URL/分类',
-    inputSchema: SEARCH_LIMIT_SCHEMA,
-    source: 'builtin',
-    enabled: true,
-    readOnly: true,
-    module: 'bookmarks',
-  }, args => {
-    const q = str(args.query).trim()
-    const limit = clamp(Math.floor(num(args.limit, 10)), 1, 50)
-    const terms = q.split(/\s+/).filter(Boolean)
-    if (terms.length === 0) return []
-    // 与 UI 同一份 .knowbase/modules/bookmarks/*.json，内存过滤
-    const all = vaultBookmarksAll()
-    const catName = new Map(all.categories.map(c => [c.id, c.name]))
-    const hits = all.bookmarks.filter(b => {
-      const hay = `${b.title} ${b.url} ${b.description} ${catName.get(b.categoryId) ?? ''}`.toLowerCase()
-      return terms.every(t => hay.includes(t.toLowerCase()))
-    }).slice(0, limit)
-    return hits.map(b => ({
-      title: b.title,
-      url: b.url,
-      description: b.description,
-      category: catName.get(b.categoryId) || '未分类',
-    }))
-  })
+  // 5-6. builtin.habits.list / builtin.bookmarks.search 已退役（2026-09-09 P1）：
+  //     habits.list → habits.stats(mode='list')；bookmarks.search → vault.search（书签 JSON 本身结构化且 modules 子树可搜）
 
   // 6. builtin.pomodoro.summary —— 近 N 天专注统计
   registerTool({
@@ -555,6 +480,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     module: 'knowledge',
   }, args => {
     const title = str(args.title).trim()
@@ -572,50 +498,8 @@ export function registerBuiltinTools(): void {
     return { ok: true, id: page.id, title }
   })
 
-  // 9. builtin.knowledge.append-page
-  registerTool({
-    name: 'builtin.knowledge.append-page',
-    title: '追加内容到知识库页面',
-    description: '向页面末尾追加文本(按 id 或标题定位)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: '页面 id(与title二选一)' },
-        title: { type: 'string', description: '精确标题(与id二选一)' },
-        text: { type: 'string', description: '追加的文本' },
-      },
-      required: ['text'],
-    },
-    source: 'builtin',
-    enabled: true,
-    readOnly: false,
-    requires: 'write',
-    module: 'knowledge',
-  }, args => {
-    const text = str(args.text)
-    const id = str(args.id)
-    const title = str(args.title)
-    let page = null
-    if (id) page = vaultGetPageById(id)
-    else if (title) {
-      // 精确标题定位（仅 published 正式页；同 SQL 语义取最近更新的一篇）
-      const idxPages = getKnowledgeIndex().pages.filter(p => p.status !== 'draft' && p.title === title)
-      page = idxPages.length > 0 ? vaultGetPageById(idxPages[idxPages.length - 1].id) : null
-    } else throw new Error('需要提供 id 或 title 之一')
-    if (!page) throw new Error('页面不存在')
-    // 页面=仓库文件：走受控写层追加（frontmatter 原样保留，写后失效索引立即可见）
-    const root = vaultRootPath()
-    const abs = resolveSafe(root, page.path)
-    if (!abs) throw new Error(`页面路径非法: ${page.path}`)
-    let raw = ''
-    try { raw = readFileSync(abs, 'utf-8') } catch { throw new Error(`页面文件读取失败: ${page.path}`) }
-    const next = raw.replace(/\s*$/, '') + '\n' + text + '\n'
-    writeWorkspaceFile(abs, next)
-    invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
-    const st = statSync(abs)
-    broadcastExternalWrite(page.path, st.mtimeMs)
-    return { ok: true, id: page.id, title: page.title, appendedChars: text.length }
-  })
+  // 9. builtin.knowledge.append-page 已退役（2026-09-09 P2）：vault.edit(append=true) 收编
+  //    （先 knowledge.search 或 vault.read(id=) 定位页面 path，再 vault.edit append）
 
   // 10. builtin.blog.create-entry
   registerTool({
@@ -635,6 +519,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     module: 'blog',
   }, args => {
     const contentMd = str(args.contentMd)
@@ -665,6 +550,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     module: 'schedule',
   }, args => {
     const title = str(args.title).trim()
@@ -699,6 +585,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     module: 'checkin',
   }, args => {
     const q = str(args.name).trim().toLowerCase()
@@ -738,6 +625,43 @@ export function registerBuiltinTools(): void {
     return { source, count: results.length, results }
   })
 
+  // ===== P3 装载层元工具：写类（tier='ondemand'）默认不在视野，需申请启用 =====
+
+  // builtin.tool.request —— 申请启用按需工具（本会话内持久；启用集合由 agentService 按会话维护）
+  registerTool({
+    name: 'builtin.tool.request',
+    title: '申请启用扩展工具',
+    description: "写入类工具（vault.write / vault.edit / vault.rename / vault.trash / knowledge.create-page / blog.create-entry / schedule.create-todo / checkin.check-habit）默认不在工具列表中。需要执行写操作时调用本工具申请（逗号分隔工具名），确认后本会话内持续可用。只申请确实需要的，不要一次全申请",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tools: { type: 'string', description: "逗号分隔的工具注册名，如 'builtin.vault.write,builtin.checkin.check-habit'" },
+      },
+      required: ['tools'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    tier: 'core',
+  }, args => {
+    const raw = str(args.tools)
+    const names = raw.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean)
+    if (names.length === 0) throw new Error('缺少必填参数: tools')
+    const known = new Set(listTools().map(t => t.name))
+    const enabled: string[] = []
+    const unknown: string[] = []
+    for (const n of names) {
+      if (known.has(n)) enabled.push(n)
+      else unknown.push(n)
+    }
+    return {
+      ok: true,
+      enabled,
+      ...(unknown.length ? { unknown, hint: '以下工具名不存在（命名规则 builtin.<域>.<动作>，可用工具以系统列表为准）' } : {}),
+      message: `已启用 ${enabled.length} 个工具（本会话内持续可用），下一轮起生效。写操作会真实生效并留审计记录，执行前确认用户意图`,
+    }
+  })
+
   // ===== vault.* 仓库文件只读工具（B1）：受 vaultFile 权限域（设置 → AI 工具 → 权限 → 仓库文件）控制 =====
 
   // 14. builtin.vault.list —— 列仓库目录（AI 视角，禁区自动隐藏）
@@ -775,44 +699,74 @@ export function registerBuiltinTools(): void {
       try { st = lstatSync(full) } catch { continue }
       if (st.isSymbolicLink()) continue
       if (st.isDirectory()) entries.push({ name, type: 'dir' })
-      else if (st.isFile() && isAiReadableFile(root, full)) entries.push({ name, type: 'file', size: st.size })
+      // P1：文档文件（pdf/pptx）一并可见（vault.read 已收编其读取），否则 AI 无法发现它们
+      else if (st.isFile() && (isAiReadableFile(root, full) || isAiDocFile(root, full))) entries.push({ name, type: 'file', size: st.size })
     }
     entries.sort((a, b) => a.type !== b.type ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name, 'zh-Hans-CN'))
     return { path: rel || '.', total: entries.length, entries }
   })
 
-  // 15. builtin.vault.read —— 读仓库内文本文件（.md/.txt 与 .knowbase/modules/*.json）
+  // 15. builtin.vault.read —— 读仓库内文本文件与文档（P1 收编原 docs.read-text，按扩展名分派）
   registerTool({
     name: 'builtin.vault.read',
     title: '读仓库文件',
-    description: '读取仓库内文本文件全文（.md/.txt；.knowbase/modules/*.json 结构化数据只读）。返回 mtimeMs 供后续写回冲突校验。二进制/图片/PDF/>10MB/保护区文件拒绝',
+    description: '读取仓库内文件：.md/.txt 全文（.knowbase/modules/*.json 结构化数据只读）与 .pdf/.pptx 文本提取（扫描版提取为空属预期）。path 与 id 二选一：传 id（knowledge.search 返回的知识页 frontmatter id）可直接读知识页全文。返回 mtimeMs 供后续写回冲突校验。图片/>10MB/保护区文件拒绝',
     inputSchema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '仓库内相对文件路径（如 笔记/内存管理.md）' },
-        maxChars: { type: 'number', description: '最多返回字符，默认8000' },
+        path: { type: 'string', description: '仓库内相对文件路径（如 笔记/内存管理.md 或 资料/课件.pptx）；与 id 二选一' },
+        id: { type: 'string', description: '知识页 frontmatter id（与 path 二选一，knowledge.search 返回的即此 id）' },
+        maxChars: { type: 'number', description: '最多返回字符，文本默认 8000，pdf/pptx 默认 12000' },
       },
-      required: ['path'],
+      required: [],
     },
     source: 'builtin',
     enabled: true,
     readOnly: true,
     requires: 'read',
     vaultFile: 'read',
-  }, args => {
-    const rel = str(args.path).trim()
-    if (!rel) throw new Error('缺少必填参数: path')
-    const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
+  }, async args => {
+    // P2 收编原 knowledge.read：path 与 id 二选一；id 走知识索引定位页面文件
+    let rel = str(args.path).trim()
+    const pageId = str(args.id).trim()
+    if (!rel && !pageId) throw new Error('缺少必填参数: path 或 id（二选一）')
+    if (!rel && pageId) {
+      const page = vaultGetPageById(pageId)
+      if (!page) throw new Error(`页面不存在: ${pageId}`)
+      rel = page.path
+    }
     const root = vaultRootPath()
     const abs = resolveSafe(root, rel)
     if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
     let st: ReturnType<typeof statSync>
     try { st = statSync(abs) } catch { throw new Error(`文件不存在: ${rel}`) }
     if (!st.isFile()) throw new Error('vault.read 只接受文件路径（列目录请用 vault.list）')
-    if (!isAiReadableFile(root, abs)) {
-      throw new Error(`文件不可读：仅支持 .md/.txt（仓库内）与 .knowbase/modules/*.json（只读）；该文件位于保护区或类型不在白名单: ${rel}`)
-    }
     if (st.size > MAX_VAULT_FILE) throw new Error(`文件过大（${st.size} 字节 > 10MB），拒绝读取: ${rel}`)
+    // 文档分派（P1）：pdf/pptx 走异步文本提取，输出字段与文本路径对齐（content/truncated/totalChars + kind/pages）
+    if (isAiDocFile(root, abs)) {
+      const maxChars = clamp(Math.floor(num(args.maxChars, 12000)), 200, 50000)
+      let out: { kind: 'pdf' | 'pptx'; text: string; pages: number; totalChars: number }
+      try {
+        out = await extractDocText(abs)
+      } catch (err) {
+        throw new Error(`文档解析失败：${String((err as Error)?.message ?? err).slice(0, 200)}`)
+      }
+      const truncated = out.totalChars > maxChars
+      return {
+        path: rel,
+        kind: out.kind,
+        pages: out.pages,
+        size: st.size,
+        mtimeMs: st.mtimeMs,
+        content: truncated ? out.text.slice(0, maxChars) : out.text,
+        truncated,
+        totalChars: out.totalChars,
+      }
+    }
+    if (!isAiReadableFile(root, abs)) {
+      throw new Error(`文件不可读：仅支持 .md/.txt（仓库内）与 .knowbase/modules/*.json（只读）；图片与保护区拒绝: ${rel}`)
+    }
+    const maxChars = clamp(Math.floor(num(args.maxChars, 8000)), 200, 50000)
     const text = readFileSync(abs, 'utf-8')
     const truncated = text.length > maxChars
     return {
@@ -874,7 +828,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.vault.write',
     title: '写入仓库文件',
-    description: '新建或整文件覆写仓库内 .md/.txt（原子写）。覆写已有文件时需带 vault.read 返回的 expectedMtimeMs 防冲突。不可写 .knowbase 内部数据。建议优先用 vault.edit 做小改动。注意：要在知识库列表/图谱中出现的知识页，内容必须以 frontmatter 开头并含 id:（稳定唯一标识，缺失则仅作为普通文件存在），格式可先 vault.read 一个既有 .md 参考',
+    description: '新建/覆写仓库内 .md/.txt（原子写；覆写需带 vault.read 的 expectedMtimeMs）。小改动优先 vault.edit。注意：要在知识库列表/图谱出现的知识页，内容必须以 frontmatter 开头且含稳定 id:（缺失则仅作为普通文件存在，不进库）——格式可先 vault.read 一个既有 .md 参考',
     inputSchema: {
       type: 'object',
       properties: {
@@ -888,6 +842,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     vaultFile: 'write',
   }, args => {
     const rel = str(args.path).trim()
@@ -911,31 +866,36 @@ export function registerBuiltinTools(): void {
     return { ok: true, path: rel, created: !existing, size: st.size, mtimeMs: st.mtimeMs }
   })
 
-  // 18. builtin.vault.edit —— 精确替换（oldText→newText，整文件最多 1 处/次，防全量重写大文件）
+  // 18. builtin.vault.edit —— 精确替换（oldText→newText）+ 末尾追加（P2 收编原 knowledge.append-page）
   registerTool({
     name: 'builtin.vault.edit',
-    title: '精确替换文件片段',
-    description: '在仓库内 .md/.txt 中做一次精确替换（oldText 必须在文中唯一命中；newText 传空串即删除该片段，可用于解除 [[双链]]）。改动局部内容请用本工具而非 vault.write。需带 vault.read 返回的 expectedMtimeMs 防冲突',
+    title: '编辑文件片段',
+    description: '两种模式：① 替换（默认）在仓库内 .md/.txt 中做一次精确替换（oldText 必须唯一命中；newText 空串即删除片段，可解除 [[双链]]）；② 追加（append=true）把 newText 追加到文件末尾。改动局部内容请用本工具而非 vault.write。需带 vault.read 返回的 expectedMtimeMs 防冲突',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: '仓库内相对文件路径' },
-        oldText: { type: 'string', description: '要被替换的原文片段（必须唯一命中）' },
-        newText: { type: 'string', description: '替换后的文本；传空串 "" 即删除该片段（如解除 [[双链]] 引用）', allowEmpty: true },
+        oldText: { type: 'string', description: '要被替换的原文片段（必须唯一命中）；append=true 时省略', allowEmpty: true },
+        newText: { type: 'string', description: '替换后的文本；替换模式下空串即删除片段（如解除 [[双链]] 引用）；append 模式下为要追加的内容', allowEmpty: true },
+        append: { type: 'boolean', description: 'true=在文件末尾追加 newText（忽略 oldText；追加前自动去掉文末多余空行）' },
         expectedMtimeMs: { type: 'number', description: 'mtime 基线（来自 vault.read）' },
       },
-      required: ['path', 'oldText', 'newText'],
+      required: ['path', 'newText'],
     },
     source: 'builtin',
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     vaultFile: 'write',
   }, args => {
     const rel = str(args.path).trim()
     const oldText = str(args.oldText)
     const newText = str(args.newText)
-    if (!rel || !oldText) throw new Error('缺少必填参数: path / oldText')
+    const append = args.append === true
+    if (!rel) throw new Error('缺少必填参数: path')
+    if (!append && !oldText) throw new Error('缺少必填参数: oldText（append=true 时可省略）')
+    if (append && !newText.trim()) throw new Error('追加内容不能为空')
     const root = vaultRootPath()
     const abs = resolveSafe(root, rel)
     if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
@@ -944,10 +904,16 @@ export function registerBuiltinTools(): void {
     if (!st.isFile()) throw new Error('vault.edit 只接受文件路径')
     assertAiWritable(root, abs, args.expectedMtimeMs)
     const text = readFileSync(abs, 'utf-8')
-    const first = text.indexOf(oldText)
-    if (first < 0) throw new Error(`未找到待替换片段（截取前 60 字符）: ${oldText.slice(0, 60)}… 可先 vault.read 确认当前内容`)
-    if (text.indexOf(oldText, first + oldText.length) >= 0) throw new Error('待替换片段在文件中出现多处，请提供更长更精确的 oldText（本工具一次只替换一处）')
-    const next = text.slice(0, first) + newText + text.slice(first + oldText.length)
+    let next: string
+    if (append) {
+      // 原 knowledge.append-page 语义：文末多余空行归一后换行追加
+      next = text.replace(/\s*$/, '') + '\n' + newText + '\n'
+    } else {
+      const first = text.indexOf(oldText)
+      if (first < 0) throw new Error(`未找到待替换片段（截取前 60 字符）: ${oldText.slice(0, 60)}… 可先 vault.read 确认当前内容`)
+      if (text.indexOf(oldText, first + oldText.length) >= 0) throw new Error('待替换片段在文件中出现多处，请提供更长更精确的 oldText（本工具一次只替换一处）')
+      next = text.slice(0, first) + newText + text.slice(first + oldText.length)
+    }
     writeWorkspaceFile(abs, next)
     if (rel.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '') // 同上：edit 后索引/图谱同步刷新
     const after = statSync(abs)
@@ -1020,6 +986,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     vaultFile: 'write',
   }, args => {
     const rel = str(args.path).trim()
@@ -1069,6 +1036,7 @@ export function registerBuiltinTools(): void {
     enabled: true,
     readOnly: false,
     requires: 'write',
+    tier: 'ondemand',
     vaultFile: 'write',
   }, async args => {
     const rel = str(args.path).trim()
@@ -1118,50 +1086,5 @@ export function registerBuiltinTools(): void {
     }
   })
 
-  // ===== docs.read-text：仓库内 PDF/PPT 文本提取（场景 B「复习资料」，vaultFile=read） =====
-
-  // 23. builtin.docs.read-text —— 提取仓库内 .pdf/.pptx 的文本
-  registerTool({
-    name: 'builtin.docs.read-text',
-    title: '提取 PDF/PPT 文本',
-    description: '从仓库内 .pdf/.pptx 提取文字内容（纯文本，供通读总结/出复习资料）。扫描版 PDF（纯图片）提取结果为空属预期；.md/.txt 请用 vault.read；Word 暂不支持',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '仓库内相对文件路径（.pdf 或 .pptx）' },
-        maxChars: { type: 'number', description: '最多返回字符，默认 12000' },
-      },
-      required: ['path'],
-    },
-    source: 'builtin',
-    enabled: true,
-    readOnly: true,
-    requires: 'read',
-    vaultFile: 'read',
-  }, async args => {
-    const rel = str(args.path).trim()
-    if (!rel) throw new Error('缺少必填参数: path')
-    const maxChars = clamp(Math.floor(num(args.maxChars, 12000)), 200, 50000)
-    const root = vaultRootPath()
-    const abs = resolveSafe(root, rel)
-    if (!abs) throw new Error(`路径非法或越出仓库: ${rel}`)
-    if (!isAiDocFile(root, abs)) {
-      throw new Error('仅支持仓库内普通目录的 .pdf/.pptx（.md/.txt 用 vault.read；其他类型与保护区拒绝）')
-    }
-    let out: { kind: 'pdf' | 'pptx'; text: string; pages: number; totalChars: number }
-    try {
-      out = await extractDocText(abs)
-    } catch (err) {
-      throw new Error(`文档解析失败：${String((err as Error)?.message ?? err).slice(0, 200)}`)
-    }
-    const truncated = out.totalChars > maxChars
-    return {
-      kind: out.kind,
-      path: rel,
-      pages: out.pages,
-      totalChars: out.totalChars,
-      text: truncated ? out.text.slice(0, maxChars) : out.text,
-      truncated,
-    }
-  })
+  // 23. builtin.docs.read-text 已退役（2026-09-09 P1）：并入 vault.read（pdf/pptx 按扩展名分派）
 }
