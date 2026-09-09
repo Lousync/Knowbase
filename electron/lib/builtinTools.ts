@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto'
 import { readdirSync, lstatSync, readFileSync, statSync, mkdirSync } from 'fs'
 import { join, relative, extname, sep, dirname } from 'path'
-import { listTools, registerTool } from './aiTools'
+import { listTools, registerTool, getSettingReader } from './aiTools'
 import { webSearch, webReadPage } from './webSearch'
+import { writeVisual } from './aiTeachingSources'
 import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
@@ -1088,4 +1089,34 @@ export function registerBuiltinTools(): void {
   })
 
   // 23. builtin.docs.read-text 已退役（2026-09-09 P1）：并入 vault.read（pdf/pptx 按扩展名分派）
+
+  // ===== visual.html：AI 教学示意图生成（docs/ai-teaching-artifacts-pane-design.md §3） =====
+
+  // 24. visual.html —— 生成单文件 HTML 示意图写入会话 visuals/（工件栏页签预览）
+  registerTool({
+    name: 'visual.html',
+    title: '生成 HTML 示意图',
+    description: '生成单文件 HTML 示意图辅助讲解，写入本会话 SOURCES/<对话>/visuals/<slug>.html 并自动在右栏工件栏打开。html 为完整自包含单文件：CSS/SVG/JS 全内联、不引用任何外部资源（无 CDN/网络图片/外链字体）、建议 ≤150 行、画幅 680×400 比例 SVG 为主、中文标注。重名不覆盖（自动 -v2/-v3 递增）。仅限 AI教学对话会话内使用',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: '文件名（kebab-case 小写英文/数字，如 parabola-open-width；不带 .html 后缀）' },
+        title: { type: 'string', description: '示意图中文标题（工件卡与页签展示，如「开口大小与 a 的关系」）' },
+        html: { type: 'string', description: '完整 HTML 全文（自包含单文件，无任何外部依赖）' },
+      },
+      required: ['slug', 'title', 'html'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    // 不设 module：产物固定落 AI教学会话目录，权限由 sessionId 归属兜底（无会话即拒绝）
+  }, (args, ctx) => {
+    const sid = String(ctx?.sessionId ?? '')
+    if (!sid) throw new Error('visual.html 仅可在 AI教学对话中使用（当前会话无归属文件夹）')
+    const r = writeVisual(sid, str(args.slug), String(args.html ?? ''), getSettingReader())
+    if (!r.ok) throw new Error(r.error ?? '示意图写入失败')
+    return { relPath: r.relPath, lines: r.lines }
+  })
 }

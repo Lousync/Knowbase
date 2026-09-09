@@ -48,7 +48,14 @@ export interface AgentTool {
   tier?: 'core' | 'ondemand'
 }
 
-export type ToolHandler = (args: Record<string, unknown>) => unknown | Promise<unknown>
+/** 工具调用上下文（AgentRunner 执行路径注入；IPC 手动调用无上下文）：
+ *  visual.html 等「产物落会话目录」的工具用 sessionId 定位归属文件夹 */
+export interface ToolInvokeCtx {
+  sessionId?: string
+  source?: string
+}
+
+export type ToolHandler = (args: Record<string, unknown>, ctx?: ToolInvokeCtx) => unknown | Promise<unknown>
 
 interface RegisteredTool extends AgentTool {
   handler: ToolHandler
@@ -228,7 +235,8 @@ async function invokeTool(
   name: string,
   args: unknown,
   getSettingValue: (key: string) => unknown,
-  callerPluginId = ''
+  callerPluginId = '',
+  ctx?: ToolInvokeCtx
 ): Promise<AiToolInvokeResult> {
   const tool = registry.get(name)
   if (!tool) return { ok: false, code: 'TOOL_NOT_FOUND', message: `工具不存在: ${name}` }
@@ -288,7 +296,7 @@ async function invokeTool(
   const started = Date.now()
   const action = auditActionFor(name)
   try {
-    const data = await tool.handler(cleanArgs)
+    const data = await tool.handler(cleanArgs, ctx)
     appendAudit(callerPluginId, action, {
       tool: name,
       args: summarizeArgs(cleanArgs),
@@ -322,11 +330,11 @@ export function getSettingReader(): (key: string) => unknown {
  * 主进程内部调用入口（AgentRunner 等消费方）：
  * 与 IPC 完全同一套校验/审计/月度上限链路，不允许绕行。
  */
-export function invokeToolInternal(name: string, args: unknown, callerPluginId = ''): Promise<AiToolInvokeResult> {
+export function invokeToolInternal(name: string, args: unknown, callerPluginId = '', ctx?: ToolInvokeCtx): Promise<AiToolInvokeResult> {
   if (!settingReader) {
     return Promise.resolve({ ok: false, code: 'EXEC_ERROR', message: 'AI 工具服务尚未初始化' })
   }
-  return invokeTool(name, args, settingReader, callerPluginId)
+  return invokeTool(name, args, settingReader, callerPluginId, ctx)
 }
 
 export function registerAiToolHandlers(deps: {

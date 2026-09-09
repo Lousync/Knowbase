@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText, Image as ImageIcon } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentStartScene, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
@@ -12,6 +12,8 @@ import {
   aiTeachProfileWriteGlobal, aiTeachProfileWriteSession, aiTeachProfileWriteWorkspace,
 } from '../../lib/ipc'
 import { AiTeachFileTree } from './AiTeachFileTree'
+import { ArtifactsPane } from './ArtifactsPane'
+import type { ArtTab } from './artifacts'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { QuizMode } from '../../components/shared/QuizMode'
 import { extractQuizzes } from '../../components/shared/QuizParser'
@@ -254,6 +256,20 @@ function parseAskBlock(raw: string, id: string): AskBlock | null {
   } catch { return null }
 }
 
+/** 素材类型分组（右栏改造方案 B，docs/ai-teaching-sources-panel-rework.md）：五类 + 其他兜底；色点对齐定稿原型 */
+const SRC_GROUPS: Array<{ key: string; label: string; color: string }> = [
+  { key: 'pdf', label: 'PDF 文件', color: '#d04242' },
+  { key: 'pptx', label: 'PPT 课件', color: '#e8842a' },
+  { key: 'url', label: '网页', color: '#2e9e5b' },
+  { key: 'code', label: '代码', color: '#4f6bed' },
+  { key: 'dir', label: '目录', color: '#8b949e' },
+  { key: 'other', label: '其他', color: '#a3aab8' },
+]
+/** type → 组键（image/md/other/未识别全进 other，不丢条目） */
+const srcGroupKey = (t: string): string => (['pdf', 'pptx', 'url', 'code', 'dir'].includes(t) ? t : 'other')
+/** 折叠缓动：快出缓停无回弹（方案 §3 定稿曲线） */
+const SRC_EASE = 'ease-[cubic-bezier(0.22,0.68,0.32,1)]'
+
 export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: { isActive?: boolean; zenLevel?: number; onZenLevelChange?: (n: number) => void }) {
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -289,10 +305,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }), [])
   const [leftOpen, setLeftOpen] = useState(() => localStorage.getItem('aiTeach.leftOpen') !== '0')
   const [rightOpen, setRightOpen] = useState(() => localStorage.getItem('aiTeach.rightOpen') !== '0')
+  /** 素材库实际可见态（双右栏联动 §1.3）：rightOpen=用户意图态（持久），srcVisible=渲染态——
+   *  工件栏展开时自动收起但不改意图；用户手动展开（贴边条/顶栏 chip）两栏允许同屏 */
+  const [srcVisible, setSrcVisible] = useState(() => localStorage.getItem('aiTeach.rightOpen') !== '0')
   const toggleSide = (side: 'left' | 'right') => {
     if (side === 'left') { const v = !leftOpen; setLeftOpen(v); localStorage.setItem('aiTeach.leftOpen', v ? '1' : '0') }
-    else { const v = !rightOpen; setRightOpen(v); localStorage.setItem('aiTeach.rightOpen', v ? '1' : '0') }
+    else { const v = !rightOpen; setRightOpen(v); localStorage.setItem('aiTeach.rightOpen', v ? '1' : '0'); setSrcVisible(v) }
   }
+  /** 打开素材库（顶栏 chip / 贴边条专用——自动收起态下 rightOpen 意图已是 true，翻转逻辑不适用） */
+  const openSources = () => { setRightOpen(true); localStorage.setItem('aiTeach.rightOpen', '1'); setSrcVisible(true) }
   // Ctrl+B 切左侧栏 / Ctrl+Alt+B 切右侧栏（2026-09-08 用户反馈补齐，对齐 VS Code 侧栏习惯）。
   // 模块级快捷键：仅本模块激活时生效；焦点在输入控件内不拦截；deps 随开合状态刷新闭包
   useEffect(() => {
@@ -302,38 +323,78 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       e.preventDefault()
-      toggleSide(e.altKey ? 'right' : 'left')
+      if (e.altKey) { if (!srcVisible) openSources(); else toggleSide('right') } // 自动收起态下快捷键=展开（意图态已 true，翻转逻辑不适用）
+      else toggleSide('left')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, leftOpen, rightOpen])
+  }, [isActive, leftOpen, rightOpen, srcVisible])
   const [aiTeachRoot, setAiTeachRoot] = useState('AI教学')
-  const [docView, setDocView] = useState<{ rel: string; name: string; content: string } | null>(null)
-  const docViewRef = useRef<{ rel: string; name: string; content: string } | null>(null)
-  useEffect(() => { docViewRef.current = docView }, [docView])
-  const [docOutline, setDocOutline] = useState<Array<{ id: string; text: string; lv: number }>>([])
-  const docScrollRef = useRef<HTMLDivElement>(null)
-  const docScrollPos = useRef<Record<string, number>>({})
-  const openDocView = useCallback(async (rel: string) => {
+  // ---------- 工件栏（docs/ai-teaching-artifacts-pane-design.md §1.2/§2）----------
+  // 对话固定左主区永不替换；md 阅读 / pptx 逐页 / visual.html 示意图全部收进右侧页签。
+  // 页签列表=会话内存态（切会话清空）；栏宽持久化；开合无手动开关——有页签即出现、关完即消失
+  //（2026-09-09 用户拍板：不设主动展开把手，避免与素材库右缘拉出条打架）；HTML 正文永不进对话流（工件卡唯一形态）。
+  const [artTabs, setArtTabs] = useState<ArtTab[]>([])
+  const [artActive, setArtActive] = useState<string | null>(null)
+  const [artPct, setArtPctRaw] = useState(() => {
+    const n = Number(localStorage.getItem('aiTeach.artWidth'))
+    return Number.isFinite(n) && n >= 24 && n <= 60 ? n : 46
+  })
+  /** html 页签 ⟳ 刷新计数（key 版本，ArtHtmlView 重读磁盘） */
+  const [htmlSeq, setHtmlSeq] = useState<Record<string, number>>({})
+  const artTabsRef = useRef<ArtTab[]>([])
+  useEffect(() => { artTabsRef.current = artTabs }, [artTabs])
+  const setArtPct = useCallback((v: number) => {
+    setArtPctRaw(v)
+    try { localStorage.setItem('aiTeach.artWidth', String(Math.round(v))) } catch { /* 隐私模式忽略 */ }
+  }, [])
+  /** 开/复用页签（同 id 原地合并更新）并激活 */
+  const openArtTab = useCallback((tab: ArtTab) => {
+    setArtTabs(prev => {
+      const i = prev.findIndex(t => t.id === tab.id)
+      if (i < 0) return [...prev, tab]
+      const n = [...prev]
+      n[i] = { ...n[i], ...tab }
+      return n
+    })
+    setArtActive(tab.id)
+  }, [])
+  const closeArtTab = useCallback((id: string) => {
+    const prev = artTabsRef.current
+    const i = prev.findIndex(t => t.id === id)
+    if (i < 0 || prev[i].generating) return
+    const next = prev[i + 1] ?? prev[i - 1] ?? null
+    setArtTabs(prev.filter(t => t.id !== id))
+    setArtActive(cur => (cur === id ? next?.id ?? null : cur))
+  }, [])
+  /** 统一打开入口：pptx→逐页页签；html→沙箱预览页签；其余按 md 阅读页签 */
+  const openArtFile = useCallback(async (rel: string, opts?: { name?: string; title?: string; lines?: number; cur?: number }) => {
+    if (/\.pptx$/i.test(rel)) {
+      const pr = await docsPptxPages(rel).catch(() => null)
+      if (pr?.ok && pr.pages?.length) {
+        openArtTab({ id: rel, kind: 'pptx', rel, name: opts?.name ?? rel.split('/').pop() ?? rel, pages: pr.pages, cur: Math.min(Math.max(0, opts?.cur ?? 0), pr.pages.length - 1) })
+      } else {
+        showToast({ type: 'error', message: (pr as { error?: string } | null)?.error || '读取失败（暂仅支持 .pptx）' })
+      }
+      return
+    }
+    if (/\.html?$/i.test(rel)) {
+      openArtTab({ id: rel, kind: 'html', rel, name: opts?.title || opts?.name || rel.split('/').pop() || rel, title: opts?.title, lines: opts?.lines })
+      return
+    }
     const cur = await workspaceGetCurrent().catch(() => null)
     const rootId = (cur as { rootId?: string } | null)?.rootId
     if (!rootId) { showToast({ type: 'error', message: '尚未打开仓库' }); return }
     const r = await workspaceReadFile(rootId, rel).catch(() => null)
     if (!r || typeof r.content !== 'string') { showToast({ type: 'error', message: '读取文档失败' }); return }
-    setDocView({ rel, name: rel.split('/').pop() ?? rel, content: r.content }) // 与逐页阅读互斥靠渲染优先级：docView > reader > 对话
-  }, [])
+    openArtTab({ id: rel, kind: 'md', rel, name: opts?.name ?? rel.split('/').pop() ?? rel, content: r.content })
+  }, [openArtTab])
+  const reloadArtTab = useCallback((tab: ArtTab) => {
+    if (tab.kind === 'html') { setHtmlSeq(prev => ({ ...prev, [tab.rel]: (prev[tab.rel] ?? 0) + 1 })); return }
+    void openArtFile(tab.rel, { name: tab.name, title: tab.title })
+  }, [openArtFile])
   useEffect(() => { void getSettingRaw('aiTeachRootDir').then(v => { const s = String(v ?? '').trim(); if (s) setAiTeachRoot(s) }).catch(() => {}) }, [])
-  // 阅读视图渲染完成：DOM 收集 h2/h3 大纲 + 恢复滚动位置（§3.9-2 状态记忆）
-  useEffect(() => {
-    if (!docView) { setDocOutline([]); return }
-    const raf = requestAnimationFrame(() => {
-      const els = docScrollRef.current?.querySelectorAll('h2, h3') ?? []
-      setDocOutline(Array.from(els).map(el => ({ id: (el as HTMLElement).id, text: (el.textContent ?? '').trim(), lv: el.tagName === 'H2' ? 2 : 3 })).filter(x => x.id && x.text))
-      if (docScrollRef.current) docScrollRef.current.scrollTop = docScrollPos.current[docView.rel] ?? 0
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [docView])
 
   // ---------- P5 工作区两层（§3.2-6；3-6/3-8 按建议：元数据入仓库 .knowbase、跟随当前激活仓库） ----------
   const [wsList, setWsList] = useState<AiTeachWorkspaceInfo[]>([])
@@ -399,13 +460,18 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [instrOpen, setInstrOpen] = useState(false)
   const [instrDraft, setInstrDraft] = useState('')
   const [instrDismiss, setInstrDismiss] = useState(false)
-  // PPT 逐页阅读（条目5.1：旧「资料来源」区块退役，reader 由素材库「原件」按钮进入）
-  const [reader, setReader] = useState<{ rel: string; name: string; pages: Array<{ n: number; text: string }>; cur: number } | null>(null)
-  // UI 优化条目6B：中栏导航状态（对话/题目 · 阅读文档 · 逐页阅读页码）随变化落到本会话持久化键
+  // PPT 逐页阅读已并入工件栏 pptx 页签（工件栏方案 §1.4，原 reader 中栏互斥态退役）
+  // UI 优化条目6B：中栏导航状态（对话/题目 · 工件栏激活页签）随变化落到本会话持久化键
   useEffect(() => {
     if (!activeId) return
-    writeNav(activeId, { midView, docRel: docView?.rel ?? null, readerRel: reader?.rel ?? null, readerPage: reader?.cur ?? 0 })
-  }, [activeId, midView, docView?.rel, reader?.rel, reader?.cur])
+    const t = artTabs.find(x => x.id === artActive)
+    writeNav(activeId, {
+      midView,
+      docRel: t && !t.generating && (t.kind === 'md' || t.kind === 'html') ? t.rel : null,
+      readerRel: t && !t.generating && t.kind === 'pptx' ? t.rel : null,
+      readerPage: t && t.kind === 'pptx' ? t.cur ?? 0 : 0,
+    })
+  }, [activeId, midView, artTabs, artActive])
   const [activeIdRef, chatIdRef] = [useRef<string | null>(null), useRef('')]
   const bottomRef = useRef<HTMLDivElement>(null)
   // P3a 快速定位条：消息滚动容器 + 当前锚点高亮
@@ -470,44 +536,54 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // P1 重命名会话（双击列表行）：agentRenameSession + 文件夹同步改名
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
-  // 实时步骤（agent:step，按 chatId 过滤）
+  // 实时步骤（agent:step，按 chatId 过滤）。工件栏方案 §3.4 生成时序：
+  // ① visual.html 带 args 的「生成中」事件 → 工件栏同步开占位页签（禁止关闭，即时反馈）；
+  // ② 带 artifact 的成功事件 → 占位原地换正式页签 + toast（对话流工件卡随消息落库自动出现）。
   useEffect(() => {
     return onAgentStep(({ chatId, step }) => {
       if (chatId !== chatIdRef.current) return
       setLiveSteps(prev => [...prev.slice(-29), step])
+      if (step.name === 'visual.html' && step.args && !step.artifact) {
+        const slug = String(step.args.slug ?? '')
+        const title = String(step.args.title ?? '') || '示意图'
+        setArtTabs(prev => [...prev.filter(t => !(t.generating && t.slug === slug)),
+          { id: `gen:${slug || title}`, kind: 'html' as const, rel: '', name: '生成中…', generating: true, slug, title }])
+        setArtActive(`gen:${slug || title}`)
+      }
+      if (step.artifact && step.ok) {
+        const a = step.artifact
+        if (!a.rel) return
+        setArtTabs(prev => {
+          const rest = prev.filter(t => !(t.generating && a.slug && t.slug === a.slug))
+          return rest.some(t => t.id === a.rel) ? rest : [...rest, { id: a.rel, kind: 'html' as const, rel: a.rel, name: a.title || a.rel.split('/').pop() || a.rel, title: a.title, lines: a.lines }]
+        })
+        setArtActive(cur => cur === `gen:${a.slug}` ? a.rel : cur)
+        showToast({ type: 'info', message: `✓ 示意图已生成：${a.rel.split('/').pop()}（${a.lines} 行）` })
+      }
+      // 工具失败：清掉「生成中」占位页签（禁关页签不能因失败卡死）；停止生成同理（setPending(false) 处兜底）
+      if (step.name === 'visual.html' && !step.ok && !step.artifact) {
+        setArtTabs(prev => prev.filter(t => !t.generating))
+        setArtActive(cur => cur?.startsWith('gen:') ? null : cur)
+      }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 切换会话
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
-    setDocView(null) // 切会话退出文档阅读（P4）
-    setReader(null)
+    setArtTabs([]); setArtActive(null) // 工件栏页签=会话内存态：切会话清空（§2，阅读位置记忆保留在页签组件内）
     setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
     const row = sessions.find(s => s.id === sid)
     setInstrDismiss(false)
     void loadConstraints(sid, row?.instructions ?? '')
     await refreshMessages(sid)
-    // UI 优化条目6B：恢复该会话「上次离开时的中栏视图」（文档阅读 > 逐页阅读 > 题目；静默降级）
+    // UI 优化条目6B：恢复该会话「上次离开时的工件」（页签在则栏在——内容驱动，无手动开合）
     const nav = readNav(sid)
-    if (nav.docRel) {
-      const cur = await workspaceGetCurrent().catch(() => null)
-      const rootId = (cur as { rootId?: string } | null)?.rootId
-      const r = rootId ? await workspaceReadFile(rootId, nav.docRel).catch(() => null) : null
-      if (r && typeof r.content === 'string') {
-        setDocView({ rel: nav.docRel, name: nav.docRel.split('/').pop() ?? nav.docRel, content: r.content })
-        return
-      }
-    }
-    if (nav.readerRel && /\.pptx$/i.test(nav.readerRel)) {
-      const pr = await docsPptxPages(nav.readerRel).catch(() => null)
-      if (pr?.ok && pr.pages?.length) {
-        setReader({ rel: nav.readerRel, name: nav.readerRel.split('/').pop() ?? nav.readerRel, pages: pr.pages, cur: Math.min(Math.max(0, nav.readerPage ?? 0), pr.pages.length - 1) })
-        return
-      }
-    }
+    if (nav.docRel) void openArtFile(nav.docRel)
+    else if (nav.readerRel && /\.pptx$/i.test(nav.readerRel)) void openArtFile(nav.readerRel, { cur: nav.readerPage ?? 0 })
     if (nav.midView === 'quiz') setMidView('quiz')
-  }, [refreshMessages, sessions, loadConstraints, reader?.rel])
+  }, [refreshMessages, sessions, loadConstraints, openArtFile])
 
   const sendText = useCallback(async (raw: string, cid: string): Promise<AgentChatResult | null> => {
     setPending(true); setLiveSteps([])
@@ -524,6 +600,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setLastChanges(r?.changes && r.changes.length ? r.changes : null)
     await refreshMessages(sid)
     setPending(false)
+    setArtTabs(prev => prev.some(t => t.generating) ? prev.filter(t => !t.generating) : prev) // 中止/失败收尾：禁关占位不留场
+    setArtActive(cur => cur?.startsWith('gen:') ? null : cur)
     return r
   }, [refreshMessages])
 
@@ -550,6 +628,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setLastChanges(r?.changes && r.changes.length ? r.changes : null)
     await refreshMessages(sid)
     setPending(false)
+    setArtTabs(prev => prev.some(t => t.generating) ? prev.filter(t => !t.generating) : prev)
+    setArtActive(cur => cur?.startsWith('gen:') ? null : cur)
   }, [refreshMessages])
 
   // 新建任务（模板）：播种场景规则到 CONSTRAINTS.md，再用虚拟首轮触发 AI 开口
@@ -573,7 +653,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setTemplate(tpl)
     setActiveId(row.id); setActiveTitle(row.title)
     activeIdRef.current = row.id
-    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false); setDocView(null)
+    setMessages([]); setLastChanges(null); setShowNewMenu(false); setActiveInstr(''); setInstrRel(''); setInstrDismiss(false); setArtTabs([]); setArtActive(null)
     setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
     void refreshSessions()
     void startScene(row.id)
@@ -591,7 +671,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       void openSession(own[0].id, own[0].title)
     } else {
       activeIdRef.current = null
-      setActiveId(null); setActiveTitle(''); setMessages([]); setLastChanges(null); setLiveSteps([]); setDocView(null)
+      setActiveId(null); setActiveTitle(''); setMessages([]); setLastChanges(null); setLiveSteps([]); setArtTabs([]); setArtActive(null)
       setActiveInstr(''); setInstrRel('')
       setMidView('chat'); setQuizOpen(false); setLastQuizReport(null)
     }
@@ -703,6 +783,86 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [visionBusy, setVisionBusy] = useState<null | { no: number; label: string; done?: number; total?: number }>(null)
   /** 网页素材「展开网页」对话框（web-crawl P3）：{no,name,path} 非空即开 */
   const [webDlg, setWebDlg] = useState<null | { no: number; name: string; path: string }>(null)
+  // ===== 右栏素材库改造（docs/ai-teaching-sources-panel-rework.md）=====
+  // 过滤 chips / 分组折叠 / 紧凑收起 = 纯视图态，localStorage 持久；不触碰 SOURCE.md 与 AI 注入口径
+  const [srcFilter, setSrcFilterRaw] = useState<string>(() => { try { return localStorage.getItem('aiTeach.srcFilter') || 'all' } catch { return 'all' } })
+  const [srcCompact, setSrcCompactRaw] = useState<boolean>(() => { try { return localStorage.getItem('aiTeach.srcCompact') === '1' } catch { return false } })
+  const [groupClosed, setGroupClosed] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('aiTeach.srcGroupClosed') ?? '[]') as string[]) } catch { return new Set<string>() } })
+  const setSrcFilter = (k: string) => { setSrcFilterRaw(k); try { localStorage.setItem('aiTeach.srcFilter', k) } catch { /* 隐私模式忽略 */ } }
+  const setSrcCompact = (v: boolean) => { setSrcCompactRaw(v); try { localStorage.setItem('aiTeach.srcCompact', v ? '1' : '0') } catch { /* 隐私模式忽略 */ } }
+  const toggleSrcGroup = (k: string) => setGroupClosed(prev => {
+    const n = new Set(prev)
+    if (n.has(k)) n.delete(k); else n.add(k)
+    try { localStorage.setItem('aiTeach.srcGroupClosed', JSON.stringify([...n])) } catch { /* 隐私模式忽略 */ }
+    return n
+  })
+  /** 素材卡片（两行 DOM 不变；第二行包 grid-rows 折叠壳：紧凑收起=0fr+opacity，只动 grid-rows/padding，方案 2.2/落地4） */
+  const renderSrcCard = (e: AiTeachSourceEntry) => {
+    const extMatch = /^✓\s*→\s*(.+)$/.exec(e.extracted)
+    const dirRel = srcFileRel ? srcFileRel.slice(0, srcFileRel.lastIndexOf('/')) : ''
+    const extractable = (e.type === 'pdf' || e.type === 'pptx' || e.type === 'code') && !extMatch && e.range && e.range !== '-' // 条目10：code 按行号区间提取
+    const inRepo = e.path.startsWith('./') || (srcFileRel && !/^[a-zA-Z]:|^https?:|^\//.test(e.path))
+    return (
+      <div key={e.no} className={`rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 kb-group-anim transition-[padding] duration-[320ms] ${SRC_EASE} ${srcCompact ? 'py-[3px]' : 'py-1.5'}`}>
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 text-[10px] font-medium text-[var(--text-muted)]">#{e.no}</span>
+          <span className="flex-1 min-w-0 truncate text-[11.5px] text-[var(--text-primary)]" title={e.note || e.name}>{e.name}</span>
+          <span className="shrink-0 px-1 rounded text-[9.5px] uppercase text-[var(--text-muted)] border border-[var(--border-color)]">{e.type}</span>
+        </div>
+        <div className={`grid kb-group-anim transition-[grid-template-rows,opacity] duration-[320ms] ${SRC_EASE} ${srcCompact ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}>
+          <div className="min-h-0 overflow-hidden">
+            <div className="pt-1 flex items-center gap-2 text-[10.5px] text-[var(--text-muted)]">
+              {e.range && e.range !== '-' && <span title={e.type === 'code' ? '行号区间' : '页码区间'}>{e.type === 'code' ? 'L' : 'p'}{e.range}</span>}
+              <span title={e.path}>{e.storage === '已入库' ? '已入库' : (e.path.startsWith('http') ? '链接' : '引用')}</span>
+              <div className="ml-auto flex items-center gap-1.5">
+                {e.type === 'url' && /^https?:\/\//i.test(e.path) && (
+                  <button onClick={() => setWebDlg({ no: e.no, name: e.name, path: e.path })}
+                    title={extMatch ? '补抓/重抓：已存在章节自动跳过，只补失败与新增页' : '展开网页：探测目录/单文章，勾选章节批量抓取为提取稿（零 token 纯程序流水线）'}
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">{extMatch ? '补抓' : '展开网页'}</button>
+                )}
+                {extMatch && dirRel && (
+                  <button onClick={() => { void openArtFile(`${dirRel}/${extMatch[1].trim()}`) }} title="阅读提取稿（可编辑）"
+                    className="text-[var(--accent)] hover:opacity-80 transition-opacity">提取稿 ✓</button>
+                )}
+                {extractable && (
+                  <button onClick={() => { void doExtract(e.no) }} disabled={srcBusy === e.no}
+                    className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
+                    {srcBusy === e.no ? <Loader2 size={9} className="animate-spin" /> : <BookOpen size={9} />}{srcBusy === e.no ? '提取中…' : '提取'}
+                  </button>
+                )}
+                {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
+                  /* 3-21 手动档→分批流水线：区间页栅格化→视觉模型转写（公式/图形/扫描件），
+                     >12 页自动分批+断点续转（提取稿已有页跳过），结果非破坏并入提取稿；
+                     pptx（2026-09-09 B 方案）由主进程 soffice 转 PDF 后同链路栅格化 */
+                  <button onClick={() => { void doTranscribe(e.no) }} disabled={!!visionBusy}
+                    title={visionBusy?.no === e.no ? visionBusy.label : e.type === 'pptx'
+                      ? '视觉转写：pptx 先经本机 LibreOffice 转 PDF 再逐页转写（需已安装 LibreOffice，可在设置→AI 模型→LibreOffice 路径指定）；文本提取对多数 PPT 公式已够用'
+                      : '视觉转写：把登记区间的页面交给视觉模型转写（>12 页自动分批、断点续转），并入提取稿后可编辑。点击可中途停止'}
+                    className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
+                    {visionBusy?.no === e.no ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
+                    {visionBusy?.no === e.no ? '转写中…' : '转写'}
+                  </button>
+                )}
+                {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
+                  /* 同一原件再加区间（2026-09-08 用户需求）：一个 PDF 多章 = 多条目共享同一份
+                     已入库原件（不再重复拷贝），各条目独立转写/提取/编号引用 */
+                  <button onClick={() => setSrcForm({ name: e.name, type: e.type, path: e.path, storage: '仅引用', rangeFrom: '', rangeTo: '', note: '' })}
+                    title="同一文件换个页码区间再登记一条（如另一章）——不重复拷贝原件"
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">再加区间</button>
+                )}
+                {inRepo && e.path.startsWith('./') && dirRel && e.type === 'pptx' && (
+                  <button onClick={() => { void openArtFile(`${dirRel}/${e.path.slice(2)}`, { name: e.name }) }} title="逐页阅读原件"
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">原件</button>
+                )}
+                <button onClick={() => { void doRemoveSrc(e.no, e.name) }} title="移除登记（不删文件）"
+                  className="text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={10} /></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
   const [srcAnom, setSrcAnom] = useState<{ unnamed: number; dupNo: number; noPath?: number } | null>(null)
   const refreshSources = useCallback(async (sid: string | null) => {
     if (!sid) { setSrcEntries([]); setSrcFileRel(null); setSrcAnom(null); return }
@@ -732,17 +892,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         if (!(st.open && st.draft.trim() !== text)) setInstrDraft(text)
       }).catch(() => null)
     }
-    // 条目6B 配套：中栏阅读视图回读磁盘（编辑器保存/程序重写后即时反映，滚动位置按文件记忆恢复）
-    const rel = opts.doc ?? docViewRef.current?.rel ?? null
-    if (rel) {
+    // 条目6B 配套 + 工件栏 §2：打开中的页签回读磁盘（编辑器保存/程序重写后即时反映，滚动位置按文件记忆恢复）
+    const rel = opts.doc ?? null
+    const openTabs = artTabsRef.current.filter(t => !t.generating && t.rel && (rel ? t.rel === rel : t.kind === 'md'))
+    for (const t of openTabs) {
       void workspaceGetCurrent().then(cur => {
         const rootId = (cur as { rootId?: string } | null)?.rootId
-        return rootId ? workspaceReadFile(rootId, rel) : null
+        return rootId ? workspaceReadFile(rootId, t.rel) : null
       }).then(r => {
-        const dv = docViewRef.current
-        if (r && typeof r.content === 'string' && dv && dv.rel === rel && dv.content !== r.content) {
-          setDocView({ ...dv, content: r.content })
-        }
+        if (!r || typeof r.content !== 'string') return
+        if (t.kind === 'md') setArtTabs(prev => prev.map(x => x.id === t.id && x.content !== r.content ? { ...x, content: r.content } : x))
+        else if (t.kind === 'html') setHtmlSeq(prev => ({ ...prev, [t.rel]: (prev[t.rel] ?? 0) + 1 }))
       }).catch(() => null)
     }
   }, [refreshSources])
@@ -750,8 +910,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     const onSaved = (e: Event) => {
       const rel = String((e as CustomEvent).detail?.relPath ?? '')
       const base = rel.split(/[\\/]/).pop() ?? ''
-      if (base !== 'SOURCE.md' && base !== 'CONSTRAINTS.md' && rel !== docViewRef.current?.rel) return
-      syncSessionFiles({ sources: base === 'SOURCE.md', constraints: base === 'CONSTRAINTS.md' })
+      const artHit = !!rel && artTabsRef.current.some(t => !t.generating && t.rel === rel)
+      if (base !== 'SOURCE.md' && base !== 'CONSTRAINTS.md' && !artHit) return
+      syncSessionFiles({ sources: base === 'SOURCE.md', constraints: base === 'CONSTRAINTS.md', doc: artHit ? rel : null })
     }
     const onTree = () => syncSessionFiles({ sources: true, constraints: true })
     const onFocus = () => syncSessionFiles({ sources: true, constraints: true })
@@ -887,7 +1048,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       if (transcribeStopRef.current) { showToast({ type: 'info', message: `视觉转写已停止：已完成 ${doneTotal} 页（重发同区间将自动续转）` }); return }
       if (doneTotal > 0 || skippedTotal > 0) {
         await refreshSources(activeId)
-        if (lastRel) openDocView(lastRel)
+        if (lastRel) void openArtFile(lastRel)
         const fail = failedPages.length ? ` · ${failedPages.length} 页失败（重发同区间自动重试失败页）` : ''
         showToast({ type: 'info', message: `👁 视觉转写完成（${lastModel || '视觉模型'}）：转写 ${doneTotal} 页 · 跳过已转 ${skippedTotal} 页${fail}` })
       }
@@ -1081,35 +1242,26 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     }
   }
 
-  // ---- PPT 逐页阅读（原件查看；条目5.1 旧「资料来源」区块退役后由素材库条目「原件」按钮进入）----
-  const openPptxReader = useCallback(async (rel: string, name: string) => {
-    const r = await docsPptxPages(rel).catch(() => null)
-    if (!r?.ok || !r.pages || r.pages.length === 0) {
-      showToast({ type: 'error', message: (r as { error?: string } | null)?.error || '读取失败（暂仅支持 .pptx）' })
-      return
-    }
-    setReader({ rel, name, pages: r.pages, cur: 0 })
+  // ---- PPT 逐页阅读（已并入工件栏 pptx 页签；条目5.1 「原件」按钮 → openArtFile 分派）----
+  const setArtPptxPage = useCallback((id: string, delta: number) => {
+    setArtTabs(prev => prev.map(t => {
+      if (t.id !== id || !t.pages?.length) return t
+      const next = Math.min(Math.max((t.cur ?? 0) + delta, 0), t.pages.length - 1)
+      return next === t.cur ? t : { ...t, cur: next }
+    }))
   }, [])
 
-  const goPage = useCallback((delta: number) => {
-    setReader(r => {
-      if (!r) return r
-      const next = Math.min(Math.max(r.cur + delta, 0), r.pages.length - 1)
-      return next === r.cur ? r : { ...r, cur: next }
-    })
-  }, [])
-
-  /** 让 AI 讲解当前页（把该页文字发进对话） */
-  const talkCurrentPage = useCallback(async () => {
-    if (!reader || pending) return
-    const page = reader.pages[reader.cur]
+  /** 让 AI 讲解当前页（对话常驻左主区：页签保留，仅切回对话视图并发送） */
+  const talkArtPage = useCallback((tab: ArtTab) => {
+    if (pending || !tab.pages?.length) return
+    const page = tab.pages[Math.min(tab.cur ?? 0, tab.pages.length - 1)]
     if (!page) return
-    setReader(null) // P3a：讲当前页退出阅读视图回对话流（reader 激活才占用中栏）
+    setMidView('chat')
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
-    const text = `我在逐页阅读 PPT《${reader.name}》第 ${reader.cur + 1} 页。请基于这一页讲清楚要点，讲完停一下等我的问题：\n\n${page.text.slice(0, 2200)}`
+    const text = `我在逐页阅读 PPT《${tab.name}》第 ${(tab.cur ?? 0) + 1} 页（原文编号 ${page.n}）。请基于这一页讲清楚要点，讲完停一下等我的问题：\n\n${page.text.slice(0, 2200)}`
     void sendText(text, cid)
-  }, [reader, pending, sendText])
+  }, [pending, sendText])
 
   /** 提交重命名：DB 标题 + 会话文件夹同步（无文件夹的旧会话不主动建，2-5 懒创建时自然用新名） */
   const commitRename = useCallback(async (sid: string) => {
@@ -1158,8 +1310,44 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     void refreshSessions()
   }, [refreshSessions])
 
-  const toolCount = liveSteps.filter(s => s.kind === 'tool').length
+  // 占位事件（args 无 artifact）不计入工具次数（它只是「开始生成」信号，正式 tool step 另有一条）
+  const toolCount = liveSteps.filter(s => s.kind === 'tool' && !(s.name === 'visual.html' && s.args && !s.artifact)).length
   const lastStep = liveSteps[liveSteps.length - 1]
+  // ---------- 工件栏布局（§1.2/§1.3）：分隔条拖拽 + 双右栏联动 ----------
+  const rowRef = useRef<HTMLDivElement>(null)
+  const [rowW, setRowW] = useState(0)
+  useEffect(() => {
+    const el = rowRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setRowW(el.clientWidth))
+    ro.observe(el)
+    setRowW(el.clientWidth)
+    return () => ro.disconnect()
+  }, [activeWs])
+  /** 双窗口判定：工件栏有页签即在（内容驱动，无折叠态；空栏不挤占素材库） */
+  const artExpanded = artTabs.length > 0
+  /** 窄窗兜底（§1.3）：<1100px 工件栏降宽至 40% */
+  const artPctEff = rowW > 0 && rowW < 1100 ? Math.min(artPct, 40) : artPct
+  // 工件栏展开 → 素材库自动收起（一次折叠动画，不改意图态）；工件栏收起 → 按意图恢复
+  useEffect(() => {
+    if (artExpanded) setSrcVisible(false)
+    else setSrcVisible(localStorage.getItem('aiTeach.rightOpen') !== '0')
+  }, [artExpanded])
+  const onDividerDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const row = rowRef.current
+    if (!row) return
+    const rect = row.getBoundingClientRect()
+    const onMove = (ev: MouseEvent): void => { setArtPct(Math.min(60, Math.max(24, (rect.right - ev.clientX) / rect.width * 100))) }
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [setArtPct])
   // P3a（§3.8-1）：快速定位条锚点——每条 AI 回答取首行标题（标题规则由主进程注入，3-13）
   const anchors = useMemo(
     () => messages.flatMap((m, idx) => (m.role === 'assistant' ? [{ idx, title: msgAnchorTitle(m.content, idx) }] : [])),
@@ -1181,12 +1369,12 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setActiveAnchor(cur)
   }, [anchors])
   useEffect(() => { setActiveAnchor(0) }, [activeId])
-  // 返回对话视图（docView 清空）后恢复滚动位置；切换会话则归零（从顶部看新会话）
+  // 题目视图会卸载对话容器：切回对话恢复滚动位置；切换会话则归零（从顶部看新会话）
   useEffect(() => {
-    if (docView) return
+    if (midView !== 'chat') return
     const t = convScrollTop.current
     if (t > 0) requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = t })
-  }, [docView, activeId])
+  }, [midView, activeId])
 
   // P3b：切会话时同步模型/思考强度控件到该会话的覆盖值（未覆盖=跟随全局默认）
   useEffect(() => {
@@ -1235,7 +1423,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (!sid) return
     const key = mid ?? `idx${idx}`
     const existing = organized[key]
-    if (existing) { void openDocView(existing); return } // P4 方案 B 入口②：已生成 → 中栏阅读
+    if (existing) { void openArtFile(existing); return } // 工件栏入口②：已生成 → 页签阅读
     const title = msgAnchorTitle(content, idx)
     const r = await aiTeachOrganizeDoc(sid, title, content).catch(() => null)
     if (r?.ok && r.relPath) {
@@ -1289,7 +1477,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       <button onClick={() => setMidView('chat')} className={chipCls(midView === 'chat')}>💬 对话</button>
       <button onClick={() => setMidView('quiz')} className={chipCls(midView === 'quiz')}>📝 题目{quizItems.length > 0 ? `（${quizItems.length}）` : ''}</button>
       {lastQuizReport && (
-        <button onClick={() => { void openDocView(lastQuizReport.rel) }} title="中栏阅读最近一次测验报告"
+        <button onClick={() => { void openArtFile(lastQuizReport.rel) }} title="工件栏阅读最近一次测验报告"
           className="ml-auto text-[10.5px] px-1.5 py-0.5 rounded-md text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors truncate max-w-[220px]">
           🧾 最近测验 {lastQuizReport.score} · 报告 →
         </button>
@@ -1365,9 +1553,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             <span>画像</span>
             {profileSuggestion && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" title="AI 有画像更新建议待确认" />}
           </button>
-          {/* 右栏展开入口：右栏收起（面板彻底消失）时顶栏显示，点击恢复素材库（参照外部产品：入口在顶栏） */}
-          {!rightOpen && (
-            <button onClick={() => toggleSide('right')} title="展开右栏（素材库）"
+          {/* 右栏展开入口：右栏不可见（收起或被工件栏自动收起）时顶栏显示，点击恢复素材库（参照外部产品：入口在顶栏） */}
+          {!srcVisible && (
+            <button onClick={openSources} title="展开右栏（素材库）"
               className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
               <PanelRightOpen size={12} />
               <span>素材库</span>
@@ -1421,7 +1609,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 />
                 <div className="shrink-0 flex items-center gap-2 px-4 py-3">
                   {instrRel && (
-                    <button onClick={() => { setInstrOpen(false); void openDocView(instrRel) }} title="在方案 B 阅读视图中打开本文件"
+                    <button onClick={() => { setInstrOpen(false); void openArtFile(instrRel) }} title="在工件栏阅读视图中打开本文件"
                       className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors truncate max-w-[220px]" >📖 在阅读视图中打开 →</button>
                   )}
                   {instrRel && <span className="truncate text-[10px] text-[var(--text-muted)] flex-1 min-w-0" title={instrRel}>{instrRel}</span>}
@@ -1461,7 +1649,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0">
+      <div ref={rowRef} className="flex flex-1 min-h-0">
         {/* 左栏（P4 §3.7 + UI 优化条目2/3）：ResizablePanel 可调宽持久化 + 折叠贴边条（悬停高亮，点/拖展开）；
             分区体 grid-rows 动画常挂载（滚动/展开状态自然保留），折叠态 visibility 兜底 */}
         <ResizablePanel side="left" storageKey="aiTeach.leftWidth" defaultWidth={248} minWidth={200} maxWidth={400}
@@ -1473,8 +1661,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               <div className="h-full min-h-0 pb-1">
                 <AiTeachFileTree
                   subRel={wsTreeSeg}
-                  activeRel={docView && docView.rel.startsWith(`${treeBase}/`) ? docView.rel.slice(treeBase.length + 1) : null}
-                  onOpenMd={(rel) => { void openDocView(`${treeBase}/${rel}`) }}
+                  activeRel={(() => { const r = artTabs.find(t => t.id === artActive && !t.generating)?.rel ?? null; return r && r.startsWith(`${treeBase}/`) ? r.slice(treeBase.length + 1) : null })()}
+                  onOpenMd={(rel) => { void openArtFile(`${treeBase}/${rel}`) }}
+                  onOpenHtml={(rel) => { void openArtFile(`${treeBase}/${rel}`) }}
                   onOpenExternal={(rel) => { window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: `${treeBase}/${rel}`, from: 'aiTeaching' } })) }}
                 />
               </div>
@@ -1527,43 +1716,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
           </div>
         </ResizablePanel>
 
-        {/* 中栏：阅读视图（P4 方案 B 接管） > 逐页阅读 > 对话流 */}
+        {/* 中栏（工件栏方案 §1.2 定稿）：对话主区固定、永不替换；原 docView/reader 分支整体迁入右缘工件栏页签 */}
         <section className="flex-1 flex flex-col min-w-0 min-h-0">
-          {docView ? (
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] text-[11.5px] select-none">
-                <button onClick={() => setDocView(null)}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0">
-                  <ArrowLeft size={12} /> 返回对话
-                </button>
-                <FileText size={12} className="shrink-0 text-[var(--accent)]" />
-                <span className="font-medium truncate text-[var(--text-primary)]" title={docView.rel}>{docView.name}</span>
-                <span className="text-[10px] text-[var(--text-muted)] truncate hidden xl:inline">{docView.rel}</span>
-                <button onClick={() => { const rel = docView.rel; window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel, from: 'aiTeaching' } })) }}
-                  className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-                  title="在编辑器标签页中打开（可编辑保存）">
-                  <ExternalLink size={11} /> 在编辑器中打开 ↗
-                </button>
-              </div>
-              <div className="flex-1 flex min-h-0">
-                <div ref={docScrollRef} onScroll={e => { docScrollPos.current[docView.rel] = (e.target as HTMLDivElement).scrollTop }} className="flex-1 overflow-y-auto min-h-0">
-                  <div className="max-w-[820px] mx-auto py-5 px-6">
-                    <MarkdownPreview content={docView.content} />
-                  </div>
-                </div>
-                {docOutline.length > 2 && (
-                  <div className="w-[150px] shrink-0 border-l border-[var(--border-color)] overflow-y-auto py-2 hidden lg:block" title="文档大纲（h2/h3，点击定位）">
-                    <div className="px-2.5 pb-1 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">大纲</div>
-                    {docOutline.map((h, i) => (
-                      <button key={`${h.id}-${i}`} onClick={() => { const el = docScrollRef.current?.querySelector(`[id="${CSS.escape(h.id)}"]`); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
-                        className={`block w-full text-left px-2.5 py-0.5 text-[10.5px] truncate text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors ${h.lv === 3 ? 'pl-5' : ''}`}
-                        title={h.text}>{h.text}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : !reader && midView === 'quiz' ? (
+          {midView === 'quiz' ? (
             /* P7（§3.2-7）：题目视图——题目 = 对话回答里的 ```quiz 围栏协议块（QuizParser 解析） */
             <div className="flex-1 flex flex-col min-h-0 relative">
               {midChips}
@@ -1612,7 +1767,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 />
               )}
             </div>
-          ) : !reader ? (
+          ) : (
             <>
               {midChips}
               {activeInstr && !instrDismiss && (
@@ -1638,6 +1793,25 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                       <div className="min-w-0">
                         {/* P8：```profile 建议块不直显；条目11/12：```plan / ```ask 协议块同样收敛（plan→侧栏、ask→提问卡） */}
                         <MarkdownPreview content={m.content.replace(/```(profile|plan|ask)[^\n]*\n[\s\S]*?```/g, '')} />
+                        {/* 工件栏方案 §2：visual.html 工件卡（对话流唯一形态，HTML 正文永不进流）——数据源=trace 里的 artifact step */}
+                        {(m.trace ?? []).some(s => s.artifact) && (
+                          <div className="mt-1.5 space-y-1">
+                            {(m.trace ?? []).filter(s => s.artifact).map((s, k) => {
+                              const a = s.artifact as NonNullable<typeof s.artifact>
+                              return (
+                                <button key={k} onClick={() => { void openArtFile(a.rel, { title: a.title, lines: a.lines }) }} title={a.rel}
+                                  className="w-full max-w-[440px] flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] hover:border-[var(--accent)]/50 transition-colors text-left">
+                                  <ImageIcon size={13} className="shrink-0 text-[var(--accent)]" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[12px] text-[var(--text-primary)]">{a.title || a.rel.split('/').pop()}</span>
+                                    <span className="block truncate text-[10px] text-[var(--text-muted)]">{a.rel} · {a.lines} 行 · 单文件自包含</span>
+                                  </span>
+                                  <span className="shrink-0 text-[10.5px] text-[var(--text-muted)]">在工件栏打开 →</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
                         {/* UI 优化条目4：操作条升格为轻 chip 条（11.5px+图标，对齐顶栏 chip 规范）；时间戳坏数据不渲染 */}
                         <div className="text-[11.5px] mt-1.5 flex items-center gap-1.5 -ml-1.5">
                           <button onClick={() => { void organizeDocFor(m.content, idx, m.id) }}
@@ -2031,75 +2205,52 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 </div>
               </div>
             </>
-          ) : (
-            /* 幻灯片逐页阅读（素材 .pptx）：reader 激活时占用中栏（P3a 起为对话流的二选一视图） */
-            <div className="flex flex-col min-h-0">
-              <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[var(--border-color)] text-[11.5px]">
-                <Presentation size={12} className="text-[var(--text-muted)] shrink-0" />
-                <span className="font-medium truncate">{reader.name}</span>
-                <span className="text-[var(--text-muted)] shrink-0">素材阅读</span>
-                <span className="flex-1" />
-                <span className="text-[var(--text-muted)] tabular-nums shrink-0">第 {reader.cur + 1} / {reader.pages.length} 页</span>
-                <button onClick={() => goPage(-1)} disabled={reader.cur === 0}
-                  className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors" title="上一页">
-                  <ChevronLeft size={13} />
-                </button>
-                <button onClick={() => goPage(1)} disabled={reader.cur >= reader.pages.length - 1}
-                  className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors" title="下一页">
-                  <ChevronRight size={13} />
-                </button>
-                <button onClick={() => { void talkCurrentPage() }}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors shrink-0">
-                  讲解此页
-                </button>
-                <button onClick={() => setReader(null)} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0" title="关闭">
-                  <X size={13} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto min-h-0">
-                <div className="max-w-[860px] mx-auto py-4 px-5">
-                  <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-5 py-4 min-h-[260px]">
-                    <div className="inline-flex items-center gap-1 text-[10.5px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] mb-3">
-                      第 {reader.cur + 1} 页 · 原文编号 {reader.pages[reader.cur]?.n}
-                    </div>
-                    {reader.pages[reader.cur]?.text?.trim() ? (
-                      <pre className="whitespace-pre-wrap break-words font-[var(--font-sans)] text-[13px] leading-relaxed">{reader.pages[reader.cur]?.text}</pre>
-                    ) : (
-                      <div className="text-[12px] text-[var(--text-muted)]">（本页无文字内容——多为图表演示页）</div>
-                    )}
-                  </div>
-                  <div className="flex justify-between mt-3">
-                    <button onClick={() => goPage(-1)} disabled={reader.cur === 0}
-                      className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors">
-                      ← 上一页
-                    </button>
-                    <button onClick={() => { void talkCurrentPage() }}
-                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">
-                      让 AI 讲这一页
-                    </button>
-                    <button onClick={() => goPage(1)} disabled={reader.cur >= reader.pages.length - 1}
-                      className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors">
-                      下一页 →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
           )}
         </section>
+
+        {/* 工件栏（docs/ai-teaching-artifacts-pane-design.md §1.2）：分隔条可拖 24%~60%、双击复位 46、宽度持久化。
+            无打开页签即不渲染——工件栏没有主动展开把手（2026-09-09 用户拍板：右缘把手与素材库拉出条冲突），
+            打开任意文件/工件卡自动出现，关掉全部页签自动消失 */}
+        {artExpanded && (
+          <>
+          <div onMouseDown={onDividerDown} onDoubleClick={() => setArtPct(46)} title="拖拽调宽（24%~60%）· 双击复位"
+            className="group shrink-0 w-[5px] cursor-col-resize relative z-[5]">
+            <div className="absolute top-0 bottom-0 left-2 w-px group-hover:left-1 group-hover:w-[3px] bg-[var(--border-color)] group-hover:bg-[var(--accent)] transition-all" />
+          </div>
+          <div className="shrink-0 min-h-0" style={{ width: `${artPctEff}%`, minWidth: 300 }}>
+            <ArtifactsPane
+              tabs={artTabs}
+              activeId={artActive}
+              widthPx={rowW > 0 ? Math.floor(rowW * artPctEff / 100) : 480}
+              htmlSeq={htmlSeq}
+              onActivate={setArtActive}
+              onClose={closeArtTab}
+              onReload={reloadArtTab}
+              onPptxPage={setArtPptxPage}
+              onTalkPage={talkArtPage}
+              pending={pending}
+              onEdit={(rel) => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel, from: 'aiTeaching' } }))}
+            />
+          </div>
+          </>
+        )}
 
         {/* 右栏（UI 优化条目2/5）：ResizablePanel 可调宽持久化 + 折叠贴边条；「素材库/资料来源」双区块合并为素材库单一区块。
             收起 = 面板彻底消失（collapsedWidth=0，2026-09-08 用户拍板参照外部产品），展开入口在顶栏工具组 */}
         <ResizablePanel side="right" storageKey="aiTeach.rightWidth" defaultWidth={280} minWidth={240} maxWidth={420}
           collapsedWidth={0}
-          visible={rightOpen} onSnapClose={() => toggleSide('right')} onSnapOpen={() => toggleSide('right')}>
-          <div className="h-full min-h-0 overflow-y-auto flex flex-col">
+          visible={srcVisible} onSnapClose={() => toggleSide('right')} onSnapOpen={() => toggleSide('right')}>
+          <div className="h-full min-h-0 flex flex-col">
           <div className="shrink-0">
             <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
               <span title="工作区 SOURCES/{对话}/SOURCE.md（§3.13 素材库结构 v3）">素材库{srcEntries.length > 0 ? `（${srcEntries.length}）` : ''}</span>
               <div className="ml-auto flex items-center gap-1">
+                {srcEntries.length > 0 && (
+                  <button onClick={() => setSrcCompact(!srcCompact)} title={srcCompact ? '展开卡片：恢复每条两行完整信息' : '收起卡片：全部压成单行细条（再点展开）'}
+                    className={`px-1 py-0.5 rounded-md transition-colors ${srcCompact ? 'text-[var(--accent)] bg-[var(--accent)]/10 font-medium' : 'hover:bg-[var(--bg-hover)]'}`}>{srcCompact ? '展开卡片' : '收起卡片'}</button>
+                )}
                 {srcFileRel && (
-                  <button onClick={() => { void openDocView(srcFileRel) }} title="中栏阅读 SOURCE.md"
+                  <button onClick={() => { void openArtFile(srcFileRel) }} title="工件栏阅读 SOURCE.md"
                     className="px-1 py-0.5 rounded-md hover:bg-[var(--bg-hover)] transition-colors">SOURCE</button>
                 )}
                 {/* 素材随对话登记：未选/未建会话时不渲染添加入口（点了也只会被引导，徒增噪音——2026-09-08 用户拍板） */}
@@ -2114,9 +2265,27 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                 )}
               </div>
             </div>
+          </div>
+          {/* 过滤 chips（方案 B）：单选、横向可滚、零数量组隐藏；只影响列表渲染，不动 SOURCE.md 与 AI 注入 */}
+          {srcEntries.length > 0 && (
+            <div className="shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-[var(--border-color)] overflow-x-auto [scrollbar-width:none]">
+              {[{ key: 'all', label: '全部' }, ...SRC_GROUPS].map(g => {
+                const n = g.key === 'all' ? srcEntries.length : srcEntries.filter(e => srcGroupKey(e.type) === g.key).length
+                if (g.key !== 'all' && n === 0) return null
+                return (
+                  <button key={g.key} onClick={() => setSrcFilter(g.key)}
+                    className={`shrink-0 px-2 py-px rounded-full border text-[10.5px] whitespace-nowrap transition-colors duration-[180ms] ${srcFilter === g.key ? 'bg-[var(--accent)] border-[var(--accent)] text-white' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent)]/50'}`}>
+                    {g.label} {n}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {/* 素材列表内部滚动（方案 A，修「一锅滚」）：改动/进度钉底后，此处独立滚动 */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {/* 条目5.3：手编 / AI 直写 SOURCE.md 的形状异常提示（不静默丢失，指回文件改正） */}
             {srcAnom && (srcAnom.unnamed > 0 || srcAnom.dupNo > 0 || (srcAnom.noPath ?? 0) > 0) && (
-              <button onClick={() => { if (srcFileRel) void openDocView(srcFileRel) }}
+              <button onClick={() => { if (srcFileRel) void openArtFile(srcFileRel) }}
                 className="w-full flex items-start gap-1.5 px-2 py-1.5 border-b border-[var(--border-color)] bg-[var(--warning-bg)]/40 text-left text-[10.5px] text-[var(--warning)] hover:opacity-80 transition-opacity"
                 title={`小节标题需为「### 编号. 名称」，字段行「- 字段: 值」。「路径」是登记必要信息，缺路径的小节不会出现在素材库。点击打开 SOURCE.md 修正。`}>
                 <span className="shrink-0">⚠</span>
@@ -2131,69 +2300,32 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               </button>
             )}
             {srcEntries.length > 0 ? (
-              <div className="p-2 space-y-1">
-                {srcEntries.map(e => {
-                  const extMatch = /^✓\s*→\s*(.+)$/.exec(e.extracted)
-                  const dirRel = srcFileRel ? srcFileRel.slice(0, srcFileRel.lastIndexOf('/')) : ''
-                  const extractable = (e.type === 'pdf' || e.type === 'pptx' || e.type === 'code') && !extMatch && e.range && e.range !== '-' // 条目10：code 按行号区间提取
-                  const inRepo = e.path.startsWith('./') || (srcFileRel && !/^[a-zA-Z]:|^https?:|^\//.test(e.path))
-                  return (
-                    <div key={e.no} className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="shrink-0 text-[10px] font-medium text-[var(--text-muted)]">#{e.no}</span>
-                        <span className="flex-1 min-w-0 truncate text-[11.5px] text-[var(--text-primary)]" title={e.note || e.name}>{e.name}</span>
-                        <span className="shrink-0 px-1 rounded text-[9.5px] uppercase text-[var(--text-muted)] border border-[var(--border-color)]">{e.type}</span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-[10.5px] text-[var(--text-muted)]">
-                        {e.range && e.range !== '-' && <span title={e.type === 'code' ? '行号区间' : '页码区间'}>{e.type === 'code' ? 'L' : 'p'}{e.range}</span>}
-                        <span title={e.path}>{e.storage === '已入库' ? '已入库' : (e.path.startsWith('http') ? '链接' : '引用')}</span>
-                        <div className="ml-auto flex items-center gap-1.5">
-                          {e.type === 'url' && /^https?:\/\//i.test(e.path) && (
-                            <button onClick={() => setWebDlg({ no: e.no, name: e.name, path: e.path })}
-                              title={extMatch ? '补抓/重抓：已存在章节自动跳过，只补失败与新增页' : '展开网页：探测目录/单文章，勾选章节批量抓取为提取稿（零 token 纯程序流水线）'}
-                              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">{extMatch ? '补抓' : '展开网页'}</button>
-                          )}
-                          {extMatch && dirRel && (
-                            <button onClick={() => { void openDocView(`${dirRel}/${extMatch[1].trim()}`) }} title="阅读提取稿（可编辑）"
-                              className="text-[var(--accent)] hover:opacity-80 transition-opacity">提取稿 ✓</button>
-                          )}
-                          {extractable && (
-                            <button onClick={() => { void doExtract(e.no) }} disabled={srcBusy === e.no}
-                              className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
-                              {srcBusy === e.no ? <Loader2 size={9} className="animate-spin" /> : <BookOpen size={9} />}{srcBusy === e.no ? '提取中…' : '提取'}
-                            </button>
-                          )}
-                          {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
-                            /* 3-21 手动档→分批流水线：区间页栅格化→视觉模型转写（公式/图形/扫描件），
-                               >12 页自动分批+断点续转（提取稿已有页跳过），结果非破坏并入提取稿；
-                               pptx（2026-09-09 B 方案）由主进程 soffice 转 PDF 后同链路栅格化 */
-                            <button onClick={() => { void doTranscribe(e.no) }} disabled={!!visionBusy}
-                              title={visionBusy?.no === e.no ? visionBusy.label : e.type === 'pptx'
-                                ? '视觉转写：pptx 先经本机 LibreOffice 转 PDF 再逐页转写（需已安装 LibreOffice，可在设置→AI 模型→LibreOffice 路径指定）；文本提取对多数 PPT 公式已够用'
-                                : '视觉转写：把登记区间的页面交给视觉模型转写（>12 页自动分批、断点续转），并入提取稿后可编辑。点击可中途停止'}
-                              className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
-                              {visionBusy?.no === e.no ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
-                              {visionBusy?.no === e.no ? '转写中…' : '转写'}
-                            </button>
-                          )}
-                          {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
-                            /* 同一原件再加区间（2026-09-08 用户需求）：一个 PDF 多章 = 多条目共享同一份
-                               已入库原件（不再重复拷贝），各条目独立转写/提取/编号引用 */
-                            <button onClick={() => setSrcForm({ name: e.name, type: e.type, path: e.path, storage: '仅引用', rangeFrom: '', rangeTo: '', note: '' })}
-                              title="同一文件换个页码区间再登记一条（如另一章）——不重复拷贝原件"
-                              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">再加区间</button>
-                          )}
-                          {inRepo && e.path.startsWith('./') && dirRel && e.type === 'pptx' && (
-                            <button onClick={() => { void openPptxReader(`${dirRel}/${e.path.slice(2)}`, e.name) }} title="逐页阅读原件"
-                              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">原件</button>
-                          )}
-                          <button onClick={() => { void doRemoveSrc(e.no, e.name) }} title="移除登记（不删文件）"
-                            className="text-[var(--text-muted)] hover:text-red-400 transition-colors"><X size={10} /></button>
+              <div className="p-2 pt-1.5">
+                {(() => {
+                  const groups = SRC_GROUPS
+                    .map(g => ({ g, items: srcEntries.filter(e => srcGroupKey(e.type) === g.key && (srcFilter === 'all' || srcFilter === g.key)) }))
+                    .filter(x => x.items.length > 0)
+                  if (groups.length === 0) return <div className="px-3 py-4 text-center text-[11px] text-[var(--text-muted)]">该类型下暂无素材</div>
+                  return groups.map(({ g, items }) => {
+                    const closed = srcFilter === 'all' && groupClosed.has(g.key)
+                    return (
+                      <div key={g.key} className="mb-1.5">
+                        {/* 组头：箭头(260ms 旋转) + 色点 + 名称 + 计数徽标；点击 1fr↔0fr 折叠（360ms 定稿曲线） */}
+                        <button onClick={() => toggleSrcGroup(g.key)} className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-[11px] font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors select-none">
+                          <ChevronDown size={11} className={`shrink-0 text-[var(--text-muted)] kb-group-anim transition-transform duration-[260ms] ${SRC_EASE} ${closed ? '-rotate-90' : ''}`} />
+                          <span className="w-1.5 h-1.5 rounded-[2px] shrink-0" style={{ background: g.color }} />
+                          <span>{g.label}</span>
+                          <span className="ml-auto text-[9.5px] font-normal text-[var(--text-muted)] border border-[var(--border-color)] rounded-full px-1.5 leading-[15px]">{items.length}</span>
+                        </button>
+                        <div className={`grid kb-group-anim transition-[grid-template-rows] duration-[360ms] ${SRC_EASE} ${closed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
+                          <div className={`min-h-0 overflow-hidden kb-group-anim transition-[opacity,transform] duration-[300ms] ${SRC_EASE} ${closed ? 'opacity-0 translate-x-1.5' : 'opacity-100 translate-x-0'}`}>
+                            <div className="pt-1 space-y-1">{items.map(renderSrcCard)}</div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                })()}
               </div>
             ) : (
               <div className="px-3 py-4 text-center text-[11px] text-[var(--text-muted)] leading-relaxed">
@@ -2201,6 +2333,29 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               </div>
             )}
           </div>
+          {/* 钉底区（方案 D）：转写进度卡上移至此 + 本次改动，素材再多也永不被列表推走 */}
+          <div className="shrink-0">
+          {/* 转写进度卡片：钉底区顶部（右栏改造方案 D——原「列表尾部空白区」会被素材增长推走，现固定可见） */}
+          {visionBusy && (
+            <div className="shrink-0 mx-2 mt-2 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-3 py-2.5">
+              <div className="flex items-center gap-2 mb-2">
+                <Loader2 size={12} className="animate-spin text-[var(--accent)] shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-[var(--text-primary)]">视觉转写 · {visionBusy.label}</span>
+                <button onClick={() => { transcribeStopRef.current = true }} title="停止转写（已完成页保留，重发同区间自动续转）"
+                  className="shrink-0 text-[10.5px] px-2 py-0.5 rounded-md border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors">停止</button>
+              </div>
+              <div className="h-2 rounded-full bg-[var(--bg-primary)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent)]/50 transition-all duration-500 animate-pulse"
+                  style={{ width: `${visionBusy.total ? Math.max(4, Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100))) : 10}%` }}
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                <span>已转写 {visionBusy.done ?? 0} / {visionBusy.total ?? '…'} 页</span>
+                <span>{visionBusy.total ? Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100)) : 0}%</span>
+              </div>
+            </div>
+          )}
           {/* 条目5.1：旧「资料来源」区块退役（PPT 逐页阅读时代遗留）——pptx 原件阅读走素材库条目「原件」按钮（同一 openPptxReader） */}
           {/* 条目5.4：静态「产物」占位区块移除——产物清单由左栏资源管理器承接（真数据同源） */}
           <div className="shrink-0 pb-2">
@@ -2212,8 +2367,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                     {lastChanges.map((c, i) => (
                       <li key={i}>
                         {c.file ? (
-                          <button onClick={() => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file, from: 'aiTeaching' } }))}
-                            title="在编辑器中打开"
+                          <button onClick={() => (c.tool === 'visual.html' ? void openArtFile(String(c.file), { title: c.target }) : window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: c.file, from: 'aiTeaching' } })))}
+                            title={c.tool === 'visual.html' ? '在工件栏打开渲染预览' : '在编辑器中打开'}
                             className="w-full flex items-center gap-1.5 px-2.5 py-1 text-left text-[11.5px] group hover:bg-[var(--bg-hover)] transition-colors">
                             <FileText size={10} className="shrink-0 text-[var(--accent)]" />
                             <span className="shrink-0 text-[var(--accent)]">{c.action}</span>
@@ -2235,28 +2390,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               <div className="py-6 text-center text-[12px] text-[var(--text-muted)]">本轮暂无写入改动</div>
             )}
           </div>
-          {/* 转写进度卡片（2026-09-08 用户拍板：进度展示移到右栏底部空白区，条目行不再挤塞） */}
-          {visionBusy && (
-            <div className="shrink-0 mx-2 mb-2 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-3 py-2.5">
-              <div className="flex items-center gap-2 mb-2">
-                <Loader2 size={12} className="animate-spin text-[var(--accent)] shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-[11.5px] text-[var(--text-primary)]">视觉转写 · {visionBusy.label}</span>
-                <button onClick={() => { transcribeStopRef.current = true }} title="停止转写（已完成页保留，重发同区间自动续转）"
-                  className="shrink-0 text-[10.5px] px-2 py-0.5 rounded-md border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors">停止</button>
-              </div>
-              <div className="h-2 rounded-full bg-[var(--bg-primary)] overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent)]/50 transition-all duration-500 animate-pulse"
-                  style={{ width: `${visionBusy.total ? Math.max(4, Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100))) : 10}%` }}
-                />
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
-                <span>已转写 {visionBusy.done ?? 0} / {visionBusy.total ?? '…'} 页</span>
-                <span>{visionBusy.total ? Math.min(100, Math.round((visionBusy.done ?? 0) / visionBusy.total * 100)) : 0}%</span>
-              </div>
-            </div>
-          )}
-          {!visionBusy && <div className="flex-1" />}
           <div className="p-2 shrink-0 flex items-center justify-between">
             <button onClick={() => { if (activeId) { void refreshMessages(activeId); void refreshSources(activeId); showToast({ type: 'info', message: '已刷新消息与素材列表' }) } }}
               className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors text-left">
@@ -2268,12 +2401,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
             </button>
           </div>
           </div>
+          </div>
         </ResizablePanel>
         {/* 右缘透明拉出条（2026-09-08 用户拍板：收起后面板彻底消失，但右缘保留透明拉出条——
             默认透明，悬停显示蓝色高亮竖条。两种展开方式：点击直接展开 / 按住向左拖过
             minWidth 一半即展开（与 ResizablePanel onEdgeMouseDown 同语义）；
             拖拽展开后抑制随后的 click 派发防二次翻转；顶栏「素材库」按钮为等效入口 */}
-        {!rightOpen && (
+        {!srcVisible && (
           <div
             data-edge-strip="right"
             title="点击或向左拖拽展开素材库"
@@ -2287,7 +2421,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               let opened = false
               const onMove = (ev: MouseEvent): void => {
                 if (opened) return
-                if (startX - ev.clientX > 120) { opened = true; toggleSide('right') }
+                if (startX - ev.clientX > 120) { opened = true; openSources() }
               }
               const onUp = (): void => {
                 document.body.style.cursor = ''
@@ -2303,7 +2437,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               window.addEventListener('mousemove', onMove)
               window.addEventListener('mouseup', onUp)
             }}
-            onClick={() => toggleSide('right')}
+            onClick={openSources}
           >
             <div className="absolute top-0 bottom-0 right-0 w-1 bg-[var(--accent)]/0 group-hover:bg-[var(--accent)]/60 transition-colors duration-150" />
           </div>

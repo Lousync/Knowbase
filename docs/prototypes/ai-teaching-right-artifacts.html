@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 教学 · 对话左 + 工件右栏（页签切换 + AI 生成 HTML 示意图）原型</title>
+<style>
+  :root {
+    --bg-primary: #ffffff; --bg-secondary: #f6f7f9; --bg-hover: #ececf0;
+    --border: #e2e4e9; --text-1: #1f2328; --text-2: #57606a; --text-3: #8b949e;
+    --accent: #4f6bed; --accent-soft: rgba(79,107,237,.10);
+    --success: #2da44e; --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+    background: #dfe3ea; color: var(--text-1); font-size: 13px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .page-note { position: fixed; top: 10px; left: 14px; font-size: 11px; color: #6b7280; user-select: none; }
+  .window {
+    width: min(1360px, 97vw); height: min(840px, 95vh);
+    background: var(--bg-primary); border: 1px solid #c9cdd6; border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(20,30,60,.18); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .titlebar { height: 30px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 10px; gap: 6px; flex-shrink: 0; user-select: none; }
+  .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .titlebar .t { margin-left: 8px; font-size: 11px; color: var(--text-3); }
+  .topbar { height: 36px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px; padding: 0 10px; flex-shrink: 0; user-select: none; }
+  .ws-chip { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; }
+  .ws-chip:hover { background: var(--bg-hover); }
+  .tab { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+  .tab.active { background: var(--bg-hover); color: var(--text-1); box-shadow: inset 0 0 0 1px rgba(79,107,237,.35); }
+  .tools { margin-left: auto; display: flex; gap: 4px; font-size: 11.5px; color: var(--text-2); }
+  .tool-btn { border: none; background: none; font-family: inherit; font-size: 11.5px; color: var(--text-2); padding: 3px 8px; border-radius: 6px; cursor: pointer; }
+  .tool-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  /* ===== 左：对话（主区，永不替换） ===== */
+  .chat { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  .chat-head { flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 7px 12px 5px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); user-select: none; }
+  .mchip { border: none; background: none; font-family: inherit; font-size: 11.5px; padding: 3px 9px; border-radius: 99px; cursor: pointer; color: var(--text-2); }
+  .mchip.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .mchip:hover:not(.active) { background: var(--bg-hover); }
+  .chat-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 14px 18px 8px; display: flex; flex-direction: column; gap: 13px; }
+  .msg.user { align-self: flex-end; max-width: 80%; }
+  .msg.user .bubble { background: var(--accent); color: #fff; border-radius: 12px 12px 3px 12px; padding: 8px 12px; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; }
+  .msg.ai .body { font-size: 12.5px; line-height: 1.7; color: #2b3138; max-width: 92%; }
+  .msg.ai .body p { margin: 5px 0; }
+  .msg.ai .body b { color: var(--text-1); }
+  .msg.ai .body code { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 11.5px; }
+  .msg .ops { display: flex; align-items: center; gap: 8px; margin-top: 5px; font-size: 11px; color: var(--text-3); flex-wrap: wrap; }
+  .msg .ops button { border: none; background: none; font-family: inherit; font-size: 11px; color: var(--text-2); cursor: pointer; padding: 2px 6px; border-radius: 5px; }
+  .msg .ops button:hover { background: var(--bg-hover); color: var(--text-1); }
+  .trace { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--text-3); background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 99px; padding: 1px 8px; }
+  .trace i { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  /* 工件卡（对话流内唯一形态：轻量一行卡） */
+  .art-card {
+    display: flex; align-items: center; gap: 8px; margin-top: 7px; padding: 7px 11px;
+    border: 1px solid rgba(79,107,237,.4); background: var(--accent-soft); border-radius: 9px;
+    cursor: pointer; max-width: 92%; transition: background .15s;
+  }
+  .art-card:hover { background: rgba(79,107,237,.16); }
+  .art-card .ico { font-size: 14px; }
+  .art-card .meta { min-width: 0; }
+  .art-card .nm { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-card .sub { font-size: 10.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-card .go { margin-left: auto; flex-shrink: 0; font-size: 11px; color: var(--accent); }
+  .art-card.gen { border-style: dashed; cursor: default; }
+  .typing { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-3); }
+  .typing .dots span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); margin-right: 3px; animation: blink 1.2s infinite; }
+  .typing .dots span:nth-child(2) { animation-delay: .2s; }
+  .typing .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,70%,100% { opacity: .25; } 35% { opacity: 1; } }
+  .quick { flex-shrink: 0; display: flex; gap: 6px; padding: 6px 14px 0; flex-wrap: wrap; }
+  .qchip { border: 1px solid var(--border); background: var(--bg-primary); font-family: inherit; font-size: 11px; color: var(--text-2); padding: 3px 10px; border-radius: 99px; cursor: pointer; }
+  .qchip:hover { border-color: rgba(79,107,237,.5); color: var(--accent); }
+  .chat-input-wrap { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--bg-secondary); padding: 9px 14px 11px; display: flex; gap: 8px; align-items: flex-end; }
+  .input-box { flex: 1; min-height: 38px; max-height: 110px; resize: none; border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; font-family: inherit; font-size: 12.5px; outline: none; background: var(--bg-primary); }
+  .input-box:focus { border-color: rgba(79,107,237,.55); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .send-btn { width: 38px; height: 38px; border: none; border-radius: 10px; background: var(--accent); color: #fff; font-size: 15px; cursor: pointer; }
+  .send-btn:hover { opacity: .88; }
+
+  /* ===== 分隔条 ===== */
+  .divider { width: 5px; flex-shrink: 0; cursor: col-resize; position: relative; z-index: 5; }
+  .divider::after { content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 1px; background: var(--border); transition: background .15s, width .15s; }
+  .divider:hover::after, .divider.dragging::after { background: var(--accent); width: 3px; left: 1px; }
+
+  /* ===== 右：工件栏（页签条目切换） ===== */
+  .arts { width: 46%; flex-shrink: 0; min-width: 320px; display: flex; flex-direction: column; min-height: 0; background: var(--bg-secondary); border-left: 1px solid var(--border); position: relative; }
+  .arts.collapsed { display: none; }
+  .tabbar { flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 5px 8px 0; overflow-x: auto; scrollbar-width: none; background: var(--bg-secondary); }
+  .tabbar::-webkit-scrollbar { display: none; }
+  .atab {
+    display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 7px 7px 0 0;
+    font-size: 11.5px; color: var(--text-2); cursor: pointer; white-space: nowrap; max-width: 170px;
+    border: 1px solid transparent; border-bottom: none; position: relative; top: 1px;
+    transition: background .15s;
+  }
+  .atab:hover { background: var(--bg-hover); }
+  .atab.active { background: var(--bg-primary); border-color: var(--border); color: var(--text-1); font-weight: 600; }
+  .atab .ic { font-size: 11px; flex-shrink: 0; }
+  .atab .nm { overflow: hidden; text-overflow: ellipsis; }
+  .atab .x { flex-shrink: 0; opacity: .4; font-size: 10px; padding: 0 1px; border-radius: 3px; }
+  .atab .x:hover { opacity: 1; background: var(--bg-hover); }
+  .atab .x::first-line { font-size: 10px; }
+  .tabbar .sp { flex-shrink: 0; width: 4px; }
+  .tabbar .collapse-btn { margin-left: auto; flex-shrink: 0; }
+  .art-toolbar { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: var(--bg-primary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .art-toolbar .path { font-size: 10.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .art-toolbar .chip-btn { border: none; background: none; font-family: inherit; font-size: 11px; color: var(--text-2); padding: 2px 7px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+  .art-toolbar .chip-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .art-view { flex: 1; min-height: 0; background: var(--bg-primary); overflow-y: auto; }
+  .art-page { max-width: 720px; margin: 0 auto; padding: 20px 24px 60px; line-height: 1.75; font-size: 13px; animation: artin .28s var(--ease); }
+  @keyframes artin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .art-page h1 { font-size: 18px; margin: 4px 0 12px; }
+  .art-page h2 { font-size: 14.5px; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .art-page p { margin: 7px 0; color: #333a44; }
+  .art-page .formula { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 9px 13px; margin: 9px 0; text-align: center; font-family: Consolas, serif; }
+  .art-page .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; padding: 8px 12px; margin: 9px 0; font-size: 12px; color: #3d4db8; }
+  .art-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-3); font-size: 12px; }
+  /* 生成中占位 */
+  .gen-holder { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-3); font-size: 12px; }
+  .gen-holder .ring { width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ghost {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    width: 22px; padding: 14px 0; background: var(--bg-secondary); border: 1px solid var(--border);
+    border-right: none; border-radius: 8px 0 0 8px; cursor: pointer; z-index: 20; display: none;
+    align-items: center; justify-content: center; color: var(--text-3); font-size: 11px;
+    writing-mode: vertical-lr; letter-spacing: 2px;
+  }
+  .ghost.show { display: flex; }
+  .ghost:hover { color: var(--accent); background: var(--accent-soft); }
+  .hint-bar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: #1f2328; color: #e8eaee;
+    padding: 8px 14px; border-radius: 10px; font-size: 11.5px; display: flex; gap: 10px; align-items: center; z-index: 50; white-space: nowrap; }
+  .hint-bar b { color: #ffd76a; }
+  .hint-bar .close { cursor: pointer; opacity: .55; }
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1f2328; color: #fff; font-size: 12px; padding: 7px 16px; border-radius: 9px; z-index: 100; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.show { opacity: .94; }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-thumb { background: #d3d7de; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+</style>
+</head>
+<body>
+<div class="page-note">AI 教学 · 对话左 + 工件右栏（页签切换 · AI 生成 HTML 示意图走 visual.html 工具）</div>
+
+<div class="window">
+  <div class="titlebar">
+    <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+    <span class="t">Knowbase — AI 教学</span>
+  </div>
+  <div class="topbar">
+    <div class="ws-chip">📚 跟我学（数学） <span style="font-size:9px;opacity:.5">▾</span></div>
+    <div class="tab active">二次函数 · 基础 <span style="opacity:.45;font-size:11px">×</span></div>
+    <div class="tools">
+      <button class="tool-btn">✎ 会话要求</button>
+      <button class="tool-btn" onclick="toggleArts()">⇤ 工件栏</button>
+    </div>
+  </div>
+
+  <div class="body" id="bodyRow">
+    <!-- 左：对话主区 -->
+    <div class="chat">
+      <div class="chat-head">
+        <button class="mchip active">💬 对话</button>
+        <button class="mchip" onclick="toast('题目视图（原型略）')">📝 题目（3）</button>
+      </div>
+      <div class="chat-scroll" id="chatScroll"></div>
+      <div class="quick">
+        <button class="qchip" onclick="genVisual('open-width')">🎨 画个示意图：|a| 与开口胖瘦</button>
+        <button class="qchip" onclick="genVisual('vertex')">🎨 示意图：顶点式怎么平移</button>
+        <button class="qchip" onclick="openTab('jiangyi')">📄 打开讲义对照</button>
+      </div>
+      <div class="chat-input-wrap">
+        <textarea class="input-box" id="inputBox" placeholder="继续提问…（Enter 发送）"></textarea>
+        <button class="send-btn" id="sendBtn">↑</button>
+      </div>
+    </div>
+
+    <!-- 分隔条 -->
+    <div class="divider" id="divider"></div>
+
+    <!-- 右：工件栏 -->
+    <div class="arts" id="arts">
+      <div class="tabbar" id="tabbar"></div>
+      <div class="art-toolbar" id="artToolbar" style="display:none">
+        <span class="path" id="artPath"></span>
+        <button class="chip-btn" onclick="toast('在编辑器中打开（原型）')">↗ 编辑</button>
+        <button class="chip-btn" onclick="toast('已刷新（原型）')">⟳</button>
+        <button class="chip-btn" onclick="closeTab(activeId)">✕ 关闭</button>
+      </div>
+      <div class="art-view" id="artView"></div>
+      <div class="ghost" id="ghost" onclick="toggleArts()">‹ 工件</div>
+    </div>
+  </div>
+
+  <div class="hint-bar" id="hintBar">
+    <span>💡 试试：<b>点快捷 chip「画个示意图」</b>看 visual.html 生成全流程 · <b>页签条</b>切换/关闭多个文件 · <b>拖分隔条</b>调宽</span>
+    <span class="close" onclick="this.parentElement.style.display='none'">✕</span>
+  </div>
+</div>
+<div class="toast" id="toastEl"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ============ 工件数据 ============ */
+const ARTS = {
+  jiangyi: { icon: '📄', title: '课程讲义·二次函数.md', path: 'SOURCES/二次函数·基础/讲义.md', kind: 'doc',
+    html: `<h1>二次函数 · 基础讲义</h1>
+      <h2>开口方向</h2><p>a &gt; 0 开口向上，a &lt; 0 开口向下；<b>|a| 越大，开口越窄</b>。</p>
+      <div class="formula">y = ax² + bx + c　（a ≠ 0）</div>
+      <h2>对称轴与顶点</h2><p>对称轴 <b>x = −b/2a</b>，顶点 <b>(−b/2a, (4ac−b²)/4a)</b>。</p>
+      <div class="callout">💡 配方是研究三要素的万能钥匙。</div>` },
+  extract: { icon: '📄', title: '提取稿-第2章.md', path: 'SOURCES/二次函数·基础/提取稿-第2章.md', kind: 'doc',
+    html: `<h1>提取稿 · 第 2 章 图像性质</h1><p>（视觉转写产物，可编辑）本页摘录原 PPT 第 5-9 页：抛物线平移规律「左加右减、上加下减」…</p>` },
+  report: { icon: '📊', title: '随堂测验报告.md', path: 'SOURCES/二次函数·基础/随堂测验报告.md', kind: 'doc',
+    html: `<h1>随堂测验报告</h1><p>得分 <b style="color:var(--success)">4/5</b> · 错题：第 3 题对称轴符号。</p>` },
+  vis1: { icon: '🖼', title: '示意图·抛物线三要素.html', path: 'visuals/parabola-three-elements.html', kind: 'visual', gen: '已生成 · 98 行 · 单文件自包含',
+    html: visualSvg('#4f6bed', '#e8842a', 'y = x²（a=1）', 'y = −x² + 2（a=−1）',
+      ['顶点 (0,0)', '对称轴 x=0', '开口向上'], 40, 330) },
+};
+function visualSvg(c1, c2, l1, l2, notes, yv1, yv2) {
+  const pts = f => Array.from({length: 41}, (_, i) => { const x = -150 + i * 7.5; return `${340 + x},${f(x)}`; }).join(' ');
+  return `<svg viewBox="0 0 680 400" style="width:100%;background:#fff;border:1px solid var(--border);border-radius:10px">
+    <line x1="340" y1="20" x2="340" y2="380" stroke="#d3d7de" stroke-width="1"/>
+    <line x1="40" y1="330" x2="640" y2="330" stroke="#d3d7de" stroke-width="1"/>
+    <polyline points="${pts(x => 330 - 0.0032 * x * x - 20)}" fill="none" stroke="${c1}" stroke-width="2.5"/>
+    <polyline points="${pts(x => 330 + 0.0032 * x * x - 90)}" fill="none" stroke="${c2}" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="500" y="120" font-size="13" fill="${c1}" font-weight="600">${l1}</text>
+    <text x="500" y="360" font-size="13" fill="${c2}" font-weight="600">${l2}</text>
+    ${notes.map((n, i) => `<g><rect x="52" y="${58 + i * 30}" width="${n.length * 13 + 22}" height="22" rx="6" fill="#f6f7f9" stroke="#e2e4e9" stroke-width="0.5"/>
+      <text x="64" y="${73 + i * 30}" font-size="12" fill="#1f2328">${n}</text></g>`).join('')}
+    <text x="596" y="42" font-size="11" fill="#8b949e">示意图 · 由 AI 生成</text>
+  </svg><p style="font-size:11px;color:var(--text-3);margin-top:6px">上图为 visual.html 产物的预览模拟 —— 实现为 iframe/WebView 加载 visuals/ 下的单文件 HTML（渲染层不在本原型讨论范围）。</p>`;
+}
+
+/* ============ 页签管理 ============ */
+let openTabs = ['jiangyi', 'vis1'];
+let activeId = 'vis1';
+
+function renderTabs() {
+  const bar = $('tabbar');
+  bar.innerHTML = '';
+  openTabs.forEach(id => {
+    const a = ARTS[id];
+    const el = document.createElement('div');
+    el.className = 'atab' + (id === activeId ? ' active' : '');
+    el.innerHTML = `<span class="ic">${a.icon}</span><span class="nm">${a.title}</span><span class="x" onclick="event.stopPropagation();closeTab('${id}')">✕</span>`;
+    el.onclick = () => { activeId = id; renderTabs(); renderArt(); };
+    bar.appendChild(el);
+  });
+  const sp = document.createElement('div'); sp.className = 'sp'; bar.appendChild(sp);
+  const btn = document.createElement('button');
+  btn.className = 'tool-btn collapse-btn'; btn.textContent = '⇥'; btn.title = '收起工件栏';
+  btn.onclick = toggleArts; bar.appendChild(btn);
+}
+function renderArt() {
+  const view = $('artView'), tb = $('artToolbar');
+  if (!openTabs.length) {
+    tb.style.display = 'none';
+    view.innerHTML = `<div class="art-empty"><div style="font-size:26px">🗂</div><div>没有打开的工件</div>
+      <div style="font-size:11px">对话里点工件卡 / 快捷 chip 打开讲义、报告或示意图</div></div>`;
+    return;
+  }
+  const a = ARTS[activeId];
+  tb.style.display = 'flex';
+  $('artPath').textContent = a.path + (a.gen ? ' · ' + a.gen : '');
+  view.innerHTML = `<div class="art-page">${a.html}</div>`;
+}
+function openTab(id, silent) {
+  if (!openTabs.includes(id)) openTabs.push(id);
+  activeId = id;
+  $('arts').classList.remove('collapsed'); $('ghost').classList.remove('show');
+  renderTabs(); renderArt();
+  if (!silent) toast(`已打开：${ARTS[id].title}`);
+}
+function closeTab(id) {
+  openTabs = openTabs.filter(x => x !== id);
+  if (activeId === id) activeId = openTabs[openTabs.length - 1] ?? null;
+  renderTabs(); renderArt();
+}
+function toggleArts() {
+  const c = $('arts').classList.toggle('collapsed');
+  $('ghost').classList.toggle('show', c);
+}
+function updateTab(id, patch) {
+  Object.assign(ARTS[id], patch);
+  renderTabs();
+  if (activeId === id) renderArt();
+}
+
+/* ============ 对话流 ============ */
+const messages = [
+  { role: 'ai', html: `<p>你好！继续二次函数。上一节讲到<b>开口方向</b>，我放了一张三要素示意图在右边工件栏，随时对照 👀</p>`, art: 'vis1' },
+  { role: 'user', text: '对称轴公式我再确认下，是 x = -b/2a 吧？' },
+  { role: 'ai', html: `<p>对。<b>任何</b>二次函数对称轴都是 <code>x = −b/2a</code>。易错点：分子是 <b>−b</b> 整体取负，b=0 时对称轴就是 y 轴。</p>
+    <span class="trace"><i></i>调用 讲义检索 · 2 段命中</span>` },
+];
+function renderMessages() {
+  const box = $('chatScroll');
+  box.innerHTML = '';
+  messages.forEach(m => {
+    const div = document.createElement('div');
+    if (m.role === 'user') {
+      div.className = 'msg user';
+      div.innerHTML = `<div class="bubble"></div>`;
+      div.querySelector('.bubble').textContent = m.text;
+    } else {
+      div.className = 'msg ai';
+      div.innerHTML = `<div class="body">${m.html}</div>`;
+      if (m.art) {
+        const a = ARTS[m.art];
+        const card = document.createElement('div');
+        card.className = 'art-card';
+        card.innerHTML = `<span class="ico">${a.icon}</span><span class="meta">
+          <span class="nm">${a.title}</span><span class="sub">${a.path}${a.gen ? ' · ' + a.gen : ''}</span></span><span class="go">在工件栏打开 →</span>`;
+        card.onclick = () => openTab(m.art);
+        div.querySelector('.body').appendChild(card);
+      }
+    }
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ============ visual.html 生成流程演示 ============ */
+const VISUALS = {
+  'open-width': {
+    title: '示意图·开口与a的关系.html', slug: 'visuals/parabola-open-width.html', lines: 112,
+    reply: `<p>好问题，这个用文字讲确实抽象——我画了张示意图：<b>同一顶点、不同 |a| 的三条抛物线</b>叠在一起，胖瘦一目了然（蓝色 a=1，橙色 a=0.35，绿色 a=2）。</p><p>规律：<b>|a| 越大 → 离对称轴"爬得越快" → 开口越窄</b>。右边工件栏已打开，看完可以问我。</p>
+      <span class="trace"><i></i>调用 visual.html · 写入 visuals/parabola-open-width.html</span>`,
+    svg: () => {
+      const line = (k, c, dash) => { const pts = Array.from({length: 41}, (_, i) => { const x = -150 + i * 7.5; return `${340 + x},${300 - k * x * x * 0.004}`; }).join(' ');
+        return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2.5" ${dash ? 'stroke-dasharray="6 4"' : ''}/>`; };
+      return `<svg viewBox="0 0 680 380" style="width:100%;background:#fff;border:1px solid var(--border);border-radius:10px">
+        <line x1="340" y1="20" x2="340" y2="360" stroke="#d3d7de"/><line x1="40" y1="300" x2="640" y2="300" stroke="#d3d7de"/>
+        ${line(0.35, '#e8842a', true)}${line(1, '#4f6bed', false)}${line(2, '#2da44e', true)}
+        <text x="425" y="205" font-size="12" fill="#4f6bed" font-weight="600">a=1</text>
+        <text x="530" y="270" font-size="12" fill="#e8842a" font-weight="600">a=0.35（胖）</text>
+        <text x="368" y="130" font-size="12" fill="#2da44e" font-weight="600">a=2（瘦）</text>
+        <text x="596" y="40" font-size="11" fill="#8b949e">示意图 · 由 AI 生成</text></svg>`;
+    }
+  },
+  'vertex': {
+    title: '示意图·顶点式平移.html', slug: 'visuals/vertex-shift.html', lines: 96,
+    reply: `<p>画好了：<b>y = x²</b> 经过「右 2、上 1」变成 <code>y = (x−2)²+1</code>，图上用箭头标了平移向量——<b>左加右减动 x，上加下减动整体</b>。</p>
+      <span class="trace"><i></i>调用 visual.html · 写入 visuals/vertex-shift.html</span>`,
+    svg: () => {
+      const line = (dx, dy, c, label) => { const pts = Array.from({length: 41}, (_, i) => { const x = -140 + i * 7; return `${320 + x + dx},${250 - 0.004 * x * x + dy}`; }).join(' ');
+        return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2.5"/><text x="${330 + dx}" y="${130 + dy}" font-size="12" fill="${c}" font-weight="600">${label}</text>`; };
+      return `<svg viewBox="0 0 680 380" style="width:100%;background:#fff;border:1px solid var(--border);border-radius:10px">
+        <line x1="320" y1="20" x2="320" y2="360" stroke="#d3d7de"/><line x1="40" y1="250" x2="640" y2="250" stroke="#d3d7de"/>
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#1f2328" stroke-width="1.5"/></marker></defs>
+        ${line(0, 0, '#4f6bed', 'y=x²')}${line(60, -40, '#2da44e', 'y=(x−2)²+1')}
+        <line x1="322" y1="248" x2="374" y2="212" stroke="#1f2328" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="336" y="222" font-size="11" fill="#1f2328">右2、上1</text>
+        <text x="596" y="40" font-size="11" fill="#8b949e">示意图 · 由 AI 生成</text></svg>`;
+    }
+  }
+};
+let genSeq = 0;
+function genVisual(key) {
+  const spec = VISUALS[key];
+  const uid = 'vis_gen_' + (++genSeq);
+  messages.push({ role: 'user', text: key === 'open-width' ? '为什么 |a| 越大开口越窄？画个示意图' : '顶点式平移规律画个示意图' });
+  renderMessages();
+  // typing：显示工具调用过程
+  const t = document.createElement('div');
+  t.className = 'msg ai';
+  t.innerHTML = `<div class="typing"><span class="dots"><span></span><span></span><span></span></span>正在调用 <b style="color:var(--accent)">visual.html</b>（生成 HTML 示意图…）</div>`;
+  $('chatScroll').appendChild(t); $('chatScroll').scrollTop = 1e6;
+  // 右栏同步开占位页签
+  ARTS[uid] = { icon: '🖼', title: '生成中…', path: spec.slug, kind: 'visual', gen: '生成中', html: `<div class="gen-holder"><div class="ring"></div><div>visual.html 正在生成示意图…</div><div style="font-size:10.5px">产出将写入会话 visuals/ 目录 · 单文件自包含</div></div>` };
+  openTab(uid, true);
+  setTimeout(() => {
+    t.remove();
+    ARTS[uid].title = spec.title; ARTS[uid].gen = `已生成 · ${spec.lines} 行 · 单文件自包含`;
+    ARTS[uid].html = spec.svg() + `<p style="font-size:11px;color:var(--text-3);margin-top:6px">上图为 visual.html 产物的预览模拟（渲染层不在本原型讨论范围）。</p>`;
+    messages.push({ role: 'ai', html: spec.reply, art: uid });
+    renderTabs(); renderArt(); renderMessages();
+    toast(`✓ 示意图已生成 → ${spec.slug}`);
+  }, 2200);
+}
+
+/* ============ 普通发送 / 拖拽 / toast ============ */
+function send() {
+  const box = $('inputBox'); const txt = box.value.trim();
+  if (!txt) return;
+  messages.push({ role: 'user', text: txt }); box.value = ''; renderMessages();
+  const t = document.createElement('div');
+  t.className = 'msg ai'; t.innerHTML = `<div class="typing"><span class="dots"><span></span><span></span><span></span></span>正在思考…</div>`;
+  $('chatScroll').appendChild(t); $('chatScroll').scrollTop = 1e6;
+  setTimeout(() => {
+    t.remove();
+    messages.push({ role: 'ai', html: `<p>收到（原型假回复）。涉及图像类概念时我会主动调用 <code>visual.html</code> 画图，你也可以随时说「画个示意图」。</p>` });
+    renderMessages();
+  }, 1000);
+}
+$('sendBtn').onclick = send;
+$('inputBox').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+
+(() => {
+  const dv = $('divider'), row = $('bodyRow'), arts = $('arts');
+  let dragging = false;
+  dv.addEventListener('mousedown', e => { dragging = true; dv.classList.add('dragging'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const r = row.getBoundingClientRect();
+    const w = Math.min(60, Math.max(24, (r.right - e.clientX) / r.width * 100));
+    arts.style.width = w + '%';
+  });
+  window.addEventListener('mouseup', () => { dragging = false; dv.classList.remove('dragging'); document.body.style.cursor = ''; });
+  dv.addEventListener('dblclick', () => { arts.style.width = '46%'; toast('已复位 54 / 46'); });
+})();
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toastEl'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+renderTabs(); renderArt(); renderMessages();
+</script>
+</body>
+</html>

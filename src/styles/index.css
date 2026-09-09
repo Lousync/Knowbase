@@ -429,3 +429,23 @@ input:focus, textarea:focus, select:focus {
   .kb-delete-fx .kb-dragon, .kb-delete-fx .kb-particle { display: none; }
 }
 
+/* ===== AI教学右栏素材库分组折叠 / 紧凑收起动画（docs/ai-teaching-sources-panel-rework.md）=====
+   缓动曲线快出缓停无回弹（cubic-bezier(0.22,.68,.32,1)）；时长 260-360ms。
+   reduced-motion 下移除侧移位移，仅保留高度变化（可访问性兜底，对齐仓库内 deleteFx 同款处理） */
+.kb-group-anim { transition-timing-function: cubic-bezier(0.22, 0.68, 0.32, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .kb-group-anim { transition-duration: 0ms; }
+  .kb-group-anim.translate-x-1\.5 { transform: none; }
+}
+
+/* ===== AI教学工件栏（docs/ai-teaching-artifacts-pane-design.md §5.6）=====
+   页签切换内容 fadein 280ms（定稿缓动同素材库）；reduced-motion 下时长归零 */
+@keyframes kb-art-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.kb-art-in { animation: kb-art-in 280ms cubic-bezier(0.22, 0.68, 0.32, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .kb-art-in { animation: none; }
+}
+

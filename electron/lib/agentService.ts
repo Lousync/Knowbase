@@ -56,6 +56,10 @@ export interface AgentTraceStep {
   promptTokens?: number
   completionTokens?: number
   summary?: string
+  /** visual.html 实时占位事件（仅 agent:step 推送，不落库）：{slug,title}——渲染层据此开「生成中」页签 */
+  args?: Record<string, unknown>
+  /** visual.html 成功产物（落库，随消息 trace 持久）：渲染层画工件卡 + 占位页签原地转正式 */
+  artifact?: { rel: string; title: string; lines: number; slug: string }
 }
 
 export interface AgentContextInfo {
@@ -131,6 +135,7 @@ const CHANGE_LABELS: Record<string, string> = {
   'builtin.blog.create-entry': '新建日记',
   'builtin.schedule.create-todo': '创建待办',
   'builtin.checkin.check-habit': '习惯打卡',
+  'visual.html': '生成示意图',
 }
 
 /**
@@ -324,6 +329,14 @@ async function runAgentLoop(
     const cat = resolveSourcesForInjection(sessionId, getSettingReader())
     return cat ? `\n\n${cat}` : ''
   })() : ''
+  // 工件栏方案 §3.2：示意图生成门槛与产物约束（双路触发：命中门槛主动画 + 用户指令强制画）
+  const visualHint = source === 'aiTeaching'
+    ? '\n\n【示意图工具 visual.html（AI教学）】讲解命中以下四类内容且画图能显著帮助理解时，调用 visual.html 工具生成单文件 HTML 示意图：' +
+      '① 抽象概念需具象化 ② 过程/演变有先后 ③ 结构/对比（多对象关系）④ 函数图像/几何图形。纯文字/表格够用的不要画。' +
+      '用户明确说「画个示意图/图示一下」时必须调用。若工具列表中没有 visual.html，先用 builtin.tool.request（tools="visual.html"）申请。' +
+      '产物约束：单文件自包含、CSS/SVG/JS 全内联、不引用任何外部资源（无 CDN/网络图片/外链字体）、不超过 150 行、以 680×400 比例 SVG 为主、中文标注、示意而非网页（无复杂交互/多页）。' +
+      'slug 用 kebab-case 小写英文；title 给中文短标题。HTML 全文只作为工具参数传递，**绝不把 HTML 源码写进回答正文或 markdown 代码块**；生成后在回答里用一句话说明右侧工件栏已打开该图。'
+    : ''
   // P8（§3.14）+ UI 优化条目8.2.2：三层学习者画像注入（全局 → 工作区 → 会话，细颗粒覆盖粗颗粒）
   // + 更新建议协议（3-33 Plan B）
   const profileHint = source === 'aiTeaching' ? resolveProfilesForInjection(sessionId, getSettingReader()) : ''
@@ -335,11 +348,11 @@ async function runAgentLoop(
         constraintChars: sessionInst.length,
         profileChars: profileHint.length,
         sourcesChars: sourcesHint.length,
-        ruleChars: titleRuleHint.length + quizRuleHint.length + planRuleHint.length + askRuleHint.length,
+        ruleChars: titleRuleHint.length + quizRuleHint.length + planRuleHint.length + askRuleHint.length + visualHint.length,
       }
     : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + sourcesHint + toolsHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。
@@ -408,8 +421,17 @@ async function runAgentLoop(
         sessionWrites++
       }
 
+      // visual.html 生成时序 §3.4：调用前推「生成中」实时事件（仅 slug/title 小字段，绝不带 html 全文；
+      // 不落库——渲染层据此在工件栏开占位页签，给即时反馈）
+      if (realName === 'visual.html') {
+        stepEmitters.get(signal)?.({
+          kind: 'tool', name: 'visual.html', ok: true, durationMs: 0,
+          args: { slug: String(args?.slug ?? ''), title: String(args?.title ?? '') },
+        })
+      }
+
       const t1 = Date.now()
-      const exec = await invokeToolInternal(realName, args)
+      const exec = await invokeToolInternal(realName, args, '', { sessionId, source })
       const durationMs = Date.now() - t1
       // P3：tool.request 成功 → 并入会话启用集合并重建工具 payload（下一轮 LLM 调用生效）
       if (realName === 'builtin.tool.request' && exec.ok) {
@@ -434,6 +456,16 @@ async function runAgentLoop(
         durationMs,
         summary: exec.ok ? undefined : String(exec.message).slice(0, 200),
       }
+      // visual.html 成功产物落 trace（小字段，不含 HTML）：渲染层工件卡数据源 + 占位页签原地转正式
+      if (realName === 'visual.html' && exec.ok && typeof exec.data === 'object' && exec.data !== null) {
+        const d = exec.data as Record<string, unknown>
+        toolStep.artifact = {
+          rel: String(d.relPath ?? ''),
+          title: String(args?.title ?? '').slice(0, 80),
+          lines: Number(d.lines ?? 0),
+          slug: String(args?.slug ?? ''),
+        }
+      }
       trace.push(toolStep)
       stepEmitters.get(signal)?.(toolStep) // 实时过程：渲染层活动气泡
       if (exec.ok) {
@@ -444,9 +476,10 @@ async function runAgentLoop(
             ? exec.data as Record<string, unknown>
             : {}
           // vault 文件写类工具：目标=真实落盘路径（rename 取目标路径 to）；trash 后文件已移走不可跳转
+          // visual.html：relPath 一并作 file（右栏「本次改动」条目可点击回工件栏渲染）
           const vaultPath = realName.startsWith('builtin.vault.')
             ? String(data?.to ?? data?.path ?? data?.trashed ?? '').trim()
-            : ''
+            : realName === 'visual.html' ? String(data?.relPath ?? '').trim() : ''
           const file = realName !== 'builtin.vault.trash' && vaultPath ? vaultPath : undefined
           const target = vaultPath || String(args?.title ?? args?.date ?? args?.name ?? '').trim().slice(0, 120)
           if (target) changes.push({ tool: realName, action: label, target, ...(file ? { file } : {}) })

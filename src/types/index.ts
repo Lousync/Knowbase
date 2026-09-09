@@ -660,6 +660,10 @@ export interface AgentTraceStep {
   promptTokens?: number
   completionTokens?: number
   summary?: string
+  /** visual.html「生成中」实时事件（agent:step 专用，不落库）：{slug,title} */
+  args?: Record<string, unknown>
+  /** visual.html 成功产物（落库随消息 trace）：对话流工件卡数据源 */
+  artifact?: { rel: string; title: string; lines: number; slug: string }
 }
 
 export interface AgentChatMessage {

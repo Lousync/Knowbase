@@ -349,6 +349,37 @@ export function removeSource(sessionId: string, no: number, getSetting: (key: st
   }
 }
 
+/** visual.html 工具产物（docs/ai-teaching-artifacts-pane-design.md §3.3）：
+ *  写 `SOURCES/{对话夹}/visuals/<slug>.html`；重名不覆盖（-v2/-v3 递增）。
+ *  slug 白名单校验（kebab 英文数字，拒 `..`/分隔符/盘符——pathGuard 同口径的入参面收敛），
+ *  落盘路径全程由本函数拼装，AI 参数无法越出会话 visuals/ 目录。不登记 SOURCE.md、不参与素材注入 */
+export function writeVisual(
+  sessionId: string, slug: string, html: string,
+  getSetting: (key: string) => unknown,
+): { ok: boolean; relPath?: string; lines?: number; error?: string } {
+  try {
+    const s = String(slug ?? '').trim()
+    if (!/^[a-z0-9](?:[a-z0-9._-]{0,60}[a-z0-9])?$/.test(s) || s.includes('..')) {
+      return { ok: false, error: `slug 不合法（要求 kebab-case 小写英文/数字，如 parabola-open-width）：${s.slice(0, 40)}` }
+    }
+    const body = String(html ?? '')
+    if (!body.trim()) return { ok: false, error: 'html 参数为空' }
+    if (body.length > 512 * 1024) return { ok: false, error: 'html 超过 512KB，拒绝写入' }
+    const l = layout(sessionId, getSetting, true)
+    if ('error' in l) return { ok: false, error: l.error }
+    const visualsAbs = join(l.dirAbs, 'visuals')
+    mkdirSync(visualsAbs, { recursive: true })
+    let fname = `${s}.html`
+    for (let v = 2; existsSync(join(visualsAbs, fname)) && v <= 99; v++) fname = `${s}-v${v}.html`
+    writeFileSync(join(visualsAbs, fname), body, 'utf-8')
+    broadcastTreeRefresh(l.dirRel)
+    const lines = body.replace(/\r\n/g, '\n').split('\n').length
+    return { ok: true, relPath: `${l.dirRel}/visuals/${fname}`, lines }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
 /** 解析条目路径 → 素材原件绝对路径（./名=素材夹；绝对路径原样；其余按仓库相对） */
 function resolveMaterialAbs(l: SourcesLayout, p: string): string {
   const clean = p.trim()

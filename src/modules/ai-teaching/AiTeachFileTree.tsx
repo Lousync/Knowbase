@@ -24,13 +24,15 @@ interface Props {
   /** P5：产物根下的子层（工作区文件夹段；空=根层，未归一/无工作区视图） */
   subRel?: string
   onOpenMd: (rel: string) => void
+  /** 工件栏方案 A（2026-09-09）：.html 点击/右键=工件栏沙箱渲染页签；不传则回落编辑器 */
+  onOpenHtml?: (rel: string) => void
   onOpenExternal: (rel: string) => void
 }
 
 interface CtxState { x: number; y: number; node: TreeNode | null }
 interface InputModal { title: string; placeholder: string; initial: string; submitLabel: string; onSubmit: (v: string) => void }
 
-export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenExternal }: Props) {
+export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenHtml, onOpenExternal }: Props) {
   const [rootId, setRootId] = useState<string | null>(null)
   const [rootDir, setRootDir] = useState('AI教学')
   const [dirCache, setDirCache] = useState<DirCache>({})
@@ -95,8 +97,9 @@ export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenExtern
 
   const openFile = useCallback((n: TreeNode) => {
     if (n.name.toLowerCase().endsWith('.md')) onOpenMd(n.relPath)
+    else if (/\.html?$/i.test(n.name) && onOpenHtml) onOpenHtml(n.relPath) // visual 示意图等 html → 工件栏渲染页签
     else onOpenExternal(n.relPath)
-  }, [onOpenMd, onOpenExternal])
+  }, [onOpenMd, onOpenHtml, onOpenExternal])
 
   // ---- 操作 ----
   const nameModal = (title: string, initial: string, placeholder: string, submitLabel: string, onSubmit: (v: string) => void) => {
@@ -172,6 +175,7 @@ export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenExtern
     const items: ReturnType<typeof menuItems> = []
     if (node.type === 'dir') items.push({ label: '＋ 新建文件', run: () => doCreate(node.relPath, 'file') }, { label: '＋ 新建文件夹', run: () => doCreate(node.relPath, 'dir') })
     if (node.type === 'file' && node.name.toLowerCase().endsWith('.md')) items.push({ label: '打开阅读', run: () => onOpenMd(node.relPath) })
+    if (node.type === 'file' && /\.html?$/i.test(node.name) && onOpenHtml) items.push({ label: '打开渲染预览', run: () => onOpenHtml(node.relPath) })
     items.push({ label: '重命名', run: () => doRename(node) })
     items.push({ label: '复制（到剪贴板）', run: () => { setClip({ rel: node.relPath, name: node.name, isDir: node.type === 'dir' }); showToast({ type: 'info', message: `已复制「${node.name}」，到目标目录右键粘贴（仅文件）` }) } })
     items.push({ label: '创建副本', run: () => void doDuplicate(node.relPath, node.type === 'dir') })
