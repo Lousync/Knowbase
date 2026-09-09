@@ -9,7 +9,7 @@ import {
   getMessageById, updateMessageContent, deleteMessage, deleteMessagesAfter,
   getAgentSession, updateAgentSessionInstructions,
 } from './agentSessionRepo'
-import { resolveConstraintsForInjection } from './aiTeachingFolders'
+import { resolveConstraintsForInjection, readGlobalConstraints } from './aiTeachingFolders'
 import { resolveSourcesForInjection } from './aiTeachingSources'
 import { resolveProfilesForInjection } from './aiTeachingProfile'
 
@@ -292,7 +292,16 @@ async function runAgentLoop(
     ? rawConstraints.slice(0, 4000) + '\n…（约束文件过长已截断，全文见会话文件夹 CONSTRAINTS.md）'
     : rawConstraints
   const instHint = sessionInst
-    ? `\n\n【本会话全局要求】（用户为此对话单独设定于 CONSTRAINTS.md，最高优先级，必须严格遵守；与用户消息冲突时以用户当下消息为准）\n${sessionInst}`
+    ? `\n\n【本会话要求】（用户为此对话单独设定于 CONSTRAINTS.md，优先于全局要求遵守；与用户消息冲突时以用户当下消息为准）\n${sessionInst}`
+    : ''
+  // 全局约束层（.claude/plans/global-constraints.md）：{产物根}/CONSTRAINTS.md 每轮重读，跨工作区/跨会话共同遵守；
+  // 冲突裁决链写进提示词：用户当下消息 > 会话层 > 全局层 > 内置人设。截断 3000 与画像段同量级。
+  const rawGlobal = readGlobalConstraints(getSettingReader()).text ?? ''
+  const globalInst = rawGlobal.length > 3000
+    ? rawGlobal.slice(0, 3000) + '\n…（全局要求过长已截断，全文见 AI教学产物根 CONSTRAINTS.md）'
+    : rawGlobal
+  const globalInstHint = globalInst.trim()
+    ? `\n\n【全局要求】（用户设定于 AI教学产物根的 CONSTRAINTS.md，所有会话共同遵守；与上方本会话要求或用户当下消息冲突时，以会话要求与当下消息为准）\n${globalInst}`
     : ''
   // P3a（§3.8-2 标题规则，3-13 拍板）：AI教学会话每条回答首行带三级标题，供快速定位条取锚点标题
   const titleRuleHint = source === 'aiTeaching'
@@ -330,7 +339,7 @@ async function runAgentLoop(
       }
     : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + sourcesHint + toolsHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + sourcesHint + toolsHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。

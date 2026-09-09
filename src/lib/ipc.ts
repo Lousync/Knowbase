@@ -504,6 +504,8 @@ export interface AiTeachConstraintsResult { ok: boolean; text?: string; relPath?
 export const aiTeachReadConstraints = (id: string): Promise<AiTeachConstraintsResult> => a().aiTeachReadConstraints(id)
 /** 写会话 CONSTRAINTS.md（懒建文件夹；不再写 DB sessionInstructions） */
 export const aiTeachWriteConstraints = (id: string, text: string): Promise<AiTeachConstraintsResult> => a().aiTeachWriteConstraints(id, text)
+/** 全局约束文档（AI教学产物根 CONSTRAINTS.md）：ensure 落骨架并返回 relPath 跳编辑区；跨会话每轮注入 */
+export const aiTeachGlobalEnsureConstraints = (): Promise<AiTeachConstraintsResult & { created?: boolean }> => a().aiTeachGlobalEnsureConstraints()
 /** P3b：整理成文档——回答 md 落盘会话文件夹（懒建夹 + 幂等），返回产物相对路径 */
 export const aiTeachOrganizeDoc = (id: string, title: string, content: string, prefix?: string): Promise<AiTeachFolderResult> => a().aiTeachOrganizeDoc(id, title, content, prefix)
 // P5 工作区两层（§3.2-6）
@@ -525,6 +527,11 @@ export const aiTeachSrcVisionCheck = () => a().aiTeachSrcVisionCheck()
 // 3-21 视觉转写（手动档）
 export const aiTeachSrcPdfBytes = (id: string, no: number) => a().aiTeachSrcPdfBytes(id, no)
 export const aiTeachSrcTranscribe = (id: string, no: number, pages: { n: number; dataUrl: string }[], modelSpec?: string) => a().aiTeachSrcTranscribe(id, no, pages, modelSpec)
+// 网页素材目录展开与批量抓取（web-crawl P2）
+export const aiTeachSrcWebProbe = (id: string, no: number, anchorUrl?: string) => a().aiTeachSrcWebProbe(id, no, anchorUrl)
+export const aiTeachSrcWebCrawl = (id: string, no: number, urls: string[]) => a().aiTeachSrcWebCrawl(id, no, urls)
+export const aiTeachSrcWebCancel = (id: string) => a().aiTeachSrcWebCancel(id)
+export const onAiTeachWebProgress = (cb: (p: { sessionId: string; no: number; done: number; total: number; current: string }) => void) => window.api.onAiTeachWebProgress(cb)
 // P8 用户画像（§3.14 两层 PROFILE.md）；UI 优化条目8.2.2 加工作区第三层（全局/工作区/会话）
 export const aiTeachProfileReadGlobal = () => a().aiTeachProfileReadGlobal()
 export const aiTeachProfileWriteGlobal = (text: string) => a().aiTeachProfileWriteGlobal(text)

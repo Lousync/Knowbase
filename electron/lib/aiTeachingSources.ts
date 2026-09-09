@@ -6,6 +6,8 @@ import { ensureSessionFolder, rootDirName, sanitizeTitle, sessionFolder, sourceT
 import { uniqueFileName } from './workspaceManager'
 import { extractPdfRange, extractPptxPages } from './docsReader'
 import { visionChat, findVisionModel } from './llmService'
+import { convertToPdf } from './sofficeConvert'
+import { probeWeb, crawlQueue, type ProbeResult, type TocChapter } from './webCrawler'
 import { appendAudit, countMonthVisionTokens, countMonthVisionPages } from './pluginAudit'
 
 /**
@@ -447,21 +449,27 @@ export async function extractRange(sessionId: string, no: number, getSetting: (k
 /**
  * ── 3-21 视觉转写（手动档，后续增强）──────────────────────────────
  * 页位图由渲染层 pdf.js 栅格化（主进程无 canvas），主进程负责：
- * ① 把已入库/引用的 pdf 原件字节交给渲染层；② 逐页喂视觉模型转写；③ **非破坏式并入提取稿**
+ * ① 把已入库/引用的 pdf 原件字节交给渲染层（pptx 先经 soffice 无头转 PDF，2026-09-09）；
+ * ② 逐页喂视觉模型转写；③ **非破坏式并入提取稿**
  *（已有 `## p{n}` 文本小节保留，转写块追补在文末「视觉转写」节；无提取稿则以转写新建并回写 已提取 ✓）。
  */
-export function readSourceBytes(sessionId: string, no: number, getSetting: (key: string) => unknown): { ok: boolean; base64?: string; error?: string } {
+export async function readSourceBytes(sessionId: string, no: number, getSetting: (key: string) => unknown): Promise<{ ok: boolean; base64?: string; error?: string }> {
   try {
     const l = layout(sessionId, getSetting, false)
     if ('error' in l) return { ok: false, error: l.error }
     const e = readEntries(l).find(x => x.no === no)
     if (!e) return { ok: false, error: `没有编号为 ${no} 的素材条目` }
-    if (e.type !== 'pdf') return { ok: false, error: '视觉转写当前仅支持 pdf 原件（pptx 页渲染需 Office 引擎）' }
+    if (e.type !== 'pdf' && e.type !== 'pptx') return { ok: false, error: '视觉转写支持 pdf/pptx 原件（其余类型请走文本提取/手工整理）' }
     const abs = resolveMaterialAbs(l, e.path)
     if (!e.path || e.path === '-' || !existsSync(abs)) return { ok: false, error: `素材原件不可用：${e.path || '（未登记路径）'}` }
     const st = statSync(abs)
     if (st.size > 80 * 1024 * 1024) return { ok: false, error: `原件过大（${Math.round(st.size / 1048576)}MB > 80MB），请缩小区间` }
-    return { ok: true, base64: readFileSync(abs).toString('base64') }
+    if (e.type === 'pdf') return { ok: true, base64: readFileSync(abs).toString('base64') }
+    // pptx（2026-09-09 B 方案）：soffice 无头转 PDF 后交渲染层——pdf.js 栅格化链路原样复用；
+    // 未装 LibreOffice 时 convertToPdf 返回带指引的 error（渲染层 toast），不影响 pdf 转写
+    const conv = await convertToPdf(abs, getSetting('sofficePath'))
+    if (!conv.ok || !conv.pdfPath) return { ok: false, error: conv.error ?? 'pptx 转 PDF 失败' }
+    return { ok: true, base64: readFileSync(conv.pdfPath).toString('base64') }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
@@ -544,6 +552,118 @@ export async function transcribeVision(sessionId: string, no: number, pages: { n
   }
 }
 
+// ===== 网页素材目录展开与批量抓取（.claude/plans/ai-teaching-web-source-crawl.md P2）=====
+// 纯程序流水线零 LLM token；清洗复用剪藏管线；落盘进 SOURCES/{会话}/web/{slug}/，
+// 回写「已提取 ✓ → web/{slug}/」后由注入层展开章节清单（见 resolveSourcesForInjection）。
+
+const crawlAborts = new Map<string, AbortController>()
+
+/** 进度广播（渲染层订阅 aiTeach:web-crawl-progress，不轮询） */
+function broadcastWebProgress(payload: { sessionId: string; no: number; done: number; total: number; current: string }): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('aiTeach:web-crawl-progress', payload)
+  }
+}
+
+/** 文件名段取 URL 末段去 .html（稳定可续抓：同一 URL 重爬命中 exists 跳过） */
+function urlStemName(u: string): string {
+  try {
+    const p = new URL(u).pathname
+    const seg = decodeURIComponent(p.slice(p.lastIndexOf('/') + 1)).replace(/\.html?$/i, '')
+    return sanitizeTitle(seg).replace(/\s+/g, '-').slice(0, 40)
+  } catch { return '' }
+}
+
+/** 探测：门户（候选锚点）/ 目录（章节清单）/ 单文章 三形态；anchorUrl=用户点选候选后二次探测 */
+export async function webProbeSource(sessionId: string, no: number, getSetting: (key: string) => unknown, anchorUrl?: string): Promise<ProbeResult> {
+  try {
+    const l = layout(sessionId, getSetting, false)
+    if ('error' in l) return { ok: false, error: l.error }
+    const e = readEntries(l).find(x => x.no === no)
+    if (!e) return { ok: false, error: `没有编号为 ${no} 的素材条目` }
+    if (e.type !== 'url') return { ok: false, error: '仅 url 类型素材支持展开网页' }
+    const target = String(anchorUrl ?? '').trim() || e.path
+    if (!target || target === '-') return { ok: false, error: '素材未登记网址' }
+    return await probeWeb(target, `${e.name} ${e.note}`)
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/** 批量抓取勾选章节 → 落盘 web/{slug}/NN-*.md + 00-目录.md → 回写「已提取」。断点续抓=已存在文件跳过 */
+export async function webCrawlSource(sessionId: string, no: number, urls: unknown, getSetting: (key: string) => unknown): Promise<{ ok: boolean; dirRel?: string; done?: number; failed?: Array<{ url: string; title: string; reason: string }>; skipped?: number; error?: string }> {
+  try {
+    const l = layout(sessionId, getSetting, true)
+    if ('error' in l) return { ok: false, error: l.error }
+    const e = readEntries(l).find(x => x.no === no)
+    if (!e) return { ok: false, error: `没有编号为 ${no} 的素材条目` }
+    if (e.type !== 'url') return { ok: false, error: '仅 url 类型素材支持批量抓取' }
+    const list = (Array.isArray(urls) ? urls : []).map(u => String(u).trim()).filter(u => /^https?:\/\//i.test(u)).slice(0, 200)
+    if (list.length === 0) return { ok: false, error: '没有要抓取的页面（请先在勾选清单选择章节）' }
+    const slug = sanitizeTitle(e.name) || `url-${e.no}`
+    const webRel = `web/${slug}`
+    const webAbs = join(l.dirAbs, 'web', slug)
+    if (!existsSync(webAbs)) mkdirSync(webAbs, { recursive: true })
+    const maxPages = Math.max(1, Math.min(Number(getSetting('webCrawlMaxPages')) || 80, 200))
+    const delayMs = Math.max(0, Number(getSetting('webCrawlDelayMs')) || 300)
+    const chapters: TocChapter[] = list.map((u, i) => ({ no: i + 1, title: '', url: u, group: '', defaultChecked: true }))
+    const abort = new AbortController()
+    crawlAborts.set(sessionId, abort)
+    let outcome
+    try {
+      outcome = await crawlQueue(chapters, {
+        maxPages, delayMs, signal: abort.signal,
+        fileName: ch => `${String(ch.no).padStart(2, '0')}-${urlStemName(ch.url) || `p${ch.no}`}.md`,
+        exists: rel => existsSync(join(webAbs, rel)),
+        write: (_ch, rel, md) => { writeFileSync(join(webAbs, rel), md, 'utf-8') },
+        onProgress: info => broadcastWebProgress({ sessionId, no, done: info.done, total: info.total, current: info.current }),
+      })
+    } finally {
+      crawlAborts.delete(sessionId)
+    }
+    // 00-目录.md：列全部已落盘章节（含历史续抓），标题/源链从文件头解析；失败项如实列出
+    const filesNow = readdirSync(webAbs).filter(f => /\.md$/i.test(f) && f !== '00-目录.md').sort()
+    const rows = filesNow.map(f => {
+      let title = f.replace(/\.md$/i, '').replace(/^\d+-/, '').replace(/-/g, ' ')
+      let src = ''
+      try {
+        const head = readFileSync(join(webAbs, f), 'utf-8')
+        const t = /^#\s+(.+)$/m.exec(head); if (t) title = t[1].trim()
+        const s = /^>\s*来源：(\S+)/m.exec(head); if (s) src = s[1]
+      } catch { /* 保留文件名推导 */ }
+      return `| ${f.replace(/\.md$/i, '').split('-')[0]} | ${title} | ${webRel}/${f} | ${src || '-'} | ✓ |`
+    })
+    const failedRows = (outcome.failed ?? []).map(x => `| - | ${x.title || x.url} | - | ${x.url} | ✗ ${x.reason} |`)
+    const tocMd = [
+      `# ${e.name} · 网页抓取目录`,
+      '',
+      `> 来源条目：SOURCE.md #${e.no}（${e.path}） · 更新：${today()} · 抓取工具：Defuddle 正文清洗`,
+      '> 每章一个 md 可直接编辑修正；AI 按「提取稿」清单读章节文件。',
+      '',
+      '| 章 | 标题 | 本地文件 | 源 URL | 状态 |',
+      '| --- | --- | --- | --- | --- |',
+      ...rows,
+      ...failedRows,
+      '',
+    ].join('\n')
+    writeFileSync(join(webAbs, '00-目录.md'), tocMd, 'utf-8')
+    const entries = readEntries(l)
+    const w = rewriteEntries(l, entries.map(x => x.no === no ? { ...x, extracted: `✓ → ${webRel}/` } : x))
+    if (!w.ok) return { ok: false, error: w.error }
+    return { ok: true, dirRel: `${l.dirRel}/${webRel}`, done: outcome.done.length, failed: outcome.failed, skipped: outcome.skipped.length }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/** 取消当前会话进行中的网页抓取 */
+export function webCrawlCancel(sessionId: string): { ok: boolean; error?: string } {
+  const a = crawlAborts.get(sessionId)
+  if (!a) return { ok: false, error: '没有进行中的抓取' }
+  a.abort()
+  return { ok: true }
+}
+
 /**
  * AgentRunner 注入（每轮重读，与 CONSTRAINTS 同哲学）：素材目录 + 编号制引用规则（3-29）。
  * 无登记文件/零条目 → 空串（零注入，存量会话不受扰）。
@@ -584,6 +704,23 @@ export function resolveSourcesForInjection(sessionId: string, getSetting: (key: 
       const ext = /^✓\s*→\s*(.+)$/.exec(e.extracted)
       bits.push(ext ? `**提取稿 ${l.dirRel}/${ext[1].trim()}（优先读此文件）**` : '未提取')
       const base = `- [${e.no}] ${e.name}（${bits.join(' · ')}）${e.note ? ` 备注：${e.note}` : ''}`
+      // 网页素材（P2）：url 且已提取 → web/{slug}/ 目录；展开章节文件清单，AI 按需 vault.read 单章
+      if (e.type === 'url' && ext && ext[1].trim().startsWith('web/')) {
+        const relDir = ext[1].trim()
+        const webAbs = join(l.dirAbs, relDir)
+        const files: { rel: string; bin: boolean }[] = []
+        try { listDirFilesRecursive(webAbs, files) } catch { return `${base}\n  ⚠ 抓取目录不可读：${relDir}` }
+        const chapters = files.filter(f => !f.bin && !/00-目录/.test(f.rel)).sort((a, b) => a.rel.localeCompare(b.rel))
+        if (chapters.length === 0) return base
+        const shown = chapters.slice(0, 120)
+        const items = shown.map(f => `  - ${l.dirRel}/${relDir}${f.rel}`)
+        if (chapters.length > shown.length) items.push(`  - …（其余 ${chapters.length - shown.length} 章，见 00-目录.md）`)
+        return `${base}\n  章节清单（${chapters.length} 章，路径相对仓库根，按需读单章，勿一次读全部）：\n${items.join('\n')}`
+      }
+      // 未提取的 url 条目：给 AI 行为指引（可在线读单页；遇目录页提示用户走「展开网页」）
+      if (e.type === 'url' && !ext) {
+        return `${base}\n  提示：可用 builtin.web.read 在线读该页；若读到的是目录/导航页，建议提示用户在右栏素材库点「展开网页」批量入库后再引用`
+      }
       // 目录素材：展开文件清单（文本可读；非文本标注需询问用户），上限 120 条防注入爆炸
       if (e.type === 'dir' && e.path && e.path !== '-') {
         const dirAbs = resolveMaterialAbs(l, e.path)
@@ -624,6 +761,12 @@ export function registerAiTeachingSourceHandlers(getSetting: (key: string) => un
     const list = Array.isArray(pages) ? pages.map(p => ({ n: Number(p?.n), dataUrl: String(p?.dataUrl ?? '') })) : []
     return transcribeVision(String(sessionId ?? ''), Number(no), list, getSetting, modelSpec ? String(modelSpec) : undefined)
   })
+  // 网页素材：探测（门户/目录/单文章）/ 批量抓取（进度经 aiTeach:web-crawl-progress 推送）/ 取消
+  ipcMain.handle('aiTeachSrc:webProbe', (_e, sessionId: string, no: number, anchorUrl?: string) =>
+    webProbeSource(String(sessionId ?? ''), Number(no), getSetting, anchorUrl ? String(anchorUrl) : undefined))
+  ipcMain.handle('aiTeachSrc:webCrawl', (_e, sessionId: string, no: number, urls: string[]) =>
+    webCrawlSource(String(sessionId ?? ''), Number(no), urls, getSetting))
+  ipcMain.handle('aiTeachSrc:webCancel', (_e, sessionId: string) => webCrawlCancel(String(sessionId ?? '')))
   // 入库浏览：系统文件选择器（表单「已入库」用；返回绝对路径给 add 拷贝）
   ipcMain.handle('aiTeachSrc:pick', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null

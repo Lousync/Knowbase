@@ -6,6 +6,8 @@
  * - 主进程使用：Node 全局 fetch（Electron 33 主进程 Node >= 18）
  */
 
+import { extractArticle } from './clipperServer/extract'
+
 export interface WebSearchResult {
   title: string
   url: string
@@ -196,20 +198,43 @@ function extractHtmlTitle(html: string): string {
 export interface WebReadOutput {
   url: string
   title: string
-  /** 纯文本正文（截断到上限） */
+  /** 正文 Markdown（Defuddle 清洗：保留标题/列表/表格/代码围栏；提取失败退化纯文本，截断到上限） */
   content: string
   truncated: boolean
   totalChars: number
+  /** 同域页内链接（绝对化去重 ≤30 条）：让 agent 看见目录页子页，可自主跟读 */
+  links: Array<{ text: string; url: string }>
 }
 
-/** 读取 https 网页正文 → 纯文本（防 SSRF + 2MB/超时护栏 + 截断保护，供 LLM 通读资料） */
+/** 读取 https 网页正文 → Markdown（防 SSRF + 2MB/超时护栏 + 截断保护，供 LLM 通读资料） */
 export async function webReadPage(rawUrl: string, maxChars = 8000): Promise<WebReadOutput> {
   const url = assertSafeWebUrl(String(rawUrl ?? '').trim())
   const html = await fetchText(url, 10000)
   const title = extractHtmlTitle(html)
-  const text = stripTags(pickMainHtml(html))
+  // 清洗复用剪藏管线（2026-09-09 P4）：容器失配/代码压行两痛点的根治；Defuddle 失败退化旧 stripTags 路径
+  let text: string
+  try {
+    text = (await extractArticle(html, url)).markdown || stripTags(pickMainHtml(html))
+  } catch { text = stripTags(pickMainHtml(html)) }
+  // 同域链接收集：href 绝对化 + 锚文本清洗 + 去重限 30（token 护栏内）
+  const links: Array<{ text: string; url: string }> = []
+  const seen = new Set<string>()
+  let host = ''
+  try { host = new URL(url).hostname } catch { /* 保底无链接 */ }
+  for (const m of html.matchAll(/<a\b[^>]*?href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let abs: URL
+    try { abs = new URL(m[1].replace(/&amp;/g, '&'), url) } catch { continue }
+    if (abs.protocol !== 'https:' && abs.protocol !== 'http:') continue
+    if (host && abs.hostname !== host) continue
+    const href = abs.href
+    const t = stripTags(m[2]).slice(0, 60).trim()
+    if (!t || seen.has(href)) continue
+    seen.add(href)
+    links.push({ text: t, url: href })
+    if (links.length >= 30) break
+  }
   const totalChars = text.length
   const cap = Math.min(Math.max(Math.floor(maxChars) || 8000, 200), MAX_READ_CHARS)
   const truncated = totalChars > cap
-  return { url, title, content: truncated ? text.slice(0, cap) : text, truncated, totalChars }
+  return { url, title, content: truncated ? text.slice(0, cap) : text, truncated, totalChars, links }
 }

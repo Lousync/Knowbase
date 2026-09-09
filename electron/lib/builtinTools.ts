@@ -1060,7 +1060,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.web.read',
     title: '读取网页全文',
-    description: '打开用户指定的 https 网页并读取正文纯文本（自动去导航/去标签、长度截断保护）。用于通读资料文章后总结、教学或提炼。仅 https；内网/私网/IP 直连与 http 一律拒绝',
+    description: '打开用户指定的 https 网页并读取正文 Markdown（Defuddle 清洗：保留标题/列表/表格/代码围栏，自动去导航/广告）。附同域页内链接清单（≤30），目录/导航页可据此选读子页跟读。仅 https；内网/私网/IP 直连一律拒绝',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1083,6 +1083,7 @@ export function registerBuiltinTools(): void {
       content: out.content,
       truncated: out.truncated,
       totalChars: out.totalChars,
+      links: out.links,
     }
   })
 

@@ -8,6 +8,7 @@
 import { readFileSync, statSync } from 'fs'
 import { extname } from 'path'
 import { unzipBuffer } from './zip'
+import { mapSymbolPua } from './puaMap'
 
 export interface DocTextOutput {
   kind: 'pdf' | 'pptx'
@@ -109,7 +110,8 @@ function extractPptxRaw(absPath: string): { n: number; text: string }[] {
   return slideNames.map(name => {
     const xml = map.get(name)!.toString('utf-8')
     const parts: string[] = []
-    for (const m of xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g)) parts.push(decodeXml(m[1]))
+    // (?=\s|>) 词边界：原 <a:t[^>]*> 会误配 <a:tbl>（表格），把整段表格 XML 当文本吞进正文（slide5/9 实证泄漏）
+    for (const m of xml.matchAll(/<a:t(?=[ >])[^>]*>([\s\S]*?)<\/a:t>/g)) parts.push(mapSymbolPua(decodeXml(m[1])))
     return { n: slideNumOf(name), text: parts.join(' ') }
   })
 }

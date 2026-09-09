@@ -732,6 +732,36 @@ export interface AiTeachSourcesResult {
   error?: string
 }
 
+/** 网页素材目录展开：章节条目（probe 返回，渲染层勾选） */
+export interface WebCrawlChapter {
+  no: number
+  title: string
+  url: string
+  group: string
+  defaultChecked: boolean
+}
+
+/** 网页探测结果：portal=门户需选锚点 / toc=目录含章节 / article=单文章 */
+export interface WebProbeResult {
+  ok: boolean
+  error?: string
+  kind?: 'portal' | 'toc' | 'article'
+  anchor?: string
+  title?: string
+  chapters?: WebCrawlChapter[]
+  candidates?: Array<{ title: string; url: string }>
+}
+
+/** 网页批量抓取结果 */
+export interface WebCrawlResult {
+  ok: boolean
+  dirRel?: string
+  done?: number
+  failed?: Array<{ url: string; title: string; reason: string }>
+  skipped?: number
+  error?: string
+}
+
 /** 会话内消息（trace 仅 assistant 消息携带） */
 export interface AgentStoredMessage {
   id: string
@@ -1326,6 +1356,7 @@ export interface ElectronAPI {
   aiTeachRenameSessionFolder: (id: string, title: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachDeleteSessionFolder: (id: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   aiTeachReadConstraints: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
+  aiTeachGlobalEnsureConstraints: () => Promise<{ ok: boolean; text?: string; relPath?: string | null; created?: boolean; error?: string }>
   aiTeachWriteConstraints: (id: string, text: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; error?: string }>
   aiTeachOrganizeDoc: (id: string, title: string, content: string, prefix?: string) => Promise<{ ok: boolean; relPath?: string | null; error?: string }>
   // P5 工作区两层（§3.2-6；元数据入 .knowbase/modules/aiTeaching/workspaces.json）
@@ -1345,6 +1376,9 @@ export interface ElectronAPI {
   aiTeachSrcVisionCheck: () => Promise<{ ok: boolean; model?: string; error?: string }>
   aiTeachSrcPdfBytes: (id: string, no: number) => Promise<{ ok: boolean; base64?: string; error?: string }>
   aiTeachSrcTranscribe: (id: string, no: number, pages: { n: number; dataUrl: string }[], modelSpec?: string) => Promise<{ ok: boolean; relPath?: string; model?: string; done?: number[]; skipped?: number[]; failed?: number[]; error?: string }>
+  aiTeachSrcWebProbe: (id: string, no: number, anchorUrl?: string) => Promise<WebProbeResult>
+  aiTeachSrcWebCrawl: (id: string, no: number, urls: string[]) => Promise<WebCrawlResult>
+  aiTeachSrcWebCancel: (id: string) => Promise<{ ok: boolean; error?: string }>
   aiTeachProfileReadGlobal: () => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
   aiTeachProfileWriteGlobal: (text: string) => Promise<{ ok: boolean; error?: string }>
   aiTeachProfileReadSession: (id: string) => Promise<{ ok: boolean; text?: string; relPath?: string | null; skeleton?: string; error?: string }>
@@ -1356,6 +1390,7 @@ export interface ElectronAPI {
   aiTeachProfileEnsureWorkspace: (id: string) => Promise<{ ok: boolean; relPath?: string; created?: boolean; error?: string }>
   llmReasoningCapable: (model: string) => Promise<boolean>
   onAiTeachTreeRefresh: (cb: (p: { dirRel: string }) => void) => () => void
+  onAiTeachWebProgress: (cb: (p: { sessionId: string; no: number; done: number; total: number; current: string }) => void) => () => void
   onAiTeachNotice: (cb: (msg: string) => void) => () => void
   llmCcSwitchList: () => Promise<CcSwitchScanResult>
   llmCcSwitchImport: (ids: string[]) => Promise<CcSwitchImportResult>

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentStartScene, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
   workspaceGetCurrent, workspaceReadFile, docsPptxPages, workspaceListDir,
-  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
+  agentRenameSession, aiTeachEnsureSessionFolder, aiTeachSessionFolder, aiTeachRenameSessionFolder, aiTeachDeleteSessionFolder, aiTeachReadConstraints, aiTeachWriteConstraints, aiTeachGlobalEnsureConstraints, aiTeachOrganizeDoc, onAiTeachNotice, onAiTeachTreeRefresh,
   aiTeachListWorkspaces, aiTeachCreateWorkspace, aiTeachRenameWorkspace, aiTeachDeleteWorkspace, aiTeachAssignSession, aiTeachUnassignSession, aiTeachSetLastWorkspace,
   aiTeachSrcRead, aiTeachSrcAdd, aiTeachSrcRemove, aiTeachSrcExtract, aiTeachSrcPick, aiTeachSrcPickDir, aiTeachSrcVisionCheck,
   aiTeachSrcPdfBytes, aiTeachSrcTranscribe,
@@ -18,6 +18,7 @@ import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
+import { WebSourceDialog } from './components/WebSourceDialog'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, AiTeachInjectionStats, LlmUsageInfo, LlmProviderInfo, LlmVisionModelInfo, AiTeachWorkspaceInfo, AiTeachSourceEntry } from '../../types'
 
 /**
@@ -42,7 +43,7 @@ import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange,
  * P6 素材库（§3.13 结构 v3）：右栏「素材库」展示 SOURCE.md 条目（工作区 SOURCES/{对话夹}/），「＋素材」表单登记
  * （类型/存放/页码区间仅 pdf·pptx 拆起止，3-28 程序解析写入）、pdf/pptx 一键区间提取为同级可编辑提取稿（3-20/3-26），
  * SOURCE.md 与提取稿经 AgentRunner 素材目录注入供 AI 编号引用（3-29，每轮重读）。
- * 3-21 视觉转写（手动档）：pdf 条目「转写」按钮→渲染层 pdf.js 区间栅格化→视觉模型逐页转写→并入提取稿。
+  * 3-21 视觉转写（手动档）：pdf/pptx 条目「转写」按钮→主进程转 PDF（pptx 经 soffice）→渲染层 pdf.js 区间栅格化→视觉模型逐页转写→并入提取稿。
  * P8 用户画像（§3.14）：全局画像（userData/AI教学/PROFILE.md）+ 会话 PROFILE.md 两层每轮注入；
  * 更新走 Plan B——AI 输出 ```profile 建议块 → 输入框上方建议卡片「接受（本主题/全局）/忽略」，接受才写文件（3-33）；
  * 「🩺 诊断问答」模板（3-34）答完生成初稿；入口=选择页「全局画像」chip + 顶栏「画像」chip（3-35）。
@@ -700,6 +701,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [srcForm, setSrcForm] = useState<null | { name: string; type: string; path: string; storage: '已入库' | '仅引用'; rangeFrom: string; rangeTo: string; note: string }>(null)
   const [srcBusy, setSrcBusy] = useState<number | null>(null)
   const [visionBusy, setVisionBusy] = useState<null | { no: number; label: string; done?: number; total?: number }>(null)
+  /** 网页素材「展开网页」对话框（web-crawl P3）：{no,name,path} 非空即开 */
+  const [webDlg, setWebDlg] = useState<null | { no: number; name: string; path: string }>(null)
   const [srcAnom, setSrcAnom] = useState<{ unnamed: number; dupNo: number; noPath?: number } | null>(null)
   const refreshSources = useCallback(async (sid: string | null) => {
     if (!sid) { setSrcEntries([]); setSrcFileRel(null); setSrcAnom(null); return }
@@ -969,6 +972,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: r.relPath, from: 'aiTeaching' } }))
     showToast({ type: 'info', message: `画像文档已在编辑区打开（${r.created ? '已按骨架创建' : '已有文件'}）· 编辑器顶栏可「← 返回 AI教学」` })
   }, [activeId, activeWs])
+  /** 全局要求编辑 = ensure 产物根 CONSTRAINTS.md（缺则落骨架）→ 跳编辑区打开；与全局画像同款交互（global-constraints 方案） */
+  const openGlobalConstraints = useCallback(async () => {
+    const r = await aiTeachGlobalEnsureConstraints().catch(() => null)
+    if (!r?.ok || !r.relPath) { showToast({ type: 'error', message: `全局要求打开失败${r?.error ? `：${r.error}` : ''}` }); return }
+    window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: r.relPath, from: 'aiTeaching' } }))
+    showToast({ type: 'info', message: `全局要求已在编辑区打开（${r.created ? '已按骨架创建' : '已有文件'}）· 保存后所有会话下一轮生效` })
+  }, [])
   const acceptProfileSuggestion = useCallback(async (target: 'global' | 'workspace' | 'session') => {
     if (!profileSuggestion) return
     if (target === 'session' && !activeId) return
@@ -1395,8 +1405,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                       自由 Markdown，无固定字段。示例：<br />
                       · 只用中文回答，先给结论再展开<br />
                       · 这个对话只聊 Linux 内核，跑题请拉回<br />
-                      · 每次回答结尾附一个表情<br />
-                      （留空并保存 = 清除约束；此文件可在左栏资源管理器或编辑器直接改）
+                       · 每次回答结尾附一个表情<br />
+                       （留空并保存 = 清除约束；此文件可在左栏资源管理器或编辑器直接改）<br />
+                       <span className="text-[var(--text-muted)]">跨会话共同遵守的要求请写「全局要求」：AI教学选择页 → 全局要求（会话要求优先于全局要求）</span>
                     </div>
                   </details>
                 </div>
@@ -2137,6 +2148,11 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                         {e.range && e.range !== '-' && <span title={e.type === 'code' ? '行号区间' : '页码区间'}>{e.type === 'code' ? 'L' : 'p'}{e.range}</span>}
                         <span title={e.path}>{e.storage === '已入库' ? '已入库' : (e.path.startsWith('http') ? '链接' : '引用')}</span>
                         <div className="ml-auto flex items-center gap-1.5">
+                          {e.type === 'url' && /^https?:\/\//i.test(e.path) && (
+                            <button onClick={() => setWebDlg({ no: e.no, name: e.name, path: e.path })}
+                              title={extMatch ? '补抓/重抓：已存在章节自动跳过，只补失败与新增页' : '展开网页：探测目录/单文章，勾选章节批量抓取为提取稿（零 token 纯程序流水线）'}
+                              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">{extMatch ? '补抓' : '展开网页'}</button>
+                          )}
                           {extMatch && dirRel && (
                             <button onClick={() => { void openDocView(`${dirRel}/${extMatch[1].trim()}`) }} title="阅读提取稿（可编辑）"
                               className="text-[var(--accent)] hover:opacity-80 transition-opacity">提取稿 ✓</button>
@@ -2147,11 +2163,14 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                               {srcBusy === e.no ? <Loader2 size={9} className="animate-spin" /> : <BookOpen size={9} />}{srcBusy === e.no ? '提取中…' : '提取'}
                             </button>
                           )}
-                          {e.type === 'pdf' && e.path && e.path !== '-' && (
+                          {(e.type === 'pdf' || e.type === 'pptx') && e.path && e.path !== '-' && (
                             /* 3-21 手动档→分批流水线：区间页栅格化→视觉模型转写（公式/图形/扫描件），
-                               >12 页自动分批+断点续转（提取稿已有页跳过），结果非破坏并入提取稿 */
+                               >12 页自动分批+断点续转（提取稿已有页跳过），结果非破坏并入提取稿；
+                               pptx（2026-09-09 B 方案）由主进程 soffice 转 PDF 后同链路栅格化 */
                             <button onClick={() => { void doTranscribe(e.no) }} disabled={!!visionBusy}
-                              title={visionBusy?.no === e.no ? visionBusy.label : '视觉转写：把登记区间的页面交给视觉模型转写（>12 页自动分批、断点续转），并入提取稿后可编辑。点击可中途停止'}
+                              title={visionBusy?.no === e.no ? visionBusy.label : e.type === 'pptx'
+                                ? '视觉转写：pptx 先经本机 LibreOffice 转 PDF 再逐页转写（需已安装 LibreOffice，可在设置→AI 模型→LibreOffice 路径指定）；文本提取对多数 PPT 公式已够用'
+                                : '视觉转写：把登记区间的页面交给视觉模型转写（>12 页自动分批、断点续转），并入提取稿后可编辑。点击可中途停止'}
                               className="flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors">
                               {visionBusy?.no === e.no ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
                               {visionBusy?.no === e.no ? '转写中…' : '转写'}
@@ -2362,6 +2381,22 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               全局画像
             </button>
           </div>
+          {/* 全局要求（global-constraints 方案）：跨会话共同遵守的约束，与画像全局层同级同交互 */}
+          <div className="mt-3 flex items-start gap-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-4 py-3.5">
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-hover)] text-[var(--text-secondary)]">
+              <ScrollText size={14} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-[var(--text-primary)]">全局要求 · 所有会话每轮遵循</div>
+              <div className="mt-1 text-[11.5px] text-[var(--text-muted)] leading-relaxed">
+                写在 <code className="rounded bg-[var(--bg-hover)] px-1">{aiTeachRoot}/CONSTRAINTS.md</code> 的个人通用要求（语言/结构/风格），跨工作区共享；冲突时优先级：用户当下消息 &gt; 会话要求 &gt; 全局要求。
+              </div>
+            </div>
+            <button onClick={() => { void openGlobalConstraints() }} title={`编辑全局要求 · 确保并打开 ${aiTeachRoot}/CONSTRAINTS.md（首次点击按骨架创建）`}
+              className="shrink-0 self-center flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[var(--border-color)] text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              编辑全局要求
+            </button>
+          </div>
           <div className="mt-8 text-[11px] text-[var(--text-muted)] leading-relaxed">
             对话产物目录：<code className="px-1 rounded bg-[var(--bg-hover)]">{treeBase}/{'{MM-DD 会话标题}'}/</code>；删除工作区只解除归属，文件夹与对话保留。
           </div>
@@ -2397,23 +2432,24 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   className="min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]"
                   onKeyDown={e => { if (e.key === 'Escape') setSrcForm(null) }} />
               </div>
-              {/* 类型全自动检测（2026-09-08 用户拍板）：按文件/地址扩展名实时识别，用户无需选择；
-                  未选文件/未填地址时整行不显示（空占位徽标无信息量）。
-                  分工：表单登记自动识别；手编 SOURCE.md / AI 登记则由用户/AI 在文件里写明类型 */}
-              {srcForm.path.trim() && (
-                <div className="flex items-center gap-2">
-                  <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">类型</label>
+              {/* 类型全自动检测（2026-09-08 拍板）+ 存放方式常驻（2026-09-09 修 URL 死锁）：
+                  「存放」选择器不受路径是否已填限制——否则默认已入库且未浏览时切不到「仅引用」，URL 无从录入；
+                  类型徽章有路径后按扩展名/协议实时识别。分工不变：表单登记自动识别；手编/AI 登记由用户在文件里写明类型 */}
+              <div className="flex items-center gap-2">
+                {srcForm.path.trim() ? (
                   <span className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] text-[var(--text-secondary)]">
                     自动识别：{srcForm.type === 'dir' ? '目录（目录下所有文件都是素材）' : inferSrcType(srcForm.path)}
                   </span>
-                  <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
-                  <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
-                    className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
-                    <option value="已入库">已入库（拷贝原件）</option>
-                    <option value="仅引用">仅引用（记路径）</option>
-                  </select>
-                </div>
-              )}
+                ) : (
+                  <span className="text-[11px] text-[var(--text-muted)]">类型按所填地址/文件自动识别</span>
+                )}
+                <label className="ml-2 shrink-0 text-[11.5px] text-[var(--text-secondary)]">存放</label>
+                <select value={srcForm.storage} onChange={e => setSrcForm({ ...srcForm, storage: e.target.value === '已入库' ? '已入库' : '仅引用', path: '' })}
+                  className="rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--accent)]">
+                  <option value="已入库">已入库（拷贝原件）</option>
+                  <option value="仅引用">仅引用（记路径/URL）</option>
+                </select>
+              </div>
               <div className="flex items-center gap-2">
                 <label className="w-[52px] shrink-0 text-right text-[11.5px] text-[var(--text-secondary)]">{srcForm.storage === '已入库' ? '文件' : '地址'}</label>
                 {srcForm.storage === '已入库' ? (
@@ -2466,6 +2502,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
       )}
       {/* UI 优化第三轮：画像编辑不再用弹层——三层=三份仓库内 PROFILE.md，入口直接跳编辑区打开
           （ensure 落骨架 → kb-open-in-editor from:aiTeaching → 编辑器「← 返回 AI教学」回跳）；弹层 JSX 已删除 */}
+      {webDlg && activeId && (
+        <WebSourceDialog sessionId={activeId} entry={webDlg} onClose={() => setWebDlg(null)} onDone={() => { void refreshSources(activeId) }} />
+      )}
     </div>
   )
 }

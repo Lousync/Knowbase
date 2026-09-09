@@ -212,6 +212,54 @@ export function writeConstraints(sessionId: string, text: string, getSetting: (k
   }
 }
 
+// ===== 全局约束层（.claude/plans/global-constraints.md）=====
+// {产物根}/CONSTRAINTS.md：跨工作区/跨会话共同要求，AgentRunner 每轮重读注入（与画像全局层同哲学）。
+// 优先级链在注入提示词中明示：用户当下消息 > 会话约束 > 全局约束 > 内置人设。
+
+const GLOBAL_CONSTRAINTS_SKELETON = [
+  '# 全局要求（所有 AI 会话每轮自动遵循）',
+  '',
+  '在这里写跨会话共同遵守的要求，例如：',
+  '- 回答默认使用中文，代码标识符保留英文',
+  '- 每次先给一句话结论，再展开',
+  '- 不确定时明说不确定，不要编造',
+  '',
+  '会话文件夹里的 CONSTRAINTS.md 可覆盖本文件的具体条目。',
+  '',
+].join('\n')
+
+/** 读全局约束；无仓库/无文件一律空 text（注入层零段，不报错） */
+export function readGlobalConstraints(getSetting: (key: string) => unknown): ConstraintsResult {
+  try {
+    const vault = getCurrentVault()
+    if (!vault) return { ok: true, text: '', relPath: null }
+    const rel = `${rootDirName(getSetting)}/${CONSTRAINTS_FILE}`
+    const p = join(vault.rootPath, rel)
+    const text = existsSync(p) ? readFileSync(p, 'utf-8') : ''
+    return { ok: true, text, relPath: text.trim() ? rel : null }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** 确保全局约束文档存在（首次入口点击落骨架）；返回 relPath 供跳编辑区打开 */
+export function ensureGlobalConstraints(getSetting: (key: string) => unknown): ConstraintsResult & { created?: boolean } {
+  try {
+    const vault = getCurrentVault()
+    if (!vault) return { ok: false, error: '尚未打开仓库' }
+    const rootDir = rootDirName(getSetting)
+    const dirAbs = join(vault.rootPath, rootDir)
+    const p = join(dirAbs, CONSTRAINTS_FILE)
+    if (existsSync(p)) return { ok: true, text: readFileSync(p, 'utf-8'), relPath: `${rootDir}/${CONSTRAINTS_FILE}` }
+    if (!existsSync(dirAbs)) mkdirSync(dirAbs, { recursive: true })
+    writeFileSync(p, GLOBAL_CONSTRAINTS_SKELETON, 'utf-8')
+    broadcastTreeRefresh(rootDir)
+    return { ok: true, text: GLOBAL_CONSTRAINTS_SKELETON, relPath: `${rootDir}/${CONSTRAINTS_FILE}`, created: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
 /**
  * AgentRunner 注入解析（§2.3 / 2-6）：CONSTRAINTS.md 文件是唯一真相源；
  * 旧会话从未落过文件夹 → 读兼容回退 DB sessionInstructions 一次；
@@ -412,6 +460,8 @@ export function registerAiTeachingFolderHandlers(getSetting: (key: string) => un
   // P2：会话约束文件（CONSTRAINTS.md）读写
   ipcMain.handle('aiTeach:readConstraints', (_e, sessionId: string) => readConstraints(String(sessionId ?? ''), getSetting))
   ipcMain.handle('aiTeach:writeConstraints', (_e, sessionId: string, text: string) => writeConstraints(String(sessionId ?? ''), String(text ?? ''), getSetting))
+  // 全局约束层（global-constraints 方案）：ensure=入口点击落骨架并返回 relPath 跳编辑区；写入走编辑器现有通道
+  ipcMain.handle('aiTeachGlobal:ensureConstraints', () => ensureGlobalConstraints(getSetting))
   // P3b：整理成文档（回答 md 落盘会话文件夹，幂等）；P7 起支持产物前缀（讲义/测验）
   ipcMain.handle('aiTeach:organizeDoc', (_e, sessionId: string, title: string, content: string, prefix?: string) => organizeDoc(String(sessionId ?? ''), String(title ?? '讲义'), String(content ?? ''), getSetting, typeof prefix === 'string' && prefix ? prefix : '讲义'))
 }

@@ -241,6 +241,8 @@ const api = {
   aiTeachRenameSessionFolder: (id: string, title: string) => ipcRenderer.invoke('aiTeach:renameSessionFolder', id, title),
   aiTeachDeleteSessionFolder: (id: string) => ipcRenderer.invoke('aiTeach:deleteSessionFolder', id),
   aiTeachReadConstraints: (id: string) => ipcRenderer.invoke('aiTeach:readConstraints', id),
+  /** 全局约束文档（AI教学产物根 CONSTRAINTS.md）：ensure 落骨架并返回 relPath 跳编辑区打开 */
+  aiTeachGlobalEnsureConstraints: () => ipcRenderer.invoke('aiTeachGlobal:ensureConstraints'),
   aiTeachWriteConstraints: (id: string, text: string) => ipcRenderer.invoke('aiTeach:writeConstraints', id, text),
   aiTeachOrganizeDoc: (id: string, title: string, content: string, prefix?: string) => ipcRenderer.invoke('aiTeach:organizeDoc', id, title, content, prefix),
   // AI教学 P5：工作区两层（§3.2-6）
@@ -260,6 +262,10 @@ const api = {
   aiTeachSrcVisionCheck: () => ipcRenderer.invoke('aiTeachSrc:visionCheck'),
   aiTeachSrcPdfBytes: (id: string, no: number) => ipcRenderer.invoke('aiTeachSrc:pdfBytes', id, no),
   aiTeachSrcTranscribe: (id: string, no: number, pages: { n: number; dataUrl: string }[], modelSpec?: string) => ipcRenderer.invoke('aiTeachSrc:transcribe', id, no, pages, modelSpec),
+  /** 网页素材：探测目录/单文章/门户候选 → 批量抓取（进度走 onAiTeachWebProgress）→ 取消 */
+  aiTeachSrcWebProbe: (id: string, no: number, anchorUrl?: string) => ipcRenderer.invoke('aiTeachSrc:webProbe', id, no, anchorUrl),
+  aiTeachSrcWebCrawl: (id: string, no: number, urls: string[]) => ipcRenderer.invoke('aiTeachSrc:webCrawl', id, no, urls),
+  aiTeachSrcWebCancel: (id: string) => ipcRenderer.invoke('aiTeachSrc:webCancel', id),
   aiTeachProfileReadGlobal: () => ipcRenderer.invoke('aiTeachProfile:readGlobal'),
   aiTeachProfileWriteGlobal: (text: string) => ipcRenderer.invoke('aiTeachProfile:writeGlobal', text),
   aiTeachProfileReadSession: (id: string) => ipcRenderer.invoke('aiTeachProfile:readSession', id),
@@ -274,6 +280,12 @@ const api = {
     const handler = (_e: unknown, p: { dirRel: string }) => cb(p)
     ipcRenderer.on('aiTeach:tree-refresh', handler)
     return () => { ipcRenderer.removeListener('aiTeach:tree-refresh', handler) }
+  },
+  /** 网页抓取进度（AI教学素材库） */
+  onAiTeachWebProgress: (cb: (p: { sessionId: string; no: number; done: number; total: number; current: string }) => void) => {
+    const handler = (_e: unknown, p: { sessionId: string; no: number; done: number; total: number; current: string }) => cb(p)
+    ipcRenderer.on('aiTeach:web-crawl-progress', handler)
+    return () => { ipcRenderer.removeListener('aiTeach:web-crawl-progress', handler) }
   },
   /** AI教学主进程侧不可静默的提示（根目录迁移失败等） */
   onAiTeachNotice: (cb: (msg: string) => void) => {
