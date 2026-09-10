@@ -279,6 +279,12 @@ export interface ScheduleTodo {
   taskType: 'deadline' | 'plan' | 'daily'; tagId: string | null
   status: 'pending' | 'done'; sortOrder: number
   endCriteria: string; parentId: string | null
+  /**
+   * 日程表排期时段（当天分钟数，540 = 09:00；null = 未排期）。
+   * 与 `time`（截止时刻，仅 deadline 类）语义分离 —— 一个是「排到哪个时段」，一个是「几点前必须完成」。
+   */
+  scheduledStart: number | null
+  scheduledEnd: number | null
   createdAt: string; updatedAt: string
   tag?: ScheduleTag | null
   subtasks?: ScheduleTodo[]
@@ -288,11 +294,13 @@ export interface CreateScheduleTodoDTO {
   title: string; description?: string; date: string; time?: string
   quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string
   endCriteria?: string; parentId?: string
+  scheduledStart?: number | null; scheduledEnd?: number | null
 }
 export interface UpdateScheduleTodoDTO {
   title?: string; description?: string; date?: string; time?: string | null
   quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string | null
   status?: string; endCriteria?: string; parentId?: string | null
+  scheduledStart?: number | null; scheduledEnd?: number | null
 }
 
 // knowledge
@@ -965,6 +973,8 @@ export interface ElectronAPI {
   getScheduleOverdue: (today: string) => Promise<ScheduleTodo[]>
   getScheduleDeadlineCounts: (yearMonth: string) => Promise<Record<string, number>>
   getScheduleSubtasks: (parentId: string) => Promise<ScheduleTodo[]>
+  getScheduleUnscheduledTodos: () => Promise<ScheduleTodo[]>
+  getScheduleWeekTodos: (weekStart: string, weekEnd: string) => Promise<ScheduleTodo[]>
   createScheduleTodo: (d: CreateScheduleTodoDTO) => Promise<ScheduleTodo>
   updateScheduleTodo: (id: string, d: UpdateScheduleTodoDTO) => Promise<ScheduleTodo>
   deleteScheduleTodo: (id: string) => Promise<void>

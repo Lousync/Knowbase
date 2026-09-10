@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check, CalendarDays } from 'lucide-react'
+import { Plus, Maximize2, Zap, ChevronDown, RotateCcw, Trash2, Check, CalendarDays, LayoutGrid } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO } from '../../types'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags, getScheduleSubtasks,
+  getScheduleUnscheduledTodos,
   createScheduleTag, deleteScheduleTag, getSetting, setSetting
 } from '../../lib/ipc'
-import { CalendarView, type ViewMode } from './views/CalendarView'
+import { CalendarView } from './views/CalendarView'
+import type { ViewMode } from './types'
+import { ViewSwitcher } from './components/ViewSwitcher'
+import { TaskTray } from './components/TaskTray'
+import { TimetableView } from './views/TimetableView'
+import { dndMeta } from './timetable'
 import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -23,6 +29,31 @@ import {
   type QuadrantIcon, type QuadrantOrder,
 } from '../../lib/scheduleQuadrant'
 import { celebrateAllDone, playDoneSound, type TaskFeedbackLevel } from './components/TodoItem'
+
+/**
+ * 视图切换的交叉淡化：旧内容先淡出（110ms），再换上新区内容淡入。
+ * 两个区域（侧栏 / 主区）共用同一个 hook 实例的结果，保证同步。
+ */
+function useViewTransition(value: ViewMode, delay = 110) {
+  const [shown, setShown] = useState(value)
+  const [leaving, setLeaving] = useState(false)
+  useEffect(() => {
+    if (value === shown) return
+    setLeaving(true)
+    const t = window.setTimeout(() => { setShown(value); setLeaving(false) }, delay)
+    return () => window.clearTimeout(t)
+  }, [value, shown, delay])
+  return { shown, leaving }
+}
+
+/** 切换过程中的内容态样式（淡出时略带上移，制造「接力」感） */
+function paneStyle(leaving: boolean): React.CSSProperties {
+  return {
+    opacity: leaving ? 0 : 1,
+    transform: leaving ? 'translateY(-5px)' : 'none',
+    transition: 'opacity 140ms ease, transform 200ms cubic-bezier(.4,0,.2,1)',
+  }
+}
 
 const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; placeholder: string; meta: string; metaIcon: number; sectionTitle: string }> = {
   sm: { icon: 14, text: 'text-[11px]', padY: 'py-1.5', placeholder: '零碎任务...', meta: 'text-[11px]', metaIcon: 10, sectionTitle: 'text-[12px]' },
@@ -58,9 +89,15 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
   /** 四象限视图的分组展示顺序（跟随排序设置） */
   const quadrantList = useMemo(() => orderedQuadrants(quadrantOrder), [quadrantOrder])
 
-  const [viewMode, setViewMode] = useState<ViewMode>('date')
+  const [viewMode, setViewMode] = useState<ViewMode>('week')
+  /** 交叉淡化用：shown = 当前上屏的视图，leaving = 旧内容正在淡出 */
+  const { shown: shownMode, leaving: viewLeaving } = useViewTransition(viewMode)
   const [monthTodos, setMonthTodos] = useState<ScheduleTodo[]>([])
   const [subtasksMap, setSubtasksMap] = useState<Record<string, ScheduleTodo[]>>({})
+  /** 日程表「待安排」栏：全部未排期的顶层未完成任务（三类任务都可进） */
+  const [unscheduled, setUnscheduled] = useState<ScheduleTodo[]>([])
+  /** 递增信号：排期变化后通知 TimetableView 重取本周数据 */
+  const [weekRefresh, setWeekRefresh] = useState(0)
 
   // AI 助手上下文：当前选中的日期及其待办
   useEffect(() => {
@@ -89,6 +126,10 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
   useEffect(() => {
     getSetting('scheduleIconSize').then(v => {
       if (v === 'sm' || v === 'md' || v === 'lg') setIconSize(v)
+    })
+    // 视图选择持久化：本次停在哪个视图，下次进来还停在那儿
+    getSetting('scheduleViewMode').then(v => {
+      if (v === 'week' || v === 'date' || v === 'deadline' || v === 'quadrant') setViewMode(v)
     })
   }, [])
 
@@ -138,7 +179,13 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     } catch (e) { console.error(e) }
   }
 
-  async function refreshAll() { await Promise.all([refreshDotDates(), refreshMonthTodos()]) }
+  async function refreshUnscheduled() {
+    try {
+      setUnscheduled(await getScheduleUnscheduledTodos())
+    } catch (e) { console.error(e) }
+  }
+
+  async function refreshAll() { await Promise.all([refreshDotDates(), refreshMonthTodos(), refreshUnscheduled()]) }
 
   const loadTags = useCallback(async () => {
     try {
@@ -188,7 +235,10 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     setYear(n.getFullYear()); setMonth(n.getMonth() + 1); setSelectedDate(today)
   }
 
-  function handleViewModeChange(mode: ViewMode) { setViewMode(mode) }
+  function handleViewModeChange(mode: ViewMode) {
+    setViewMode(mode)
+    setSetting('scheduleViewMode', mode)
+  }
 
   async function openQuadrantChart() { await refreshMonthTodos(); setQuadrantOpen(true) }
 
@@ -199,16 +249,28 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
   async function handleDeleteTag(id: string) { await deleteScheduleTag(id); await loadTags() }
 
   // ---- CRUD ----
-  function openEdit(todo: ScheduleTodo) { setEditTarget(todo); setModalOpen(true) }
+  /** 新建任务时预填的排期时段（日程表空白拖框创建时带上） */
+  const [pendingSlot, setPendingSlot] = useState<{ date: string; start: number; end: number } | null>(null)
+
+  function openEdit(todo: ScheduleTodo) { setPendingSlot(null); setEditTarget(todo); setModalOpen(true) }
+  /** 打开「新建任务」：slot 非空时预填日期与排期时段（拖框创建的路径） */
+  function openCreate(slot: { date: string; start: number; end: number } | null = null) {
+    setEditTarget(null); setPendingSlot(slot); setModalOpen(true)
+  }
 
   async function handleSave(form: { title: string; description: string; time: string; quadrant: number; taskType: 'deadline' | 'plan' | 'daily'; tagId: string; endCriteria: string }) {
+    // 排期时段不在这里编辑（由日程表拖拽产生），保存时原样带回：
+    // 编辑 = 沿用目标任务的时段；新建 = 用拖框产生的预填时段（普通新建则为空）
+    const slotStart = editTarget ? editTarget.scheduledStart : (pendingSlot?.start ?? null)
+    const slotEnd = editTarget ? editTarget.scheduledEnd : (pendingSlot?.end ?? null)
     const dto: CreateScheduleTodoDTO = {
       title: form.title, description: form.description,
-      date: editTarget ? editTarget.date : today,
+      date: editTarget ? editTarget.date : (pendingSlot?.date ?? today),
       time: form.taskType === 'deadline' ? form.time : undefined,
       quadrant: form.quadrant, taskType: form.taskType,
       tagId: form.tagId || undefined,
-      endCriteria: form.taskType === 'plan' ? form.endCriteria : undefined
+      endCriteria: form.taskType === 'plan' ? form.endCriteria : undefined,
+      scheduledStart: slotStart, scheduledEnd: slotEnd
     }
     try {
       if (editTarget) {
@@ -220,9 +282,10 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
           endCriteria: form.taskType === 'plan' ? form.endCriteria : ''
         })
       } else { await createScheduleTodo(dto) }
-      setModalOpen(false); setEditTarget(null)
+      setModalOpen(false); setEditTarget(null); setPendingSlot(null)
       notifyDataChanged('schedule')
       await refreshAll()
+      setWeekRefresh(v => v + 1)
     } catch (e) { console.error(e) }
   }
 
@@ -236,6 +299,9 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     try {
       await updateScheduleTodo(id, { status: next })
       notifyDataChanged('schedule')
+      // 完成/恢复会改变「待安排」栏与「延后幽灵」的构成，通知日程表重取
+      setWeekRefresh(v => v + 1)
+      void refreshUnscheduled()
     } catch (e) {
       setMonthTodos(prevList => prevList.map(t => (t.id === id ? { ...t, status: prev } : t)))
       showToast({ type: 'error', message: '任务状态更新失败' })
@@ -261,7 +327,46 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
 
   const [showDone, setShowDone] = useState(false)
 
-  async function handleDelete(id: string) { await deleteScheduleTodo(id); notifyDataChanged('schedule'); await refreshAll() }
+  async function handleDelete(id: string) {
+    await deleteScheduleTodo(id)
+    notifyDataChanged('schedule')
+    await refreshAll()
+    setWeekRefresh(v => v + 1)
+  }
+
+  /** 日程表：把卡片拖回「待安排」栏 = 取消排期（清空时段，日期保留） */
+  async function handleUnschedule(todo: ScheduleTodo) {
+    try {
+      await updateScheduleTodo(todo.id, { scheduledStart: null, scheduledEnd: null })
+      notifyDataChanged('schedule')
+      await refreshAll()
+      setWeekRefresh(v => v + 1)
+    } catch (e) {
+      showToast({ type: 'error', message: '取消排期失败' })
+      console.error(e)
+    }
+  }
+
+  /** 日程表：排期 / 改时长落盘成功后，刷新侧栏与月历并广播给其他窗口 */
+  function handleScheduleChanged() {
+    notifyDataChanged('schedule')
+    void refreshAll()
+  }
+
+  /** 拖起「待安排」卡片：写入跨组件拖拽缓存，默认给 1 小时的初始时长 */
+  function handleTrayDragStart(todo: ScheduleTodo, e: React.DragEvent) {
+    dndMeta.id = todo.id
+    dndMeta.from = 'tray'
+    dndMeta.duration = 60
+    dndMeta.grabOffset = 30
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', todo.id)
+  }
+
+  function handleTrayDragEnd() {
+    dndMeta.id = null
+    dndMeta.from = null
+  }
 
   async function handleClearDone() {
     if (doneTodos.length === 0) return
@@ -321,6 +426,14 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     for (const t of doneTodos) (groups[t.date] ??= []).push(t)
     return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a))
   }, [doneTodos])
+
+  /** 待安排列表（关联标签，供侧栏渲染色条与标签名） */
+  const unscheduledWithTag = useMemo(() =>
+    unscheduled.map(t => ({
+      ...t,
+      tag: t.tagId ? tags.find(tg => tg.id === t.tagId) ?? null : null,
+    })),
+    [unscheduled, tags])
 
   // Today's date string
   const todayDateStr = localToday()
@@ -433,8 +546,7 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
       // Ctrl+N — open new task modal
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault()
-        setEditTarget(null)
-        setModalOpen(true)
+        openCreate()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -443,11 +555,20 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
 
   return (
     <div className="flex h-full flex-col bg-[var(--bg-primary)]">
-      {/* 顶部贯通行：横跨侧栏 + 内容区 */}
+      {/* 顶部贯通行：视图切换条 + 视图专属操作 */}
       <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2 py-1 shrink-0 select-none">
         <CalendarDays size={12} className="text-[var(--text-muted)]" />
-        <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{viewTitle}</span>
+        <ViewSwitcher value={viewMode} onChange={handleViewModeChange} />
+        {viewMode !== 'week' && (
+          <span className="text-[11.5px] font-medium text-[var(--text-muted)] truncate">{viewTitle}</span>
+        )}
         <div className="ml-auto flex items-center gap-0.5">
+          {viewMode === 'quadrant' && (
+            <button onClick={openQuadrantChart} title="打开象限图"
+              className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+              <LayoutGrid size={13} />
+            </button>
+          )}
           <div className="relative" ref={sizeMenuRef}>
             <button onClick={() => setSizeMenuOpen(v => !v)}
               className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
@@ -469,7 +590,7 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
             className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
             管理标签
           </button>
-          <button onClick={() => { setEditTarget(null); setModalOpen(true) }}
+          <button onClick={() => openCreate()}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors">
             <Plus size={12} /> 添加
           </button>
@@ -478,27 +599,66 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
 
       <div className="flex min-h-0 flex-1">
       <ResizablePanel storageKey="sidebarWidth_schedule" defaultWidth={280} minWidth={220} maxWidth={450} visible={sidebarOpen} initialWidth={sidebarWidths.sidebarWidth_schedule} onSnapClose={onSnapCloseSidebar} onSnapOpen={onSnapOpenSidebar}>
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col" style={paneStyle(viewLeaving)}>
           {/* 头部：与编辑器「资源管理器」同款紧凑标题行 */}
           <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
             <CalendarDays size={12} />
-            日程
+            {shownMode === 'week' ? '待安排' : '日程'}
+            {shownMode === 'week' && unscheduled.length > 0 && (
+              <span className="ml-auto rounded-full bg-[var(--bg-tertiary)] px-1.5 leading-[15px] text-[10.5px] font-semibold text-[var(--text-secondary)]">
+                {unscheduled.length}
+              </span>
+            )}
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <CalendarView
-              year={year} month={month} selectedDate={selectedDate}
-              dotDates={dotDates} deadlineCounts={deadlineCounts}
-              viewMode={viewMode}
-              onSelectDate={setSelectedDate}
-              onPrevMonth={goToPrevMonth} onNextMonth={goToNextMonth}
-              onToday={goToToday} onViewModeChange={handleViewModeChange}
-              onQuadrantChart={openQuadrantChart}
-            />
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {shownMode === 'week' ? (
+              <TaskTray
+                todos={unscheduledWithTag}
+                iconSize={iconSize}
+                quadrantIcon={quadrantIcon}
+                quadrantText={quadrantText}
+                onOpen={openEdit}
+                onDragStartTodo={handleTrayDragStart}
+                onDragEndTodo={handleTrayDragEnd}
+                onDropTodo={id => {
+                  const t = unscheduled.find(x => x.id === id)
+                  if (t) void handleUnschedule(t)
+                }}
+              />
+            ) : (
+              <div className="h-full overflow-y-auto">
+                <CalendarView
+                  year={year} month={month} selectedDate={selectedDate}
+                  dotDates={dotDates} deadlineCounts={deadlineCounts}
+                  onSelectDate={setSelectedDate}
+                  onPrevMonth={goToPrevMonth} onNextMonth={goToNextMonth}
+                  onToday={goToToday}
+                />
+              </div>
+            )}
           </div>
         </div>
       </ResizablePanel>
 
       <div className="flex-1 flex flex-col overflow-hidden">
+        {shownMode === 'week' ? (
+          /* ===== 日程表（周视图）===== */
+          <div className="flex-1 min-h-0 flex flex-col" style={paneStyle(viewLeaving)}>
+            <TimetableView
+              isActive={isActive}
+              tags={tags}
+              iconSize={iconSize}
+              quadrantIcon={quadrantIcon}
+              quadrantText={quadrantText}
+              refreshSignal={weekRefresh}
+              onOpenTodo={openEdit}
+              onToggleDone={handleToggleDone}
+              onRequestCreate={(dateStr, start, end) => openCreate({ date: dateStr, start, end })}
+              onChanged={handleScheduleChanged}
+            />
+          </div>
+        ) : (
+        <div className="flex-1 min-h-0 flex flex-col" style={paneStyle(viewLeaving)}>
         {/* 当日任务快速添加条 */}
         <div className={`flex items-center gap-2 px-6 ${INPUT_SZ[iconSize].padY} border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0`}>
           <Zap size={INPUT_SZ[iconSize].icon} className="text-[var(--warning)] shrink-0" />
@@ -644,25 +804,33 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
         {/* ===== COMPLETED TASKS ===== */}
         {doneTodos.length > 0 && (
           <div className="border-t border-[var(--border-color)] shrink-0">
-            <button
-              onClick={() => setShowDone(v => !v)}
-              className={`flex items-center justify-between w-full px-6 py-2.5 ${INPUT_SZ[iconSize].meta} text-[var(--text-muted)] hover:bg-[var(--bg-hover)] transition-colors`}
-            >
-              <span className="flex items-center gap-2">
+            {/* 行容器改用 div：内部含「全部清除」按钮，按钮不能嵌套按钮（否则 React 报 validateDOMNesting） */}
+            <div className={`flex items-center justify-between w-full px-6 py-2.5 ${INPUT_SZ[iconSize].meta} text-[var(--text-muted)] hover:bg-[var(--bg-hover)] transition-colors`}>
+              <button
+                onClick={() => setShowDone(v => !v)}
+                className="flex items-center gap-2 flex-1 text-left"
+                aria-expanded={showDone}
+              >
                 <Check size={INPUT_SZ[iconSize].metaIcon + 4} />
                 已完成 · {doneTodos.length} 项
-              </span>
+              </button>
               <span className="flex items-center gap-2">
                 <button
-                  onClick={e => { e.stopPropagation(); handleClearDone() }}
+                  onClick={handleClearDone}
                   className={`px-2 py-1 ${INPUT_SZ[iconSize].meta} text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded transition-colors`}
                   title="已完成任务 7 天后自动清空"
                 >
                   <Trash2 size={INPUT_SZ[iconSize].metaIcon + 4} className="inline mr-0.5" />全部清除
                 </button>
-                <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+                <button
+                  onClick={() => setShowDone(v => !v)}
+                  className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors"
+                  title={showDone ? '收起已完成' : '展开已完成'}
+                >
+                  <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+                </button>
               </span>
-            </button>
+            </div>
             {showDone && (
               <div className="px-6 py-3 max-h-[260px] overflow-y-auto space-y-3">
                 {doneByDate.map(([date, items]) => (
@@ -682,6 +850,8 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
               </div>
             )}
           </div>
+        )}
+        </div>
         )}
       </div>
       </div>

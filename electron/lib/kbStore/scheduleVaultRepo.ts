@@ -24,6 +24,14 @@ export interface TodoRow {
   time: string | null; quadrant: number; task_type: string
   tag_id: string | null; status: string; sort_order: number
   end_criteria: string | null; parent_id: string | null
+  /**
+   * 日程表排期时段（当天分钟数，540 = 09:00）。
+   * 与 `time` 语义严格分离：`time` 是「截止时刻」（YYYY-MM-DDTHH:mm，仅 deadline 类），
+   * 这里是「从几点排到几点」的时段。两者都为 null 时任务只出现在「待安排」栏。
+   * 旧数据无此字段 → 读时兜 null，不需要迁移。
+   */
+  scheduled_start: number | null
+  scheduled_end: number | null
   created_at: string; updated_at: string
 }
 
@@ -154,6 +162,36 @@ export function vaultMonthTodos(yearMonth: string): TodoRow[] {
     .sort((a, b) => binaryCompare(str(a.date), str(b.date)) || bySortThenCreated(a, b))
 }
 
+/**
+ * 未排期任务：顶层、未完成、且**没有排期时段**（scheduled_start 为空）。
+ *
+ * 日程表视图「待安排」栏的数据源。刻意**不限日期/月份** ——
+ * 三类任务（plan / daily / deadline）都可以先进这个池子，等着被拖进网格排期；
+ * 计划类任务本来就没有日期归属，只按月份捞会让它们漏出视野。
+ * 排序：日期升序 → 建序（与月视图同口径，保持稳定）。
+ */
+export function vaultUnscheduledTodos(): TodoRow[] {
+  return vaultTodosAll()
+    .filter((r) => isNull(r.parent_id) && r.status === 'pending' && isNull(r.scheduled_start))
+    .sort((a, b) => binaryCompare(str(a.date), str(b.date)) || bySortThenCreated(a, b))
+}
+
+/**
+ * 日程表视图：某一周（含首尾）的顶层任务。
+ *
+ * 除区间内的任务外，还捞**区间之前、已排期但未完成**的任务 —— 它们是「未完成自动延后」
+ * 的候选，视图会在今天的同一时段以虚线幽灵呈现（原日期让位）。
+ * 已完成的历史任务不捞，避免幽灵越积越多。
+ */
+export function vaultTodosForWeek(weekStart: string, weekEnd: string): TodoRow[] {
+  return vaultTodosAll()
+    .filter((r) => isNull(r.parent_id) && (
+      (r.date >= weekStart && r.date <= weekEnd) ||
+      (r.status === 'pending' && !isNull(r.scheduled_start) && r.date < weekStart)
+    ))
+    .sort((a, b) => binaryCompare(str(a.date), str(b.date)) || bySortThenCreated(a, b))
+}
+
 /** SELECT * FROM schedule_todos WHERE parent_id = ? ORDER BY sort_order, created_at */
 export function vaultSubtasks(parentId: string): TodoRow[] {
   return vaultTodosAll()
@@ -203,8 +241,9 @@ export function vaultCreateTodo(row: TodoRow): TodoRow {
 type TodoColumn =
   | 'title' | 'description' | 'date' | 'time' | 'quadrant' | 'task_type'
   | 'tag_id' | 'status' | 'end_criteria' | 'parent_id'
+  | 'scheduled_start' | 'scheduled_end'
 
-const TODO_COLUMNS: TodoColumn[] = ['title', 'description', 'date', 'time', 'quadrant', 'task_type', 'tag_id', 'status', 'end_criteria', 'parent_id']
+const TODO_COLUMNS: TodoColumn[] = ['title', 'description', 'date', 'time', 'quadrant', 'task_type', 'tag_id', 'status', 'end_criteria', 'parent_id', 'scheduled_start', 'scheduled_end']
 
 function camelToSnake(s: string): string {
   return s.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase())
@@ -239,6 +278,8 @@ export function vaultUpdateTodo(id: string, patch: Record<string, unknown>, upda
       case 'status': next.status = v as string; break
       case 'end_criteria': next.end_criteria = v as string | null; break
       case 'parent_id': next.parent_id = v as string | null; break
+      case 'scheduled_start': next.scheduled_start = v as number | null; break
+      case 'scheduled_end': next.scheduled_end = v as number | null; break
     }
   }
   // preset：updated_at 总被刷新（sqlite handler 里恒定附加）

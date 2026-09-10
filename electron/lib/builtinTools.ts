@@ -573,7 +573,10 @@ export function registerBuiltinTools(): void {
     vaultCreateTodo({
       id, title, description: '', date, time, quadrant,
       task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
-      end_criteria: '', parent_id: null, created_at: now, updated_at: now,
+      end_criteria: '', parent_id: null,
+      // AI 建的任务默认不排期，落进「待安排」栏等着被拖进日程表
+      scheduled_start: null, scheduled_end: null,
+      created_at: now, updated_at: now,
     })
     // 主进程写盘后必须主动广播：日程模块是保活的（切 Tab 不重载），
     // 不通知就只能靠切月份/重启才能看到（2026-09-10 修）

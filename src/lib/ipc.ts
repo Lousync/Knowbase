@@ -66,6 +66,10 @@ export const getScheduleMonthTodos = (yearMonth: string) => a().getScheduleMonth
 export const getScheduleOverdue = (today: string) => a().getScheduleOverdue(today)
 export const getScheduleDeadlineCounts = (yearMonth: string) => a().getScheduleDeadlineCounts(yearMonth)
 export const getScheduleSubtasks = (parentId: string) => a().getScheduleSubtasks(parentId)
+/** 日程表「待安排」栏：全部未排期（无排期时段）的顶层未完成任务，不限月份 */
+export const getScheduleUnscheduledTodos = () => a().getScheduleUnscheduledTodos()
+/** 日程表：某一周（含首尾）的任务，附带区间之前「已排期未完成」的延后候选 */
+export const getScheduleWeekTodos = (weekStart: string, weekEnd: string) => a().getScheduleWeekTodos(weekStart, weekEnd)
 export const createScheduleTodo = (d: CreateScheduleTodoDTO) => a().createScheduleTodo(d)
 export const updateScheduleTodo = (id: string, d: UpdateScheduleTodoDTO) => a().updateScheduleTodo(id, d)
 export const deleteScheduleTodo = (id: string) => a().deleteScheduleTodo(id)

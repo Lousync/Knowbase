@@ -3,7 +3,8 @@ import { SettingSelect } from '../components/SettingSelect'
 
 /**
  * 设置 → 模块设置 → 日程任务。
- * 四项：完成反馈强度 / 四象限图标方案 / 四象限排序 / 四象限是否显示文字。
+ * 前四项：完成反馈强度 / 四象限图标方案 / 四象限排序 / 四象限是否显示文字。
+ * 后四项：日程表（周视图）的粒度、行高、时间轴起止小时。
  * 数据层不变 —— 四象限存储值恒为 0/1/2/3，这里只影响呈现。
  */
 export function ScheduleView() {
@@ -13,7 +14,7 @@ export function ScheduleView() {
     <div>
       <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">日程任务</h2>
       <p className="text-[12px] text-[var(--text-muted)] mb-4">
-        任务完成时的反馈强度，以及四象限选项的图标、排序与文字呈现。
+        任务完成时的反馈强度、四象限选项的呈现方式，以及日程表视图的时间轴刻度、行高与显示范围。
       </p>
 
       <div className="space-y-7 max-w-xl">
@@ -71,7 +72,68 @@ export function ScheduleView() {
             ]}
           />
         </div>
+
+        {/* ---- 日程表（周视图）---- */}
+        <div data-setting-anchor="schedule.timetableGranularity">
+          <SettingSelect
+            title="日程表粒度"
+            description="时间轴的刻度细分与拖拽时的吸附步长；粒度越细，越能排出短会。"
+            value={s.scheduleTimetableGranularity}
+            onChange={v => update('scheduleTimetableGranularity', v)}
+            options={[
+              { id: '15', label: '15 分钟', desc: '刻度最细，适合会议密集、需要排短时段' },
+              { id: '30', label: '30 分钟', desc: '刻度与吸附都落在半小时上（默认）', isDefault: true },
+              { id: '60', label: '1 小时', desc: '只画整点线，界面最干净；吸附也以小时为单位' },
+            ]}
+          />
+        </div>
+
+        <div data-setting-anchor="schedule.timetableRowHeight">
+          <SettingSelect
+            title="日程表行高"
+            description="时间轴每一小时占用的纵向高度；越高越容易看清卡片文字，但同一屏能看到的时间段越少。"
+            value={s.scheduleTimetableRowHeight}
+            onChange={v => update('scheduleTimetableRowHeight', v)}
+            options={[
+              { id: 'compact', label: '紧凑', desc: '44 px 每小时，一屏看全天' },
+              { id: 'normal', label: '舒适', desc: '60 px 每小时（默认）', isDefault: true },
+              { id: 'loose', label: '宽松', desc: '78 px 每小时，卡片可显示更多信息' },
+            ]}
+          />
+        </div>
+
+        <div data-setting-anchor="schedule.timetableStartHour">
+          <SettingSelect
+            title="日程表起始时间"
+            description="时间轴每天从几点开始显示；范围之外的时段不占纵向空间，早睡早起或熬夜作息各不相同。"
+            value={s.scheduleTimetableStartHour}
+            onChange={v => update('scheduleTimetableStartHour', v)}
+            options={HOUR_OPTIONS.slice(0, 8).map(o => ({ ...o, isDefault: o.id === '7' }))}
+          />
+        </div>
+
+        <div data-setting-anchor="schedule.timetableEndHour">
+          <SettingSelect
+            title="日程表终止时间"
+            description="时间轴每天到几点结束显示；需比起始时间至少晚 4 小时。"
+            value={s.scheduleTimetableEndHour}
+            onChange={v => update('scheduleTimetableEndHour', v)}
+            options={HOUR_OPTIONS.slice(8).map(o => ({ ...o, isDefault: o.id === '23' }))}
+          />
+        </div>
       </div>
     </div>
   )
 }
+
+/** 起止小时的候选档位（起始 05–12 点，终止 16–24 点，覆盖常见作息） */
+const HOUR_OPTIONS = [
+  ...Array.from({ length: 8 }, (_, i) => {
+    const h = i + 5
+    return { id: String(h), label: `${String(h).padStart(2, '0')}:00`, desc: '' }
+  }),
+  ...Array.from({ length: 9 }, (_, i) => {
+    const h = i + 16
+    return { id: String(h), label: `${h}:00`, desc: '' }
+  }),
+]

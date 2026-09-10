@@ -11,6 +11,7 @@ interface TodoRow {
   time: string | null; quadrant: number; task_type: string
   tag_id: string | null; status: string; sort_order: number
   end_criteria: string | null; parent_id: string | null
+  scheduled_start: number | null; scheduled_end: number | null
   created_at: string; updated_at: string
 }
 
@@ -22,6 +23,9 @@ function rowToTodo(row: TodoRow) {
     tagId: row.tag_id, status: row.status as 'pending' | 'done',
     sortOrder: row.sort_order, endCriteria: row.end_criteria || '',
     parentId: row.parent_id || null,
+    // 排期时段（当天分钟数）；旧数据缺字段 → 兜 null
+    scheduledStart: typeof row.scheduled_start === 'number' ? row.scheduled_start : null,
+    scheduledEnd: typeof row.scheduled_end === 'number' ? row.scheduled_end : null,
     createdAt: row.created_at, updatedAt: row.updated_at
   }
 }
@@ -64,6 +68,18 @@ export function registerScheduleHandlers(): void {
     return V.vaultSubtasks(parentId).map(rowToTodo)
   })
 
+  // 日程表视图「待安排」栏：全部未排期（scheduled_start 为空）的顶层未完成任务，不限月份
+  ipcMain.handle('schedule:getUnscheduledTodos', () => {
+    return V.vaultUnscheduledTodos().map(rowToTodo)
+  })
+
+  // 日程表视图：某一周的任务（含区间之前「已排期未完成」的延后候选）
+  ipcMain.handle('schedule:getWeekTodos', (_e, weekStart: string, weekEnd: string) => {
+    if (typeof weekStart !== 'string' || typeof weekEnd !== 'string') return []
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnd)) return []
+    return V.vaultTodosForWeek(weekStart, weekEnd).map(rowToTodo)
+  })
+
   // 获取某月截止日期的任务计数（仅未完成）
   ipcMain.handle('schedule:getDeadlineCounts', (_e, yearMonth: string) => {
     const vaultMap: Record<string, number> = {}
@@ -80,6 +96,7 @@ export function registerScheduleHandlers(): void {
     title: string; description?: string; date: string; time?: string
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string
     endCriteria?: string; parentId?: string
+    scheduledStart?: number | null; scheduledEnd?: number | null
   }) => {
     const vId = randomUUID()
     const vNow = new Date().toISOString()
@@ -88,6 +105,8 @@ export function registerScheduleHandlers(): void {
       time: data.time || null, quadrant: data.quadrant ?? 1, task_type: data.taskType || 'plan',
       tag_id: data.tagId || null, status: 'pending', sort_order: 0,
       end_criteria: data.endCriteria || '', parent_id: data.parentId || null,
+      scheduled_start: typeof data.scheduledStart === 'number' ? data.scheduledStart : null,
+      scheduled_end: typeof data.scheduledEnd === 'number' ? data.scheduledEnd : null,
       created_at: vNow, updated_at: vNow
     }
     return rowToTodo(V.vaultCreateTodo(row))
@@ -98,6 +117,7 @@ export function registerScheduleHandlers(): void {
     title?: string; description?: string; date?: string; time?: string | null
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
     status?: string; endCriteria?: string; parentId?: string | null
+    scheduledStart?: number | null; scheduledEnd?: number | null
   }) => {
     // 联动需要状态跃迁判定:先取旧状态,只有 pending → done 才算"完成"事件
     // (改标题/象限等普通编辑也走本 handler,不能每次都触发)

@@ -1,38 +1,36 @@
 import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, LayoutGrid, Clock, CalendarDays, Layers } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import type { ViewMode } from '../types'
 
-export type ViewMode = 'date' | 'deadline' | 'quadrant'
+export type { ViewMode }
 
+/**
+ * 侧栏月历（日期锚点）。
+ *
+ * 视图切换与象限图入口原先在这里，现已上移到模块顶栏（见 components/ViewSwitcher）——
+ * 因为「周日程」视图下侧栏整体换成「待安排」栏，入口留在侧栏会随视图一起消失。
+ */
 interface Props {
   year: number
   month: number
   selectedDate: string | null
   dotDates: Set<string>
   deadlineCounts: Map<string, number>
-  viewMode: ViewMode
   onSelectDate: (date: string) => void
   onPrevMonth: () => void
   onNextMonth: () => void
   onToday: () => void
-  onViewModeChange: (mode: ViewMode) => void
-  onQuadrantChart: () => void
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
-
-const VIEW_MODES: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
-  { id: 'date', label: '按日期', icon: <CalendarDays size={13} /> },
-  { id: 'deadline', label: '按截止', icon: <Clock size={13} /> },
-  { id: 'quadrant', label: '按象限', icon: <Layers size={13} /> },
-]
 
 function localToday(): string {
   const n = new Date()
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-export function CalendarView({ year, month, selectedDate, dotDates, deadlineCounts, viewMode, onSelectDate, onPrevMonth, onNextMonth, onToday, onViewModeChange, onQuadrantChart }: Props) {
+export function CalendarView({ year, month, selectedDate, dotDates, deadlineCounts, onSelectDate, onPrevMonth, onNextMonth, onToday }: Props) {
   const today = localToday()
 
   const weeks = useMemo(() => {
@@ -59,8 +57,8 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
 
   return (
     <div className="w-full shrink-0 bg-[var(--bg-secondary)] flex flex-col select-none">
-      {/* header 两行：月份导航 / 视图切换 —— 窄侧栏下月份不再被按钮挤压截断 */}
-      <div className="flex items-center gap-0.5 px-1.5 pt-1">
+      {/* header：月份导航 + 今天（视图切换已上移到模块顶栏） */}
+      <div className="flex items-center gap-0.5 px-1.5 pt-1 pb-1 border-b border-[var(--border-color)]">
         <button onClick={onPrevMonth} title="上个月" className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
           <ChevronLeft size={14} />
         </button>
@@ -74,33 +72,6 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
           className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
         >
           今天
-        </button>
-      </div>
-
-      {/* 视图切换行：三视图居中成组，象限图靠右 */}
-      <div className="flex items-center px-2 pt-0.5 pb-1 border-b border-[var(--border-color)]">
-        <div className="flex-1 flex justify-center gap-0.5">
-          {VIEW_MODES.map(m => (
-            <button
-              key={m.id}
-              onClick={() => onViewModeChange(m.id)}
-              title={m.label}
-              className={`px-2 py-0.5 rounded-md transition-colors ${
-                viewMode === m.id
-                  ? 'bg-[var(--accent)] text-white'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              {m.icon}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={onQuadrantChart}
-          title="象限图"
-          className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
-        >
-          <LayoutGrid size={13} />
         </button>
       </div>
 
