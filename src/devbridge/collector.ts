@@ -74,18 +74,53 @@ export function flush(): void {
   }
 }
 
-function stringify(args: unknown[]): string {
-  return args
-    .map((a) => {
-      if (a instanceof Error) return a.message
-      if (typeof a === 'string') return a
-      try {
-        return JSON.stringify(a) ?? String(a)
-      } catch {
-        return String(a)
+function fmtOne(a: unknown): string {
+  if (a instanceof Error) return a.message
+  if (typeof a === 'string') return a
+  // React 组件栈：单独取 componentStack，避免整段 JSON 刷屏
+  if (a && typeof a === 'object' && typeof (a as { componentStack?: unknown }).componentStack === 'string') {
+    return (a as { componentStack: string }).componentStack
+  }
+  try {
+    return JSON.stringify(a) ?? String(a)
+  } catch {
+    return String(a)
+  }
+}
+
+/**
+ * 模拟 console 的 printf 风格替换（%s %d %i %f %o %O %j %c %%）。
+ * 不这么做的话，React 的 `console.error('In HTML, %s cannot be a descendant of %s', 'button', 'button')`
+ * 上报到日志里就只剩一串裸 %s + 铺开的参数，完全读不出原意（2026-09-10 修）。
+ */
+function formatArgs(args: unknown[]): string {
+  const [first, ...rest] = args
+  if (typeof first !== 'string' || !/%[sdifoOjc%]/.test(first)) {
+    return args.map(fmtOne).join(' ')
+  }
+  let i = 0
+  const head = first.replace(/%([sdifoOjc%])/g, (_m, spec: string) => {
+    if (spec === '%') return '%'
+    if (i >= rest.length) return _m
+    const v = rest[i++]
+    switch (spec) {
+      case 's': return typeof v === 'string' ? v : fmtOne(v)
+      case 'j': {
+        try { return JSON.stringify(v) ?? String(v) } catch { return String(v) }
       }
-    })
-    .join(' ')
+      case 'c': return '' // 纯样式参数，丢弃
+      case 'd':
+      case 'i': return String(Number(v))
+      case 'f': return String(Number(v))
+      default: return fmtOne(v)
+    }
+  })
+  const tail = rest.slice(i).map(fmtOne).join(' ')
+  return tail ? `${head} ${tail}` : head
+}
+
+function stringify(args: unknown[]): string {
+  return formatArgs(args)
 }
 
 export function installRendererCollector(): void {

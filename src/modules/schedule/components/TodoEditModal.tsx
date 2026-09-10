@@ -332,12 +332,25 @@ export function TodoEditModal({
               }
               return (
                 <div className="flex flex-wrap gap-2">
-                  {selectable.map(t => (
-                    <button key={t.id} onClick={() => setForm(f => ({ ...f, tagId: f.tagId === t.id ? '' : t.id }))}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors ${form.tagId === t.id ? 'ring-1 ring-white/40' : ''}`}
-                      style={{ backgroundColor: t.color + '30', color: t.color, border: `1px solid ${t.color}50` }}
-                    >{t.name}</button>
-                  ))}
+                  {selectable.map(t => {
+                    // 选中态 = 实心填充 + 白字 + 对勾；未选中 = 描边风格。
+                    // 旧实现两种状态都是彩色填充、只差一个 ring —— 浅色主题下 ring 不可见，
+                    // 于是"所有标签都像已添加，且点了没反应"（2026-09-10 修）
+                    const active = form.tagId === t.id
+                    return (
+                      <button key={t.id}
+                        onClick={() => setForm(f => ({ ...f, tagId: active ? '' : t.id }))}
+                        title={active ? '点击取消这个标签' : '点击为任务选择这个标签'}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded text-[12px] transition-colors ${active ? 'text-white' : 'hover:bg-[var(--bg-hover)]'}`}
+                        style={active
+                          ? { backgroundColor: t.color, border: `1px solid ${t.color}` }
+                          : { backgroundColor: 'transparent', color: t.color, border: `1px solid ${t.color}66` }}
+                      >
+                        {active && <Check size={11} strokeWidth={3} />}
+                        {t.name}
+                      </button>
+                    )
+                  })}
                 </div>
               )
             })()}
