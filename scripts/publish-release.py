@@ -85,8 +85,11 @@ def main():
     # ---- 门 1:三件套必须同时存在 ----
     print('== 门 1:三件套存在性 ==')
     names = os.listdir(d)
-    exe_name = next((n for n in names if n.lower().endswith('.exe')
-                     and 'setup' in n.lower() and ver in n and not n.lower().endswith('.blockmap')), None)
+    # 产物名形如 "Knowbase Programmer Edition Setup <ver>.exe"。
+    # 必须按「Setup <ver>.exe」精确后缀匹配：`ver in n` 这类子串匹配在
+    # 3.0.0 与 3.0.0-beta 共存时会误选旧 beta 包（3.0.0 是 3.0.0-beta 的前缀），
+    # 于是 sha512 与 latest.yml 天然对不上，被报成"重新打包使元数据与产物匹配"。
+    exe_name = next((n for n in names if n.lower().endswith('setup %s.exe' % ver.lower())), None)
     if not exe_name:
         sys.exit('!! 未找到 %s 下的 *Setup*%s*.exe(产物命名或版本不匹配)' % (d, ver))
     blockmap_name = exe_name + '.blockmap'
