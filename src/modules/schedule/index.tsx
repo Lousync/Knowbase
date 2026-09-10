@@ -13,7 +13,6 @@ import type { ViewMode } from './types'
 import { ViewSwitcher } from './components/ViewSwitcher'
 import { TaskTray } from './components/TaskTray'
 import { TimetableView } from './views/TimetableView'
-import { dndMeta } from './timetable'
 import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
@@ -334,10 +333,10 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     setWeekRefresh(v => v + 1)
   }
 
-  /** 日程表：把卡片拖回「待安排」栏 = 取消排期（清空时段，日期保留） */
-  async function handleUnschedule(todo: ScheduleTodo) {
+  /** 日程表：卡片拖回「待安排」栏 = 取消排期（清空时段、保留日期） */
+  async function handleUnschedule(id: string) {
     try {
-      await updateScheduleTodo(todo.id, { scheduledStart: null, scheduledEnd: null })
+      await updateScheduleTodo(id, { scheduledStart: null, scheduledEnd: null })
       notifyDataChanged('schedule')
       await refreshAll()
       setWeekRefresh(v => v + 1)
@@ -351,21 +350,6 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
   function handleScheduleChanged() {
     notifyDataChanged('schedule')
     void refreshAll()
-  }
-
-  /** 拖起「待安排」卡片：写入跨组件拖拽缓存，默认给 1 小时的初始时长 */
-  function handleTrayDragStart(todo: ScheduleTodo, e: React.DragEvent) {
-    dndMeta.id = todo.id
-    dndMeta.from = 'tray'
-    dndMeta.duration = 60
-    dndMeta.grabOffset = 30
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', todo.id)
-  }
-
-  function handleTrayDragEnd() {
-    dndMeta.id = null
-    dndMeta.from = null
   }
 
   async function handleClearDone() {
@@ -618,12 +602,6 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
                 quadrantIcon={quadrantIcon}
                 quadrantText={quadrantText}
                 onOpen={openEdit}
-                onDragStartTodo={handleTrayDragStart}
-                onDragEndTodo={handleTrayDragEnd}
-                onDropTodo={id => {
-                  const t = unscheduled.find(x => x.id === id)
-                  if (t) void handleUnschedule(t)
-                }}
               />
             ) : (
               <div className="h-full overflow-y-auto">
@@ -654,6 +632,7 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
               onOpenTodo={openEdit}
               onToggleDone={handleToggleDone}
               onRequestCreate={(dateStr, start, end) => openCreate({ date: dateStr, start, end })}
+              onUnschedule={handleUnschedule}
               onChanged={handleScheduleChanged}
             />
           </div>

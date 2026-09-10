@@ -151,6 +151,14 @@ input:focus, textarea:focus, select:focus {
   -webkit-user-drag: auto;
 }
 
+/* HTML5 拖拽源。
+   body 上的 -webkit-user-drag: none 是**可继承属性**，会把所有后代的拖动能力钉死 ——
+   即使元素写了 draggable="true" 也拖不动（表现为点住拖动毫无反应 / 禁止光标）。
+   任何作为拖拽源的元素都要显式恢复（同类恢复见上面的 input/textarea 与编辑器区域）。 */
+.kb-draggable {
+  -webkit-user-drag: auto;
+}
+
 /* ===== Markdown 标记淡化（编辑器弱化版 Live Preview，光标所在行除外）=====
    Monaco inline decoration 的类直接落在包裹 token 的 span 上——token 的 mtk 颜色在
    更深层 span，会覆盖我们的 color，故语义强调色用 !important；淡化用 opacity（作用于

@@ -10,8 +10,9 @@ import {
 } from '../../../lib/scheduleQuadrant'
 import {
   DENSITY_PX, DENSITY_LABEL, DENSITY_VALUES, MIN_DURATION, MIN_RANGE_HOURS,
-  GRANULARITY_VALUES, layoutDay, dueOfDay, dndMeta,
-  clamp, dayFromMonday, fmtMin, mondayOfWeek, snapMin, shortDate, toDateStr,
+  GRANULARITY_VALUES, layoutDay, dueOfDay,
+  SCHEDULE_DRAG_START, type DragStartDetail, type DragTodoSnapshot,
+  clamp, dayFromMonday, dragGuard, fmtMin, mondayOfWeek, snapMin, shortDate, toDateStr,
   WEEKDAY_LABELS, type DensityId, type Granularity,
 } from '../timetable'
 
@@ -25,8 +26,8 @@ import {
  * - 截止类任务额外画一条虚线红线（不占时段）
  * - 未完成的排期任务自动延后：原日期让位，今天同一时段显示为虚线幽灵
  *
- * 跨栏拖拽用 HTML5 DnD（跨组件最省事），边缘拉伸与空白拖框用 pointer events
- * （同一元素内完成，不必跨组件传坐标）。
+ * 拖拽全程用 **pointer events**（不用 HTML5 拖放）：落点判定、预览框、时长提示
+ * 都由自己算，行为可控；待安排栏那边通过 `SCHEDULE_DRAG_START` 事件把任务快照交过来。
  */
 
 interface Props {
@@ -41,13 +42,24 @@ interface Props {
   onToggleDone: (todo: ScheduleTodo) => void
   /** 空白处拖框新建：交给上层打开编辑弹窗（预填日期与时段） */
   onRequestCreate: (dateStr: string, start: number, end: number) => void
+  /** 网格卡片拖回待安排栏 = 取消排期 */
+  onUnschedule: (id: string) => void
   /** 排期/改时长落盘成功后通知上层刷新（待安排栏、月历打点） */
   onChanged: () => void
 }
 
+/** 任务 → 拖拽快照（载荷自带本体，落点不回查数据集） */
+function snapshotOf(todo: ScheduleTodo): DragTodoSnapshot {
+  return {
+    id: todo.id, title: todo.title, date: todo.date, taskType: todo.taskType,
+    tagId: todo.tagId, quadrant: todo.quadrant,
+    scheduledStart: todo.scheduledStart, scheduledEnd: todo.scheduledEnd,
+  }
+}
+
 export function TimetableView({
   isActive, tags, iconSize, quadrantIcon, quadrantText, refreshSignal,
-  onOpenTodo, onToggleDone, onRequestCreate, onChanged,
+  onOpenTodo, onToggleDone, onRequestCreate, onUnschedule, onChanged,
 }: Props) {
   const today = localToday()
   const { s: appSettings, update } = useSettings()
@@ -152,7 +164,12 @@ export function TimetableView({
   }, [])
 
   // ---- 提交排期 ----
-  const commitSchedule = useCallback(async (todo: ScheduleTodo, dateStr: string, start: number, end: number) => {
+  // 参数只要求排期相关的四个字段（而不是完整 ScheduleTodo）：落点用的是拖拽快照，
+  // 待安排栏的任务可能来自任意月份，不一定存在于本视图的 rows 里
+  const commitSchedule = useCallback(async (
+    todo: { id: string; date: string; scheduledStart: number | null; scheduledEnd: number | null },
+    dateStr: string, start: number, end: number,
+  ) => {
     const patch = { date: dateStr, scheduledStart: start, scheduledEnd: end }
     const prevState = { date: todo.date, scheduledStart: todo.scheduledStart, scheduledEnd: todo.scheduledEnd }
     setRows(prev => prev.map(t => (t.id === todo.id ? { ...t, ...patch } : t)))
@@ -167,34 +184,134 @@ export function TimetableView({
     }
   }, [onChanged, load])
 
-  // ---- ① HTML5 DnD：跨栏拖拽 ----
-  const onColumnDragOver = useCallback((dayIdx: number, e: React.DragEvent) => {
-    if (!dndMeta.id) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    const rect = e.currentTarget.getBoundingClientRect()
-    const raw = dayStartMin + (e.clientY - rect.top) / pxPerMin - dndMeta.grabOffset
-    const maxStart = dayEndMin - dndMeta.duration
-    const start = clamp(snapMin(raw, gran), dayStartMin, Math.max(dayStartMin, maxStart))
-    setDrop(prev => (prev && prev.day === dayIdx && prev.start === start && prev.duration === dndMeta.duration
-      ? prev
-      : { day: dayIdx, start, duration: dndMeta.duration }))
-    showHint(e.clientX, e.clientY, `${fmtMin(start)}–${fmtMin(start + dndMeta.duration)} · ${dndMeta.duration} 分钟`)
-  }, [dayStartMin, dayEndMin, pxPerMin, gran, showHint])
+  // ---- ① 拖拽（pointer events，不依赖 HTML5 拖放）----
+  /** 拖拽会话放 ref：pointermove 里高频读，走 state 会每帧重渲染整张网格 */
+  const dragRef = useRef<DragStartDetail | null>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
 
-  const onColumnDrop = useCallback((dayIdx: number, e: React.DragEvent) => {
-    e.preventDefault()
-    const meta = { ...dndMeta }
-    dndMeta.id = null; dndMeta.from = null
-    setDrop(null)
-    hideHint()
-    if (!meta.id || !drop) return
-    const dateStr = toDateStr(days[dayIdx])
-    const todo = rows.find(t => t.id === meta.id)
-    if (!todo) return
-    const dur = meta.from === 'tray' ? meta.duration : Math.max(MIN_DURATION, (todo.scheduledEnd ?? 0) - (todo.scheduledStart ?? 0))
-    void commitSchedule(todo, dateStr, drop.start, drop.start + dur)
-  }, [drop, days, rows, commitSchedule, hideHint])
+  /** 指针位置 → 落点（某天的第几分钟 / 待安排栏 / 无效） */
+  const hitTest = useCallback((x: number, y: number): { kind: 'day'; day: number; start: number } | { kind: 'tray' } | null => {
+    const d = dragRef.current
+    if (!d) return null
+
+    // 待安排栏（只接受从网格拖回来的，用于取消排期）
+    const trayEl = document.querySelector<HTMLElement>('[data-tray-drop]')
+    if (trayEl) {
+      const r = trayEl.getBoundingClientRect()
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        return d.from === 'grid' ? { kind: 'tray' } : null
+      }
+    }
+
+    // 日期列
+    const cols = document.querySelectorAll<HTMLElement>('[data-day-col]')
+    for (let i = 0; i < cols.length; i++) {
+      const r = cols[i].getBoundingClientRect()
+      if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue
+      const raw = dayStartMin + (y - r.top) / pxPerMin - d.grabOffset
+      const maxStart = Math.max(dayStartMin, dayEndMin - d.duration)
+      return { kind: 'day', day: i, start: clamp(snapMin(raw, gran), dayStartMin, maxStart) }
+    }
+    return null
+  }, [dayStartMin, dayEndMin, pxPerMin, gran])
+
+  /** 起拖：接管 window 的 pointer 事件直到松手 */
+  const startDrag = useCallback((detail: DragStartDetail) => {
+    dragRef.current = detail
+    document.body.style.userSelect = 'none'
+
+    const trayEl = () => document.querySelector<HTMLElement>('[data-tray-drop]')
+
+    const onMove = (ev: PointerEvent) => {
+      const d = dragRef.current
+      if (!d) return
+
+      // 跟随指针的幽灵标签（直接改 DOM，不走 state）
+      const g = ghostRef.current
+      if (g) {
+        g.style.display = 'block'
+        g.textContent = d.todo.title
+        g.style.left = `${ev.clientX + 12}px`
+        g.style.top = `${ev.clientY + 12}px`
+      }
+
+      const hit = hitTest(ev.clientX, ev.clientY)
+      if (hit?.kind === 'day') {
+        // 同值跳过：避免每帧都 setState 重渲染
+        setDrop(prev => (prev && prev.day === hit.day && prev.start === hit.start && prev.duration === d.duration
+          ? prev
+          : { day: hit.day, start: hit.start, duration: d.duration }))
+        showHint(ev.clientX, ev.clientY, `${fmtMin(hit.start)}–${fmtMin(hit.start + d.duration)} · ${d.duration} 分钟`)
+      } else {
+        setDrop(null)
+        hideHint()
+      }
+      const t = trayEl()
+      if (t) t.style.boxShadow = hit?.kind === 'tray' ? 'inset 0 0 0 2px var(--accent)' : ''
+    }
+
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      document.body.style.userSelect = ''
+      const d = dragRef.current
+      // 注意：hitTest 依赖 dragRef，必须在清空之前算落点
+      const hit = d ? hitTest(ev.clientX, ev.clientY) : null
+      dragRef.current = null
+      dragGuard.lastEnd = Date.now()
+      const g = ghostRef.current
+      if (g) g.style.display = 'none'
+      setDrop(null)
+      hideHint()
+      const t = trayEl()
+      if (t) t.style.boxShadow = ''
+      if (!d || !hit) return
+
+      if (hit.kind === 'tray') {
+        if (d.from === 'grid') onUnschedule(d.todo.id)
+        return
+      }
+      void commitSchedule(d.todo, toDateStr(days[hit.day]), hit.start, hit.start + d.duration)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }, [hitTest, showHint, hideHint, commitSchedule, days, onUnschedule])
+
+  /** 网格卡片按下 → 位移超阈值后起拖（把手与完成按钮已各自 stopPropagation） */
+  const onBlockPointerDown = useCallback((todo: ScheduleTodo, e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    if ((e.target as HTMLElement).closest('.rz, button')) return
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const dur = Math.max(MIN_DURATION, (todo.scheduledEnd ?? 0) - (todo.scheduledStart ?? 0))
+    const grabOffset = clamp((e.clientY - rect.top) / pxPerMin, 0, dur)
+    const sx = e.clientX
+    const sy = e.clientY
+    let started = false
+
+    const onMove = (ev: PointerEvent) => {
+      if (started) return
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return
+      started = true
+      cleanup()
+      startDrag({ todo: snapshotOf(todo), from: 'grid', duration: dur, grabOffset })
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', cleanup)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', cleanup)
+  }, [pxPerMin, startDrag])
+
+  // 待安排栏（另一个组件树）发起的拖拽 → 由本视图接管后续落点判定
+  useEffect(() => {
+    const onStart = (e: Event) => startDrag((e as CustomEvent<DragStartDetail>).detail)
+    window.addEventListener(SCHEDULE_DRAG_START, onStart)
+    return () => window.removeEventListener(SCHEDULE_DRAG_START, onStart)
+  }, [startDrag])
 
   // ---- ② 边缘拉伸（pointer events）----
   const onResizeDown = useCallback((todo: ScheduleTodo, edge: 'top' | 'bot', e: React.PointerEvent) => {
@@ -225,10 +342,14 @@ export function TimetableView({
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       setResize(null)
       hideHint()
+      // 拉伸同样是一次 pointer 手势：松手后浏览器会补发 click，
+      // 不记时间戳的话卡片 onClick 会把它当成普通点击 → 顺手弹出编辑窗。
+      dragGuard.lastEnd = Date.now()
       if (!moved) return
       if (latest.start === s0 && latest.end === e0) return
       void commitSchedule(todo, todo.date, latest.start, latest.end)
@@ -238,6 +359,7 @@ export function TimetableView({
     document.body.style.userSelect = 'none'
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }, [dayStartMin, dayEndMin, pxPerMin, gran, showHint, hideHint, commitSchedule])
 
   // ---- ③ 空白拖框新建（pointer events）----
@@ -275,27 +397,14 @@ export function TimetableView({
     window.addEventListener('pointerup', onUp)
   }, [dayStartMin, dayEndMin, pxPerMin, gran, days, showHint, hideHint, onRequestCreate])
 
-  // ---- 任务块拖动（HTML5）----
-  const onBlockDragStart = useCallback((todo: ScheduleTodo, e: React.DragEvent) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const dur = Math.max(MIN_DURATION, (todo.scheduledEnd ?? 0) - (todo.scheduledStart ?? 0))
-    dndMeta.id = todo.id
-    dndMeta.from = 'grid'
-    dndMeta.duration = dur
-    dndMeta.grabOffset = clamp((e.clientY - rect.top) / pxPerMin, 0, dur)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', todo.id)
-  }, [pxPerMin])
-
-  const onBlockDragEnd = useCallback(() => {
-    dndMeta.id = null
-    dndMeta.from = null
-    setDrop(null)
-    hideHint()
-  }, [hideHint])
-
   // ---- 渲染 ----
   const todayIdx = days.findIndex(d => toDateStr(d) === today)
+
+  /** 打开编辑前先挡掉「刚拖完补发的那次 click」 */
+  const openTodoGuarded = useCallback((t: ScheduleTodo) => {
+    if (Date.now() - dragGuard.lastEnd < 250) return
+    onOpenTodo(t)
+  }, [onOpenTodo])
 
   return (
     <div className="flex h-full flex-col bg-[var(--bg-primary)]">
@@ -415,9 +524,6 @@ export function TimetableView({
               <div
                 key={dayIdx}
                 data-day-col
-                onDragOver={e => onColumnDragOver(dayIdx, e)}
-                onDragLeave={() => setDrop(prev => (prev?.day === dayIdx ? null : prev))}
-                onDrop={e => onColumnDrop(dayIdx, e)}
                 onPointerDown={e => onColumnPointerDown(dayIdx, e)}
                 className={`flex-1 min-w-0 relative overflow-hidden border-r border-[var(--border-color)] last:border-r-0 ${isToday ? 'bg-[var(--input-bg)]' : ''} ${isDropTarget ? 'bg-[var(--drop-bg)]' : ''}`}
                 style={{ height: totalH }}
@@ -473,8 +579,8 @@ export function TimetableView({
                 {ghosts.map(t => (
                   <Block key={`ghost-${t.id}`} todo={t} pxPerMin={pxPerMin} dayStartMin={dayStartMin}
                     lane={0} lanes={1} ghost iconSize={iconSize} quadrantIcon={quadrantIcon} quadrantText={quadrantText}
-                    onOpen={onOpenTodo} onToggleDone={onToggleDone}
-                    onDragStart={onBlockDragStart} onDragEnd={onBlockDragEnd}
+                    onOpen={openTodoGuarded} onToggleDone={onToggleDone}
+                    onStartDrag={onBlockPointerDown}
                     onResizeDown={onResizeDown} resize={null} />
                 ))}
 
@@ -484,8 +590,8 @@ export function TimetableView({
                   return (
                     <Block key={item.id} todo={item} pxPerMin={pxPerMin} dayStartMin={dayStartMin}
                       lane={lane} lanes={lanes} iconSize={iconSize} quadrantIcon={quadrantIcon} quadrantText={quadrantText}
-                      onOpen={onOpenTodo} onToggleDone={onToggleDone}
-                      onDragStart={onBlockDragStart} onDragEnd={onBlockDragEnd}
+                      onOpen={openTodoGuarded} onToggleDone={onToggleDone}
+                      onStartDrag={onBlockPointerDown}
                       onResizeDown={onResizeDown} resize={live} />
                   )
                 })}
@@ -504,6 +610,11 @@ export function TimetableView({
       <div ref={hintRef}
         className="fixed z-[9000] hidden px-1.5 py-0.5 rounded text-[10.5px] font-semibold text-white bg-black/85 tabular-nums pointer-events-none whitespace-nowrap"
         style={{ letterSpacing: '.2px' }} />
+
+      {/* 拖拽时跟随指针的幽灵标签（直接改 DOM，不参与渲染循环） */}
+      <div ref={ghostRef}
+        className="fixed z-[9500] hidden pointer-events-none px-2 py-1 rounded border border-[var(--accent)] bg-[var(--bg-primary)] shadow-lg text-[11.5px] font-medium max-w-[200px] truncate"
+        style={{ left: 0, top: 0 }} />
     </div>
   )
 }
@@ -512,7 +623,7 @@ export function TimetableView({
 
 function Block({
   todo, pxPerMin, dayStartMin, lane, lanes, ghost = false, iconSize, quadrantIcon, quadrantText,
-  onOpen, onToggleDone, onDragStart, onDragEnd, onResizeDown, resize,
+  onOpen, onToggleDone, onStartDrag, onResizeDown, resize,
 }: {
   todo: ScheduleTodo & { tag?: ScheduleTag | null }
   pxPerMin: number
@@ -525,8 +636,7 @@ function Block({
   quadrantText: 'show' | 'hide'
   onOpen: (t: ScheduleTodo) => void
   onToggleDone: (t: ScheduleTodo) => void
-  onDragStart: (t: ScheduleTodo, e: React.DragEvent) => void
-  onDragEnd: () => void
+  onStartDrag: (t: ScheduleTodo, e: React.PointerEvent) => void
   onResizeDown: (t: ScheduleTodo, edge: 'top' | 'bot', e: React.PointerEvent) => void
   resize: { start: number; end: number } | null
 }) {
@@ -547,9 +657,7 @@ function Block({
   return (
     <div
       data-block
-      draggable={!ghost && !resize}
-      onDragStart={e => onDragStart(todo, e)}
-      onDragEnd={onDragEnd}
+      onPointerDown={ghost ? undefined : e => onStartDrag(todo, e)}
       onClick={() => onOpen(todo)}
       className={`absolute rounded-md overflow-hidden transition-shadow z-[2] hover:z-[6] hover:shadow-[0_3px_10px_rgba(0,0,0,.16)] ${ghost ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} ${isDone ? 'opacity-50' : ''}`}
       style={{
@@ -579,11 +687,13 @@ function Block({
       {!ghost && (
         <>
           <div className="absolute left-0 right-0 top-0 h-[7px] z-[3] cursor-ns-resize group/rz"
-            onPointerDown={e => onResizeDown(todo, 'top', e)}>
+            onPointerDown={e => onResizeDown(todo, 'top', e)}
+            onClick={e => e.stopPropagation()}>
             <span className="absolute left-1/2 -translate-x-1/2 top-[2px] w-4 h-[3px] rounded-full opacity-0 group-hover/rz:opacity-100 transition-opacity" style={{ background: color }} />
           </div>
           <div className="absolute left-0 right-0 bottom-0 h-[7px] z-[3] cursor-ns-resize group/rz"
-            onPointerDown={e => onResizeDown(todo, 'bot', e)}>
+            onPointerDown={e => onResizeDown(todo, 'bot', e)}
+            onClick={e => e.stopPropagation()}>
             <span className="absolute left-1/2 -translate-x-1/2 bottom-[2px] w-4 h-[3px] rounded-full opacity-0 group-hover/rz:opacity-100 transition-opacity" style={{ background: color }} />
           </div>
         </>

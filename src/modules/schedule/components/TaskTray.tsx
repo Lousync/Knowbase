@@ -1,10 +1,9 @@
-import { useState } from 'react'
 import type { ScheduleTodo } from '../../../types'
 import {
   quadrantMeta, QUADRANT_TEXT_CLASS, QuadrantIconGlyph,
   type QuadrantIcon,
 } from '../../../lib/scheduleQuadrant'
-import { dndMeta } from '../timetable'
+import { dragGuard, emitScheduleDragStart } from '../timetable'
 
 /**
  * 日程表视图的「待安排」栏（侧栏）。
@@ -12,8 +11,9 @@ import { dndMeta } from '../timetable'
  * 这里只放**没有排期时段**的未完成任务 —— 三类任务（计划 / 当日 / 截止）都可能出现，
  * 拖进右侧网格即完成排期；网格里拖回来则清空排期、回到这里。
  *
- * 拖拽走 HTML5 DnD（跨组件最省事）：本组件只负责让卡片可拖 + 带上 id，
- * 落点判定与提交统一由 TimetableView 处理。
+ * 拖拽用 pointer events：按下后位移超过阈值才真正「起拖」，
+ * 事件交给 TimetableView 接管（它掌握网格几何，负责落点判定与提交）；
+ * 本栏只负责把任务快照广播出去。落点区域用 `data-tray-drop` 标出来供对方识别。
  */
 interface Props {
   todos: ScheduleTodo[]
@@ -21,10 +21,6 @@ interface Props {
   quadrantIcon: QuadrantIcon
   quadrantText: 'show' | 'hide'
   onOpen: (todo: ScheduleTodo) => void
-  onDragStartTodo: (todo: ScheduleTodo, e: React.DragEvent) => void
-  onDragEndTodo: () => void
-  /** 从网格拖回本栏 = 取消排期 */
-  onDropTodo: (id: string) => void
 }
 
 const TYPE_LABEL: Record<string, string> = { plan: '计划', daily: '当日', deadline: '截止' }
@@ -35,37 +31,45 @@ const SZ = {
   lg: { title: 'text-[13.5px]', meta: 'text-[11px]', icon: 16, pad: 'px-3 py-2.5', gap: 'mb-2' },
 }
 
-export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen, onDragStartTodo, onDragEndTodo, onDropTodo }: Props) {
+export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }: Props) {
   const s = SZ[iconSize]
-  const [over, setOver] = useState(false)
 
-  /** 本栏作为落点：只接受「从网格拖回来」的卡片 —— 取消排期 */
-  const dropProps = {
-    onDragEnter: (e: React.DragEvent) => {
-      if (dndMeta.from !== 'grid') return
-      e.preventDefault()
-      setOver(true)
-    },
-    onDragOver: (e: React.DragEvent) => {
-      if (dndMeta.from !== 'grid') return
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-    },
-    onDragLeave: (e: React.DragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false)
-    },
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault()
-      setOver(false)
-      const id = e.dataTransfer.getData('text/plain') || dndMeta.id
-      if (id && dndMeta.from === 'grid') onDropTodo(id)
-    },
+  /** 按下后位移超过阈值才算起拖（否则是一次点击 → 打开编辑） */
+  function handleCardPointerDown(todo: ScheduleTodo, e: React.PointerEvent) {
+    if (e.button !== 0) return
+    const sx = e.clientX
+    const sy = e.clientY
+    let started = false
+
+    const onMove = (ev: PointerEvent) => {
+      if (started) return
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return
+      started = true
+      cleanup()
+      emitScheduleDragStart({
+        todo: {
+          id: todo.id, title: todo.title, date: todo.date, taskType: todo.taskType,
+          tagId: todo.tagId, quadrant: todo.quadrant,
+          scheduledStart: todo.scheduledStart, scheduledEnd: todo.scheduledEnd,
+        },
+        from: 'tray',
+        // 待安排任务还没有时长，先按 1 小时落位，落点后可再拉伸
+        duration: 60,
+        grabOffset: 30,
+      })
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', cleanup)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', cleanup)
   }
 
   if (todos.length === 0) {
     return (
-      <div className="flex h-full flex-col" {...dropProps}>
-        <div className={`flex-1 flex items-center justify-center px-4 transition-colors ${over ? 'bg-[var(--drop-bg)]' : ''}`}>
+      <div data-tray-drop className="flex h-full flex-col">
+        <div className="flex-1 flex items-center justify-center px-4">
           <p className="text-[11.5px] text-[var(--text-disabled)] text-center leading-relaxed">
             全部任务都已排期<br />把网格里的卡片拖回来可取消排期
           </p>
@@ -75,8 +79,8 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen, 
   }
 
   return (
-    <div className="flex h-full flex-col" {...dropProps}>
-      <div className={`flex-1 min-h-0 overflow-y-auto p-2 transition-colors ${over ? 'bg-[var(--drop-bg)]' : ''}`}>
+    <div data-tray-drop className="flex h-full flex-col">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {todos.map(todo => {
           const tag = todo.tag ?? null
           const q = quadrantMeta(todo.quadrant)
@@ -84,10 +88,12 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen, 
           return (
             <div
               key={todo.id}
-              draggable
-              onDragStart={e => onDragStartTodo(todo, e)}
-              onDragEnd={onDragEndTodo}
-              onClick={() => onOpen(todo)}
+              onPointerDown={e => handleCardPointerDown(todo, e)}
+              onClick={() => {
+                // 刚拖完的那一下会补发 click，忽略掉，避免顺手弹出编辑窗
+                if (Date.now() - dragGuard.lastEnd < 250) return
+                onOpen(todo)
+              }}
               className={`group relative flex items-center gap-2 ${s.pad} ${s.gap} bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md cursor-grab active:cursor-grabbing hover:border-[var(--accent)] transition-colors`}
               title="拖到右侧日程表即可排期"
             >

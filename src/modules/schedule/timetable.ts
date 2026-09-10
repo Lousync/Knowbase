@@ -19,15 +19,57 @@ export const DENSITY_LABEL: Record<DensityId, string> = { compact: '紧凑', nor
 /** 卡片最小时长（分钟）。与粒度解耦：1 小时粒度下也能排出 15 分钟的短任务 */
 export const MIN_DURATION = 15
 
+/** 拖拽源任务的最小快照 —— 载荷必须自带本体，不能指望落点侧的数据集里有它（见下） */
+export interface DragTodoSnapshot {
+  id: string
+  title: string
+  date: string
+  taskType: string
+  tagId: string | null
+  quadrant: number
+  scheduledStart: number | null
+  scheduledEnd: number | null
+}
+
 /**
- * 跨栏拖拽的当前源（模块级缓存）。
+ * 拖拽全程用 **pointer events** 手写，不用 HTML5 拖放 API。
  *
- * HTML5 DnD 的 `dataTransfer.getData()` 在 dragover 阶段**读不到**（浏览器安全限制，
- * 只在 drop 时可见），但 dragover 需要知道「拖的是什么、多长、抓在块内哪个位置」才能
- * 算落点与预览框 —— 所以用模块级缓存传递。同窗口内的拖拽都是同一 JS 环境，安全。
+ * 踩过的三个坑，决定了这个选择：
+ * 1. `body { -webkit-user-drag: none }` 是**可继承属性**，会把后代的拖动能力钉死 ——
+ *    元素写了 `draggable="true"` 也可能拖不动（项目里 input/编辑器区域都要单独恢复 `auto`）。
+ * 2. HTML5 拖放需要落点在 `dragover` 里 `preventDefault()` 才会响应 `drop`，
+ *    任何一处状态没接上就表现为「整片区域显示禁止光标、松手毫无反应」，且很难定位。
+ * 3. `dataTransfer.getData()` 在 dragover 阶段读不到（浏览器安全限制），
+ *    而预览框需要提前知道时长与抓取位置。
+ *
+ * pointer events 没有这些约束，落点判定完全由自己算，也能做出更细腻的预览。
+ * （原型 docs/prototypes/schedule-timetable-week-view.html 用的就是这套，已实测可用。）
  */
-export const dndMeta: { id: string | null; from: 'tray' | 'grid' | null; duration: number; grabOffset: number } =
-  { id: null, from: null, duration: 60, grabOffset: 0 }
+export interface DragStartDetail {
+  /** 任务本体快照：待安排栏列的是「全部未排期任务、不限月份」，而周网格只有本周数据 ——
+   *  落点若回查自己的数据集必然扑空（一个月前创建的计划任务拖不进去） */
+  todo: DragTodoSnapshot
+  from: 'tray' | 'grid'
+  /** 拖动持续时长（分钟），落点时决定卡片高度 */
+  duration: number
+  /** 抓取点在卡片内距顶部的分钟数，落点据此对齐指针 */
+  grabOffset: number
+}
+
+/** 待安排栏（另一个组件树分支）发起拖拽时广播的事件 */
+export const SCHEDULE_DRAG_START = 'kb-schedule-drag-start'
+
+export function emitScheduleDragStart(detail: DragStartDetail): void {
+  window.dispatchEvent(new CustomEvent<DragStartDetail>(SCHEDULE_DRAG_START, { detail }))
+}
+
+/**
+ * 刚结束拖拽的时间戳。
+ *
+ * 拖动时指针会位移，但浏览器在 pointerdown 与 pointerup 落在同一元素上时**仍会补发 click** ——
+ * 不拦一下，松手就会顺手弹出编辑弹窗。卡片的 onClick 用它做时间窗守卫。
+ */
+export const dragGuard = { lastEnd: 0 }
 
 /** 拖拽时的时间轴范围约束（起止之间至少留 4 小时） */
 export const MIN_RANGE_HOURS = 4
