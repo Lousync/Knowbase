@@ -66,6 +66,130 @@ interface ChatResult {
 const CONNECT_TIMEOUT_MS = 30_000
 const TOTAL_TIMEOUT_MS = 300_000
 
+// ===== 流式（2026-09-10 docs/ai-streaming-design.md §5.1）=====
+
+/** 网关归一化流事件：屏蔽三家（OpenAI 兼容 / Anthropic / Ollama）差异，上层只认这个 */
+export type LlmStreamEvent =
+  | { type: 'text'; delta: string }
+  | { type: 'reasoning'; delta: string }
+  | { type: 'tool_call'; index: number; id?: string; name?: string; argsDelta?: string }
+  | { type: 'usage'; promptTokens: number; completionTokens: number }
+  | { type: 'done' }
+
+const STREAM_FIRST_BYTE_MS = 60_000
+const STREAM_IDLE_MS = 60_000
+
+/**
+ * 流式超时：首字节 60s + 空闲 60s（每次收到数据块重置定时器）。
+ * 不可用 AbortSignal.timeout(TOTAL_TIMEOUT_MS)——那会在第 300 秒掐断正常长流。
+ */
+function createStreamAbort(external: AbortSignal | undefined): {
+  signal: AbortSignal
+  chunk: () => void
+  timedOut: () => boolean
+  dispose: () => void
+} {
+  const ctrl = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let timedOut = false
+  const arm = (ms: number): void => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => { timedOut = true; ctrl.abort() }, ms)
+  }
+  const onExternal = (): void => ctrl.abort()
+  if (external) {
+    if (external.aborted) ctrl.abort()
+    else external.addEventListener('abort', onExternal, { once: true })
+  }
+  arm(STREAM_FIRST_BYTE_MS)
+  return {
+    signal: ctrl.signal,
+    chunk: () => arm(STREAM_IDLE_MS),
+    timedOut: () => timedOut,
+    dispose: () => {
+      if (timer) clearTimeout(timer)
+      if (external) external.removeEventListener('abort', onExternal)
+    },
+  }
+}
+
+/**
+ * 按帧切分读取响应体。
+ *
+ * **chunk 边界 ≠ 事件边界**（实测 Electron 33 net.fetch 单块可达 21KB、含多个 SSE 事件，
+ * 也可能只有半个）——所以必须带缓冲按空行切帧，残尾留到下个 chunk。
+ * 详见 docs/ai-streaming-design.md §5.1.2。
+ */
+async function* readFrames(res: Response): AsyncGenerator<string> {
+  const body = res.body
+  if (!body) return
+  const reader = body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      if (buf.indexOf('\r') >= 0) buf = buf.replace(/\r\n/g, '\n')
+      let i = buf.indexOf('\n\n')
+      while (i >= 0) {
+        yield buf.slice(0, i)
+        buf = buf.slice(i + 2)
+        i = buf.indexOf('\n\n')
+      }
+    }
+    if (buf.trim()) yield buf
+  } finally {
+    try { reader.releaseLock() } catch { /* 已释放 */ }
+  }
+}
+
+/** 按行切分读取（Ollama 是 NDJSON 而非 SSE，不能复用 readFrames 的空行分帧） */
+async function* readLines(res: Response): AsyncGenerator<string> {
+  const body = res.body
+  if (!body) return
+  const reader = body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      let i = buf.indexOf('\n')
+      while (i >= 0) {
+        const line = buf.slice(0, i).replace(/\r$/, '')
+        buf = buf.slice(i + 1)
+        if (line.trim()) yield line
+        i = buf.indexOf('\n')
+      }
+    }
+    if (buf.trim()) yield buf
+  } finally {
+    try { reader.releaseLock() } catch { /* 已释放 */ }
+  }
+}
+
+/** SSE 帧 → data 载荷（多行 data: 按规范以 \n 连接）；注释/心跳帧返回 null */
+function sseData(frame: string): string | null {
+  const parts: string[] = []
+  for (const ln of frame.split('\n')) {
+    if (ln.startsWith('data:')) parts.push(ln.slice(5).replace(/^ /, ''))
+  }
+  return parts.length > 0 ? parts.join('\n') : null
+}
+
+/** 是否 SSE 响应（否则视为网关忽略了 stream 参数，走非流式回退） */
+function isSseResponse(res: Response): boolean {
+  return String(res.headers.get('content-type') ?? '').includes('text/event-stream')
+}
+
+/** 流式响应体 → 完整 JSON（网关忽略 stream 时的回退解析）；失败返回 null */
+function parseWholeJson(text: string): any {
+  try { return JSON.parse(text) } catch { return null }
+}
+
 // ===== 存取 =====
 
 /** 由 registerLlmHandlers 注入；避免与 settingsStore 循环依赖 */
@@ -105,6 +229,9 @@ export function validateProviderUrl(raw: string): { ok: true; url: string } | { 
 interface Adapter {
   listModels(p: ProviderConfig): Promise<string[]>
   chat(p: ProviderConfig, req: ChatRequest): Promise<ChatResult>
+  /** 流式对话：逐块回调归一化事件，返回值与非流式 chat 同构（上层逻辑无需分叉）。
+   *  未实现时 invokeLlmStream 自动回退为「一次返回全部 content」——功能不受损，仅失去过程感。 */
+  chatStream?(p: ProviderConfig, req: ChatRequest, onEvent: (e: LlmStreamEvent) => void): Promise<ChatResult>
 }
 
 async function httpJson(url: string, init: { method: string; headers: Record<string, string>; body?: string }, externalSignal?: AbortSignal): Promise<{ status: number; json: any }> {
@@ -169,6 +296,44 @@ function normalizeOpenAiToolCalls(raw: any[]): ToolCallNormalized[] {
 /** P3b 推理/思考能力启发式：仅这些模型接受 reasoning_effort（跟随模型能力）。渲染层可用同口径判断是否置灰。 */
 export const REASONING_MODEL_RE = /(reasoner|r1|qwq|qwen3|o[134]-|o[134]$|thinking|research|smart|deepthink)/i
 
+/** OpenAI 兼容请求体（流式 / 非流式共用，避免两套参数漂移） */
+function buildOpenAiBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages: req.messages,
+    max_tokens: req.maxTokens,
+  }
+  if (stream) {
+    body.stream = true
+    // 末块带 usage；不支持的网关会忽略该字段，usage 退化为 0（不影响正确性）
+    body.stream_options = { include_usage: true }
+  }
+  if (req.tools && req.tools.length > 0) {
+    body.tools = req.tools
+    body.tool_choice = 'auto'
+  }
+  // P3b：思考强度仅在模型具备能力时透传，避免不认该参数的供应商报错
+  if (req.effort && req.effort !== 'off' && REASONING_MODEL_RE.test(req.model)) {
+    body.reasoning_effort = req.effort
+  }
+  return body
+}
+
+/** OpenAI 兼容完整响应 → ChatResult（非流式解析 + 流式回退共用） */
+function parseOpenAiChoice(json: any): ChatResult {
+  const msg = json?.choices?.[0]?.message ?? {}
+  const toolCalls = normalizeOpenAiToolCalls(msg.tool_calls)
+  return {
+    content: String(msg.content ?? ''),
+    toolCalls,
+    assistantMessage: msg as ChatMessage,
+    usage: {
+      promptTokens: Number(json?.usage?.prompt_tokens ?? 0),
+      completionTokens: Number(json?.usage?.completion_tokens ?? 0),
+    },
+  }
+}
+
 const openAiCompatibleAdapter: Adapter = {
   async listModels(p): Promise<string[]> {
     const { status, json } = await httpJson(`${p.baseUrl}/models`, { method: 'GET', headers: authHeaders(p) })
@@ -177,44 +342,151 @@ const openAiCompatibleAdapter: Adapter = {
     return [...new Set(ids)] as string[]
   },
   async chat(p, req) {
-    const body: Record<string, unknown> = {
-      model: req.model,
-      messages: req.messages,
-      max_tokens: req.maxTokens,
-    }
-    if (req.tools && req.tools.length > 0) {
-      body.tools = req.tools
-      body.tool_choice = 'auto'
-    }
-    // P3b：思考强度仅在模型具备能力时透传，避免不认该参数的供应商报错
-    if (req.effort && req.effort !== 'off' && REASONING_MODEL_RE.test(req.model)) {
-      body.reasoning_effort = req.effort
-    }
     const started = Date.now()
     const { status, json } = await httpJson(`${p.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: authHeaders(p),
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildOpenAiBody(req, false)),
     }, req.signal)
     if (status !== 200 || !json) {
       throw Object.assign(new Error(friendlyHttpError(status, json)), { latencyMs: Date.now() - started })
     }
-    const msg = json.choices?.[0]?.message ?? {}
-    const toolCalls = normalizeOpenAiToolCalls(msg.tool_calls)
-    return {
-      content: String(msg.content ?? ''),
-      toolCalls,
-      assistantMessage: msg as ChatMessage,
-      usage: {
-        promptTokens: Number(json.usage?.prompt_tokens ?? 0),
-        completionTokens: Number(json.usage?.completion_tokens ?? 0),
-      },
+    return parseOpenAiChoice(json)
+  },
+  async chatStream(p, req, onEvent) {
+    const sa = createStreamAbort(req.signal)
+    try {
+      const res = await net.fetch(`${p.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: authHeaders(p),
+        body: JSON.stringify(buildOpenAiBody(req, true)),
+        signal: sa.signal,
+      })
+      if (res.status !== 200) {
+        throw new Error(friendlyHttpError(res.status, parseWholeJson(await res.text())))
+      }
+      // 网关忽略 stream：整体 JSON 回退（功能可用，仅失去过程感）
+      if (!isSseResponse(res)) {
+        const r = parseOpenAiChoice(parseWholeJson(await res.text()))
+        if (r.content) onEvent({ type: 'text', delta: r.content })
+        onEvent({ type: 'usage', ...r.usage })
+        onEvent({ type: 'done' })
+        return r
+      }
+      let content = ''
+      const acc = new Map<number, { id: string; name: string; args: string }>()
+      let usage = { promptTokens: 0, completionTokens: 0 }
+      for await (const frame of readFrames(res)) {
+        sa.chunk()
+        const data = sseData(frame)
+        if (!data) continue
+        if (data === '[DONE]') break
+        const json = parseWholeJson(data)
+        if (!json) continue // 心跳 / 非 JSON 帧：丢弃，绝不抛
+        const d = json?.choices?.[0]?.delta ?? {}
+        if (typeof d?.content === 'string' && d.content) {
+          content += d.content
+          onEvent({ type: 'text', delta: d.content })
+        }
+        // 思考链字段名各家不一（reasoning_content / reasoning）：见到即归一化，不做模型名预判
+        const rc = typeof d?.reasoning_content === 'string' ? d.reasoning_content
+          : typeof d?.reasoning === 'string' ? d.reasoning : ''
+        if (rc) onEvent({ type: 'reasoning', delta: rc })
+        if (Array.isArray(d?.tool_calls)) {
+          for (const tc of d.tool_calls) {
+            // 流式 tool_calls 是分片：id/name 仅首片给，arguments 逐片累加
+            const idx = Number(tc?.index ?? 0)
+            const cur = acc.get(idx) ?? { id: '', name: '', args: '' }
+            if (tc?.id) cur.id = String(tc.id)
+            if (tc?.function?.name) cur.name = String(tc.function.name)
+            const argDelta = typeof tc?.function?.arguments === 'string' ? tc.function.arguments : ''
+            if (argDelta) cur.args += argDelta
+            acc.set(idx, cur)
+            onEvent({
+              type: 'tool_call', index: idx,
+              id: cur.id || undefined, name: cur.name || undefined,
+              argsDelta: argDelta || undefined,
+            })
+          }
+        }
+        if (json?.usage) {
+          usage = {
+            promptTokens: Number(json.usage.prompt_tokens ?? 0),
+            completionTokens: Number(json.usage.completion_tokens ?? 0),
+          }
+        }
+      }
+      const toolCalls: ToolCallNormalized[] = [...acc.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([i, t]) => ({ id: t.id || `call_${i}`, name: t.name, arguments: t.args || '{}' }))
+        .filter(tc => tc.name)
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content,
+        ...(toolCalls.length > 0 ? {
+          tool_calls: toolCalls.map(tc => ({
+            id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments },
+          })),
+        } : {}),
+      }
+      onEvent({ type: 'usage', ...usage })
+      onEvent({ type: 'done' })
+      return { content, toolCalls, assistantMessage, usage }
+    } catch (err) {
+      if (sa.timedOut()) throw new Error('流式响应超时（60 秒无数据）')
+      throw err
+    } finally {
+      sa.dispose()
     }
   },
 }
 
 function ollamaBase(p: ProviderConfig): string {
   return p.baseUrl || 'http://localhost:11434'
+}
+
+/** Ollama 消息 → 归一化工具调用 */
+function parseOllamaToolCalls(raw: any[]): ToolCallNormalized[] {
+  return (raw ?? []).map((tc: any, i: number) => ({
+    id: `call_${i}`,
+    name: String(tc?.function?.name ?? ''),
+    arguments: typeof tc?.function?.arguments === 'string'
+      ? tc.function.arguments
+      : JSON.stringify(tc?.function?.arguments ?? {}),
+  })).filter((tc: ToolCallNormalized) => tc.name)
+}
+
+/** Ollama 完整响应 → ChatResult（非流式解析 + 流式回退共用） */
+function parseOllamaWhole(json: any): ChatResult {
+  const msg = json?.message ?? {}
+  const toolCalls = parseOllamaToolCalls(msg.tool_calls)
+  return {
+    content: String(msg.content ?? ''),
+    toolCalls,
+    assistantMessage: {
+      role: 'assistant',
+      content: String(msg.content ?? ''),
+      ...(toolCalls.length > 0 ? { tool_calls: msg.tool_calls } : {}),
+    },
+    usage: {
+      promptTokens: Number(json.prompt_eval_count ?? 0),
+      completionTokens: Number(json.eval_count ?? 0),
+    },
+  }
+}
+
+/** Ollama 请求体装配（流式 / 非流式共用；tool_calls 回传逻辑两处一致） */
+function buildOllamaBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
+  const messages = req.messages.map(m => ({ role: m.role, content: m.content ?? '' }))
+  const lastAssistant = [...req.messages].reverse().find(m => m.role === 'assistant')
+  if (lastAssistant?.tool_calls) (messages[messages.length - 1] as any).tool_calls = lastAssistant.tool_calls
+  return {
+    model: req.model,
+    messages,
+    stream,
+    tools: req.tools && req.tools.length > 0 ? req.tools : undefined,
+    options: { num_predict: req.maxTokens },
+  }
 }
 
 const ollamaAdapter: Adapter = {
@@ -224,47 +496,138 @@ const ollamaAdapter: Adapter = {
     return ((json?.models ?? []).map((m: any) => String(m?.name)).filter(Boolean)) as string[]
   },
   async chat(p, req) {
-    const messages = req.messages.map(m => ({ role: m.role, content: m.content ?? '' }))
-    const lastAssistant = [...req.messages].reverse().find(m => m.role === 'assistant')
-    if (lastAssistant?.tool_calls) (messages[messages.length - 1] as any).tool_calls = lastAssistant.tool_calls
-    const body: Record<string, unknown> = {
-      model: req.model,
-      messages,
-      stream: false,
-      tools: req.tools && req.tools.length > 0 ? req.tools : undefined,
-      options: { num_predict: req.maxTokens },
-    }
     const { status, json } = await httpJson(`${ollamaBase(p)}/api/chat`, {
       method: 'POST',
       headers: {},
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildOllamaBody(req, false)),
     }, req.signal)
     if (status !== 200 || !json) throw new Error(`HTTP ${status}`)
-    const msg = json.message ?? {}
-    const toolCalls = (msg.tool_calls ?? []).map((tc: any, i: number) => ({
-      id: `call_${i}`,
-      name: String(tc?.function?.name ?? ''),
-      arguments: typeof tc?.function?.arguments === 'string'
-        ? tc.function.arguments
-        : JSON.stringify(tc?.function?.arguments ?? {}),
-    })).filter((tc: ToolCallNormalized) => tc.name)
-    return {
-      content: String(msg.content ?? ''),
-      toolCalls,
-      assistantMessage: {
+    return parseOllamaWhole(json)
+  },
+  async chatStream(p, req, onEvent) {
+    const sa = createStreamAbort(req.signal)
+    try {
+      const res = await net.fetch(`${ollamaBase(p)}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildOllamaBody(req, true)),
+        signal: sa.signal,
+      })
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`)
+      // 网关/服务忽略 stream 时返回 application/json（非 NDJSON）→ 整体回退
+      const ctype = String(res.headers.get('content-type') ?? '')
+      if (ctype.includes('application/json') && !ctype.includes('ndjson')) {
+        const r = parseOllamaWhole(parseWholeJson(await res.text()))
+        if (r.content) onEvent({ type: 'text', delta: r.content })
+        onEvent({ type: 'usage', ...r.usage })
+        onEvent({ type: 'done' })
+        return r
+      }
+      let content = ''
+      let usage = { promptTokens: 0, completionTokens: 0 }
+      const toolCalls: ToolCallNormalized[] = []
+      for await (const line of readLines(res)) {
+        sa.chunk()
+        const json = parseWholeJson(line)
+        if (!json) continue
+        const m = json.message ?? {}
+        if (typeof m.content === 'string' && m.content) {
+          content += m.content
+          onEvent({ type: 'text', delta: m.content })
+        }
+        if (typeof m.thinking === 'string' && m.thinking) {
+          onEvent({ type: 'reasoning', delta: m.thinking })
+        }
+        if (Array.isArray(m.tool_calls)) {
+          const got = parseOllamaToolCalls(m.tool_calls)
+          for (const tc of got) {
+            toolCalls.push({ ...tc, id: `call_${toolCalls.length}` })
+            onEvent({ type: 'tool_call', index: toolCalls.length - 1, name: tc.name, argsDelta: tc.arguments })
+          }
+        }
+        if (json.prompt_eval_count != null || json.eval_count != null) {
+          usage = {
+            promptTokens: Number(json.prompt_eval_count ?? 0),
+            completionTokens: Number(json.eval_count ?? 0),
+          }
+        }
+        if (json.done) break
+      }
+      const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: String(msg.content ?? ''),
-        ...(toolCalls.length > 0 ? { tool_calls: msg.tool_calls } : {}),
-      },
-      usage: {
-        promptTokens: Number(json.prompt_eval_count ?? 0),
-        completionTokens: Number(json.eval_count ?? 0),
-      },
+        content,
+        ...(toolCalls.length > 0 ? {
+          tool_calls: toolCalls.map(tc => ({
+            id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments },
+          })),
+        } : {}),
+      }
+      onEvent({ type: 'usage', ...usage })
+      onEvent({ type: 'done' })
+      return { content, toolCalls, assistantMessage, usage }
+    } catch (err) {
+      if (sa.timedOut()) throw new Error('流式响应超时（60 秒无数据）')
+      throw err
+    } finally {
+      sa.dispose()
     }
   },
 }
 
 // ---- Anthropic Messages API 适配器（非流式） ----
+
+/** OpenAI 线格式 → Anthropic 请求体（流式 / 非流式共用） */
+function buildAnthropicBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
+  // system 抽离；tool 结果合并为 tool_result 块
+  const systemParts: string[] = []
+  const turns: { role: 'user' | 'assistant'; content: unknown[] }[] = []
+  const pushTurn = (role: 'user' | 'assistant', block: unknown): void => {
+    const last = turns[turns.length - 1]
+    if (last && last.role === role) last.content.push(block)
+    else turns.push({ role, content: [block] })
+  }
+  for (const m of req.messages) {
+    if (m.role === 'system') { systemParts.push(m.content ?? ''); continue }
+    if (m.role === 'user') { pushTurn('user', { type: 'text', text: m.content ?? '' }); continue }
+    if (m.role === 'tool') {
+      pushTurn('user', { type: 'tool_result', tool_use_id: m.tool_call_id ?? '', content: m.content ?? '' })
+      continue
+    }
+    // assistant：文本块 + tool_use 块
+    const blocks: unknown[] = []
+    if (m.content) blocks.push({ type: 'text', text: m.content })
+    for (const tc of (m.tool_calls ?? []) as any[]) {
+      let input: unknown = {}
+      try { input = JSON.parse(String(tc?.function?.arguments ?? '{}')) } catch { /* 空对象 */ }
+      blocks.push({ type: 'tool_use', id: String(tc?.id ?? ''), name: String(tc?.function?.name ?? ''), input })
+    }
+    if (blocks.length > 0) pushTurn('assistant', blocks.length === 1 ? blocks[0] : blocks)
+  }
+  const tools = (req.tools ?? []).map((t: any) => ({
+    name: String(t?.function?.name ?? ''),
+    description: String(t?.function?.description ?? ''),
+    input_schema: t?.function?.parameters ?? { type: 'object' },
+  }))
+  return {
+    model: req.model,
+    max_tokens: req.maxTokens,
+    messages: turns,
+    ...(stream ? { stream: true } : {}),
+    ...(systemParts.length > 0 ? { system: systemParts.join('\n\n') } : {}),
+    ...(tools.length > 0 ? { tools } : {}),
+  }
+}
+
+/** Anthropic 结果 → assistant 消息（OpenAI 线格式，多轮回喂用） */
+function buildAnthropicAssistant(text: string, toolCalls: ToolCallNormalized[]): ChatMessage {
+  return {
+    role: 'assistant',
+    content: text,
+    ...(toolCalls.length > 0 ? {
+      tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })),
+    } : {}),
+  }
+}
 
 const anthropicAdapter: Adapter = {
   async listModels(p): Promise<string[]> {
@@ -276,47 +639,10 @@ const anthropicAdapter: Adapter = {
     return ((json?.data ?? []).map((m: any) => String(m?.id)).filter(Boolean)) as string[]
   },
   async chat(p, req) {
-    // OpenAI 线格式 → Anthropic 格式：system 抽离；tool 结果合并为 tool_result 块
-    const systemParts: string[] = []
-    const turns: { role: 'user' | 'assistant'; content: unknown[] }[] = []
-    const pushTurn = (role: 'user' | 'assistant', block: unknown): void => {
-      const last = turns[turns.length - 1]
-      if (last && last.role === role) last.content.push(block)
-      else turns.push({ role, content: [block] })
-    }
-    for (const m of req.messages) {
-      if (m.role === 'system') { systemParts.push(m.content ?? ''); continue }
-      if (m.role === 'user') { pushTurn('user', { type: 'text', text: m.content ?? '' }); continue }
-      if (m.role === 'tool') {
-        pushTurn('user', { type: 'tool_result', tool_use_id: m.tool_call_id ?? '', content: m.content ?? '' })
-        continue
-      }
-      // assistant：文本块 + tool_use 块
-      const blocks: unknown[] = []
-      if (m.content) blocks.push({ type: 'text', text: m.content })
-      for (const tc of (m.tool_calls ?? []) as any[]) {
-        let input: unknown = {}
-        try { input = JSON.parse(String(tc?.function?.arguments ?? '{}')) } catch { /* 空对象 */ }
-        blocks.push({ type: 'tool_use', id: String(tc?.id ?? ''), name: String(tc?.function?.name ?? ''), input })
-      }
-      if (blocks.length > 0) pushTurn('assistant', blocks.length === 1 ? blocks[0] : blocks)
-    }
-    const tools = (req.tools ?? []).map((t: any) => ({
-      name: String(t?.function?.name ?? ''),
-      description: String(t?.function?.description ?? ''),
-      input_schema: t?.function?.parameters ?? { type: 'object' },
-    }))
-    const body: Record<string, unknown> = {
-      model: req.model,
-      max_tokens: req.maxTokens,
-      messages: turns,
-      ...(systemParts.length > 0 ? { system: systemParts.join('\n\n') } : {}),
-      ...(tools.length > 0 ? { tools } : {}),
-    }
     const { status, json } = await httpJson(`${anthropicBase(p)}/v1/messages`, {
       method: 'POST',
       headers: anthropicHeaders(p),
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildAnthropicBody(req, false)),
     })
     if (status !== 200 || !json) {
       throw new Error(`HTTP ${status}: ${String(json?.error?.message ?? '').slice(0, 200) || '响应解析失败'}`)
@@ -333,21 +659,85 @@ const anthropicAdapter: Adapter = {
         })
       }
     }
-    const assistantMessage: ChatMessage = {
-      role: 'assistant',
-      content: text,
-      ...(toolCalls.length > 0 ? {
-        tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })),
-      } : {}),
-    }
     return {
       content: text,
       toolCalls,
-      assistantMessage,
+      assistantMessage: buildAnthropicAssistant(text, toolCalls),
       usage: {
         promptTokens: Number(json.usage?.input_tokens ?? 0),
         completionTokens: Number(json.usage?.output_tokens ?? 0),
       },
+    }
+  },
+  async chatStream(p, req, onEvent) {
+    const sa = createStreamAbort(req.signal)
+    try {
+      const res = await net.fetch(`${anthropicBase(p)}/v1/messages`, {
+        method: 'POST',
+        headers: anthropicHeaders(p),
+        body: JSON.stringify(buildAnthropicBody(req, true)),
+        signal: sa.signal,
+      })
+      if (res.status !== 200) {
+        const json = parseWholeJson(await res.text())
+        throw new Error(`HTTP ${res.status}: ${String(json?.error?.message ?? '').slice(0, 200) || '响应解析失败'}`)
+      }
+      let text = ''
+      let usage = { promptTokens: 0, completionTokens: 0 }
+      /** 按 content block index 收集 tool_use（入参是 input_json_delta 分片拼接） */
+      const blocks = new Map<number, { id: string; name: string; json: string }>()
+      for await (const frame of readFrames(res)) {
+        sa.chunk()
+        const data = sseData(frame)
+        if (!data) continue
+        const json = parseWholeJson(data)
+        if (!json) continue
+        const type = String(json.type ?? '')
+        if (type === 'message_start') {
+          usage = { ...usage, promptTokens: Number(json.message?.usage?.input_tokens ?? 0) }
+        } else if (type === 'content_block_start') {
+          const cb = json.content_block ?? {}
+          if (cb.type === 'tool_use') {
+            blocks.set(Number(json.index ?? 0), { id: String(cb.id ?? ''), name: String(cb.name ?? ''), json: '' })
+          }
+        } else if (type === 'content_block_delta') {
+          const d = json.delta ?? {}
+          if (d.type === 'text_delta' && d.text) {
+            text += String(d.text)
+            onEvent({ type: 'text', delta: String(d.text) })
+          } else if (d.type === 'thinking_delta' && d.thinking) {
+            onEvent({ type: 'reasoning', delta: String(d.thinking) })
+          } else if (d.type === 'input_json_delta') {
+            const idx = Number(json.index ?? 0)
+            const cur = blocks.get(idx)
+            if (cur) {
+              cur.json += String(d.partial_json ?? '')
+              onEvent({ type: 'tool_call', index: idx, name: cur.name || undefined, argsDelta: String(d.partial_json ?? '') })
+            }
+          }
+        } else if (type === 'message_delta') {
+          usage = { ...usage, completionTokens: Number(json.usage?.output_tokens ?? 0) }
+        } else if (type === 'message_stop') {
+          break
+        }
+      }
+      const toolCalls: ToolCallNormalized[] = [...blocks.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([i, b]) => ({ id: b.id || `call_${i}`, name: b.name, arguments: b.json || '{}' }))
+        .filter(tc => tc.name)
+      onEvent({ type: 'usage', ...usage })
+      onEvent({ type: 'done' })
+      return {
+        content: text,
+        toolCalls,
+        assistantMessage: buildAnthropicAssistant(text, toolCalls),
+        usage,
+      }
+    } catch (err) {
+      if (sa.timedOut()) throw new Error('流式响应超时（60 秒无数据）')
+      throw err
+    } finally {
+      sa.dispose()
     }
   },
 }
@@ -392,7 +782,12 @@ export type LlmInvokeResponse = {
   code?: 'PROVIDER_NOT_FOUND' | 'PROVIDER_DISABLED' | 'NO_DEFAULT_MODEL'
 }
 
-async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
+type LlmTarget =
+  | { ok: true; provider: ProviderConfig; model: string; maxTokens: number }
+  | { ok: false; error: string; code?: 'PROVIDER_NOT_FOUND' | 'PROVIDER_DISABLED' | 'NO_DEFAULT_MODEL' }
+
+/** 供应商 / 模型 / 上限解析（llmInvoke 与流式入口共用，避免两套参数漂移） */
+function resolveLlmTarget(req: LlmInvokeRequest): LlmTarget {
   const providers = getProviders()
   let provider: ProviderConfig | undefined
   let modelId = req.modelId ?? ''
@@ -408,25 +803,36 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
   if (!provider) return { ok: false, error: '未找到可用的模型供应商', code: req.providerId ? 'PROVIDER_NOT_FOUND' : 'NO_DEFAULT_MODEL' }
   if (!provider.enabled) return { ok: false, error: `供应商「${provider.name}」已禁用`, code: 'PROVIDER_DISABLED' }
 
-  const adapter = getAdapter(provider.type)
   const maxTokensRaw = Math.floor(Number(depsRef?.getSettingValue('llmMaxTokens') ?? 4096))
   const maxTokens = Math.max(256, Math.min(32768, Number.isFinite(maxTokensRaw) ? maxTokensRaw : 4096))
   const finalModel = modelId || provider.models[0] || ''
   if (!finalModel) return { ok: false, error: '供应商未配置可用模型，请先刷新模型列表' }
+  return { ok: true, provider, model: finalModel, maxTokens }
+}
 
+/** 流式开关（设置项 aiStreamEnabled，缺省开）：关闭后退回非流式，功能不受损 */
+function streamEnabled(): boolean {
+  return depsRef?.getSettingValue('aiStreamEnabled') !== false
+}
+
+async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
+  const t = resolveLlmTarget(req)
+  if (!t.ok) return { ok: false, error: t.error, code: t.code }
+
+  const adapter = getAdapter(t.provider.type)
   const started = Date.now()
   try {
-    const r = await adapter.chat(provider, {
-      model: finalModel,
+    const r = await adapter.chat(t.provider, {
+      model: t.model,
       messages: req.messages,
       tools: req.tools,
-      maxTokens,
+      maxTokens: t.maxTokens,
       effort: req.effort,
       signal: req.signal,
     })
-    appendAudit(provider.id, 'llm.invoke', {
-      provider: provider.name,
-      model: finalModel,
+    appendAudit(t.provider.id, 'llm.invoke', {
+      provider: t.provider.name,
+      model: t.model,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
@@ -438,15 +844,83 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       content: r.content,
       toolCalls: r.toolCalls,
       assistantMessage: r.assistantMessage,
-      model: finalModel,
+      model: t.model,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
     }
   } catch (err) {
-    appendAudit(provider.id, 'llm.invoke', {
-      provider: provider.name,
-      model: finalModel,
+    appendAudit(t.provider.id, 'llm.invoke', {
+      provider: t.provider.name,
+      model: t.model,
+      durationMs: Date.now() - started,
+      ok: false,
+      error: String((err as Error)?.message ?? err).slice(0, 300),
+    })
+    return { ok: false, error: String((err as Error)?.message ?? err) }
+  }
+}
+
+/**
+ * 流式调用（docs/ai-streaming-design.md §5.1.5）。
+ *
+ * **返回值与 llmInvoke 完全同构** —— 调用方（AgentRunner）的回喂 / 审计 / trace / 落库
+ * 逻辑一律不分叉；流式只是"在生成过程中额外发事件"。
+ * 适配器未实现 chatStream、或设置里关闭了流式 → 自动回退非流式（content 一次性作为 text 事件发出）。
+ */
+export async function invokeLlmStreamInternal(
+  req: LlmInvokeRequest,
+  onEvent: (e: LlmStreamEvent) => void,
+): Promise<LlmInvokeResponse> {
+  const t = resolveLlmTarget(req)
+  if (!t.ok) return { ok: false, error: t.error, code: t.code }
+  const adapter = getAdapter(t.provider.type)
+
+  if (!streamEnabled() || !adapter.chatStream) {
+    const r = await llmInvoke(req)
+    if (r.ok) {
+      if (r.content) onEvent({ type: 'text', delta: r.content })
+      onEvent({ type: 'usage', promptTokens: r.promptTokens, completionTokens: r.completionTokens })
+    }
+    onEvent({ type: 'done' })
+    return r
+  }
+
+  const started = Date.now()
+  try {
+    const r = await adapter.chatStream(t.provider, {
+      model: t.model,
+      messages: req.messages,
+      tools: req.tools,
+      maxTokens: t.maxTokens,
+      effort: req.effort,
+      signal: req.signal,
+    }, onEvent)
+    appendAudit(t.provider.id, 'llm.invoke', {
+      provider: t.provider.name,
+      model: t.model,
+      stream: true,
+      tokens: r.usage.promptTokens + r.usage.completionTokens,
+      promptTokens: r.usage.promptTokens,
+      completionTokens: r.usage.completionTokens,
+      durationMs: Date.now() - started,
+      ok: true,
+    })
+    return {
+      ok: true,
+      content: r.content,
+      toolCalls: r.toolCalls,
+      assistantMessage: r.assistantMessage,
+      model: t.model,
+      tokens: r.usage.promptTokens + r.usage.completionTokens,
+      promptTokens: r.usage.promptTokens,
+      completionTokens: r.usage.completionTokens,
+    }
+  } catch (err) {
+    appendAudit(t.provider.id, 'llm.invoke', {
+      provider: t.provider.name,
+      model: t.model,
+      stream: true,
       durationMs: Date.now() - started,
       ok: false,
       error: String((err as Error)?.message ?? err).slice(0, 300),

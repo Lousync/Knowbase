@@ -3,6 +3,8 @@ import { Bot, Check, Copy, Loader2, Pencil, RefreshCw, Square, Trash2, Wrench } 
 import { MarkdownPreview } from '../MarkdownPreview'
 import { showToast } from '../../../lib/toast'
 import { copyText } from '../../../lib/ipc'
+import { StreamBubble } from './StreamBubble'
+import type { StreamDraft } from './useAgentStream'
 import type { AgentTraceStep } from '../../../types'
 
 /**
@@ -97,6 +99,8 @@ export interface MessageListProps {
   messages: UiMessage[]
   pending: boolean
   liveSteps: AgentTraceStep[]
+  /** 流式过程草稿（思考链 / 过程时间线 / 正文增量）。为空时回落到旧的固定文案气泡 */
+  draft?: StreamDraft | null
   /** 行内编辑用户消息：目标 id + 草稿 */
   editing: { id: string; draft: string } | null
   setEditing: (v: { id: string; draft: string } | null) => void
@@ -113,16 +117,39 @@ export interface MessageListProps {
 }
 
 export function MessageList({
-  messages, pending, liveSteps, editing, setEditing, copiedIdx, setCopiedIdx,
+  messages, pending, liveSteps, draft, editing, setEditing, copiedIdx, setCopiedIdx,
   onRegenerate, onEditSubmit, onDeleteMessage, onAbort, emptyHint, className,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  /** 是否贴底（用户上滚阅读时不再强制拉回）。初始 true：新会话从底部开始 */
+  const stickRef = useRef(true)
 
-  // 新消息 / 进入回复态时滚到底
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, pending])
+  // 跟踪「是否贴底」。流式高频注入下，只有贴底才跟随滚动
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = (): void => {
+      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // 内容变化 → 贴底才跟随，且**用 instant 而非 smooth**：
+  // 流式下这个 effect 每 60ms 触发一次，smooth 动画会与下一次调用互相打断（表现为滚动抽搐）
+  const draftSig = draft ? `${draft.text.length}|${draft.items.length}|${draft.thinking.length}` : ''
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !stickRef.current) return
+    el.scrollTop = el.scrollHeight
+  }, [messages, pending, draftSig])
 
   return (
-    <div className={className ?? 'h-full overflow-y-auto px-3 py-3 space-y-2'}>
+    <div
+      ref={scrollRef}
+      className={className ?? 'h-full overflow-y-auto px-3 py-3 space-y-2'}
+    >
       {messages.length === 0 && !pending && emptyHint}
       {messages.map((m, i) => (
         <div key={m.id ?? `live-${i}`} className="group/msg">
@@ -198,7 +225,11 @@ export function MessageList({
         </div>
       ))}
 
-      {pending && (
+      {pending && (draft ? (
+        /* 流式过程气泡：思考区 + 工具时间线 + 正文增量（docs/ai-streaming-design.md §5.3.4） */
+        <StreamBubble draft={draft} onAbort={onAbort} />
+      ) : (
+        /* 兜底：无流式草稿时（如流式被设置关闭）沿用固定文案气泡 */
         <div className="mr-6 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
           <Loader2 size={13} className="animate-spin shrink-0" />
           <span className="flex-1 min-w-0"><AgentLiveSteps steps={liveSteps} /></span>
@@ -209,7 +240,7 @@ export function MessageList({
             <Square size={9} className="fill-current" /> 停止
           </button>
         </div>
-      )}
+      ))}
       <div ref={bottomRef} />
     </div>
   )

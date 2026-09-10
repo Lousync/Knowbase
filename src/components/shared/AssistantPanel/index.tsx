@@ -11,10 +11,11 @@ import { getAssistantContext, getSelectionAskHost, selectionContext } from '../.
 import { showToast } from '../../../lib/toast'
 import { TranslateCard } from '../TranslateCard'
 import { MessageList, fmtTime, type UiMessage } from './MessageList'
+import { useAgentStream } from './useAgentStream'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentRegenerate, agentEditMessage, agentDeleteMessage,
-  llmListProviders, agentAbort, onAgentStep,
+  llmListProviders, agentAbort,
 } from '../../../lib/ipc'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo, AgentChange, TabName } from '../../../types'
 
@@ -99,16 +100,10 @@ export function AssistantPanel({ shellLeft = 68 }: { shellLeft?: number }) {
   const chatIdRef = useRef<string>('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const ctxVersionRef = useRef(0)
-  /** 实时过程步骤（agent:step，仅当前 chatId）：驱动「正在思考/调用工具」气泡 */
-  const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
+  /** 流式过程（思考链 / 工具时间线 / 正文增量）+ 步骤轨迹，仅当前 chatId 收流 */
+  const { draft, liveSteps, begin: beginStream, end: endStream } = useAgentStream(chatIdRef)
   /** 本次请求的真实改动清单（agentChat 返回 changes）→ 完成后卡片 */
   const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
-  useEffect(() => {
-    return onAgentStep(({ chatId, step }) => {
-      if (chatId !== chatIdRef.current) return
-      setLiveSteps(prev => [...prev.slice(-19), step])
-    })
-  }, [])
   /** 当前会话 id 的实时镜像：回复返回时判断用户是否已切换会话 */
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
@@ -382,7 +377,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     setMessages(prev => [...prev, { role: 'user', content: text, createdAt: nowLocal() }])
     setInput('')
     setPending(true)
-    setLiveSteps([])
+    beginStream()
     setLastChanges(null)
     ctxVersionRef.current++
     const cid = crypto.randomUUID()
@@ -405,6 +400,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       // 以会话库为准刷新（拿到落库 id/trace；中止时仅剩用户消息也保持一致）
       await refreshMessages(sid)
     } finally {
+      endStream()
       setPending(false)
       void refreshSessions()
     }
@@ -416,7 +412,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     if (!sid || pending) return
     if (messages.length === 0 || messages[messages.length - 1].role !== 'assistant') return
     setPending(true)
-    setLiveSteps([])
+    beginStream()
     setLastChanges(null)
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
@@ -427,6 +423,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       else if (r.changes && r.changes.length > 0) setLastChanges(r.changes)
       await refreshMessages(sid)
     } finally {
+      endStream()
       setPending(false)
       void refreshSessions()
     }
@@ -438,7 +435,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     if (!sid || pending) return
     setEditing(null)
     setPending(true)
-    setLiveSteps([])
+    beginStream()
     setLastChanges(null)
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
@@ -449,6 +446,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       else if (r.changes && r.changes.length > 0) setLastChanges(r.changes)
       await refreshMessages(sid)
     } finally {
+      endStream()
       setPending(false)
       void refreshSessions()
     }
@@ -488,7 +486,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
 
   /** 会话桥接：把侧栏这套状态与方法原样交给全屏学堂 —— 两边是同一份会话，扩张不丢上下文 */
   const chatBridge: ChatBridge = {
-    messages, pending, liveSteps, lastChanges, sessions, activeId, selCtx,
+    messages, pending, liveSteps, draft, lastChanges, sessions, activeId, selCtx,
     editing, setEditing, copiedIdx, setCopiedIdx,
     send: text => { void send(text) },
     newSession: () => { void newSession() },
@@ -640,6 +638,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                       messages={messages}
                       pending={pending}
                       liveSteps={liveSteps}
+                      draft={draft}
                       editing={editing}
                       setEditing={setEditing}
                       copiedIdx={copiedIdx}

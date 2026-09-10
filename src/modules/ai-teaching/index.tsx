@@ -21,6 +21,8 @@ import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { registerSelectionAskHost, selectionContext } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
+import { StreamBubble } from '../../components/shared/AssistantPanel/StreamBubble'
+import { useAgentStream } from '../../components/shared/AssistantPanel/useAgentStream'
 import { WebSourceDialog } from './components/WebSourceDialog'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, AiTeachInjectionStats, LlmUsageInfo, LlmProviderInfo, LlmVisionModelInfo, AiTeachWorkspaceInfo, AiTeachSourceEntry } from '../../types'
 
@@ -169,6 +171,17 @@ const TOOL_CN: Record<string, string> = {
 function toolName(name?: string): string {
   const s = String(name ?? '')
   return TOOL_CN[s] ?? (s.startsWith('builtin.') ? s.slice(8) : s || '工具')
+}
+
+/**
+ * 流式期间剥掉尾部**未闭合**的 ``` 围栏（quiz/plan/ask/profile 等协议块），
+ * 防止半截 JSON 在正文里闪现；围栏闭合后自然恢复显示。
+ * 规则：最后一个 ``` 之后若再无 ```，则截断到它之前（正规 Markdown 中围栏总是成对）。
+ */
+function stripOpenFence(text: string): string {
+  const open = text.lastIndexOf('```')
+  if (open === -1) return text
+  return text.slice(open + 3).includes('```') ? text : text.slice(0, open)
 }
 
 interface UiMsg {
@@ -561,6 +574,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // P1 重命名会话（双击列表行）：agentRenameSession + 文件夹同步改名
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+  // 流式过程（思考链 / 工具时间线 / 正文增量）：与侧栏共用同一 hook（docs/ai-streaming-design.md §5.3.5）。
+  // liveSteps 仍由下方 onAgentStep 订阅维护（本模块还要做工件栏占位页签联动，不合并）。
+  const { draft: streamDraft, begin: beginStream, end: endStream } = useAgentStream(chatIdRef)
+
   // 实时步骤（agent:step，按 chatId 过滤）。工件栏方案 §3.4 生成时序：
   // ① visual.html 带 args 的「生成中」事件 → 工件栏同步开占位页签（禁止关闭，即时反馈）；
   // ② 带 artifact 的成功事件 → 占位原地换正式页签 + toast（对话流工件卡随消息落库自动出现）。
@@ -612,7 +629,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [refreshMessages, sessions, loadConstraints, openArtFile])
 
   const sendText = useCallback(async (raw: string, cid: string, withQuote = false): Promise<AgentChatResult | null> => {
-    setPending(true); setLiveSteps([])
+    setPending(true); setLiveSteps([]); beginStream()
     const sid = activeIdRef.current
     if (!sid) { setPending(false); return null }
     setMessages(prev => [...prev, { role: 'user', content: raw, createdAt: new Date().toISOString() }]) // 条目4：乐观时间存 ISO（原纯时刻串必 Invalid Date）
@@ -629,11 +646,12 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     void llmGetUsage().then(setUsage).catch(() => null)
     setLastChanges(r?.changes && r.changes.length ? r.changes : null)
     await refreshMessages(sid)
+    endStream()
     setPending(false)
     setArtTabs(prev => prev.some(t => t.generating) ? prev.filter(t => !t.generating) : prev) // 中止/失败收尾：禁关占位不留场
     setArtActive(cur => cur?.startsWith('gen:') ? null : cur)
     return r
-  }, [refreshMessages])
+  }, [refreshMessages, beginStream, endStream])
 
   const doSend = useCallback(async () => {
     const text = input.trim()
@@ -1900,7 +1918,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   </div>
                 )}
 
-                {pending && (
+                {pending && (streamDraft ? (
+                  <div className="flex justify-start">
+                    <div className="w-full max-w-[92%]">
+                      <StreamBubble draft={streamDraft} textTransform={stripOpenFence} />
+                    </div>
+                  </div>
+                ) : (
                   <div className="flex justify-start">
                     <div className="max-w-[86%] rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-3.5 py-2.5 flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
                       <Loader2 size={13} className="animate-spin shrink-0" />
@@ -1914,7 +1938,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                       </span>
                     </div>
                   </div>
-                )}
+                ))}
                 <div ref={bottomRef} />
                 </div>
                 {/* 右缘快速定位条（§3.8-1，3-13）：每条回答一个刻度，hover 预览标题，点击滚动定位。

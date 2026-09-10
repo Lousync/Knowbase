@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
 import type { ToolDescription } from './aiTools'
-import { invokeLlmInternal } from './llmService'
+import { invokeLlmStreamInternal } from './llmService'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
@@ -61,7 +61,24 @@ export interface AgentTraceStep {
   args?: Record<string, unknown>
   /** visual.html 成功产物（落库，随消息 trace 持久）：渲染层画工件卡 + 占位页签原地转正式 */
   artifact?: { rel: string; title: string; lines: number; slug: string }
+  /** 过程旁白：带工具轮次里模型输出的说明文本（落库供历史回看；
+   *  最终轮正文是回复本体，已在消息 content 里，不重复存） */
+  processText?: string
+  /** 思考耗时（ms）。reasoning 全文**不落库**——会话文件全量读写，思考链长度常是正文数倍 */
+  thinkingMs?: number
 }
+
+/**
+ * 流式增量事件（docs/ai-streaming-design.md §4.1）。与 agent:step 刻意分工：
+ * - `agent:step`：步骤**完成**事件（含耗时 / artifact，随 trace 落库）—— 保持零改动
+ * - `agent:stream`：**增量与进行中**事件（不落库）—— 本次新增
+ * 渲染层把两者合起来即完整过程时间线。
+ */
+export type AgentStreamEvent =
+  | { kind: 'round-start'; round: number }
+  | { kind: 'thinking'; delta: string }
+  | { kind: 'text'; delta: string }
+  | { kind: 'tool-start'; name: string; label: string; target?: string }
 
 export interface AgentContextInfo {
   type: string
@@ -125,6 +142,66 @@ const activeChats = new Map<string, AbortController>()
 
 /** signal → 步骤事件推送器（withAbort 注入发起窗口 sender，仅目标窗口收流） */
 const stepEmitters = new WeakMap<AbortSignal, (step: AgentTraceStep) => void>()
+
+/** signal → 流式增量推送器（与 stepEmitters 同机制；WeakMap 随 signal 一并回收） */
+const streamEmitters = new WeakMap<AbortSignal, (event: AgentStreamEvent) => void>()
+
+/**
+ * 增量合批：**绝不每 token 一次 IPC**。
+ * 一次 2000 字回答若按 delta 直发是数百次 send；40ms 或累计 64 字符 flush 一次
+ * → 一次完整请求约 30~80 次事件（docs/ai-streaming-design.md §5.2.2）。
+ */
+class DeltaBatcher {
+  private text = ''
+  private reasoning = ''
+  private timer: ReturnType<typeof setTimeout> | null = null
+  constructor(private readonly emit: (e: AgentStreamEvent) => void) {}
+
+  push(kind: 'text' | 'thinking', delta: string): void {
+    if (kind === 'text') this.text += delta
+    else this.reasoning += delta
+    if (this.text.length + this.reasoning.length >= 64) { this.flush(); return }
+    if (!this.timer) this.timer = setTimeout(() => this.flush(), 40)
+  }
+
+  /** 收尾必须显式调用一次：否则最后一段积压会丢（表现为回答结尾缺几个字） */
+  flush(): void {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
+    if (this.reasoning) { const d = this.reasoning; this.reasoning = ''; this.emit({ kind: 'thinking', delta: d }) }
+    if (this.text) { const d = this.text; this.text = ''; this.emit({ kind: 'text', delta: d }) }
+  }
+}
+
+/** 工具注册名 → 过程时间线的动作文案（"正在读取 …"）。未登记的取注册名末段兜底 */
+const TOOL_ACTION_LABELS: Record<string, string> = {
+  'builtin.vault.list': '浏览目录',
+  'builtin.vault.read': '读取文件',
+  'builtin.vault.search': '搜索内容',
+  'builtin.vault.resolve-ref': '解析引用',
+  'builtin.vault.write': '写入文件',
+  'builtin.vault.edit': '修改文件',
+  'builtin.vault.rename': '重命名',
+  'builtin.vault.trash': '移入回收站',
+  'builtin.knowledge.search': '检索知识库',
+  'builtin.knowledge.create-page': '新建知识页',
+  'builtin.blog.create-entry': '新建日记',
+  'builtin.schedule.list-todos': '查看待办',
+  'builtin.schedule.create-todo': '创建待办',
+  'builtin.checkin.check-habit': '习惯打卡',
+  'builtin.habits.stats': '统计习惯',
+  'builtin.pomodoro.summary': '统计番茄',
+  'builtin.web.search': '联网搜索',
+  'builtin.web.read': '读取网页',
+  'builtin.help.search': '检索帮助',
+  'builtin.tool.request': '申请工具',
+  'visual.html': '生成示意图',
+}
+
+/** 工具入参 → 过程时间线的目标文案（正在读/写哪个对象）；取不到则留空 */
+function argTarget(args: Record<string, unknown>): string {
+  const v = args.path ?? args.relPath ?? args.title ?? args.name ?? args.date ?? args.query ?? args.slug
+  return typeof v === 'string' ? v.trim().slice(0, 120) : ''
+}
 
 /** 写改动识别：工具 → 人类动作标签（成功执行后收集 target=path/title/date/name） */
 const CHANGE_LABELS: Record<string, string> = {
@@ -386,11 +463,32 @@ async function runAgentLoop(
     modelOverride = ci > 0 ? llmOpts.modelId.slice(ci + 1) : llmOpts.modelId
   }
 
+  // 流式增量出口（不落库）：思考链 / 正文 delta 经合批后推给发起窗口。
+  // signal 全程不变，取一次即可。
+  const emitStream = streamEmitters.get(signal)
+  const batcher = new DeltaBatcher((e) => emitStream?.(e))
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // ---- LLM 轮 ----
     if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
+    emitStream?.({ kind: 'round-start', round: i + 1 })
     const t0 = Date.now()
-    const r = await invokeLlmInternal({ messages: convo, tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort })
+    // 思考时长统计（reasoning 全文不落库，只记时长，见 AgentTraceStep.thinkingMs）
+    let thinkFrom = 0
+    let thinkTo = 0
+    const r = await invokeLlmStreamInternal(
+      { messages: convo, tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
+      (e) => {
+        if (e.type === 'text') batcher.push('text', e.delta)
+        else if (e.type === 'reasoning') {
+          if (!thinkFrom) thinkFrom = Date.now()
+          thinkTo = Date.now()
+          batcher.push('thinking', e.delta)
+        }
+      },
+    )
+    // 本轮收尾：确保积压的旁白/正文已推出（否则渲染层会缺最后一段）
+    batcher.flush()
     const llmStep: AgentTraceStep = {
       kind: 'llm',
       ok: r.ok,
@@ -398,6 +496,12 @@ async function runAgentLoop(
       tokens: r.ok ? r.tokens : undefined,
       promptTokens: r.ok ? r.promptTokens : undefined,
       completionTokens: r.ok ? r.completionTokens : undefined,
+      // 带工具轮次的正文 = 过程旁白（落库供历史回看）。实时展示已由上面的 text delta 完成，
+      // 这里只为「回看历史时仍能看到 AI 当时说了什么」
+      ...(r.ok && r.toolCalls.length > 0 && r.content.trim()
+        ? { processText: r.content.trim().slice(0, 1000) }
+        : {}),
+      ...(thinkFrom ? { thinkingMs: Math.max(1, thinkTo - thinkFrom) } : {}),
     }
     trace.push(llmStep)
     stepEmitters.get(signal)?.(llmStep) // 实时过程：渲染层活动气泡
@@ -446,6 +550,15 @@ async function runAgentLoop(
           args: { slug: String(args?.slug ?? ''), title: String(args?.title ?? '') },
         })
       }
+
+      // 过程时间线（§5.2.3）：在**调用前**先推「进行中」——现有 agent:step 是执行完才推，
+      // 渲染层若只靠它会滞后一整轮生成时间。执行完由 agent:step 原地转 ✓ 并补耗时。
+      emitStream?.({
+        kind: 'tool-start',
+        name: realName,
+        label: TOOL_ACTION_LABELS[realName] ?? (realName.startsWith('builtin.') ? realName.slice(8) : realName),
+        target: argTarget(args),
+      })
 
       const t1 = Date.now()
       const exec = await invokeToolInternal(realName, args, '', { sessionId, source })
@@ -565,12 +678,17 @@ export function registerAgentHandlers(): void {
       stepEmitters.set(ctrl.signal, (step) => {
         if (!sender.isDestroyed()) sender.send('agent:step', { chatId, step })
       })
+      // 流式增量：与 agent:step 平行，只发发起窗口（多窗口下另一窗口看不到流，与同类产品一致）
+      streamEmitters.set(ctrl.signal, (event) => {
+        if (!sender.isDestroyed()) sender.send('agent:stream', { chatId, event })
+      })
     }
     try {
       return await fn(ctrl.signal)
     } finally {
       activeChats.delete(chatId)
       stepEmitters.delete(ctrl.signal)
+      streamEmitters.delete(ctrl.signal)
     }
   }
   ipcMain.handle('agent:chat', (e, req: AgentChatRequest) =>

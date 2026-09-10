@@ -96,6 +96,28 @@ export function AiModelsTab() {
         </div>
       </div>
 
+      {/* 对话输出（docs/ai-streaming-design.md §5.4） */}
+      <div data-setting-anchor="aiTools.stream">
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">对话输出</h2>
+        <p className="text-[12px] text-[var(--text-muted)] mb-4">AI 回复的输出方式与过程展示。</p>
+        <div className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md space-y-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] text-[var(--text-primary)]">流式输出</div>
+              <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">回复逐字输出并实时显示工具调用过程；供应商不支持时自动回退</div>
+            </div>
+            <SettingSwitch checked={s.aiStreamEnabled !== false} onChange={v => { void update('aiStreamEnabled', v) }} aria-label="流式输出" />
+          </div>
+          <div data-setting-anchor="aiTools.thinking" className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] text-[var(--text-primary)]">显示思考过程</div>
+              <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">推理模型的思考链以折叠区实时显示；普通模型没有思考链，自动不出现</div>
+            </div>
+            <SettingSwitch checked={s.aiShowThinking !== false} onChange={v => { void update('aiShowThinking', v) }} aria-label="显示思考过程" />
+          </div>
+        </div>
+      </div>
+
       {/* 供应商列表 */}
       <div>
         <div className="flex items-center justify-between max-w-md">

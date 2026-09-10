@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { MarkdownPreview } from '../MarkdownPreview'
 import { MessageList, type UiMessage } from '../AssistantPanel/MessageList'
+import type { StreamDraft } from '../AssistantPanel/useAgentStream'
 import { loadHelpDocs, type HelpDoc } from '../../../modules/help/docsLoader'
 import { LESSONS, LESSON_TOTAL, getLesson, type Lesson } from './lessons'
 import type { LearnProgressApi } from './useLearnProgress'
@@ -32,6 +33,8 @@ export interface ChatBridge {
   messages: UiMessage[]
   pending: boolean
   liveSteps: AgentTraceStep[]
+  /** 流式过程草稿（侧栏与全屏同源：扩张/回缩不丢流式内容） */
+  draft: StreamDraft | null
   lastChanges: AgentChange[] | null
   sessions: AgentSessionInfo[]
   activeId: string | null
@@ -174,6 +177,7 @@ function FollowChat({ chat, lesson, docMode = false, docTitle }: {
         messages={chat.messages}
         pending={chat.pending}
         liveSteps={chat.liveSteps}
+        draft={chat.draft}
         editing={chat.editing}
         setEditing={chat.setEditing}
         copiedIdx={chat.copiedIdx}
@@ -433,6 +437,7 @@ export function AiLearnShell({ tab, onTabChange, onCollapse, onClose, active, pr
             messages={chat.messages}
             pending={chat.pending}
             liveSteps={chat.liveSteps}
+            draft={chat.draft}
             editing={chat.editing}
             setEditing={chat.setEditing}
             copiedIdx={chat.copiedIdx}
