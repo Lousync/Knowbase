@@ -487,3 +487,50 @@ registerTool({
 - **注入截断**：`buildSystemPrompt` 的 6000 字符上限 + `resolveXxxForInjection` 的 3000/4000 截断，是本方案的硬天花板；每次加内容前先算字符数。
 - **与 `onboarding-rework-design.md` 的关系**：那份稿子的 P0-3（《快速上手》+ weight 排序）与本文 §7 重叠，建议合并实施，以本文为准（本文多出「主进程可读」这一前提）。
 - 存量文档改写不要顺手改 `frontmatter` 之外的既有排版习惯，避免 diff 污染。
+
+---
+
+## 14. 实施记录（滚动，2026-09-10）
+
+### P0 外壳 ✅
+新增 `src/components/shared/AiLearn/{index.tsx,lessons.tsx}`；`AssistantPanel` 加 `surface` 状态机、
+`expandToFull/collapseToSidebar/closeAll`、头部 ⊞、`Ctrl+Shift+J`；`App.tsx` 透传 `shellLeft`。
+底栏排版经 3 轮迭代，最终采用**方案 A（单排：动作靠左 / 导航靠右，上一步与下一步同款描边）**。
+对照原型：`docs/prototypes/ai-learn-center.html`、`ai-learn-bottom-bar.html`。
+
+### P1 教程闭环 ✅
+- 进度落盘 `settings.learnProgress`（json），hook：`AiLearn/useLearnProgress.ts`。
+- **共用消息流** `AssistantPanel/MessageList.tsx`：侧栏与全屏学堂同一份渲染；`ChatBridge` 把会话状态
+  与方法打包交给全屏 → 扩张前后同一会话。
+- 「动手做」跳转：`lessons.action = { label, goto }` → `collapseToSidebar()` + `ai-learn:goto` → App 切模块。
+- 步骤上下文：`learnStepContext()` 仅在**全屏学堂内**提问时注入（`selCtx > learnStep > getAssistantContext()`）。
+
+### 会话来源隔离（P1 期间发现的额外需求）✅
+问题：学堂的会话列表里混进了 AI 教学的会话（"跟我学（教学）"等）。
+根因：`AgentSessionRow` 没有来源字段，教学模块建会话走的是与侧栏同一条 `agentNewSession` 路径。
+方案：新增 `source?: 'assistant' | 'aiTeaching'`（repo / preload / ipc / types 全链路打通），
+新建会话按来源标记，**存量数据用「是否归属教学工作区」一次性回填**（`backfillSessionSources`，只在
+`agent:sessions` 首次调用时跑一次）；两侧列表各自按 source 过滤。
+
+### P2 知识打通 ✅
+- 文档从 `src/modules/help/docs/` **搬到 `resources/help/`**（24 篇）；渲染层 glob 用
+  **`import.meta.glob('/resources/help/*.md')`**（以 `/` 开头 = Vite 项目根，比多级 `../` 稳）；
+  `package.json` 的 `extraResources` 加 `{ from: 'resources/help', to: 'help' }`。
+  主进程侧 `electron/lib/helpService.ts` 按 `app.isPackaged ? process.resourcesPath : app.getAppPath()`
+  解析（多候选路径探测）。
+- 新增工具 **`builtin.help.search`**（`tier: core`，readOnly，不设 module → 不受模块权限限制），
+  支持关键词检索与 `id` 读全文，返回 `hits + hint`。
+- 渲染层 `docsLoader` 支持 `frontmatter.weight` 排序（缺省 100），《快速上手》= 0 置顶。
+
+### P3 内容（第一批）✅ / 余量待补
+新增 4 篇：《快速上手》(weight 0)、《核心概念：读写分工与草稿机制》(5)、《模块一览》(6)、
+《AI 权限与工具边界》(20)；扩写《常见问题》4 问 → 13 问（weight 10）。
+**余量**：存量 19 篇尚未补 `keywords`（检索目前靠标题与正文）；统一骨架的「常见误用 / 相关」两节也待补。
+
+### 实施中修正的两处判断
+1. **§7.2 的「单篇 ≤ 4KB」表述过严**：真正的天花板是 `buildSystemPrompt` 的 **6000 字符**
+   （JS 字符串长度，中文按 1 算），而中文 4KB **字节** 仅约 1300 字符。按字节卡会把文档写残。
+   → 正确口径：**单篇 ≤ 4000 字符**（约 12 KB 字节）。
+2. **中文检索必须 bigram 分词**（`helpService.tokenize`）：最初按空格/标点切词，中文整句会被当成
+   一个词，而文档里不存在这个连续串 → **14 个口语查询错了 6 个**。改成相邻两字滑窗后 **14/14 全部命中**。
+   自检脚本：`tmp/verify-help-search.mjs`（纯 node，可重跑）。

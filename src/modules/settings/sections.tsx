@@ -129,6 +129,8 @@ const ENTRY_ITEMS: SettingItem[] = [
     desc: '博客 / 知识库 / 目录 / 章节删除时是否弹确认框', keywords: ['删除确认', '确认', '对话框', '弹窗', '跳过', 'confirm'] },
   { id: 'advanced.onboarding', section: 'about', group: '新手引导', label: '新手引导',
     desc: '重新查看新手引导', keywords: ['引导', '新手', '教程', 'onboarding', '向导', '引导页'] },
+  { id: 'advanced.welcomeImport', section: 'about', group: '新手引导', label: '导入《欢迎》页面',
+    desc: '把欢迎导览页(欢迎.html)写回仓库并收录进知识库', keywords: ['欢迎', '欢迎页', '导入', '恢复', '导览', 'welcome', 'html', '知识库', '误删'] },
   { id: 'advanced.storage', section: 'data', group: '备份与恢复', label: '整仓备份',
     desc: '整仓备份恢复（.knowbase 整包 zip）与数据导出', keywords: ['仓库', 'vault', '备份', '恢复', '导出', 'storage', '存储'] },
   // ===== 快捷键 =====

@@ -828,11 +828,12 @@ export function MomentsModule() {
 
   const renderPost = (post: MomentsPost) => {
     const previewText = post.contentMd || stripHtmlTags(post.contentHtml || '')
+    // kb-cv：视口外说说跳过布局与绘制（时间线列表的 CSS 虚拟化，见 styles/index.css）
     return (
       <article
         key={post.id}
         onClick={() => setDetailPostId(post.id)}
-        className="flex rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
+        className="kb-cv flex rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-hidden cursor-pointer hover:border-[var(--text-muted)]/40 transition-colors"
         title="查看完整文案"
       >
         {renderCoverGrid(post)}

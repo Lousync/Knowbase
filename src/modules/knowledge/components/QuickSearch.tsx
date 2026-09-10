@@ -319,7 +319,8 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
                 <div className="px-4 py-8 text-[13px] text-[var(--text-muted)] text-center">未找到匹配结果</div>
               ) : (
                 results.map((item, idx) => (
-                  <div key={item.kind + item.id}>
+                  /* kb-cv-sm：视口外结果跳过布局与绘制（见 styles/index.css） */
+                  <div key={item.kind + item.id} className="kb-cv-sm">
                     <button
                       onClick={() => handleSelect(item)}
                       className={`w-full flex items-start gap-2.5 px-4 py-1.5 text-left transition-colors ${

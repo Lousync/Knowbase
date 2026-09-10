@@ -10,6 +10,7 @@ import { getCurrentVault } from './kbStore/vaultContext'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { searchHelp } from './helpService'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
 import { vaultTodosAll, vaultCreateTodo } from './kbStore/scheduleVaultRepo'
@@ -640,6 +641,35 @@ export function registerBuiltinTools(): void {
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 20)
     const { source, results } = await webSearch(q, limit)
     return { source, count: results.length, results }
+  })
+
+  // 14. builtin.help.search —— Knowbase 官方手册检索（跨模块通用，不设 module）
+  //     背景：帮助文档原先只在渲染层 bundle 里，AI 完全读不到 → 答不了「知识库为什么看不到我的文件」。
+  //     迁到 resources/help 后由本工具按需检索（见 docs/ai-learn-center-design.md §7.5）。
+  registerTool({
+    name: 'builtin.help.search',
+    title: '检索 Knowbase 使用手册',
+    description: '检索本软件（Knowbase）的官方使用手册。当用户询问「这个软件怎么用 / 某功能在哪 / 为什么某个行为不符合预期 / 怎么备份 / 权限怎么设 / 快捷键是什么」这类关于软件自身的问题时，先调用本工具查手册再回答，不要凭猜测描述软件行为。也可用 id 参数直接读取某一篇全文',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '检索关键词，用用户的原话即可（如「知识库看不到文件」「怎么备份」）；指定 id 读全文时传任意非空串占位' },
+        limit: { type: 'number', description: '返回条数，默认 3，最大 5' },
+        id: { type: 'string', description: '可选：手册 id 或标题，直接返回该篇全文（如「快速上手」）' },
+      },
+      required: ['query'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    // 不设 module：手册检索是跨模块通用能力，不受 aiModulePermissions 限制
+  }, args => {
+    const q = str(args.query)
+    if (!q) throw new Error('缺少必填参数: query')
+    const id = str(args.id).trim() || undefined
+    const limit = clamp(Math.floor(num(args.limit, 3)), 1, 5)
+    const { hits, total, hint } = searchHelp(q, limit, id)
+    return { count: hits.length, totalDocs: total, hits, ...(hint ? { hint } : {}) }
   })
 
   // ===== P3 装载层元工具：写类（tier='ondemand'）默认不在视野，需申请启用 =====

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Check, Folder, FolderOpen, BookOpen, Layers, ChevronRight, ChevronDown, ChevronUp, ArrowUp, Pencil, Trash2, Star, Download, Link2, Copy, Scissors, ClipboardPaste, FileOutput } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
@@ -55,6 +55,9 @@ interface Props {
   cutItemIds?: Set<string>
 }
 
+/** 目录排序权重（提到模块级：供下方 useMemo 派生索引复用，避免每次渲染新建对象） */
+const TYPE_ORDER: Record<string, number> = { space: 0, notebook: 1, folder: 2 }
+
 export function NotebookList({
   categories, allPages, loosePages, starredPages,
   selectedCategoryId, focusChapterId, activePageId,
@@ -76,20 +79,44 @@ export function NotebookList({
     { id: 'created', label: '创建时间' }, { id: 'updated', label: '更新时间' },
   ]
   const [sortMode, setSortMode] = useState<string>('custom')
-  const TYPE_ORDER: Record<string, number> = { space: 0, notebook: 1, folder: 2 }
-  function sortCats(list: KnowledgeCategory[]): KnowledgeCategory[] {
-    return [...list].sort((a, b) => {
-      if (sortMode === 'type') { const ta = TYPE_ORDER[a.categoryType] ?? 2; const tb = TYPE_ORDER[b.categoryType] ?? 2; if (ta !== tb) return ta - tb; return a.sortOrder - b.sortOrder }
-      if (sortMode === 'name') return a.name.localeCompare(b.name)
-      if (sortMode === 'created') return b.createdAt.localeCompare(a.createdAt)
-      if (sortMode === 'updated') return b.updatedAt.localeCompare(a.updatedAt)
-      return a.sortOrder - b.sortOrder
-    })
-  }
+  // ---- 派生索引（性能 2026-09-10）----
+  // 原先 renderCategory 对**每个节点**各做一次 categories.filter + allPages.filter，
+  // 整棵树为 O(目录数² + 目录数×页数)。数百目录 / 上千页时，任何一次展开、选中或拖动
+  // 都会触发全树重算。这里预建「父 → 子」「分类 → 页」两张 Map，查询降为 O(1)。
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string, KnowledgeCategory[]>()
+    for (const c of categories) {
+      const k = c.parentId || ''
+      const arr = m.get(k)
+      if (arr) arr.push(c); else m.set(k, [c])
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        if (sortMode === 'type') { const ta = TYPE_ORDER[a.categoryType] ?? 2; const tb = TYPE_ORDER[b.categoryType] ?? 2; if (ta !== tb) return ta - tb; return a.sortOrder - b.sortOrder }
+        if (sortMode === 'name') return a.name.localeCompare(b.name)
+        if (sortMode === 'created') return b.createdAt.localeCompare(a.createdAt)
+        if (sortMode === 'updated') return b.updatedAt.localeCompare(a.updatedAt)
+        return a.sortOrder - b.sortOrder
+      })
+    }
+    return m
+  }, [categories, sortMode])
+
+  const pagesByCategory = useMemo(() => {
+    const m = new Map<string, KnowledgePage[]>()
+    for (const p of allPages) {
+      const k = p.categoryId
+      if (!k) continue
+      const arr = m.get(k)
+      if (arr) arr.push(p); else m.set(k, [p])
+    }
+    return m
+  }, [allPages])
+
   // 空间沉浸视图下 root = 空间内的子项；空间列表视图下 root = 所有空间（done 的删除条目不渲染）
-  const rootCats = sortCats(isSpaceView
-    ? categories.filter(c => c.parentId === spaceId)
-    : categories.filter(c => !c.parentId))
+  const rootCats = isSpaceView
+    ? (childrenByParent.get(spaceId || '') ?? [])
+    : (childrenByParent.get('') ?? [])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   /** 行内新建学习空间命名（空白菜单入口 → 树末尾输入行，Enter/失焦提交） */
@@ -341,9 +368,9 @@ export function NotebookList({
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
     const isExpanded = expanded.has(cat.id)
     const isSelected = selectedCategoryId === cat.id || focusChapterId === cat.id
-    const children = sortCats(categories.filter(c => c.parentId === cat.id))
+    const children = childrenByParent.get(cat.id) ?? []
     const hasChildren = children.length > 0
-    const categoryPages = allPages.filter(p => p.categoryId === cat.id)
+    const categoryPages = pagesByCategory.get(cat.id) ?? []
     const hasPages = categoryPages.length > 0
     const isNotebook = cat.categoryType === 'notebook'
     const isSpace = cat.categoryType === 'space'
@@ -695,7 +722,7 @@ export function NotebookList({
 
         {/* Space view: the space's direct pages (loose within the space) */}
         {isSpaceView && spaceId && (() => {
-          const spacePages = allPages.filter(p => p.categoryId === spaceId)
+          const spacePages = pagesByCategory.get(spaceId) ?? []
           if (spacePages.length === 0) return null
           return (
             <div
@@ -810,7 +837,7 @@ export function NotebookList({
           </div>
         )}
 
-        {rootCats.length === 0 && (isSpaceView ? !spaceId || allPages.filter(p => p.categoryId === spaceId).length === 0 : loosePages.length === 0) && (
+        {rootCats.length === 0 && (isSpaceView ? !spaceId || (pagesByCategory.get(spaceId)?.length ?? 0) === 0 : loosePages.length === 0) && (
           <div className="flex flex-col items-center py-8 px-4 text-center">
             <Folder size={28} className="text-[var(--text-disabled)] mb-2" />
             <p className="text-[11px] text-[var(--text-muted)]">暂无内容</p>

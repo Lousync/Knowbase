@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, extname, join, resolve as resolvePath, sep } from 'path'
 import { randomUUID } from 'crypto'
 import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
-import { getKnowledgeIndex, invalidateKnowledgeIndex, removeCategoryEntries, appendCategoryEntry, updateCategoryEntry, renameCategoryCascade, moveCategoryOrderInDict, type KnowledgeCategoryType, type KnowledgePageIndexEntry } from './knowledgeIndex'
+import { getKnowledgeIndex, invalidateKnowledgeIndex, getKnowledgeTextIndex, mdToPlain, removeCategoryEntries, appendCategoryEntry, updateCategoryEntry, renameCategoryCascade, moveCategoryOrderInDict, type KnowledgeCategoryType, type KnowledgePageIndexEntry } from './knowledgeIndex'
 import { createLinkResolver, getGraphIndex } from './graphIndex'
 import { parseMarkdown, serializeMarkdown } from './mdStore'
+import { WELCOME_DOC_FILENAME } from './welcomeDoc'
 
 /**
  * 知识库 vault 读源（读写分工定稿，见 .AGENT/docs/读写分工设计.md）：
@@ -47,6 +48,16 @@ function requireRoot(): string {
   if (!cur) throw new Error('当前没有打开的仓库')
   return cur.rootPath
 }
+
+/**
+ * 欢迎页（HTML 导览文件，见 welcomeDoc.ts）不是 md 知识页：凡「重写文件 / 改名」的仓库写通道一律拒绝——
+ * frontmatter 注入会毁掉整页 HTML，改名（→ .md）会让它跌出 kbview 白名单、从知识库直接消失。
+ * 想改内容：在编辑器/记事本里直接编辑该文件；想移除：删除（进系统回收站）。
+ */
+function isWelcomeEntry(entry: { path: string; fileType: string }): boolean {
+  return entry.fileType === 'html' || entry.path === WELCOME_DOC_FILENAME
+}
+const WELCOME_WRITE_DENY = '「欢迎」是 HTML 导览页：不支持改名 / 排序 / 收藏，请直接编辑或删除该文件'
 
 function tagsOf(entry: KnowledgePageIndexEntry): VaultTag[] {
   return entry.tags.map((name) => ({ id: name, name, color: '' }))
@@ -313,15 +324,20 @@ export function vaultImportFolder(folderPath: string, parentCategoryId: string |
   return { id: top.id, name: folderName, fileCount: totalFiles, folderCount: totalFolders }
 }
 
-/** 语义对齐 knowledge:getPages：truthy=按分类，null=未分类，undefined=全部（均只含正式 published 页） */
-export function vaultGetPages(categoryId?: string | null): VaultPage[] {  const idx = getKnowledgeIndex()
+/**
+ * 语义对齐 knowledge:getPages：truthy=按分类，null=未分类，undefined=全部（均只含正式 published 页）
+ *
+ * 列表骨架（性能 2026-09-10）：只回元数据，**不回正文**。
+ * 原先对每个 published 页调用 readPageDoc（逐页同步 readFileSync）——417 页实测 135ms，
+ * 并把约 2MB 正文经 IPC 传给渲染层常驻。正文改由 vaultGetPageById 在打开时单独取。
+ * attachments 一并省略：它是正文内的引用清单，列表不渲染。
+ */
+export function vaultGetPages(categoryId?: string | null): VaultPage[] {
+  const idx = getKnowledgeIndex()
   let list = publishedOnly(idx.pages)
   if (categoryId) list = list.filter((e) => e.categoryId === categoryId)
   else if (categoryId === null) list = list.filter((e) => e.categoryId === null)
-  return list.map((e) => {
-    const doc = readPageDoc(e)
-    return entryToPage(e, doc.contentMd, doc.attachments)
-  })
+  return list.map((e) => entryToPage(e))
 }
 
 export function vaultGetPageById(id: string): VaultPage | null {
@@ -335,6 +351,7 @@ export function vaultGetPageById(id: string): VaultPage | null {
 export function vaultToggleStar(id: string): VaultPage | null {
   const entry = getKnowledgeIndex().byId[id]
   if (!entry) return null
+  if (isWelcomeEntry(entry)) throw new Error(WELCOME_WRITE_DENY)
   const abs = join(requireRoot(), entry.path)
   const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
   const cur = String(doc.frontmatter.starred ?? '').toLowerCase() === 'true'
@@ -364,17 +381,6 @@ export function vaultGetTags(): VaultTag[] {
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans'))
 }
 
-/** 粗剥 markdown 记号 → 纯文本（与 knowledgeRepo 内同名逻辑一致） */
-function mdToPlain(s: string): string {
-  return s
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-    .replace(/[>*`~_|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 function buildExcerpt(plain: string, terms: string[], radius = 60): string {
   if (!plain) return ''
   const lower = plain.toLowerCase()
@@ -395,22 +401,20 @@ export function vaultSearchPages(q: string): Array<VaultPage & { excerpt: string
   const terms = q.trim().split(/\s+/).filter(Boolean)
   if (terms.length === 0) return []
   const idx = getKnowledgeIndex()
-  const root = requireRoot()
+  // 性能 2026-09-10：正文取自预建的纯文本索引，不再逐页 readFileSync
+  // （417 页实测：68ms 全盘读 → 一次 JSON 读取 + 内存检索）
+  const textById = getKnowledgeTextIndex()
   const out: Array<VaultPage & { excerpt: string }> = []
   for (const entry of publishedOnly(idx.pages)) {
-    let body = ''
-    try {
-      body = parseMarkdown(readFileSync(join(root, entry.path), 'utf-8')).body
-    } catch {
-      body = ''
-    }
+    const plain = textById[entry.id] ?? ''
+    const lower = plain.toLowerCase()
     const titleHit = terms.every((t) => entry.title.toLowerCase().includes(t.toLowerCase()))
     const tagHit = terms.every((t) => entry.tags.some((tag) => tag.toLowerCase().includes(t.toLowerCase())))
-    const bodyHit = terms.every((t) => body.toLowerCase().includes(t.toLowerCase()))
+    const bodyHit = terms.every((t) => lower.includes(t.toLowerCase()))
     if (!titleHit && !tagHit && !bodyHit) continue
     const { path: _p, ...slim } = entryToPage(entry, '')
     void _p
-    out.push({ ...slim, path: entry.path, excerpt: buildExcerpt(mdToPlain(body), terms) || entry.title })
+    out.push({ ...slim, path: entry.path, excerpt: buildExcerpt(plain, terms) || entry.title })
     if (out.length >= 50) break
   }
   return out
@@ -514,6 +518,7 @@ export function vaultRenamePage(id: string, newTitle: string): void {
   const idx = getKnowledgeIndex()
   const entry = idx.byId[id]
   if (!entry) throw new Error('页面不存在')
+  if (isWelcomeEntry(entry)) throw new Error(WELCOME_WRITE_DENY) // 欢迎页拒绝改名（会连带改成 .md）
   const clean = newTitle.trim()
   if (!clean) throw new Error('名称不能为空')
   const root = requireRoot()
@@ -548,10 +553,12 @@ export function vaultMovePageOrder(id: string, direction: 'up' | 'down'): void {
   const idx = getKnowledgeIndex()
   const me = idx.byId[id]
   if (!me) throw new Error('页面不存在')
+  if (isWelcomeEntry(me)) throw new Error(WELCOME_WRITE_DENY)
   const root = requireRoot()
   const dirOf = (p: string): string => { const s = p.lastIndexOf('/'); return s >= 0 ? p.slice(0, s) : '' }
   const dirRel = dirOf(me.path)
-  const siblings = idx.pages.filter((p) => dirOf(p.path) === dirRel)
+  // 欢迎页不参与同目录排序（它没有 frontmatter，写 sortOrder 会毁掉整页）
+  const siblings = idx.pages.filter((p) => dirOf(p.path) === dirRel && !isWelcomeEntry(p))
   siblings.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'zh-Hans'))
   const i = siblings.findIndex((p) => p.id === id)
   if (i < 0) return

@@ -301,8 +301,9 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
     const snap = r.snapshot
     const summary = stripMarkdown(snap?.question || '') || r.pageTitle || '（无题干）'
     const isSel = selected.has(r.id)
+    // kb-cv：视口外卡片不参与布局/绘制（长错题列表的 CSS 虚拟化，见 styles/index.css）
     return (
-      <div key={r.id} className={`relative rounded-lg border bg-[var(--bg-secondary)] overflow-hidden transition-colors ${isSel ? 'border-[var(--accent)]' : 'border-[var(--border-color)] hover:border-[var(--text-secondary)]/40'} ${isExp ? 'col-span-full' : ''}`}>
+      <div key={r.id} className={`kb-cv relative rounded-lg border bg-[var(--bg-secondary)] overflow-hidden transition-colors ${isSel ? 'border-[var(--accent)]' : 'border-[var(--border-color)] hover:border-[var(--text-secondary)]/40'} ${isExp ? 'col-span-full' : ''}`}>
         {/* 勾选模式角标 */}
         {selectMode && (
           <span className={`absolute left-2 top-2 z-10 w-4 h-4 rounded flex items-center justify-center ${isSel ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-primary)] border border-[var(--border-color)]'}`}>

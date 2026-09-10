@@ -1,19 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag } from '../../../types'
 import { getScheduleWeekTodos, updateScheduleTodo } from '../../../lib/ipc'
 import { localToday } from '../../../lib/date'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
+import { isEditingInput } from '../../../lib/shortcuts'
 import {
   quadrantMeta, QUADRANT_TEXT_CLASS, QuadrantIconGlyph, type QuadrantIcon,
 } from '../../../lib/scheduleQuadrant'
 import {
-  DENSITY_PX, DENSITY_LABEL, DENSITY_VALUES, MIN_DURATION, MIN_RANGE_HOURS,
-  GRANULARITY_VALUES, layoutDay, dueOfDay,
+  GRANULARITY_VALUES, layoutDay, dueOfDay, MIN_DURATION, MIN_RANGE_HOURS,
+  ROW_PX_DEFAULT, ROW_PX_PRESETS, ROW_PX_PRESET_LABEL, ROW_PX_STEP_KEY, ROW_PX_STEP_WHEEL, clampRowPx,
   SCHEDULE_DRAG_START, type DragStartDetail, type DragTodoSnapshot,
   clamp, dayFromMonday, dragGuard, fmtMin, mondayOfWeek, snapMin, shortDate, toDateStr,
-  WEEKDAY_LABELS, type DensityId, type Granularity,
+  WEEKDAY_LABELS, type Granularity,
 } from '../timetable'
 
 /**
@@ -68,12 +69,11 @@ export function TimetableView({
   const gran: Granularity = (GRANULARITY_VALUES as readonly number[]).includes(Number(appSettings.scheduleTimetableGranularity))
     ? (Number(appSettings.scheduleTimetableGranularity) as Granularity)
     : 30
-  const density: DensityId = (DENSITY_VALUES as readonly string[]).includes(appSettings.scheduleTimetableRowHeight)
-    ? (appSettings.scheduleTimetableRowHeight as DensityId)
-    : 'normal'
+  // 行高是连续数值（可 Ctrl+滚轮缩放），非法值/旧版遗留字符串由 clampRowPx 兜底
+  const rowPx = clampRowPx(Number(appSettings.scheduleTimetableRowHeight))
   const startHour = clamp(Number(appSettings.scheduleTimetableStartHour) || 7, 0, 20)
   const endHour = clamp(Number(appSettings.scheduleTimetableEndHour) || 23, startHour + MIN_RANGE_HOURS, 24)
-  const pxPerHour = DENSITY_PX[density]
+  const pxPerHour = rowPx
   const pxPerMin = pxPerHour / 60
   const dayStartMin = startHour * 60
   const dayEndMin = endHour * 60
@@ -88,6 +88,60 @@ export function TimetableView({
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const hintRef = useRef<HTMLDivElement>(null)
+  /** 缩放后待恢复的 scrollTop（让锚点时刻留在原来的屏幕位置） */
+  const pendingScrollRef = useRef<number | null>(null)
+
+  /**
+   * 缩放时间轴：改每小时像素高度，并把 scrollTop 挪到「锚点时刻仍在原来屏幕位置」。
+   * 不做这一步的话缩放会围绕内容顶部进行，正在看的时间段会被甩出视口。
+   */
+  const zoomTo = useCallback((next: number, anchorY: number) => {
+    const el = scrollRef.current
+    const target = clampRowPx(next)
+    if (!el || target === rowPx) return
+    const hoursAtAnchor = (el.scrollTop + anchorY) / rowPx
+    pendingScrollRef.current = hoursAtAnchor * target - anchorY
+    update('scheduleTimetableRowHeight', target)
+  }, [rowPx, update])
+
+  // 行高变化后应用挂起的滚动位置（layout 阶段落地，避免视觉上闪一下）
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (el && pendingScrollRef.current != null) {
+      el.scrollTop = Math.max(0, pendingScrollRef.current)
+      pendingScrollRef.current = null
+    }
+  }, [rowPx])
+
+  // Ctrl+滚轮缩放，锚点 = 指针所在的时刻
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onWheel = (ev: WheelEvent) => {
+      if (!ev.ctrlKey && !ev.metaKey) return
+      ev.preventDefault() // 拦掉 Chromium 自带的页面缩放
+      const dir = ev.deltaY < 0 ? 1 : -1
+      zoomTo(rowPx + dir * ROW_PX_STEP_WHEEL, ev.clientY - el.getBoundingClientRect().top)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [rowPx, zoomTo])
+
+  // Ctrl+= / Ctrl+- / Ctrl+0，锚点 = 视口中心
+  useEffect(() => {
+    if (!isActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      if (isEditingInput(e)) return
+      const el = scrollRef.current
+      const anchorY = el ? el.clientHeight / 2 : 0
+      if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomTo(rowPx + ROW_PX_STEP_KEY, anchorY) }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomTo(rowPx - ROW_PX_STEP_KEY, anchorY) }
+      else if (e.key === '0') { e.preventDefault(); zoomTo(ROW_PX_DEFAULT, anchorY) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isActive, rowPx, zoomTo])
 
   const monday = useMemo(() => mondayOfWeek(today, weekOffset), [today, weekOffset])
   const weekStart = toDateStr(monday)
@@ -441,13 +495,15 @@ export function TimetableView({
               </button>
             ))}
           </div>
-          {/* 行高 */}
+          {/* 行高：显示实际 px，点击切到下一个预设；精细缩放走 Ctrl+滚轮 / Ctrl+加减号 */}
           <button onClick={() => {
-            const i = DENSITY_VALUES.indexOf(density)
-            update('scheduleTimetableRowHeight', DENSITY_VALUES[(i + 1) % DENSITY_VALUES.length])
-          }} title="行高（紧凑 / 舒适 / 宽松）"
-            className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-            {DENSITY_LABEL[density]}
+            const i = (ROW_PX_PRESETS as readonly number[]).indexOf(rowPx)
+            const next = i >= 0 ? ROW_PX_PRESETS[(i + 1) % ROW_PX_PRESETS.length] : ROW_PX_DEFAULT
+            zoomTo(next, (scrollRef.current?.clientHeight ?? 0) / 2)
+          }}
+            title={`行高 ${rowPx}px（${ROW_PX_PRESET_LABEL[rowPx] ?? '自定义'}）· Ctrl+滚轮 或 Ctrl+加减号 缩放，Ctrl+0 复位`}
+            className="px-1.5 py-0.5 rounded-md text-[11.5px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors tabular-nums">
+            {rowPx}px
           </button>
           {/* 显示范围 */}
           <div className="relative">

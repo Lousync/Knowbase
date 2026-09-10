@@ -2,24 +2,36 @@ import { existsSync, readFileSync, statSync } from 'fs'
 import { protocol } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
 import { rootDirName } from './aiTeachingFolders'
+import { WELCOME_DOC_FILENAME } from './kbStore/welcomeDoc'
 import { safePathInside } from './pathGuard'
 
 /**
- * kbview:// 协议 —— AI教学工件栏「示意图渲染」载体（docs/ai-teaching-artifacts-pane-design.md §4 实修裁决）。
+ * kbview:// 协议 —— 仓库内受控 HTML 的沙箱渲染载体，两个白名单入口：
+ *
+ *  ① AI教学工件栏「示意图渲染」（docs/ai-teaching-artifacts-pane-design.md §4 实修裁决）
+ *  ② 仓库根「欢迎.html」（新用户导览页；知识库阅读器内渲染，2026-09-10）
  *
  * 为什么不用 iframe srcDoc：srcdoc 子框架会**继承父文档 CSP**（index.html `script-src 'self'`），
- * 示意图文档脚本与宿主高度上报内联脚本全被拦（2026-09-09 实锤 Refused to execute inline script）；
+ * 文档脚本与宿主量高脚本全被拦（2026-09-09 实锤 Refused to execute inline script）；
  * blob: 载体又被 sandbox（无 allow-same-origin → opaque origin）拒绝加载。
  * 跨 scheme 正常导航不继承，与既有 plugin:// 同思路。
  *
- * 安全边界：
- * - 仅暴露「AI教学产物根/{...}/*.html」——路径 safePathInside 防穿越 + 前缀与扩展名白名单 + 2MB 上限；
+ * 安全边界（**只放行这两个白名单，其余一律 403**——「知识库可渲染的 html 仅限欢迎页」由本处收敛）：
+ * - AI教学：仅「AI教学产物根/{...}/*.html」——safePathInside 防穿越 + 前缀与扩展名白名单 + 2MB 上限；
+ * - 欢迎页：仅仓库根同名文件（精确相等，不接受子目录同名）+ 4MB 上限；
  * - 响应头 CSP 锁死网络（default-src 'none'，仅放行内联样式脚本与 data:/blob: 图片），并剥掉文档自带的 CSP meta（取交集会反噬）；
  * - 渲染侧仍必须配合 iframe sandbox="allow-scripts"（无 allow-same-origin，不透明源拿不到宿主 bridge）。
  */
 
 const VISUAL_CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'"
 const MAX_VISUAL_BYTES = 2 * 1024 * 1024
+/** 欢迎页：自包含整页（含内联样式/脚本），不复用 AI 工件的居中量高壳（那是给示意图用的，会毁掉整页布局） */
+const MAX_WELCOME_BYTES = 4 * 1024 * 1024
+
+/** 剥掉文档自带 CSP meta（响应头策略与之取交集会反噬，见 VISUAL_CSP 注释） */
+function stripCspMeta(html: string): string {
+  return html.replace(/<meta[^>]*http-equiv\s*=\s*["']?\s*content-security-policy\s*["']?[^>]*>/gi, '')
+}
 
 /** 基线样式 + 量高/主题/缩放壳（2026-09-09 四修，AI模板居中为所有 kbview:// 渲染的默认行为）：
  *  - 画布铺满 + 内容垂直居中（用户需求）：html{height:100%}、html body{min-height:100%;display:grid;place-items:center}，
@@ -44,7 +56,7 @@ const SHELL_SCRIPT = [
 const SHELL_INJECT = SHELL_HEAD + '\n' + SHELL_SCRIPT
 
 function wrapVisualShell(raw: string): string {
-  const src = raw.replace(/<meta[^>]*http-equiv\s*=\s*["']?\s*content-security-policy\s*["']?[^>]*>/gi, '')
+  const src = stripCspMeta(raw)
   if (/<head[^>]*>/i.test(src)) return src.replace(/<head[^>]*>/i, m => `${m}\n${SHELL_INJECT}`)
   if (/<html[^>]*>/i.test(src)) return src.replace(/<html[^>]*>/i, m => `${m}\n<head>\n${SHELL_INJECT}\n</head>`)
   return `<!doctype html>\n<html>\n<head>\n${SHELL_INJECT}\n</head>\n<body>\n${src}\n</body>\n</html>`
@@ -59,6 +71,24 @@ export function registerKbVisualProtocol(getSetting: (key: string) => unknown): 
       if (url.hostname !== 'vault') return new Response('Bad Request', { status: 400 })
       const rel = url.pathname.replace(/^\//, '').split('/').map(s => { try { return decodeURIComponent(s) } catch { return s } }).join('/').replace(/\\/g, '/')
       if (!rel || !/\.html?$/i.test(rel)) return new Response('Forbidden', { status: 403 })
+
+      // ② 欢迎页（仓库根同名精确匹配）：整页原样返回，不注入 AI 工件的居中/量高壳
+      if (rel === WELCOME_DOC_FILENAME) {
+        const welcomeAbs = safePathInside(vault.rootPath, rel)
+        if (!welcomeAbs) return new Response('Forbidden', { status: 403 })
+        if (!existsSync(welcomeAbs) || !statSync(welcomeAbs).isFile()) return new Response('Not Found', { status: 404 })
+        if (statSync(welcomeAbs).size > MAX_WELCOME_BYTES) return new Response('Too Large', { status: 413 })
+        return new Response(stripCspMeta(readFileSync(welcomeAbs, 'utf-8')), {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'Content-Security-Policy': VISUAL_CSP,
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
+      }
+
+      // ① AI 教学工件：仅产物根目录下的 *.html
       const rootDir = rootDirName(getSetting)
       if (rel !== rootDir && !rel.startsWith(`${rootDir}/`)) return new Response('Forbidden: 仅允许渲染 AI教学产物目录', { status: 403 })
       const abs = safePathInside(vault.rootPath, rel)

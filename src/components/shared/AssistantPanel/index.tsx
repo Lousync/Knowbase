@@ -1,36 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Sparkles, X, Menu, Plus, Trash2, Loader2, Wrench, Bot, FileText, Copy, Check, Square,
-  Pencil, RefreshCw, Languages, ArrowUpRight,
+  Sparkles, X, Menu, Plus, Trash2, Wrench, FileText, Check, ArrowUpRight, Maximize2,
+  Languages, Loader2, Bot,
 } from 'lucide-react'
+import { AiLearnShell, type AiLearnTab, type ChatBridge } from '../AiLearn'
+import { useLearnProgress, learnStepContext } from '../AiLearn/useLearnProgress'
+import { getLesson } from '../AiLearn/lessons'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext, getSelectionAskHost, selectionContext } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
-import { MarkdownPreview } from '../MarkdownPreview'
 import { TranslateCard } from '../TranslateCard'
+import { MessageList, fmtTime, type UiMessage } from './MessageList'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentRegenerate, agentEditMessage, agentDeleteMessage,
-  llmListProviders, copyText, agentAbort, onAgentStep,
+  llmListProviders, agentAbort, onAgentStep,
 } from '../../../lib/ipc'
-import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo, AgentChange } from '../../../types'
+import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentContextInfo, AgentChange, TabName } from '../../../types'
 
 /**
  * 全局 AI 助手侧栏（方案 B）：任意界面 Ctrl+J / 右下角按钮唤起，
  * 会话留存 + 上下文感知（正在查看的知识库页面自动附带）。
  * 拖拽左缘调宽；拖到 320px 以下松手 = 整体关闭（snap），不会误触下层模块侧栏。
+ *
+ * 也可原地扩张为全屏「AI 学堂」（Ctrl+Shift+J / 头部 ⊞），会话与侧栏共用同一份。
+ * 消息渲染抽在 ./MessageList.tsx，侧栏与学堂全屏对话共用，避免两套逻辑分叉。
  */
 
 /** 选区矩形（viewport 坐标），供翻译卡片智能定位 */
 interface SelRect { left: number; top: number; right: number; bottom: number }
 
-interface UiMessage {
-  id?: string
-  role: 'user' | 'assistant'
-  content: string
-  trace?: AgentTraceStep[]
-  createdAt?: string
-}
+/** 扩张/回缩动画总时长：宽度 320ms 与最晚一栏（delay 140 + 180ms）取齐，再留余量。
+ *  动画结束靠定时器兜底而非 transitionend（见 state 声明处注释）。 */
+const EXPAND_MS = 420
+/** 扩张动画缓动（与 AiLearn 内三栏淡入保持一致） */
+const EASE_EXPAND = 'cubic-bezier(.22,.68,.32,1)'
 
 function nowLocal(): string {
   const d = new Date()
@@ -49,45 +53,14 @@ function toUi(m: AgentStoredMessage): UiMessage {
   }
 }
 
-/** 'YYYY-MM-DD HH:MM:SS' → 今天只显示 HH:mm，更早显示 MM-DD HH:mm */
-function fmtTime(raw?: string | null): string {
-  if (!raw) return ''
-  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(raw)
-  if (!m) return raw.slice(5, 16)
-  const d = new Date()
-  const sameDay = Number(m[1]) === d.getFullYear() && Number(m[2]) === d.getMonth() + 1 && Number(m[3]) === d.getDate()
-  return sameDay ? `${m[4]}:${m[5]}` : `${m[2]}-${m[3]} ${m[4]}:${m[5]}`
-}
-
-/** 数字 → 友好 token 文本（≥1k 显示 k） */
-function fmtTok(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n)
-}
-
-/** 聚合 assistant 回复的 llm trace 用量，渲染"↑输入 ↓输出 · 合计 tokens"小字 */
-function TokensOf({ trace }: { trace?: AgentTraceStep[] }): React.ReactNode | null {
-  if (!trace || trace.length === 0) return null
-  const llm = trace.filter(s => s.kind === 'llm')
-  if (llm.length === 0) return null
-  let p = 0, c = 0, hasSplit = false, t = 0, hasTotal = false
-  for (const s of llm) {
-    if (typeof s.promptTokens === 'number') { p += s.promptTokens; hasSplit = true }
-    if (typeof s.completionTokens === 'number') { c += s.completionTokens; hasSplit = true }
-    if (typeof s.tokens === 'number') { t += s.tokens; hasTotal = true }
-  }
-  if (hasSplit && (p > 0 || c > 0)) {
-    return (
-      <span className="text-[var(--text-muted)]" title="本次回复消耗 tokens（↑=上下文输入 ↓=生成输出）">
-        ↑{fmtTok(p)} ↓{fmtTok(c)} · {fmtTok(p + c)} tokens
-      </span>
-    )
-  }
-  if (hasTotal && t > 0) return <span className="text-[var(--text-muted)]">≈{fmtTok(t)} tokens</span>
-  return null
-}
-
-export function AssistantPanel() {
+/**
+ * @param shellLeft 全屏扩张时左侧需避让的宽度（活动栏占位，由 App 透传）。
+ *   禅模式 Z2+ 活动栏不渲染 → 0；最大化 → 56；否则 56 + mx-1.5 两侧留白 = 68。
+ */
+export function AssistantPanel({ shellLeft = 68 }: { shellLeft?: number }) {
   const { s, update } = useSettings()
+  /** 上手路径进度（settings 落盘）；全屏学堂与提问上下文共用 */
+  const learn = useLearnProgress()
   const [open, setOpen] = useState(false)
   // 动画三态: mounted=DOM 存在(含退场动画期间), shown=滑入到位
   const [mounted, setMounted] = useState(false)
@@ -96,6 +69,15 @@ export function AssistantPanel() {
   // 抽屉动画三态
   const [drawerMounted, setDrawerMounted] = useState(false)
   const [drawerShown, setDrawerShown] = useState(false)
+  /** 全屏 AI 学堂（P0）：full=容器已扩张；fullMounted=全屏层已挂载；fullShown=阶梯淡入已触发；
+   *  animating=扩张/回缩动画进行中（屏蔽点击 + contain 隔离），结束由定时器兜底（不可依赖 transitionend，
+   *  Tailwind v4 下过渡属性名可能是 width/translate，历史上已踩过事件不触发的坑） */
+  const [full, setFull] = useState(false)
+  const [fullTab, setFullTab] = useState<AiLearnTab>('learn')
+  const [fullMounted, setFullMounted] = useState(false)
+  const [fullShown, setFullShown] = useState(false)
+  const [animating, setAnimating] = useState(false)
+  const animTimerRef = useRef<number | null>(null)
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([])
   const [providersOk, setProvidersOk] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -116,7 +98,6 @@ export function AssistantPanel() {
   const drawerTimerRef = useRef<number | null>(null)
   const chatIdRef = useRef<string>('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
   const ctxVersionRef = useRef(0)
   /** 实时过程步骤（agent:step，仅当前 chatId）：驱动「正在思考/调用工具」气泡 */
   const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
@@ -182,23 +163,79 @@ export function AssistantPanel() {
     closeDrawer()
   }, [closeDrawer])
 
+  /** 侧栏 → 全屏学堂（原地扩张）。首帧以未展开渲染，双 rAF 后触发三栏阶梯淡入 */
+  const expandToFull = useCallback((tab?: AiLearnTab) => {
+    if (tab) setFullTab(tab)
+    setFullMounted(true)
+    setAnimating(true)
+    setFull(true)
+    requestAnimationFrame(() => requestAnimationFrame(() => setFullShown(true)))
+    if (animTimerRef.current !== null) window.clearTimeout(animTimerRef.current)
+    animTimerRef.current = window.setTimeout(() => {
+      setAnimating(false)
+      animTimerRef.current = null
+    }, EXPAND_MS)
+  }, [])
+
+  /** 全屏 → 缩回侧栏（会话、滚动、输入草稿原样保留）；全屏层卸载延后到动画结束，避免回缩瞬间闪空 */
+  const collapseToSidebar = useCallback(() => {
+    setAnimating(true)
+    setFullShown(false)
+    setFull(false)
+    if (animTimerRef.current !== null) window.clearTimeout(animTimerRef.current)
+    animTimerRef.current = window.setTimeout(() => {
+      setAnimating(false)
+      setFullMounted(false)
+      animTimerRef.current = null
+    }, EXPAND_MS)
+  }, [])
+
+  /** 关闭整个面板（含全屏态） */
+  const closeAll = useCallback(() => {
+    if (animTimerRef.current !== null) { window.clearTimeout(animTimerRef.current); animTimerRef.current = null }
+    setFull(false)
+    setFullShown(false)
+    setFullMounted(false)
+    setAnimating(false)
+    closePanel()
+  }, [closePanel])
+
+  // 卸载时清理扩张动画兜底定时器
+  useEffect(() => {
+    return () => { if (animTimerRef.current !== null) window.clearTimeout(animTimerRef.current) }
+  }, [])
+
   const toggleDrawer = useCallback(() => {
     if (drawerOpen) closeDrawer()
     else openDrawer()
   }, [drawerOpen, openDrawer, closeDrawer])
 
-  // Ctrl+J 全局开关
+  // Ctrl+J 开关侧栏 / Ctrl+Shift+J 全屏学堂切换 / Esc 退出全屏（第一层：先关会话抽屉）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') {
+      const k = e.key.toLowerCase()
+      if (e.ctrlKey && e.shiftKey && !e.altKey && k === 'j') {
         e.preventDefault()
-        if (open) closePanel()
+        if (full) collapseToSidebar()
+        else { if (!open) openPanel(); expandToFull() }
+        return
+      }
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && k === 'j') {
+        e.preventDefault()
+        if (full) collapseToSidebar()
+        else if (open) closePanel()
         else openPanel()
+        return
+      }
+      // Esc 只在全屏态接管：先收会话抽屉，再缩回侧栏（侧栏态原本无 Esc 行为，不新增）
+      if (e.key === 'Escape' && full) {
+        if (drawerOpen) closeDrawer()
+        else collapseToSidebar()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, openPanel, closePanel])
+  }, [open, full, drawerOpen, openPanel, closePanel, closeDrawer, expandToFull, collapseToSidebar])
 
   // 主体卡片内 AI 按钮 → ai-assistant:toggle 事件（与 Ctrl+J 同一套开关逻辑）
   useEffect(() => {
@@ -217,11 +254,13 @@ export function AssistantPanel() {
   }, [open])
 
     const refreshSessions = useCallback(async () => {
-    try { setSessions(await agentSessions()) } catch { /* ignore */ }
+    try {
+      // 只列「通用助手」来源：AI 教学有自己的会话列表（同表存储，按 source 分流）
+      setSessions((await agentSessions()).filter(x => x.source !== 'aiTeaching'))
+    } catch { /* ignore */ }
   }, [])
 
 useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, pending, drawerShown])
 
   /** 以会话库为准刷新消息（发送/重新生成/编辑/删除后统一走这里，拿到落库 id 与 trace） */
   const refreshMessages = useCallback(async (sid: string) => {
@@ -322,8 +361,8 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     setTransFloat({ rect: pos.rect, text })
   }, [])
 
-  const send = useCallback(async () => {
-    const text = input.trim()
+  const send = useCallback(async (override?: string) => {
+    const text = (override ?? input).trim()
     if (!text) return
     // 排队请求不静默丢弃：明确告知正在回复中（可点停止）
     if (pending) {
@@ -337,7 +376,9 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       sid = sRow.id
       setActiveId(sid)
     }
-    const ctx = selCtx ?? getAssistantContext()
+    // 上下文优先级：本次选中的片段 > 帮助页正在读的手册 > 学堂当前步骤（仅全屏时） > 当前所在界面
+    const learnCtx = full ? learnStepContext(getLesson(learn.last)) : null
+    const ctx = selCtx ?? helpCtxRef.current ?? learnCtx ?? getAssistantContext()
     setMessages(prev => [...prev, { role: 'user', content: text, createdAt: nowLocal() }])
     setInput('')
     setPending(true)
@@ -367,7 +408,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       setPending(false)
       void refreshSessions()
     }
-  }, [input, pending, activeId, refreshSessions, selCtx, refreshMessages])
+  }, [input, pending, activeId, refreshSessions, selCtx, refreshMessages, full, learn.last])
 
   /** 重新生成最后一条回复（末条为助手消息时可用） */
   const runRegenerate = useCallback(async () => {
@@ -423,6 +464,48 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
 
   const ctx = open ? getAssistantContext() : null
 
+  /** 帮助页当前阅读的手册（AiLearnShell 回传）→ 提问时优先于「第几步」作为上下文 */
+  const helpCtxRef = useRef<AgentContextInfo | null>(null)
+  const onHelpDocChange = useCallback((doc: { title: string; md: string } | null) => {
+    helpCtxRef.current = doc
+      ? {
+          type: 'helpDoc',
+          label: `帮助手册 · ${doc.title}`,
+          data: {
+            手册标题: doc.title,
+            手册正文: doc.md.slice(0, 4000),
+            说明: '用户正在阅读这篇手册并就其提问，回答请以该手册内容为准，并注明手册标题。',
+          },
+        }
+      : null
+  }, [])
+
+  /** 「动手做」跳模块：先收起全屏（浮层会压住目标模块），再派发事件由 App 切换 */
+  const gotoModule = useCallback((tab: TabName) => {
+    collapseToSidebar()
+    window.dispatchEvent(new CustomEvent('ai-learn:goto', { detail: { tab } }))
+  }, [collapseToSidebar])
+
+  /** 会话桥接：把侧栏这套状态与方法原样交给全屏学堂 —— 两边是同一份会话，扩张不丢上下文 */
+  const chatBridge: ChatBridge = {
+    messages, pending, liveSteps, lastChanges, sessions, activeId, selCtx,
+    editing, setEditing, copiedIdx, setCopiedIdx,
+    send: text => { void send(text) },
+    newSession: () => { void newSession() },
+    loadSession: id => { void loadSession(id) },
+    deleteSession: id => { void removeSession(id) },
+    onAbort: () => { void agentAbort(chatIdRef.current) },
+    onRegenerate: () => { void runRegenerate() },
+    onEditSubmit: (id, content) => { void runEdit(id, content) },
+    onDeleteMessage: id => { void handleDeleteMessage(id) },
+    onDismissChanges: () => setLastChanges(null),
+    providerMissing: providersOk === false,
+    onGoSettings: () => {
+      setOpen(false)
+      window.dispatchEvent(new CustomEvent('settings:open', { detail: { section: 'aiTools', aiTab: 'models' } }))
+    },
+  }
+
   return (
     <>
       {/* 悬浮入口已移至主体卡片内（App.tsx 渲染，相对主体定位，任务栏展开不遮挡）。
@@ -465,9 +548,26 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       {open && (
         <div
           id="assistant-panel-root"
-          className={`fixed z-40 top-[48px] bottom-10 right-0 flex flex-col bg-[var(--bg-primary)] border-l border-[var(--border-color)] shadow-2xl transition-opacity ${snapClosing ? 'opacity-60' : ''}`}
-          style={{ width }}
+          className={`fixed z-40 right-0 flex flex-col bg-[var(--bg-primary)] border-l border-[var(--border-color)] ${full ? 'shadow-none' : 'shadow-2xl'} ${snapClosing ? 'opacity-60' : ''} ${animating ? 'pointer-events-none' : ''}`}
+          style={{
+            top: full ? 36 : 48,
+            bottom: full ? 0 : 40,
+            // 宽度必须始终是具体长度：px ↔ calc() 之间才能过渡（CSS 无法过渡到 auto）
+            width: full ? `calc(100% - ${shellLeft}px)` : width,
+            transition: `top 320ms ${EASE_EXPAND}, bottom 320ms ${EASE_EXPAND}, width ${full ? 320 : 280}ms ${EASE_EXPAND}, opacity 160ms linear`,
+            contain: animating ? 'layout paint' : undefined,
+          }}
         >
+          {/* 侧栏层：全屏态下淡出但不卸载 —— 保住滚动位置、输入草稿与正在进行的请求 */}
+          <div
+            className="flex min-h-0 flex-1 flex-col"
+            style={{
+              opacity: full ? 0 : 1,
+              // 扩张：先让侧栏淡出、再铺开三栏；回缩：等三栏淡出得差不多侧栏再回来，避免两套内容同屏
+              transition: full ? 'opacity 120ms linear' : 'opacity 160ms linear 140ms',
+              pointerEvents: full ? 'none' : undefined,
+            }}
+          >
           {/* 头部 */}
           <div className="h-9 shrink-0 px-2.5 flex items-center gap-1 border-b border-[var(--border-color)]">
             <button onClick={toggleDrawer} title="会话列表"
@@ -477,8 +577,12 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
             <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-primary)]">
               <Sparkles size={13} className="text-[var(--accent)]" /> AI 助手
             </span>
-            <button onClick={() => setOpen(false)} title="收起 (Ctrl+J)"
-              className="ml-auto p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+            <button onClick={() => expandToFull()} title="全屏展开 (Ctrl+Shift+J)"
+              className="ml-auto p-1.5 rounded-md text-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] hover:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] transition-colors">
+              <Maximize2 size={14} />
+            </button>
+            <button onClick={closeAll} title="收起 (Ctrl+J)"
+              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
               <X size={14} />
             </button>
           </div>
@@ -532,98 +636,25 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                         </div>
                       </div>
                     )}
-                    <div className="h-full overflow-y-auto px-3 py-3 space-y-2">
-                    {messages.length === 0 && !pending && (
-                      <div className="pt-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed px-4">
-                        在这里可以直接询问你正在查看的内容。<br />
-                        例如打开一篇知识库页面后问：「总结一下这一页」。
-                      </div>
-                    )}
-                    {messages.map((m, i) => (
-                      <div key={m.id ?? `live-${i}`} className="group/msg">
-                        {m.role === 'assistant' ? (
-                          <div className="mr-6 px-3 py-2 rounded-lg text-[12px] leading-relaxed break-words select-text cursor-text bg-[var(--bg-secondary)] border border-[var(--border-color)] [&_.prose-content>:first-child]:mt-0 [&_.prose-content>:last-child]:mb-0 [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_table]:block [&_table]:overflow-x-auto">
-                            <MarkdownPreview content={m.content} />
-                          </div>
-                        ) : (
-                          <div className="ml-6 px-3 py-2 rounded-lg text-[12px] leading-relaxed whitespace-pre-wrap break-words select-text cursor-text bg-[var(--bg-selected)] border border-[var(--border-color)]">
-                            {m.content}
-                          </div>
-                        )}
-                        {editing != null && editing.id != null && editing.id === m.id ? (
-                          <div className="ml-6 mt-1 space-y-1.5">
-                            <textarea
-                              value={editing.draft}
-                              onChange={e => setEditing({ ...editing, draft: e.target.value })}
-                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (editing.draft.trim()) void runEdit(m.id!, editing.draft.trim()) } }}
-                              rows={3}
-                              autoFocus
-                              className="w-full px-2.5 py-2 rounded-md border border-[var(--accent)] bg-[var(--input-bg)] text-[12px] resize-none outline-none"
-                            />
-                            <div className="flex items-center gap-1.5">
-                              <button onClick={() => { if (editing.draft.trim()) void runEdit(m.id!, editing.draft.trim()) }}
-                                className="px-2 py-0.5 rounded text-[11px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity">保存并重新生成</button>
-                              <button onClick={() => setEditing(null)}
-                                className="px-2 py-0.5 rounded text-[11px] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">取消</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className={`flex items-center gap-1.5 px-1 mt-0.5 text-[10px] text-[var(--text-disabled)] ${m.role === 'user' ? 'justify-end ml-6' : 'justify-start mr-6'}`}>
-                            {m.createdAt && <span>{fmtTime(m.createdAt)}</span>}
-                            {m.role === 'assistant' && <TokensOf trace={m.trace} />}
-                            <button
-                              onClick={async () => {
-                                const okFlag = await copyText(m.content)
-                                if (okFlag) {
-                                  setCopiedIdx(i)
-                                  setTimeout(() => setCopiedIdx(cur => (cur === i ? null : cur)), 1500)
-                                } else showToastSafe('复制失败')
-                              }}
-                              className={`flex items-center gap-0.5 transition-opacity hover:text-[var(--text-primary)] ${copiedIdx === i ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'}`}
-                              title="复制">
-                              {copiedIdx === i ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
-                              {copiedIdx === i ? '已复制' : '复制'}
-                            </button>
-                            {m.role === 'user' && m.id && !pending && (
-                              <button onClick={() => setEditing({ id: m.id!, draft: m.content })}
-                                className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
-                                title="编辑并重新生成">
-                                <Pencil size={10} /> 编辑
-                              </button>
-                            )}
-                            {m.role === 'assistant' && i === messages.length - 1 && !pending && m.id && (
-                              <button onClick={() => { void runRegenerate() }}
-                                className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:text-[var(--text-primary)]"
-                                title="重新生成">
-                                <RefreshCw size={10} /> 重新生成
-                              </button>
-                            )}
-                            {m.role === 'assistant' && m.id && !pending && (
-                              <button onClick={() => { void handleDeleteMessage(m.id!) }}
-                                className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity hover:text-red-400"
-                                title="删除该回复">
-                                <Trash2 size={10} /> 删除
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        {m.trace && m.trace.length > 0 && <TraceBlock steps={m.trace} />}
-                      </div>
-                    ))}
-                    {pending && (
-                      <div className="mr-6 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
-                        <Loader2 size={13} className="animate-spin shrink-0" />
-                        <span className="flex-1 min-w-0"><AgentLiveSteps steps={liveSteps} /></span>
-                        <button
-                          onClick={() => { void agentAbort(chatIdRef.current) }}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-400/50 transition-colors shrink-0"
-                          title="中断当前请求与工具循环">
-                          <Square size={9} className="fill-current" /> 停止
-                        </button>
-                      </div>
-                    )}
-                    <div ref={bottomRef} />
-                    </div>
+                    <MessageList
+                      messages={messages}
+                      pending={pending}
+                      liveSteps={liveSteps}
+                      editing={editing}
+                      setEditing={setEditing}
+                      copiedIdx={copiedIdx}
+                      setCopiedIdx={setCopiedIdx}
+                      onRegenerate={() => { void runRegenerate() }}
+                      onEditSubmit={(id, content) => { void runEdit(id, content) }}
+                      onDeleteMessage={id => { void handleDeleteMessage(id) }}
+                      onAbort={() => { void agentAbort(chatIdRef.current) }}
+                      emptyHint={(
+                        <div className="pt-8 text-center text-[12px] text-[var(--text-muted)] leading-relaxed px-4">
+                          在这里可以直接询问你正在查看的内容。<br />
+                          例如打开一篇知识库页面后问：「总结一下这一页」。
+                        </div>
+                      )}
+                    />
                   </div>
 
                   {/* 本次改动卡片（AI 执行完成的写操作清单，可一键关闭） */}
@@ -710,9 +741,9 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
 
           {/* 宽度拖拽条：向左拖缩小；低于 320px 松手 = 整体关闭（snap）
               面板为悬浮层且置顶，打开期间本拖拽条独占该边缘，
-              不会误触下层（如知识库大纲侧栏）的拖拽条 */}
+              不会误触下层（如知识库大纲侧栏）的拖拽条。全屏态不需要调宽 → 隐藏 */}
           <div
-            className="absolute top-0 left-[-3px] w-1.5 h-full cursor-ew-resize hover:bg-[var(--accent)]/30"
+            className={`absolute top-0 left-[-3px] w-1.5 h-full cursor-ew-resize hover:bg-[var(--accent)]/30 ${full ? 'hidden' : ''}`}
             onMouseDown={e => {
               e.preventDefault()
               const startX = e.clientX
@@ -736,6 +767,27 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
               window.addEventListener('mouseup', up)
             }}
           />
+          </div>
+
+          {/* 全屏层：AI 学堂（三页签）。挂载后常驻，靠 opacity 切换，回缩动画结束后才卸载 */}
+          {fullMounted && (
+            <div
+              className="absolute inset-0 flex flex-col"
+              style={{ opacity: full ? 1 : 0, transition: 'opacity 140ms linear', pointerEvents: full ? undefined : 'none' }}
+            >
+              <AiLearnShell
+                tab={fullTab}
+                onTabChange={setFullTab}
+                onCollapse={collapseToSidebar}
+                onClose={closeAll}
+                active={fullShown}
+                progress={learn}
+                chat={chatBridge}
+                onGoto={gotoModule}
+                onHelpDocChange={onHelpDocChange}
+              />
+            </div>
+          )}
         </div>
       )}
     </>
@@ -760,48 +812,12 @@ function NoProviderHint({ onGoSettings }: { onGoSettings: () => void }) {
   )
 }
 
-function TraceBlock({ steps }: { steps: AgentTraceStep[] }) {
-  return (
-    <details className="mr-6 mt-1 text-[11px] px-2.5 py-1.5 rounded-md border border-dashed border-[var(--border-color)] text-[var(--text-muted)]">
-      <summary className="cursor-pointer select-none">调用轨迹（{steps.length} 步）</summary>
-      <ul className="mt-1.5 space-y-1">
-        {steps.map((st, j) => (
-          <li key={j} className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.ok ? 'bg-emerald-500' : 'bg-red-500'}`} />
-            {st.kind === 'tool' ? <Wrench size={10} /> : <Bot size={10} />}
-            <code className="truncate">{st.name ?? 'LLM'}</code>
-            <span className="ml-auto tabular-nums shrink-0">{st.durationMs}ms{st.tokens ? ` · ${st.tokens}tok` : ''}</span>
-          </li>
-        ))}
-      </ul>
-    </details>
-  )
-}
-
 function SendIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
     </svg>
   )
-}
-
-/** 工具名可读化：builtin.vault.read → vault.read */
-function toolShortName(name?: string): string {
-  const s = String(name ?? '')
-  return s.startsWith('builtin.') ? s.slice(8) : s || '工具'
-}
-
-/** 实时状态行（agent:step 驱动）：无步骤=思考中；最新为工具=正在调用；失败则显示重试中 */
-function AgentLiveSteps({ steps }: { steps: AgentTraceStep[] }) {
-  const last = steps[steps.length - 1]
-  if (!last) return <>正在思考…</>
-  const toolCount = steps.filter(s => s.kind === 'tool').length
-  if (last.kind === 'tool') {
-    if (!last.ok) return <>执行 {toolShortName(last.name)} 失败，正在调整策略…</>
-    return <>正在调用 <span className="text-[var(--accent)]">{toolShortName(last.name)}</span>（第 {toolCount} 次工具调用）</>
-  }
-  return <>思考中…（已调用 {toolCount} 次工具）</>
 }
 
 function showToastSafe(message: string, type: 'error' | 'info' = 'error'): void {

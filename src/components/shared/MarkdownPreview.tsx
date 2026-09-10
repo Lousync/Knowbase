@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react'
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -85,11 +85,16 @@ function SpoilerBlock({ content }: { content: string }) {
   )
 }
 
-export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTitles, draftWikiTitles, pageId, pageTitle }: Props) {
+/** remark/rehype 插件链：提为模块级常量。原先每次渲染新建数组，react-markdown 会视为新配置 */
+const REMARK_PLUGINS: any = [remarkGfm, remarkMath]
+const REHYPE_PLUGINS: any = [rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]
+type MdComponents = NonNullable<React.ComponentProps<typeof ReactMarkdown>['components']>
+
+function MarkdownPreviewInner({ content, onWikiLink, onLinkClick, knownWikiTitles, draftWikiTitles, pageId, pageTitle }: Props) {
   // 旧 408 选择题格式 → ```quiz 围栏（供 pre 组件渲染判题卡片）；非选择题块原样保留
   const processedContent = useMemo(() => preprocessContent(content), [content])
 
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  const handleLinkClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
     if (onLinkClick) {
       onLinkClick(href)
@@ -104,150 +109,157 @@ export function MarkdownPreview({ content, onWikiLink, onLinkClick, knownWikiTit
         }
       }
     }
-  }
+  }, [onLinkClick])
+
+  // components 稳定化：依赖未变即复用同一对象。正文变化时若该对象被重建，React 会因
+  // 「组件类型变了」卸载重建整棵节点树；保持引用稳定可让 React 只 patch 真正变化的节点。
+  const components = useMemo<MdComponents>(() => ({
+    // 折叠块/动画/选择题围栏不包 <pre>
+    pre({ children }) {
+      const child = Array.isArray(children) ? children[0] : children
+      const cls = (React.isValidElement(child) && ((child.props as { className?: string }).className || '')) || ''
+      if (/language-(spoiler|anim)/.test(cls)) return <>{children}</>
+      // ```quiz 围栏（新规范或旧格式预处理产物）→ 判题卡片；解析失败回退普通代码块
+      if (/language-(quiz|json)/.test(cls)) {
+        const quiz = parseQuizFence(extractText(children))
+        if (quiz) return <QuizCard quiz={quiz} pageId={pageId} pageTitle={pageTitle} />
+        if (/language-quiz/.test(cls)) {
+          const fixed = parseQuizFenceLoose(extractText(children))
+          if (fixed) return <QuizCard quiz={fixed} pageId={pageId} pageTitle={pageTitle} />
+        }
+      }
+      return <pre>{children}</pre>
+    },
+    // Override ul/ol to restore list-style killed by Tailwind reset
+    ul({ children }) {
+      return <ul className="list-disc pl-6 my-1.5">{children}</ul>
+    },
+    ol({ children }) {
+      return <ol className="list-decimal pl-6 my-1.5">{children}</ol>
+    },
+    // Custom link handler — intercept all <a> clicks to avoid Electron navigation blocks
+    a({ href, children, ...props }) {
+      return (
+        <a
+          href={href}
+          {...props}
+          className="text-[var(--accent)] hover:underline cursor-pointer"
+          onClick={e => href ? handleLinkClick(e, href) : undefined}
+        >
+          {children}
+        </a>
+      )
+    },
+    // Images: add a hover "copy to clipboard" affordance
+    img({ src, alt, ...props }) {
+      // P3/D1：仓库根相对附件链接（.attachments/…，含旧 _attachments 形态）→ 经主进程白名单取 data:URI
+      const vaultRel = typeof src === 'string' ? normalizeVaultRel(src) : null
+      if (vaultRel) return <VaultRelImg rel={vaultRel} alt={alt} {...props} />
+      // 包内容缺陷降级：源 md 把图引用写死成 `图片资源缺失:undefined` 等占位（408 包 5 处，
+      // 见 docs/verification-issues-20260904.md ISS-2026-09-04-03）→ 不渲染破图，改为显式占位
+      if (typeof src === 'string' && /图片资源缺失|undefined|null/i.test(src)) {
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-muted)]">
+            <span>📷</span>
+            <span>图片缺失{alt ? `：${alt}` : ''}</span>
+          </span>
+        )
+      }
+      return (
+        <span className="inline-block relative max-w-full align-bottom group/img">
+          <img src={src} alt={alt} {...props} />
+          {src && (
+            <button
+              onClick={() => {
+                void copyImageUrlToClipboard(src).then(ok => {
+                  showToast({ type: ok ? 'info' : 'error', message: ok ? '图片已复制到剪贴板' : '复制失败' })
+                })
+              }}
+              className="absolute top-1.5 right-1.5 p-1 rounded bg-black/55 text-white opacity-0 group-hover/img:opacity-100 hover:bg-black/80 transition-opacity"
+              title="复制图片"
+            >
+              <Copy size={14} />
+            </button>
+          )}
+        </span>
+      )
+    },
+    code({ className, children, node, ...props }) {
+      // 内容包折叠块 fence:spoiler-answer → 答案/解析默认收起(内部递归完整管线)
+      if (/(?:^|\s)language-spoiler/.test(className || '')) {
+        return <SpoilerBlock content={String(children).replace(/\n$/, '')} />
+      }
+      // 内容包动画 fence:anim@<pluginId>:<blockId> → 沙箱 iframe 播放器
+      // (rehype-highlight 会在 className 前加 "hljs ",故不用锚定匹配)
+      const anim = /language-anim@([a-z0-9][a-z0-9._-]*):([A-Za-z0-9._-]+)/.exec(className || '')
+      if (anim) return <AnimEmbed pluginId={anim[1]} animId={anim[2]} label={String(children).trim().split('\n')[0]} />
+      const match = /language-(\w+)/.exec(className || '')
+      const lang = match ? match[1] : ''
+      const isBlock = node?.tagName === 'code' && className?.includes('language-')
+      if (!isBlock) {
+        return <code className={className} {...props}>{children}</code>
+      }
+      return (
+        <div className="relative group">
+          {lang && (
+            <span className="absolute top-1 right-2 text-[10px] text-[var(--text-muted)] opacity-40 select-none">
+              {lang}
+            </span>
+          )}
+          <code className={className} {...props}>{children}</code>
+        </div>
+      )
+    },
+    // Convert [[wiki links]] + 脚注（word^[标注]） in paragraph text to interactive spans
+    p({ children }) {
+      return <p>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</p>
+    },
+    // Also handle wiki links in list items, headings, etc.
+    li({ children }) {
+      return <li>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</li>
+    },
+    h1({ children }) {
+      const text = extractText(children)
+      return <h1 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h1>
+    },
+    h2({ children }) {
+      const text = extractText(children)
+      return <h2 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h2>
+    },
+    h3({ children }) {
+      const text = extractText(children)
+      return <h3 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h3>
+    },
+    h4({ children }) {
+      const text = extractText(children)
+      return <h4 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h4>
+    },
+    h5({ children }) {
+      const text = extractText(children)
+      return <h5 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h5>
+    },
+    h6({ children }) {
+      const text = extractText(children)
+      return <h6 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h6>
+    },
+  }), [handleLinkClick, onWikiLink, knownWikiTitles, draftWikiTitles, pageId, pageTitle])
 
   return (
     <div className="prose-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
         urlTransform={safeUrlTransform}
-        components={{
-          // 折叠块/动画/选择题围栏不包 <pre>
-          pre({ children }) {
-            const child = Array.isArray(children) ? children[0] : children
-            const cls = (React.isValidElement(child) && ((child.props as { className?: string }).className || '')) || ''
-            if (/language-(spoiler|anim)/.test(cls)) return <>{children}</>
-            // ```quiz 围栏（新规范或旧格式预处理产物）→ 判题卡片；解析失败回退普通代码块
-            if (/language-(quiz|json)/.test(cls)) {
-              const quiz = parseQuizFence(extractText(children))
-              if (quiz) return <QuizCard quiz={quiz} pageId={pageId} pageTitle={pageTitle} />
-              if (/language-quiz/.test(cls)) {
-                const fixed = parseQuizFenceLoose(extractText(children))
-                if (fixed) return <QuizCard quiz={fixed} pageId={pageId} pageTitle={pageTitle} />
-              }
-            }
-            return <pre>{children}</pre>
-          },
-          // Override ul/ol to restore list-style killed by Tailwind reset
-          ul({ children }) {
-            return <ul className="list-disc pl-6 my-1.5">{children}</ul>
-          },
-          ol({ children }) {
-            return <ol className="list-decimal pl-6 my-1.5">{children}</ol>
-          },
-          // Custom link handler — intercept all <a> clicks to avoid Electron navigation blocks
-          a({ href, children, ...props }) {
-            return (
-              <a
-                href={href}
-                {...props}
-                className="text-[var(--accent)] hover:underline cursor-pointer"
-                onClick={e => href ? handleLinkClick(e, href) : undefined}
-              >
-                {children}
-              </a>
-            )
-          },
-          // Images: add a hover "copy to clipboard" affordance
-          img({ src, alt, ...props }) {
-            // P3/D1：仓库根相对附件链接（.attachments/…，含旧 _attachments 形态）→ 经主进程白名单取 data:URI
-            const vaultRel = typeof src === 'string' ? normalizeVaultRel(src) : null
-            if (vaultRel) return <VaultRelImg rel={vaultRel} alt={alt} {...props} />
-            // 包内容缺陷降级：源 md 把图引用写死成 `图片资源缺失:undefined` 等占位（408 包 5 处，
-            // 见 docs/verification-issues-20260904.md ISS-2026-09-04-03）→ 不渲染破图，改为显式占位
-            if (typeof src === 'string' && /图片资源缺失|undefined|null/i.test(src)) {
-              return (
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded border border-dashed border-[var(--border-color)] bg-[var(--bg-secondary)] text-[12px] text-[var(--text-muted)]">
-                  <span>📷</span>
-                  <span>图片缺失{alt ? `：${alt}` : ''}</span>
-                </span>
-              )
-            }
-            return (
-              <span className="inline-block relative max-w-full align-bottom group/img">
-                <img src={src} alt={alt} {...props} />
-                {src && (
-                  <button
-                    onClick={() => {
-                      void copyImageUrlToClipboard(src).then(ok => {
-                        showToast({ type: ok ? 'info' : 'error', message: ok ? '图片已复制到剪贴板' : '复制失败' })
-                      })
-                    }}
-                    className="absolute top-1.5 right-1.5 p-1 rounded bg-black/55 text-white opacity-0 group-hover/img:opacity-100 hover:bg-black/80 transition-opacity"
-                    title="复制图片"
-                  >
-                    <Copy size={14} />
-                  </button>
-                )}
-              </span>
-            )
-          },
-          code({ className, children, node, ...props }) {
-            // 内容包折叠块 fence:spoiler-answer → 答案/解析默认收起(内部递归完整管线)
-            if (/(?:^|\s)language-spoiler/.test(className || '')) {
-              return <SpoilerBlock content={String(children).replace(/\n$/, '')} />
-            }
-            // 内容包动画 fence:anim@<pluginId>:<blockId> → 沙箱 iframe 播放器
-            // (rehype-highlight 会在 className 前加 "hljs ",故不用锚定匹配)
-            const anim = /language-anim@([a-z0-9][a-z0-9._-]*):([A-Za-z0-9._-]+)/.exec(className || '')
-            if (anim) return <AnimEmbed pluginId={anim[1]} animId={anim[2]} label={String(children).trim().split('\n')[0]} />
-            const match = /language-(\w+)/.exec(className || '')
-            const lang = match ? match[1] : ''
-            const isBlock = node?.tagName === 'code' && className?.includes('language-')
-            if (!isBlock) {
-              return <code className={className} {...props}>{children}</code>
-            }
-            return (
-              <div className="relative group">
-                {lang && (
-                  <span className="absolute top-1 right-2 text-[10px] text-[var(--text-muted)] opacity-40 select-none">
-                    {lang}
-                  </span>
-                )}
-                <code className={className} {...props}>{children}</code>
-              </div>
-            )
-          },
-          // Convert [[wiki links]] + 脚注（word^[标注]） in paragraph text to interactive spans
-          p({ children }) {
-            return <p>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</p>
-          },
-          // Also handle wiki links in list items, headings, etc.
-          li({ children }) {
-            return <li>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</li>
-          },
-          h1({ children }) {
-            const text = extractText(children)
-            return <h1 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h1>
-          },
-          h2({ children }) {
-            const text = extractText(children)
-            return <h2 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h2>
-          },
-          h3({ children }) {
-            const text = extractText(children)
-            return <h3 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h3>
-          },
-          h4({ children }) {
-            const text = extractText(children)
-            return <h4 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h4>
-          },
-          h5({ children }) {
-            const text = extractText(children)
-            return <h5 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h5>
-          },
-          h6({ children }) {
-            const text = extractText(children)
-            return <h6 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h6>
-          },
-        }}
+        components={components}
       >
         {processedContent}
       </ReactMarkdown>
     </div>
   )
 }
+
+/** memo 包装：props 引用未变时跳过整个重渲染（连带跳过 react-markdown 的解析与节点重建） */
+export const MarkdownPreview = React.memo(MarkdownPreviewInner)
 
 const WIKI_RE = /\[\[([^\]]+)\]\]/
 

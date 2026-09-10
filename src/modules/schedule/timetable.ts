@@ -10,11 +10,27 @@
 export const GRANULARITY_VALUES = [15, 30, 60] as const
 export type Granularity = (typeof GRANULARITY_VALUES)[number]
 
-/** 行高档位 → 每小时像素高度 */
-export const DENSITY_VALUES = ['compact', 'normal', 'loose'] as const
-export type DensityId = (typeof DENSITY_VALUES)[number]
-export const DENSITY_PX: Record<DensityId, number> = { compact: 44, normal: 60, loose: 78 }
-export const DENSITY_LABEL: Record<DensityId, string> = { compact: '紧凑', normal: '舒适', loose: '宽松' }
+/**
+ * 行高（时间轴每小时的纵向高度，px）。
+ *
+ * 数值即真相源（存设置 `scheduleTimetableRowHeight`），不是档位枚举 ——
+ * 因为要在日程表里用 Ctrl+滚轮 / Ctrl+± 连续缩放。下面三个预设只是设置页与工具行的快捷入口。
+ */
+export const ROW_PX_DEFAULT = 60
+export const ROW_PX_MIN = 24
+export const ROW_PX_MAX = 160
+/** 预设：紧凑 / 舒适 / 宽松 */
+export const ROW_PX_PRESETS = [44, 60, 78] as const
+export const ROW_PX_PRESET_LABEL: Record<number, string> = { 44: '紧凑', 60: '舒适', 78: '宽松' }
+/** 单次缩放步进：滚轮小步、键盘大步 */
+export const ROW_PX_STEP_WHEEL = 4
+export const ROW_PX_STEP_KEY = 8
+
+/** 夹到合法区间；非法值（含旧版本遗留的 'normal' 之类字符串）回落到默认行高 */
+export function clampRowPx(v: number): number {
+  if (!Number.isFinite(v)) return ROW_PX_DEFAULT
+  return clamp(Math.round(v), ROW_PX_MIN, ROW_PX_MAX)
+}
 
 /** 卡片最小时长（分钟）。与粒度解耦：1 小时粒度下也能排出 15 分钟的短任务 */
 export const MIN_DURATION = 15

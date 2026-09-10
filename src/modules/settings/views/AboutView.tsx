@@ -1,15 +1,18 @@
 import { useRef, useState, useEffect } from 'react'
 import {
   Sparkles, RefreshCw, Download, ExternalLink, Play,
-  CheckCircle2, AlertTriangle, Loader2, Pause, X, MonitorUp,
+  CheckCircle2, AlertTriangle, Loader2, Pause, X, MonitorUp, FileText,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { getAppVersion, openExternal } from '../../../lib/ipc'
+import { getAppVersion, openExternal, workspaceImportWelcomeDoc } from '../../../lib/ipc'
 import {
   useUpdateStore, updateCheck, updateDownload, updatePause, updateCancel, updateInstall,
   updateFailKind, updateFailMessage,
 } from '../../../lib/updateStore'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
+import { ConfirmDialog } from '../../../components/shared/ConfirmDialog'
+import { showToast } from '../../../lib/toast'
+import { notifyDataChanged } from '../../../lib/dataChanged'
 
 /** 设置 → 关于：版本 / 更新（下载镜像） / 新手引导 */
 export function AboutView() {
@@ -17,8 +20,33 @@ export function AboutView() {
   const upd = useUpdateStore()
   const mirrorInputRef = useRef<HTMLInputElement | null>(null)
   const [appVersion, setAppVersion] = useState('')
+  // 导入《欢迎》页面：已存在同名文件时不直接覆盖，先弹应用内确认（该文件用户可自由改写）
+  const [importingWelcome, setImportingWelcome] = useState(false)
+  const [overwriteAsk, setOverwriteAsk] = useState(false)
 
   useEffect(() => { getAppVersion().then(setAppVersion).catch(() => {}) }, [])
+
+  /** force=false 首次尝试：仓库无同名文件则直接导入；已有则转为覆盖确认 */
+  const runImportWelcome = async (force: boolean) => {
+    if (importingWelcome) return
+    setImportingWelcome(true)
+    try {
+      const r = await workspaceImportWelcomeDoc(force)
+      if (r.error) { showToast({ type: 'error', message: r.error }); return }
+      if (r.exists) { setOverwriteAsk(true); return }
+      notifyDataChanged('knowledge')
+      showToast({
+        type: 'info',
+        message: `${r.created ? '《欢迎》页面已导入知识库' : '《欢迎》页面已更新为最新版'}${
+          r.hasLegacyMd ? '；仓库根另有旧版「欢迎.md」，知识库会出现两条同名页面，可自行删除其一' : ''
+        }`,
+      })
+    } catch (e) {
+      showToast({ type: 'error', message: `导入失败：${(e as Error).message || '未知错误'}` })
+    } finally {
+      setImportingWelcome(false)
+    }
+  }
 
   const failText = upd.check ? updateFailMessage(upd) : (upd.error || '检查失败,请检查网络')
   const failKind = upd.check ? updateFailKind(upd.reason) : 'network'
@@ -188,7 +216,34 @@ export function AboutView() {
           <Sparkles size={12} />
           重新查看新手引导
         </button>
+
+        <div className="mt-4" data-setting-anchor="advanced.welcomeImport">
+          <button
+            onClick={() => void runImportWelcome(false)}
+            disabled={importingWelcome}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {importingWelcome ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+            {importingWelcome ? '导入中…' : '导入《欢迎》页面到知识库'}
+          </button>
+          <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed max-w-md">
+            把《欢迎》导览页(<span className="font-mono">欢迎.html</span>)写回仓库根目录并收录进知识库，适合误删后恢复、或重新生成为最新版导览。
+            仓库里已有该文件时会先询问，确认后覆盖(你对它的改动将被重置)。
+          </p>
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={overwriteAsk}
+        title="覆盖已有的《欢迎》页面？"
+        message="仓库根目录已存在 欢迎.html。继续将用最新版导览内容覆盖它，你对这个文件的改动会被重置。"
+        confirmLabel="覆盖导入"
+        cancelLabel="取消"
+        showCheckbox={false}
+        variant="default"
+        onConfirm={() => { setOverwriteAsk(false); void runImportWelcome(true) }}
+        onCancel={() => setOverwriteAsk(false)}
+      />
     </div>
   )
 }

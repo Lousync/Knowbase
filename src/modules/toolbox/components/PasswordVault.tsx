@@ -515,10 +515,9 @@ export function PasswordVault({ onBack }: Props) {
     }
     if (entries.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center py-16 px-6">
+        <div className="h-full flex flex-col items-center justify-center py-16 px-6">
           <Shield size={40} className="text-[var(--text-disabled)] opacity-25 mb-3" />
-          <p className="text-[13px] text-[var(--text-primary)] mb-1">密码本还是空的</p>
-          <p className="text-[11px] text-[var(--text-muted)] mb-4">添加第一条，之后可随时搜索、分组与置顶</p>
+          <p className="text-[13px] text-[var(--text-primary)] mb-4">密码本还是空的</p>
           <button
             onClick={() => setShowNewForm(true)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
@@ -530,7 +529,7 @@ export function PasswordVault({ onBack }: Props) {
     }
     if (totalCount === 0) {
       return (
-        <div className="flex flex-col items-center justify-center py-14 px-6">
+        <div className="h-full flex flex-col items-center justify-center py-14 px-6">
           <Search size={26} className="text-[var(--text-disabled)] opacity-30 mb-2" />
           <p className="text-[12px] text-[var(--text-muted)]">没有匹配「{searchQuery}」的条目</p>
           <button onClick={() => setSearchQuery('')} className="mt-2 text-[11.5px] text-[var(--accent)] hover:underline">清除搜索</button>
@@ -544,6 +543,13 @@ export function PasswordVault({ onBack }: Props) {
     if (sortKey !== k) return <ChevronsUpDown size={10} className="opacity-40" />
     return sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />
   }
+
+  /**
+   * 空态（首条录入 / 无匹配）需要整块在滚动区正中，而不是贴在顶沿。
+   * 空态块内的 h-full 必须有一个「有确定高度」的父级才生效 —— 由外层 min-w 容器按此标记撑满高度。
+   * 非空态一律不加，避免把列表的滚动高度锁死成视口高度。
+   */
+  const centeredEmpty = !loading && (entries.length === 0 || totalCount === 0)
 
   const listBody = () => {
     const empty = renderEmptyState()
@@ -673,7 +679,7 @@ export function PasswordVault({ onBack }: Props) {
 
           {/* 列表（总览） */}
           <div ref={listRef} onScroll={onListScroll} className="flex-1 overflow-y-auto min-w-0">
-            <div className="min-w-[660px]">
+            <div className={`min-w-[660px] ${centeredEmpty ? 'h-full' : ''}`}>
               {listBody()}
             </div>
           </div>

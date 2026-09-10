@@ -2,8 +2,12 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles/index.css'
-import './lib/monaco-setup'
 import { SettingsProvider } from './lib/SettingsContext'
+
+// monaco-setup 不在此处引入（性能 2026-09-10）：它静态拉入 monaco-editor 主包 + 5 个 worker，
+// 曾使首屏主 chunk 达 13.3MB。现下沉到三个 Monaco 宿主组件
+// （editor/MonacoPane、knowledge/PageEditor、blog/MarkdownEditor）各自副作用引入，
+// rollup 会提升为共享 chunk，只在真正打开编辑器时才下载解析。
 
 // 不用 StrictMode（2026-09-08）：dev 双挂载（mount→unmount→mount）与 @monaco-editor/react
 // 4.7 卸载逻辑（pe(): dispose model+editor）组合出 dispose 竞态——组件树持有已 dispose 的

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { Sparkles } from 'lucide-react'
 import type { TabName, KnowledgePage, KnowledgeCategory, KnowledgeTag } from './types'
 
@@ -30,6 +30,15 @@ import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
 import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent } from './lib/ipc'
+/* 模块引入方式（2026-09-10 二次修正：回退到静态 import）
+   曾把 12 个模块改成 React.lazy 做代码分割——首屏从 13.3MB 降到 3.37MB，但代价是
+   「每次打开应用后，进入一个尚未访问过的模块都要现取 chunk」：生产下数十 ms，
+   dev 下还要叠加 vite 的按需编译（数百 ms）。即使用空闲 + 悬停预热补偿，实测仍能感到
+   约 100ms 停顿（chunk 就绪后，Suspense 从 fallback 切回真实内容还要整树渲染一次）。
+   本项目是「多 Tab 首挂后 display:none 常驻保活」架构、模块切换极频繁，
+   用首屏体积换切换延迟不划算。故模块改回静态 import；
+   **真正的大头（monaco 8.3MB / pdfjs / heic-to）仍由各自宿主组件 lazy 拆出**，
+   兼顾启动体积与切换手感。 */
 import { BlogModule } from './modules/blog'
 import { ScheduleModule } from './modules/schedule'
 import { KnowledgeModule } from './modules/knowledge'
@@ -42,6 +51,7 @@ import { ToolboxModule } from './modules/toolbox'
 import { PluginsModule } from './modules/plugins'
 import { EditorModule } from './modules/editor'
 import { AiTeachingModule } from './modules/ai-teaching'
+
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { VaultPicker } from './components/shared/VaultPicker'
 import { PomodoroProvider } from './modules/toolbox/hooks/PomodoroContext'
@@ -59,6 +69,11 @@ import { ResizablePanel } from './components/shared/ResizablePanel'
 import { WindowResizeHandles } from './components/shared/WindowResizeHandles'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
+/** 模块 chunk 拉取期间的占位（仅首次访问该 Tab 时出现一瞬，之后由保活层常驻） */
+function ModuleLoadingFallback() {
+  return <div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)] select-none">加载中…</div>
+}
+
 export default function App() {
   // Fill popup mode: render standalone popup instead of full app
   if (window.api.isFillPopup) {
@@ -411,6 +426,16 @@ export default function App() {
     return () => window.removeEventListener('help:open', handler)
   }, [])
 
+  // Listen for ai-learn:goto —— AI 学堂「动手做」跳模块（学堂自身先收起，避免浮层压住目标）
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent<{ tab?: TabName }>).detail?.tab
+      if (tab) { setActiveTab(tab); setSidebarOpen(true) }
+    }
+    window.addEventListener('ai-learn:goto', handler)
+    return () => window.removeEventListener('ai-learn:goto', handler)
+  }, [])
+
   // Listen for plugins:open — navigate to plugins tab (e.g. 设置→AI 工具→Skill 跳市场)
   useEffect(() => {
     const handler = () => { setActiveTab('plugins'); setSidebarOpen(true) }
@@ -621,7 +646,12 @@ export default function App() {
   function renderMounted(name: TabName, on: boolean) {
     if (on) mountedTabs.current.add(name)
     if (!on && !mountedTabs.current.has(name)) return null
-    return <div key={name} className="flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>{renderModuleContent(name, on)}</div>
+    // Suspense 不产生 DOM 节点，容器布局与改前一致；fallback 只在该模块 chunk 首次拉取期间出现。
+    return (
+      <div key={name} className="flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>
+        <Suspense fallback={<ModuleLoadingFallback />}>{renderModuleContent(name, on)}</Suspense>
+      </div>
+    )
   }
 
   return (
@@ -746,8 +776,9 @@ export default function App() {
               </ResizablePanel>
             )}
           </main>
-      {/* 全局 AI 助手侧栏 */}
-      <AssistantPanel />
+      {/* 全局 AI 助手侧栏。shellLeft = 全屏扩张时要避让的活动栏占位宽度
+          （禅模式 Z2+ 活动栏不渲染 → 0；最大化 flush → 56；否则 56 + mx-1.5 两侧留白） */}
+      <AssistantPanel shellLeft={zenLevel >= 2 ? 0 : winMax ? 56 : 68} />
         </div>
       {/* 全局搜索（VS Code 式顶部弹层）：输入 portal 进标题栏，全模块可用 */}
       <QuickSearch

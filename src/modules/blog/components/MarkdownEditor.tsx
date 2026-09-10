@@ -12,6 +12,8 @@ import { SummaryPanel } from './SummaryPanel'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'
 import { bindEditorTheme } from '../../../lib/editorTheme'
+// Monaco 运行时装配下沉到宿主组件：不随应用入口进首屏 chunk（性能 2026-09-10）
+import '../../../lib/monaco-setup'
 import type * as Monaco from 'monaco-editor'
 import type { Tag } from '../../../types'
 
@@ -28,6 +30,9 @@ const MOOD_OPTIONS = [
   { emoji: '😕', label: '困惑' },
 ]
 const MAX_TAGS = 5
+
+/** 模块级稳定引用：内联箭头每次渲染都是新函数，会让 MarkdownPreview 的 memo 失效、预览反复重解析 */
+const handlePreviewLinkClick = (href: string) => openExternal(href)
 
 export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onCancel, onContentChange, onToggleOutline }: Props) {
   const { s } = useSettings()
@@ -408,7 +413,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
         {showPreview ? (
           <div className="h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-10 py-6">
-              <MarkdownPreview content={contentMd} onLinkClick={href => openExternal(href)} />
+              <MarkdownPreview content={contentMd} onLinkClick={handlePreviewLinkClick} />
               {date && <SummaryPanel date={date} />}
             </div>
           </div>

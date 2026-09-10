@@ -996,8 +996,9 @@ function ListView({ onReload, onWordClick, version }: { onReload: () => Promise<
 }
 
 function EntryRow({ e, onWordClick, onReload }: { e: WordbookEntryDto; onWordClick: (w: string) => void; onReload: () => Promise<void> }) {
+  // kb-cv-sm：视口外词条跳过布局与绘制（生词本列表的 CSS 虚拟化，见 styles/index.css）
   return (
-    <div className="group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-hover)] transition-colors">
+    <div className="kb-cv-sm group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-hover)] transition-colors">
       <button onClick={() => speak(e.word)} title="发音"
         className="shrink-0 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">
         <Volume2 size={13} />

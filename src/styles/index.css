@@ -159,6 +159,21 @@ input:focus, textarea:focus, select:focus {
   -webkit-user-drag: auto;
 }
 
+/* ===== 长列表虚拟化（CSS 原生，性能 2026-09-10）=====
+   长列表原先全部条目一次性进 DOM（项目无任何虚拟滚动）。这里启用 Chromium 原生的
+   content-visibility: auto —— 视口外的条目不参与布局与绘制，滚回来才渲染。
+   对**不定高**的卡片列表，它比 JS 虚拟滚动更省事、零侵入、不改组件结构；
+   contain-intrinsic-size 给出高度估值（auto 关键字会记住上次实际尺寸），避免滚动条抖动。
+   用法：加到「列表项」元素上 —— .kb-cv 估值 120px，.kb-cv-sm 估值 60px。 */
+.kb-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+.kb-cv-sm {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
 /* ===== Markdown 标记淡化（编辑器弱化版 Live Preview，光标所在行除外）=====
    Monaco inline decoration 的类直接落在包裹 token 的 span 上——token 的 mtk 颜色在
    更深层 span，会覆盖我们的 color，故语义强调色用 !important；淡化用 opacity（作用于

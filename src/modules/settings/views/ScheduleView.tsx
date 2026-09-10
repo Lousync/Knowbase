@@ -1,5 +1,6 @@
 import { useSettings } from '../../../lib/SettingsContext'
 import { SettingSelect } from '../components/SettingSelect'
+import { NumberField } from '../components/fields/NumberField'
 
 /**
  * 设置 → 模块设置 → 日程任务。
@@ -89,16 +90,21 @@ export function ScheduleView() {
         </div>
 
         <div data-setting-anchor="schedule.timetableRowHeight">
-          <SettingSelect
-            title="日程表行高"
-            description="时间轴每一小时占用的纵向高度；越高越容易看清卡片文字，但同一屏能看到的时间段越少。"
+          <h3 className="text-[12.5px] font-medium text-[var(--text-primary)] mb-1">日程表行高</h3>
+          <p className="text-[11.5px] text-[var(--text-muted)] mb-2.5 leading-relaxed">
+            时间轴每小时占用的纵向高度。在日程表里按 <b className="text-[var(--text-secondary)]">Ctrl+滚轮</b> 或
+            <b className="text-[var(--text-secondary)]"> Ctrl+加减号 </b>可随时连续缩放（会记住），
+            <b className="text-[var(--text-secondary)]"> Ctrl+0 </b>复位到舒适档。
+          </p>
+          <NumberField
             value={s.scheduleTimetableRowHeight}
-            onChange={v => update('scheduleTimetableRowHeight', v)}
-            options={[
-              { id: 'compact', label: '紧凑', desc: '44 px 每小时，一屏看全天' },
-              { id: 'normal', label: '舒适', desc: '60 px 每小时（默认）', isDefault: true },
-              { id: 'loose', label: '宽松', desc: '78 px 每小时，卡片可显示更多信息' },
-            ]}
+            onCommit={v => update('scheduleTimetableRowHeight', v)}
+            min={24}
+            max={160}
+            step={2}
+            unit="px"
+            presets={[44, 60, 78]}
+            defaultValue={60}
           />
         </div>
 

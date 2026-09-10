@@ -23,3 +23,13 @@ proto/
 .idea/
 *.blockmap
 latest.yml
+
+# 构建产物备份（npm run build 前 mv out out_prev_* 的绕法残留）
+out_prev_*/
+# electron-vite 配置的时间戳备份
+electron.vite.config.*.mjs
+# 原型与截图预览输出
+outputs/
+.workbuddy-ai/
+# 临时工作区（探针/草稿/截图；tmp/smoke/ 下少数冒烟脚本已跟踪，保持跟踪）
+tmp/

@@ -4,8 +4,29 @@ import { randomUUID } from 'crypto'
 import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
 import { readJson, writeJson, deleteFile } from './jsonStore'
 import { parseMarkdown } from './mdStore'
+import { WELCOME_DOC_FILENAME } from './welcomeDoc'
 import { getVaultIgnore, isDirIgnored, getVaultIgnoreState, auditIgnoreRules, type VaultIgnoreResult, type VaultIgnoreState } from './ignoreFile'
 import type { Ignore } from 'ignore'
+
+/**
+ * 欢迎页（HTML）入索引的特殊口径（2026-09-10）：
+ * 知识库**只允许渲染这一个 html** —— 扫描器仅收「仓库根 / 欢迎.html」精确同名文件，
+ * 其余 .html 一律不入索引（svg/htm 等同样不收）。它没有 frontmatter，索引条目在此合成。
+ */
+const WELCOME_PAGE_ID = 'kb-welcome-doc'
+
+/** 欢迎页 HTML → 纯文本（供搜索索引）：剥脚本/样式与标签、压空白并截断。
+ *  正文里的 `[[...]]` 是**讲解语法用的示例文字**（本页在 iframe 里渲染，双链不可点），
+ *  去掉方括号既让搜索命中标题词，也避免 extractWikiOutlinks 在图谱里造出假外链节点。 */
+function welcomeHtmlToPlain(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\[\[([^\]]*)\]\]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 8000)
+}
 
 export type KnowledgeCategoryType = 'space' | 'notebook' | 'folder'
 
@@ -76,6 +97,8 @@ function asStringArray(value: unknown): string[] {
  * 扫描仓库 .md（P5a 嵌套防护）：全仓库最多一个 `.knowbase`（仓库根直属那个）；
  * 深层再出现 `.knowbase` 视为布局违规——跳过不扫描，并经 warnings 提示（D4/§1 完整性规则）。
  *
+ * 唯一非 md 例外：仓库根 `欢迎.html`（见 WELCOME_DOC_FILENAME / WELCOME_PAGE_ID 注释）。
+ *
  * .ignore 过滤层（docs/ignore-filter-design.md）：叠加在系统区跳过之后——
  * 系统目录（. 开头 / _inbox / _attachments / 嵌套 .knowbase）先按固有规则跳过，
  * 用户规则对系统区无效（不可被 ! 取反救回）；目录命中 → 整棵剪枝不递归。
@@ -103,7 +126,7 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
     if (audit) {
       const relAudit = relative(root, abs).replace(/\\/g, '/')
       if (entry.isDirectory()) audit.dirs.push(relAudit)
-      else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) audit.files.push(relAudit)
+      else if (entry.isFile() && (entry.name.toLowerCase().endsWith('.md') || (atRoot && entry.name === WELCOME_DOC_FILENAME))) audit.files.push(relAudit)
     }
     // .ignore 过滤：目录命中整棵剪枝；文件命中不入扫描结果（rel = 仓库内 posix 相对路径）
     if (ign) {
@@ -131,7 +154,8 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
           continue
         }
         scanMarkdownFiles(root, abs, out, warnings, ign, audit)
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      } else if (entry.isFile() && (entry.name.toLowerCase().endsWith('.md') || (atRoot && entry.name === WELCOME_DOC_FILENAME))) {
+        // 欢迎页例外：唯一放行的 html，仅限仓库根同名文件（子目录同名不收）
         out.push(abs)
       }
     } catch {
@@ -426,10 +450,28 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown> }> = []
   for (const abs of files) {
     try {
+      const rel = relative(current.rootPath, abs).replace(/\\/g, '/')
+      const raw = readFileSync(abs, 'utf8')
+      // 欢迎页（唯一放行的 html）：无 frontmatter，条目字段在此合成；正文取纯文本供搜索
+      const isWelcome = rel === WELCOME_DOC_FILENAME
+      const mtime = isWelcome ? new Date(statSync(abs).mtimeMs).toISOString() : ''
       docs.push({
         abs,
-        rel: relative(current.rootPath, abs).replace(/\\/g, '/'),
-        doc: parseMarkdown(readFileSync(abs, 'utf8')),
+        rel,
+        doc: isWelcome
+          ? {
+              frontmatter: {
+                id: WELCOME_PAGE_ID,
+                title: '欢迎',
+                fileType: 'html',
+                status: 'published',
+                starred: 'false',
+                created: mtime,
+                updated: mtime,
+              },
+              body: welcomeHtmlToPlain(raw),
+            }
+          : parseMarkdown(raw),
       })
     } catch {
       warnings.push(`页面读取失败，已跳过：${relative(current.rootPath, abs)}`)
@@ -500,7 +542,8 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
         updatedAt: asString(doc.frontmatter.updated),
         status: asString(doc.frontmatter.status).toLowerCase() === 'draft' ? 'draft' : 'published',
         mtimeMs: stat.mtimeMs,
-        outgoingTitles: extractWikiOutlinks(doc.body),
+        // 欢迎页不入双链图：它是导览页，正文里的 [[...]] 只是语法示例（见 welcomeHtmlToPlain）
+        outgoingTitles: rel === WELCOME_DOC_FILENAME ? [] : extractWikiOutlinks(doc.body),
       }
       pages.push(entry)
       byId[id] = entry
@@ -510,6 +553,20 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   }
 
   pages.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'zh-Hans'))
+
+  // 搜索用纯文本索引（性能 2026-09-10）：复用本已读入内存的 docs 正文顺手产出并落盘。
+  // 放在这里而不是搜索时懒建，是因为此刻正文已在内存 —— 零额外读盘。
+  const textById: Record<string, string> = {}
+  for (const { doc } of docs) {
+    const id = asString(doc.frontmatter.id)
+    if (id) textById[id] = mdToPlain(doc.body || '')
+  }
+  writeJson('cache', KNOWLEDGE_TEXT_KEY, {
+    generatedAt: new Date().toISOString(),
+    vaultPath: current.rootPath,
+    byId: textById,
+  })
+
   return {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
@@ -529,9 +586,96 @@ function sameIgnoreState(a: VaultIgnoreState | null | undefined, b: VaultIgnoreS
   return a.mtimeMs === b.mtimeMs && a.size === b.size
 }
 
+/**
+ * 进程内索引缓存（2026-09-10 性能优化）。
+ *
+ * 磁盘缓存虽免了重建，但每次 getKnowledgeIndex 仍要走 readJson 的
+ * existsSync + statSync + readFileSync + JSON.parse 全同步链（实测 417 页 ≈ 2.3ms/次）。
+ * 而该函数被 knowledgeVaultRepo 多处 + AI 工具 / quiz / 附件 / summary / habitLink 高频调用，
+ * 单次页面加载累积可达数十毫秒且全程阻塞主进程。
+ *
+ * 失效条件与磁盘缓存保持一致：.ignore 指纹变化（外部改规则、无 watcher 也感知）或显式 invalidate。
+ * 仓库切换必须失效，否则会把上一个仓库的索引串给新仓库。
+ */
+let indexMemo: KnowledgeIndex | null = null
+/** 内存缓存归属的仓库根路径（null = 无当前仓库） */
+let indexMemoVault: string | null = null
+
+/** 搜索用纯文本索引的缓存文件（与 knowledge-index.json 同生命周期） */
+const KNOWLEDGE_TEXT_KEY = 'knowledge-text.json'
+
+interface KnowledgeTextIndexFile {
+  generatedAt: string
+  vaultPath: string | null
+  byId: Record<string, string>
+}
+
+let textMemo: KnowledgeTextIndexFile | null = null
+let textMemoVault: string | null = null
+
+/** 粗剥 markdown 记号 → 纯文本（搜索索引口径；与原先 vaultSearchPages 内的实现保持一致） */
+export function mdToPlain(s: string): string {
+  return s
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/[>*`~_|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * 搜索用正文索引（性能 2026-09-10）。
+ * 命中内存 → 读一次磁盘 cache → 都没有则由当前索引逐页读盘懒重建。
+ * 常态路径由 rebuildKnowledgeIndex 顺手产出（那时正文已在内存里，零额外读盘），
+ * 从而把 vaultSearchPages 从「每次搜索全盘重读 417 个 md（实测 68ms）」降为一次 JSON 读取。
+ */
+export function getKnowledgeTextIndex(): Record<string, string> {
+  const vaultKey = getCurrentVault()?.rootPath ?? null
+  if (textMemo && textMemoVault === vaultKey) return textMemo.byId
+  const cached = readJson<KnowledgeTextIndexFile | null>('cache', KNOWLEDGE_TEXT_KEY, null)
+  if (cached && cached.byId && cached.vaultPath === vaultKey) {
+    textMemo = cached
+    textMemoVault = vaultKey
+    return cached.byId
+  }
+  // 懒重建：磁盘 cache 缺失、或仓库已切换
+  const root = getCurrentVault()?.rootPath
+  const byId: Record<string, string> = {}
+  if (root) {
+    for (const e of getKnowledgeIndex().pages) {
+      try { byId[e.id] = mdToPlain(parseMarkdown(readFileSync(join(root, e.path), 'utf-8')).body || '') }
+      catch { byId[e.id] = '' }
+    }
+  }
+  const payload: KnowledgeTextIndexFile = { generatedAt: new Date().toISOString(), vaultPath: vaultKey, byId }
+  writeJson('cache', KNOWLEDGE_TEXT_KEY, payload)
+  textMemo = payload
+  textMemoVault = vaultKey
+  return byId
+}
+
+/** 丢弃进程内正文索引缓存 */
+function clearTextMemo(): void {
+  textMemo = null
+  textMemoVault = null
+}
+
+/** 丢弃进程内索引缓存（仓库切换 / 内容写入后调用） */
+function clearIndexMemo(): void {
+  indexMemo = null
+  indexMemoVault = null
+}
+
 /** 读取缓存；schema 不匹配或 .ignore 指纹变化（外部增删改规则，无 watcher 也感知）时自动重建并落盘。 */
 export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
+  const vaultKey = getCurrentVault()?.rootPath ?? null
   if (!forceRebuild) {
+    // 一级：进程内缓存（命中即返回，零 IO）
+    if (indexMemo && indexMemoVault === vaultKey && sameIgnoreState(indexMemo.ignoreState, getVaultIgnoreState())) {
+      return indexMemo
+    }
+    // 二级：磁盘缓存（进程冷启动后首次调用）
     const cached = readJson<KnowledgeIndex | null>('cache', 'knowledge-index.json', null)
     if (
       cached &&
@@ -541,19 +685,25 @@ export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
       cached.byId &&
       sameIgnoreState(cached.ignoreState, getVaultIgnoreState())
     ) {
+      indexMemo = cached
+      indexMemoVault = vaultKey
       return cached
     }
   }
   const fresh = rebuildKnowledgeIndex()
   writeJson('cache', 'knowledge-index.json', fresh)
+  indexMemo = fresh
+  indexMemoVault = vaultKey
   return fresh
 }
 
-/** Vault 内容发生变化时调用：只删缓存文件，下一次 getKnowledgeIndex 懒重建（P0 不依赖 watcher）。 */
+/** Vault 内容发生变化时调用：清进程内 + 磁盘缓存，下一次 getKnowledgeIndex 懒重建（P0 不依赖 watcher）。 */
 export function invalidateKnowledgeIndex(): void {
-  const current = getCurrentVault()
-  if (!current) return
+  clearIndexMemo()
+  clearTextMemo()
+  if (!getCurrentVault()) return
   deleteFile('cache', 'knowledge-index.json')
+  deleteFile('cache', KNOWLEDGE_TEXT_KEY)
 }
 
 export function findKnowledgePage(id: string): KnowledgePageIndexEntry | null {

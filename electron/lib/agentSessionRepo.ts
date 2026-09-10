@@ -10,11 +10,19 @@ import { globalReadJson, globalWriteJson } from './globalJsonStore'
 const SESSIONS_FILE = 'agent-sessions.json'
 const MESSAGES_FILE = 'agent-messages.json'
 
+/**
+ * 会话来源：用于把「通用 AI 助手」（侧栏 / AI 学堂）与「AI 教学」的会话列表互相隔离。
+ * 二者共用同一张会话表（同一份存储、同一套 AgentRunner），只在列表展示上按来源分流。
+ */
+export type AgentSessionSource = 'assistant' | 'aiTeaching'
+
 export interface AgentSessionRow {
   id: string
   title: string
   /** 会话级全局要求（056 迁移；空串=无） */
   instructions?: string
+  /** 来源（缺省=assistant；存量老数据无此字段，由 backfillSessionSources 回填） */
+  source?: AgentSessionSource
   created_at: string
   updated_at: string
 }
@@ -43,11 +51,12 @@ function readMessages(): AgentMessageRow[] {
   return globalReadJson<AgentMessageRow[]>(MESSAGES_FILE, [])
 }
 
-export function createAgentSession(title = '新会话'): AgentSessionRow {
+export function createAgentSession(title = '新会话', source: AgentSessionSource = 'assistant'): AgentSessionRow {
   const row: AgentSessionRow = {
     id: randomUUID(),
     title,
     instructions: '',
+    source,
     created_at: nowLocal(),
     updated_at: nowLocal(),
   }
@@ -55,6 +64,35 @@ export function createAgentSession(title = '新会话'): AgentSessionRow {
   sessions.push(row)
   globalWriteJson(SESSIONS_FILE, sessions)
   return row
+}
+
+/**
+ * 存量会话来源回填：老数据没有 source 字段，调用方传入推断函数。
+ *
+ * @param infer 返回 'aiTeaching' 表示判定为教学会话；返回 null 表示"判不出来"
+ * @param overwrite 修正模式。默认 false（初始化）：source 缺省的一律定性，判不出来算 assistant。
+ *   置 true（修正）：**允许覆盖已标记的条目**，但只在 infer 明确返回来源时才改 ——
+ *   用于修复"上一轮回填判据不全、把教学会话误标成 assistant"的历史数据
+ *   （2026-09-10 实况：只按工作区归属判定，漏掉了未分配工作区的教学会话）。
+ * @returns 实际写入的条数
+ */
+export function backfillSessionSources(
+  infer: (id: string, title: string) => AgentSessionSource | null,
+  overwrite = false,
+): number {
+  const sessions = readSessions()
+  let n = 0
+  for (const s of sessions) {
+    const src = infer(s.id, s.title)
+    if (overwrite) {
+      if (src && src !== s.source) { s.source = src; n++ }
+    } else if (!s.source) {
+      s.source = src ?? 'assistant'
+      n++
+    }
+  }
+  if (n > 0) globalWriteJson(SESSIONS_FILE, sessions)
+  return n
 }
 
 export function listAgentSessions(): AgentSessionRow[] {

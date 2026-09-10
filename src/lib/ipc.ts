@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentStoredMessage, AgentTraceStep, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult, AiTeachSourceInput, CreatePasswordEntryDTO, UpdatePasswordEntryDTO } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentSessionSource, AgentStoredMessage, AgentTraceStep, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult, AiTeachSourceInput, CreatePasswordEntryDTO, UpdatePasswordEntryDTO } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -285,6 +285,11 @@ export const workspaceRenameVault = (name: string): Promise<{ ok?: boolean; name
 export const workspaceGetCurrent = () => a().workspaceGetCurrent()
 // 在系统文件管理器中打开当前仓库文件夹（标题栏仓库菜单）
 export const workspaceRevealVault = (): Promise<{ ok: boolean; error?: string }> => a().workspaceRevealVault()
+// 设置 → 新手引导：把《欢迎》导览页（HTML）导入仓库根并收录进知识库。
+// exists=true 表示已有同名文件未写盘（需用户确认后再以 force=true 调用覆盖）
+export const workspaceImportWelcomeDoc = (force?: boolean): Promise<{
+  ok: boolean; created?: boolean; exists?: boolean; hasLegacyMd?: boolean; relPath?: string; error?: string
+}> => a().workspaceImportWelcomeDoc(force)
 export const workspaceForget = (rootId: string) => a().workspaceForget(rootId)
 // P7（D6）：删除当前仓库 = 整仓进 OS 回收站（不弹提醒窗，回收站可还原兜底）
 export const workspaceDeleteVault = (rootId: string): Promise<{ ok?: boolean; deletedCurrent?: boolean; error?: string }> => a().workspaceDeleteVault(rootId)
@@ -488,7 +493,7 @@ export const agentSetSessionInstructions = (id: string, instructions: string): P
 /** AgentRunner 实时过程步骤（chatId 过滤用；渲染层据此驱动活动气泡） */
 export const onAgentStep = (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => a().onAgentStep(cb)
 export const agentSessions = (): Promise<AgentSessionInfo[]> => a().agentSessions()
-export const agentNewSession = (title?: string): Promise<AgentSessionInfo> => a().agentNewSession(title)
+export const agentNewSession = (title?: string, source?: AgentSessionSource): Promise<AgentSessionInfo> => a().agentNewSession(title, source)
 export const agentMessages = (sessionId: string): Promise<AgentStoredMessage[]> => a().agentMessages(sessionId)
 export const agentRenameSession = (id: string, title: string): Promise<boolean> => a().agentRenameSession(id, title)
 export const agentDeleteSession = (id: string): Promise<boolean> => a().agentDeleteSession(id)

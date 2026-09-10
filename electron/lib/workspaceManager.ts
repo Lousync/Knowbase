@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSy
 import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, markRecentDeleted, clearRecentDeleted, setVaultMetaName } from './kbStore/vaultContext'
-import { writeWelcomeDocOnce } from './kbStore/welcomeDoc'
+import { writeWelcomeDocOnce, importWelcomeDoc, getWelcomeDocState, WELCOME_DOC_FILENAME } from './kbStore/welcomeDoc'
 import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
@@ -912,6 +912,29 @@ export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown)
     if (!existsSync(cur.rootPath)) return { ok: false, error: '仓库文件夹不存在（可能已被移动或删除）' }
     const err = await shell.openPath(cur.rootPath)
     return err ? { ok: false, error: err } : { ok: true }
+  })
+
+  // 设置 → 关于 → 新手引导：把《欢迎》导览页（HTML）重新导入仓库根并收录进知识库。
+  // 解耦于「首次初始化才落盘」的 writeWelcomeDocOnce —— 误删后恢复、或想拿最新版导览时手动触发。
+  // force=false 且仓库根已有同名文件时**不写盘**，只回报 exists，由渲染层弹应用内确认再带 force 重来
+  // （欢迎页是用户可自由改写的普通文件，静默覆盖会吃掉用户的编辑）。
+  ipcMain.handle('ws:importWelcomeDoc', (_e, force: unknown) => {
+    const cur = getCurrentVault()
+    if (!cur) return { ok: false, error: '当前没有打开的仓库' }
+    if (!existsSync(cur.rootPath)) return { ok: false, error: '仓库文件夹不存在（可能已被移动或删除）' }
+    const before = getWelcomeDocState(cur.rootPath)
+    if (before.hasHtml && force !== true) return { ok: false, exists: true, hasLegacyMd: before.hasLegacyMd }
+    const r = importWelcomeDoc(cur.rootPath)
+    if (!r.ok) return { ok: false, error: `导入失败：${r.error}` }
+    invalidateKnowledgeIndex()
+    invalidateGraphIndex()
+    return {
+      ok: true,
+      created: !before.hasHtml,
+      // 旧版 欢迎.md（09-08~09-09 窗口期产物）会让知识库列表出现两条「欢迎」，提示用户自行取舍
+      hasLegacyMd: before.hasLegacyMd,
+      relPath: WELCOME_DOC_FILENAME,
+    }
   })
 
   // 移除授权（从 roots 内存与 JSON 登记表）

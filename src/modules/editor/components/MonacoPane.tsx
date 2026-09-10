@@ -3,6 +3,8 @@ import { forwardRef } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 import { bindEditorTheme, applyEditorTheme, setEditorThemeVariant } from '../../../lib/editorTheme'
+// Monaco 运行时装配（worker 注册 + loader 本地化）下沉到宿主组件：不随应用入口进首屏 chunk（性能 2026-09-10）
+import '../../../lib/monaco-setup'
 import { dimMarkdownText, markdownWikiHighlights, wikiTargetTitle, type DimCls } from '../../../lib/markdownDim'
 import { getKnowledgePages } from '../../../lib/ipc'
 import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'

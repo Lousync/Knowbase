@@ -328,6 +328,41 @@ export function renameSessionFolder(sessionId: string, newTitle: string, getSett
 }
 
 /** 查询会话文件夹（渲染层删除确认前探测用） */
+/**
+ * 扫描产物根下所有会话文件夹的 `.session.json` 锚点，收集其中的 sessionId。
+ *
+ * 用途：存量会话的「来源」回填（2026-09-10）。老数据里 AgentSessionRow 没有 source 字段，
+ * 仅靠「是否归属工作区」判不全（未分配工作区的教学会话会被漏掉）——而**有会话文件夹**
+ * 是教学会话的可靠特征（新建对话即建夹，见本文件顶注）。
+ * 深度 ≤3：产物根 → 工作区 → 会话夹 →（SOURCES 等子目录不再下探）。
+ */
+export function listSessionFolderIds(getSetting: (key: string) => unknown): Set<string> {
+  const out = new Set<string>()
+  try {
+    const vault = getCurrentVault()
+    if (!vault) return out
+    const rootAbs = join(vault.rootPath, rootDirName(getSetting))
+    if (!existsSync(rootAbs)) return out
+    const walk = (dir: string, depth: number): void => {
+      if (depth > 3) return
+      const anchor = join(dir, ANCHOR_FILE)
+      if (existsSync(anchor)) {
+        try {
+          const a = JSON.parse(readFileSync(anchor, 'utf-8')) as { sessionId?: string }
+          if (a && a.sessionId) out.add(String(a.sessionId))
+        } catch { /* 锚点损坏 → 跳过该夹 */ }
+      }
+      let entries
+      try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
+      for (const e of entries) {
+        if (e.isDirectory()) walk(join(dir, e.name), depth + 1)
+      }
+    }
+    walk(rootAbs, 0)
+  } catch { /* 扫描失败返回空集：回填退化为「仅按工作区归属」，不影响主流程 */ }
+  return out
+}
+
 export function sessionFolder(sessionId: string, getSetting: (key: string) => unknown): FolderResult {
   const vault = getCurrentVault()
   if (!vault) return { ok: false, relPath: null, error: '尚未打开仓库' }

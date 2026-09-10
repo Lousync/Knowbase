@@ -78,6 +78,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   const raf = useRef(0)
   const lastDataRef = useRef<GraphIndexData | null>(null)
   const propsRef = useRef({ colorBySpaceEnabled, selectedId, labelThreshold: labelThreshold ?? DEFAULT_LABEL_THRESHOLD, data, simOpts })
+  /** 自适应 tick 降频计数（大图单帧 tick 超预算时改为隔帧执行，见 step 内注释） */
+  const tickGate = useRef({ skip: 0 })
   propsRef.current = { colorBySpaceEnabled, selectedId, labelThreshold: labelThreshold ?? DEFAULT_LABEL_THRESHOLD, data, simOpts }
 
   // ---- 世界坐标 ⇄ 屏幕 ----
@@ -290,9 +292,21 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   }, [])
 
   // ---- 帧循环（sim tick + alpha lerp + 相机插值 + 惯性 + 生长/收缩动画；全部收敛后停帧） ----
+  // 自适应 tick 降频（性能 2026-09-10）：这里本就是「每帧最多 tick 一次」，但大图单次 tick
+  // 可能逼近甚至吃掉整个帧预算，连续跑就是肉眼可见的卡顿。改为实测单次耗时，超过半帧
+  // 预算（8ms）即隔帧 tick —— 布局收敛略慢一点，渲染与交互始终有帧可用。
+  // 为什么没搬进 Web Worker：每帧仍需把上千节点坐标克隆回主线程（结构化克隆成本与一次
+  // tick 同量级），且拖拽交互与增量 merge 都要跨线程双向同步状态，净收益为负。
   const step = useCallback((md: Model) => {
     const { sim } = md.world
-    if (sim.alpha() > sim.alphaMin()) sim.tick()
+    if (sim.alpha() > sim.alphaMin()) {
+      if (tickGate.current.skip > 0) tickGate.current.skip--
+      else {
+        const t0 = performance.now()
+        sim.tick()
+        if (performance.now() - t0 > 8) tickGate.current.skip = 1
+      }
+    }
     setTargets(md)
     let alphaMoving = false
     for (const [, n] of md.nodeDa) {

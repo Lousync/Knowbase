@@ -7,11 +7,12 @@ import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
   getMessageById, updateMessageContent, deleteMessage, deleteMessagesAfter,
-  getAgentSession, updateAgentSessionInstructions,
+  getAgentSession, updateAgentSessionInstructions, backfillSessionSources,
 } from './agentSessionRepo'
-import { resolveConstraintsForInjection, readGlobalConstraints } from './aiTeachingFolders'
+import { resolveConstraintsForInjection, readGlobalConstraints, listSessionFolderIds } from './aiTeachingFolders'
 import { resolveSourcesForInjection } from './aiTeachingSources'
 import { resolveProfilesForInjection } from './aiTeachingProfile'
+import { listWorkspaces } from './aiTeachingWorkspaces'
 
 /**
  * 最小 AgentRunner —— 「用户消息 → LLM 决策 → ToolRegistry 执行 → 结果回喂」循环。
@@ -203,6 +204,14 @@ function buildToolsPayload(sessionId?: string): {
   return { payload, nameMap, writeTools, deniedModules, deniedVaultFile, hasOnDemandHidden, skills }
 }
 
+/**
+ * AI 教学场景模板的标题（与渲染层 src/modules/ai-teaching/index.tsx 的 `TEMPLATES[].label` 一致，
+ * 新建会话时标题直接取 label）。仅用于「存量会话来源回填」的历史救济 ——
+ * 会话文件夹机制落地前创建的教学会话既无工作区归属也无文件夹，只能靠标题认。
+ * ⚠️ 渲染层改模板名时要同步这里，否则那批历史会话会重新混进助手列表。
+ */
+const LEGACY_TEACHING_TITLES = new Set(['跟我学（教学）', '深度研读（织网）', '周复盘', '画像诊断'])
+
 const SYSTEM_PROMPT_BASE = [
   '你是本地知识管理应用 Knowbase 内置的 AI 助手。',
   '你可以调用工具读写用户的本地数据（知识库、博客日记、日程待办、习惯打卡、书签、番茄专注统计等）。',
@@ -236,7 +245,7 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, _chatId: st
   // ---- 会话保障 ----
   let sessionId = String(req.sessionId ?? '')
   if (sessionId && !sessionExists(sessionId)) sessionId = ''
-  if (!sessionId) sessionId = createAgentSession().id
+  if (!sessionId) sessionId = createAgentSession('新会话', req.source === 'aiTeaching' ? 'aiTeaching' : 'assistant').id
 
   // ---- 落库用户消息 + 自动标题 ----
   appendAgentMessage(sessionId, 'user', message)
@@ -596,9 +605,45 @@ export function registerAgentHandlers(): void {
       traceJson: typeof row.trace_json === 'string' ? row.trace_json : (row.traceJson ?? null),
     } as T
   }
-  ipcMain.handle('agent:sessions', () => listAgentSessions().map(camelRow))
-  ipcMain.handle('agent:newSession', (_e, title?: string) =>
-    camelRow(createAgentSession(typeof title === 'string' && title.trim() ? title.trim() : '新会话')))
+  /**
+   * 存量会话来源回填（每个进程只跑一次，用内存标记兜底，避免每列一次会话就扫盘）。
+   *
+   * 判据双保险：① 归属过 AI 教学工作区；② 产物根下存在对应的会话文件夹。
+   * 只用 ① 会漏（2026-09-10 用户实测：新建的教学会话已隔离，但历史会话仍混在助手列表里）——
+   * 那批会话未被分配工作区，但**都有会话文件夹**，后者才是可靠特征。
+   *
+   * 两种情况分开处理：有 source 缺省的走初始化；全都有 source 的走**修正模式**
+   * （上一轮用不全的判据跑过，误标的 assistant 需要被改回来）。
+   */
+  let sourceBackfillDone = false
+  const ensureSessionSources = (): void => {
+    if (sourceBackfillDone) return
+    sourceBackfillDone = true
+    try {
+      const rows = listAgentSessions()
+      if (rows.length === 0) return
+      const sessionWs = listWorkspaces(getSettingReader()).sessionWs ?? {}
+      const folderIds = listSessionFolderIds(getSettingReader())
+      const infer = (id: string, title: string): 'aiTeaching' | null => {
+        if (sessionWs[id] || folderIds.has(id)) return 'aiTeaching'
+        // 历史救济：会话文件夹机制落地之前创建的教学会话，既无工作区归属也无文件夹，
+        // 只能靠标题特征识别（标题 = 教学场景模板名，见渲染层 TEMPLATES 的 label）
+        const t = title.trim()
+        if (LEGACY_TEACHING_TITLES.has(t) || /（教学）$/.test(t)) return 'aiTeaching'
+        return null
+      }
+      backfillSessionSources(infer, !rows.some(r => !r.source))
+    } catch { /* 回填失败不影响列表本身 */ }
+  }
+  ipcMain.handle('agent:sessions', () => {
+    ensureSessionSources()
+    return listAgentSessions().map(camelRow)
+  })
+  ipcMain.handle('agent:newSession', (_e, title?: string, source?: string) =>
+    camelRow(createAgentSession(
+      typeof title === 'string' && title.trim() ? title.trim() : '新会话',
+      source === 'aiTeaching' ? 'aiTeaching' : 'assistant',
+    )))
   ipcMain.handle('agent:messages', (_e, id: string) => getAgentMessages(String(id ?? '')).map(camelRow))
   ipcMain.handle('agent:renameSession', (_e, id: string, title: string) => {
     if (typeof id === 'string' && typeof title === 'string' && title.trim()) renameAgentSession(id, title.trim())

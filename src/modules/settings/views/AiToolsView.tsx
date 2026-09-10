@@ -706,13 +706,6 @@ function SkillsTab() {
               {s.disabled && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-500/40 text-[var(--text-disabled)]">已停用</span>
               )}
-              {s.variables.length > 0 && (
-                <span className="flex items-center gap-1 flex-wrap">
-                  {s.variables.map(v => (
-                    <code key={v} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)]">{`{{${v}}}`}</code>
-                  ))}
-                </span>
-              )}
               <label className="ml-auto flex items-center gap-2 cursor-pointer shrink-0" title={s.disabled ? '启用该 Skill' : '停用该 Skill（AI 不再使用，文件保留）'}>
                 <span className="text-[11px] text-[var(--text-muted)]">{s.disabled ? '停用' : '启用'}</span>
                 <SettingSwitch checked={!s.disabled} onChange={() => { void handleToggle(s) }} />

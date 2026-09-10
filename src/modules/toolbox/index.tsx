@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft, Scissors, Eye } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
 import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
 import { WordbookModule } from './components/wordbook'
-import { PdfToolkit } from './components/pdf-toolkit'
+// PdfToolkit 内联 pdfjs（~800KB）：不进首屏，打开该工具时才加载
+// （toolbox 模块本身是静态引入的，切换零延迟；只有这一件含大依赖的工具按需）
+const PdfToolkit = lazy(() => import('./components/pdf-toolkit').then((m) => ({ default: m.PdfToolkit })))
 import { BookmarkNav } from './components/bookmark-nav'
 import { RemoteSupervise } from './components/remote-supervise'
 import { ExportTool } from './components/export/ExportTool'
@@ -214,7 +216,11 @@ export function ToolboxModule({ homeSignal = 0 }: ToolboxModuleProps) {
       case 'wordbook':
         return <WordbookModule onBack={() => setActiveTool(null)} />
       case 'pdf-toolkit':
-        return <PdfToolkit onBack={() => setActiveTool(null)} />
+        return (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">正在加载 PDF 工具…</div>}>
+            <PdfToolkit onBack={() => setActiveTool(null)} />
+          </Suspense>
+        )
       case 'bookmark-nav':
         return <BookmarkNav onBack={() => setActiveTool(null)} />
       case 'data-export':

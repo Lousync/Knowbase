@@ -16,10 +16,13 @@ import { visibleKnowledgeTags } from '../../../lib/knowledgeTags'
 import { ConfirmDialog } from '../../../components/shared'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
+import { WelcomeHtmlView } from './WelcomeHtmlView'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'
 import type * as Monaco from 'monaco-editor'
 import { bindEditorTheme } from '../../../lib/editorTheme'
+// Monaco 运行时装配下沉到宿主组件：不随应用入口进首屏 chunk（性能 2026-09-10）
+import '../../../lib/monaco-setup'
 
 interface Props {
   pageId: string
@@ -86,7 +89,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const [wikiPicker, setWikiPicker] = useState<{ title: string; candidates: KnowledgePage[] } | null>(null)
   // 空链接建页确认(应用内 ConfirmDialog — Electron 原生 confirm 会破坏键盘焦点,禁止使用)
   const [wikiCreateTitle, setWikiCreateTitle] = useState<string | null>(null)
-  const [showBacklinks, setShowBacklinks] = useState(true)
+  /** 右侧「关联网络」（关联 + 反向链接）默认收起：正文优先占满宽度，需要时从右缘点击/拖出再展开。
+   *  仅本地 state（不持久化）——每次打开页面都是收起态，不用去翻上次的开关。 */
+  const [showBacklinks, setShowBacklinks] = useState(false)
   // Toolbar portals: render the editor toolbar into the tab bar row (merged layer 1 + 2)
   const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
@@ -115,6 +120,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   const isCodeFile = fileType !== '' && fileType !== 'md' && fileType !== 'txt' && fileType !== 'pdf' && fileType !== 'xmind'
   const isPdfFile = fileType === 'pdf' || fileType === 'xmind'
   const isXmindFile = fileType === 'xmind'
+  /** 欢迎页（唯一放行 HTML 渲染的知识页，主进程 kbview 白名单只收仓库根同名文件）：
+   *  走沙箱 iframe 整页渲染，不入 Monaco / MarkdownPreview，也不参与收藏等文件重写通道 */
+  const isWelcomeHtml = fileType === 'html' && (page?.path ?? '') === '欢迎.html'
 
   useEffect(() => { contentRef.current = content }, [content])
   useEffect(() => { pageIdRef.current = pageId }, [pageId])
@@ -204,7 +212,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       vaultModeRef.current ? Promise.resolve(setManualLinks([])) : getKnowledgeManualLinks(pageId).then(setManualLinks),
       getKnowledgeTags().then(setAllTags)
     ])
-    setShowBacklinks(true)  // reset when switching pages
+    // 原来这里无条件 setShowBacklinks(true)（"切换页面时重置"），导致默认收起形同虚设：
+    // 每次打开/切换页面都被强行打开。改为不动它——由用户当前开关状态决定，
+    // 关着就一直关着、开着就保持开着（同一编辑器实例在标签间切换时状态自然延续）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageId])
 
@@ -717,11 +727,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             {showMoreMenu && (
               <div className="absolute top-full right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl z-50 w-44 py-1"
                 onMouseLeave={() => setShowMoreMenu(false)}>
-                <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                  <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? 'currentColor' : 'none'} />
-                  {page.isStarred ? '取消收藏' : '收藏页面'}
-                </button>
+                {/* 欢迎页不走 frontmatter 收藏（会毁掉整页 HTML，主进程同样拒绝） */}
+                {!isWelcomeHtml && (
+                  <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
+                    <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? 'currentColor' : 'none'} />
+                    {page.isStarred ? '取消收藏' : '收藏页面'}
+                  </button>
+                )}
                 {!vaultMode && (
                   <button onClick={() => { setShowBacklinks(true); setLinkPickerOpen(true); setShowMoreMenu(false) }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
@@ -759,7 +772,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 注解层：非 md/txt 页面的通用备注条（支持 [[双链]]，自动入图） */}
-        {fileType !== 'md' && fileType !== 'txt' && (
+        {fileType !== 'md' && fileType !== 'txt' && !isWelcomeHtml && (
           <div className="shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
             <button onClick={() => setShowAnnotation(o => !o)}
               className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
@@ -846,13 +859,15 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 <FileText size={64} className="opacity-20" />
                 <p className="text-sm">PDF 文档将使用本地工具打开</p>
                 <button onClick={openPdfExternal}
-                  className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors">
+                    className="flex items-center gap-2 px-4 py-2 text-[13px] bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)] transition-colors">
                   <ExternalLink size={15} />
                   使用本地工具打开
                 </button>
               </div>
             )}
           </div>
+        ) : isWelcomeHtml && page?.path ? (
+          <WelcomeHtmlView path={page.path} />
         ) : preview ? (
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <h1 className="text-xl font-bold text-[var(--text-primary)] mb-3">{title}</h1>

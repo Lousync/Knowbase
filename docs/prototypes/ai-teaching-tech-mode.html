@@ -175,6 +175,7 @@
   .run-status { font-size: 11.5px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
   .run-status.ok { color: var(--success); font-weight: 600; }
   .run-status.bad { color: var(--danger); font-weight: 600; }
+  .run-status.warn { color: var(--warn); font-weight: 600; }
 
   .hint-box { flex-shrink: 0; border-top: 1px dashed var(--border); background: #fffdf5; padding: 10px 14px; font-size: 12px; line-height: 1.75; color: var(--text-2); display: none; }
   .hint-box.on { display: block; }
@@ -190,6 +191,25 @@
   .paste-box textarea { width: 100%; height: 62px; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-primary); color: var(--text-1); resize: vertical; outline: none; }
   .paste-box textarea:focus { border-color: var(--accent-line); }
   .basis { margin-top: 7px; padding-top: 6px; border-top: 1px dashed var(--border-soft); font-size: 11.5px; color: var(--text-3); }
+
+  .ladder { padding: 0 12px 12px; }
+  .ladder-btn { display: block; width: 100%; text-align: left; font-family: inherit; font-size: 11.5px; color: var(--accent); background: none; border: 1px dashed var(--accent-line); border-radius: 7px; padding: 7px 10px; cursor: pointer; margin-top: 6px; }
+  .ladder-btn:hover { background: var(--accent-soft); }
+  .ladder-item { margin-top: 8px; padding: 1px 0 1px 10px; border-left: 2px solid var(--accent-line); animation: fade .28s ease; }
+  .ladder-head { font-size: 11.5px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
+  .ladder-body { font-size: 12px; line-height: 1.75; color: var(--text-2); }
+  .ladder-body code { font-family: var(--mono); font-size: 11.5px; background: var(--bg-secondary); padding: 0 4px; border-radius: 3px; color: var(--text-1); }
+  .ladder-body b { color: var(--text-1); font-weight: 600; }
+
+  .oj-result { padding: 0 12px 14px; }
+  .oj-tip { font-size: 11.5px; color: var(--text-3); line-height: 1.7; margin-bottom: 9px; }
+  .oj-tip b { color: var(--text-2); font-weight: 600; }
+  .oj-opts { display: flex; gap: 6px; }
+  .oj-opts button { flex: 1; font-family: inherit; font-size: 11.5px; padding: 6px 0; border-radius: 7px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-2); cursor: pointer; }
+  .oj-opts button:hover { background: var(--bg-hover); color: var(--text-1); }
+  .oj-opts button.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .oj-opts button[data-res="pass"].on { border-color: rgba(45,164,78,.45); background: var(--success-soft); color: var(--success); }
+  .oj-opts button[data-res="fail"].on { border-color: rgba(207,34,46,.35); background: var(--danger-soft); color: var(--danger); }
 
   .run-guide { flex-shrink: 0; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; background: #f8f9fb; border-bottom: 1px solid var(--border-soft); font-size: 11.5px; color: var(--text-3); }
   .run-guide .rg-k { flex-shrink: 0; }
@@ -217,20 +237,22 @@
   .rsec-head .badge { margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bg-secondary); color: var(--text-3); }
   .rsec-head .badge.ok { background: var(--success-soft); color: var(--success); }
   .rsec-head .badge.bad { background: var(--danger-soft); color: var(--danger); }
+  .rsec-head .badge.warn { background: var(--warn-soft); color: var(--warn); }
   .tests { padding: 0 12px 12px; }
   .tests .empty { font-size: 11.5px; color: var(--text-3); line-height: 1.7; padding: 2px 0 4px; }
   .tcase { display: flex; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--border-soft); animation: fade .28s ease; }
   .tcase:last-child { border-bottom: none; }
   .tcase .mk { width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9.5px; margin-top: 1px; }
-  .tcase.pass .mk { background: var(--success-soft); color: var(--success); }
-  .tcase.fail .mk { background: var(--danger-soft); color: var(--danger); }
+  .tcase.warn .mk { background: var(--warn-soft); color: var(--warn); }
+  .tcase.info .mk { background: var(--bg-secondary); color: var(--text-3); }
   .tcase.pend .mk { background: var(--bg-secondary); color: var(--text-3); }
   .tcase-body { min-width: 0; flex: 1; }
   .tcase-body .lb { font-size: 11.5px; color: var(--text-2); font-family: var(--mono); word-break: break-all; line-height: 1.5; }
-  .tcase.fail .tcase-body .lb { color: var(--text-1); }
-  .tcase-body .dt { font-size: 11px; color: var(--text-3); margin-top: 3px; font-family: var(--mono); word-break: break-all; }
-  .tcase-body .dt b { color: var(--danger); font-weight: 600; }
-  .tcase-body .dt i { font-style: normal; color: var(--success); }
+  .tcase.warn .tcase-body .lb { color: var(--text-1); }
+  .tcase-body .dt { font-size: 11px; color: var(--text-3); margin-top: 3px; line-height: 1.6; }
+  .tcase-body .dt code { font-family: var(--mono); background: var(--bg-secondary); padding: 0 3px; border-radius: 3px; }
+  .tcase-body .dt em { font-style: normal; color: var(--warn); font-weight: 600; font-family: var(--mono); }
+  .tcase-body .dt i { font-style: normal; color: var(--text-2); font-family: var(--mono); }
   @keyframes fade { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 
   .critique { padding: 0 12px 14px; font-size: 12px; line-height: 1.75; color: var(--text-3); }
@@ -384,13 +406,14 @@
                 <textarea id="pasteInput" spellcheck="false" placeholder="粘贴终端输出或报错信息，例如：&#10;PASS ./two-sum.test.js&#10;  ✓ 4 passed"></textarea>
               </div>
               <div class="ed-actions">
-                <button class="btn primary" id="runBtn">提交评审</button>
+                <button class="btn primary" id="runBtn">看代码诊断</button>
                 <button class="btn" id="hintBtn">提示 0 / 3</button>
-                <button class="btn" id="resetBtn">重置</button>
-                <button class="btn" id="pasteBtn">贴上运行输出</button>
+                <button class="btn flat" id="pasteBtn">贴上运行输出</button>
+                <button class="btn flat" id="resetBtn">重置</button>
                 <button class="btn flat" id="openEditor">在 IDE 中打开 ↗</button>
+                <button class="btn flat" id="openOj">去 OJ 判定 ↗</button>
                 <span class="sp"></span>
-                <span class="run-status" id="runStatus">未提交</span>
+                <span class="run-status" id="runStatus">未诊断</span>
               </div>
             </div>
           </div>
@@ -415,14 +438,26 @@
     <!-- 右栏 -->
     <div class="rightbar">
       <div class="rsec tech-only">
-        <div class="rsec-head">评审结果 <span class="badge" id="passBadge">未提交</span></div>
+        <div class="rsec-head">代码诊断 <span class="badge" id="passBadge">未诊断</span></div>
         <div class="tests" id="tests">
-          <div class="empty">提交后，AI 会逐条对照测试用例评审你的代码。<b>Knowbase 不执行任何代码</b> —— 请先在本地 IDE 里运行验证。</div>
+          <div class="empty">点「看代码诊断」后，AI 会读完你的代码，列出<b>值得注意的地方</b>。<br><br>注意：AI 只提示、<b>不下对错结论</b> —— 题面与判定都来自 OJ。</div>
         </div>
       </div>
       <div class="rsec tech-only">
         <div class="rsec-head">AI 点评</div>
-        <div class="critique" id="critique">提交评审后，这里给出针对性点评与下一步建议。</div>
+        <div class="critique" id="critique">诊断之后，这里可按需逐层展开：诊断细节 → 引导 → 延伸。</div>
+        <div class="ladder" id="ladder"></div>
+      </div>
+      <div class="rsec tech-only">
+        <div class="rsec-head">本题结果 <span class="badge" id="resBadge">未记录</span></div>
+        <div class="oj-result">
+          <div class="oj-tip">在 OJ 上提交后回来记一笔 —— 这是技能树与复习队列的<b>唯一数据来源</b>。</div>
+          <div class="oj-opts" id="ojOpts">
+            <button data-res="pass">通过了</button>
+            <button data-res="peek">看了题解</button>
+            <button data-res="fail">没做出来</button>
+          </div>
+        </div>
       </div>
       <div class="rsec">
         <div class="rsec-head">素材库</div>
@@ -459,6 +494,12 @@
       eg: 'twoSum([2,7,11,15], 9) → <em>[0,1]</em>',
       file: 'two-sum.js',
       run: { cmd: 'node two-sum.js', expect: '4 行，末尾依次为 [0,1] [1,2] [0,1] [2,3]' },
+      layers: {
+        diagFail: '看第 6 行：<code>seen.set(nums[i], i)</code> 写在判断<b>之前</b>了 —— <code>[3,2,4]</code> 的第 1 个元素刚入库，<code>seen.has(3)</code> 立刻为真，它匹配到了自己。顺序应该是<b>先查后存</b>：先问「我要的那一半来过没有」，问完再把自己登记进去。',
+        diagPass: '关键在「<b>先查后存</b>」：遍历到 <code>nums[i]</code> 时，先问 <code>target - nums[i]</code> 来过没有，再把自己登记进去。顺序颠倒就会匹配到自己。',
+        guide: '下次遇到「找两个东西满足某个关系」，先问自己一句：能不能把「遍历」和「查找」拆开，让查找落到一个能在 O(1) 里回答「有没有」的结构上？',
+        extend: '<b>复杂度</b>：时间 O(n)，每个元素只进 Map 一次；空间 O(n)。<br><b>另一种思路</b>：数组若已有序，双指针能做到空间 O(1) —— 但代价是先排序，整体仍是 O(n log n)，所以本题哈希表更优。'
+      },
       starter: [
         'function twoSum(nums, target) {',
         '  const seen = new Map()',
@@ -499,6 +540,12 @@
       eg: 'isValid("()[]{}") → <em>true</em>　　isValid("([)]") → <em>false</em>',
       file: 'is-valid.js',
       run: { cmd: 'node is-valid.js', expect: '6 行，依次为 true true false false true true' },
+      layers: {
+        diagFail: '两处最容易漏：① 遇到右括号时若栈已空，<code>stack.pop()</code> 返回 <code>undefined</code>，必须先判空；② 遍历结束后必须确认栈为空，否则 <code>"(("</code> 这种会被误判成有效。',
+        diagPass: '核心是「最近一个还没闭合的左括号」—— 正好是后进先出，所以用栈。两个边界必须单独处理：栈空时遇到右括号、遍历完栈里还剩东西。',
+        guide: '碰到「配对」「嵌套」「最近的」这类字眼，先想后进先出的结构。另外记一句：凡是用栈的题，都要单独检查「栈空时操作」和「结束时栈不空」这两个边界。',
+        extend: '<b>复杂度</b>：时间 O(n)，空间 O(n)（最坏情况全是左括号）。<br><b>另一种思路</b>：反复 <code>replace</code> 消掉成对括号直到长度不变也能做，但那是 O(n²)。<br><b>同类题</b>：括号生成、逆波兰表达式求值。'
+      },
       starter: [
         'function isValid(s) {',
         '  // 从零实现：想一想「最近一个还没闭合的左括号」该怎么记',
@@ -533,6 +580,8 @@
   var runStatus = $('runStatus'), testsBox = $('tests'), passBadge = $('passBadge');
   var critique = $('critique'), hintBox = $('hintBox');
   var pasteBox = $('pasteBox'), pasteInput = $('pasteInput'), pasteBtn = $('pasteBtn');
+  var ladderEl = $('ladder'), ladderItems = [], ladderIdx = 0;
+  var ojOpts = $('ojOpts'), resBadge = $('resBadge');
   var cur = 0, hintLevel = 0, running = false, lastRunUsedHint = 0, solved = [];
 
   /* ============ 高亮 ============ */
@@ -626,50 +675,72 @@
   }
 
   function paintCase(t, i) {
-    var ok = t.ok;
-    var cls = ok ? 'pass' : 'fail';
-    var mark = ok ? '✓' : '✕';
-    var dt = '';
-    if (!ok) {
-      dt = '<div class="dt">预期 <i>' + esc(fmt(t.expect)) + '</i>　判定实际 <b>' + esc(fmt(t.actual)) + '</b></div>';
-    } else {
-      dt = '<div class="dt">预期 ' + esc(fmt(t.expect)) + '　·　判定一致</div>';
-    }
+    var warn = !t.ok;
+    var cls = warn ? 'warn' : 'info';
+    var mark = warn ? '!' : '·';
+    var dt = warn
+      ? '<div class="dt">可能返回 <em>' + esc(fmt(t.actual)) + '</em>，题面示例给的是 <i>' + esc(fmt(t.expect)) + '</i></div>'
+      : '<div class="dt">这组没看出问题</div>';
     return '<div class="tcase ' + cls + '"><div class="mk">' + mark + '</div><div class="tcase-body"><div class="lb">' + esc(t.label) + '</div>' + dt + '</div></div>';
   }
 
   function paintPending(p) {
     return p.tests.map(function (t) {
-      return '<div class="tcase pend"><div class="mk">·</div><div class="tcase-body"><div class="lb">' + esc(t.label) + '</div><div class="dt">待评审</div></div></div>';
+      return '<div class="tcase pend"><div class="mk">·</div><div class="tcase-body"><div class="lb">' + esc(t.label) + '</div><div class="dt">待检查</div></div></div>';
     }).join('');
   }
 
   function critiqueText(p, pass, total, usedHints, compileErr) {
     if (compileErr) {
-      return '<span class="tag">语法问题</span>AI 在评审时发现这段代码无法通过解析，说明有语法错误：<br><code>' + esc(compileErr) + '</code><br><br>先解决这一处，再重新提交。';
+      return '<span class="tag">语法问题</span>代码没能通过解析，先解决语法错误再看结果。';
     }
     if (pass === total) {
-      if (usedHints >= 3) {
-        return '<span class="tag">通过 · 依赖答案</span>这次是在看完整实现后完成的，属于「认出来了」而不是「想出来了」。建议 24 小时后把提示关掉再做一遍 —— 我会把它放进复习队列。';
-      }
-      if (usedHints > 0) {
-        return '<span class="tag ok">通过</span>用了 ' + usedHints + ' 级提示后做对，说明方向已经抓住。下一步建议把 <code>' + p.skill + '</code> 的复杂度分析自己讲一遍：为什么查找是 O(1)？';
-      }
-      return '<span class="tag ok">通过 · 零提示</span>全部用例一次通过，且没有用任何提示。' + p.skill + ' 这块可以往下推了 —— 点底部「下一题」进到第 2 题。';
+      return '<span class="tag ok">没看出问题</span>AI 读完了你的代码，没发现明显问题 —— <b>但这不是判定</b>，请去 OJ 提交确认。';
     }
-    if (pass === 0) {
-      return '<span class="tag">未通过</span>先别改代码 —— 看看右栏哪条用例挂了，用 <b>那组具体输入</b>在脑子里走一遍你的循环。想不出来再点提示，我一次只给一级。';
-    }
-    return '<span class="tag">部分通过</span>' + pass + '/' + total + ' 条过了，主路径逻辑是对的，但边界没兜住。先别改代码 —— 回到右栏看挂掉的那几条，用它的<b>具体输入</b>在脑子里走一遍你的循环，想不通再点提示。';
+    return '<span class="tag">' + (total - pass) + ' 处值得注意</span>AI 只做提示、<b>不下对错结论</b>。往下展开一层看具体位置。';
   }
 
   function paintCritique(p, pass, total, usedHints, compileErr) {
     critique.className = 'critique on';
     var hasPaste = pasteInput.value.trim().length > 0;
-    var basis = '<div class="basis">判定依据：'
-      + (hasPaste ? '你贴回的真实运行输出 + AI 代码评审' : 'AI 代码评审 · 贴上运行输出可提高准确度')
-      + '</div>';
+    var basis = '<div class="basis">诊断依据：'
+      + (hasPaste ? '你贴回的真实运行输出 + AI 读代码' : 'AI 读代码 · 贴上运行输出可提高准确度')
+      + '　·　判定以 OJ 为准</div>';
     critique.innerHTML = critiqueText(p, pass, total, usedHints, compileErr) + basis;
+    renderLadder(p, pass, total, compileErr);
+  }
+
+  /* ============ 评审阶梯（四层按需逐层展开） ============ */
+  function renderLadder(p, pass, total, compileErr) {
+    ladderItems = [];
+    ladderIdx = 0;
+    ladderEl.innerHTML = '';
+    var allPass = !compileErr && pass === total;
+    ladderItems.push({
+      label: allPass ? '回顾 · 这题的关键' : '诊断 · 错在哪',
+      body: allPass ? p.layers.diagPass : p.layers.diagFail
+    });
+    ladderItems.push({ label: '引导 · 下一步该想什么', body: p.layers.guide });
+    ladderItems.push({ label: '延伸 · 复杂度与别的解法', body: p.layers.extend });
+    addLadderBtn();
+  }
+
+  function addLadderBtn() {
+    var it = ladderItems[ladderIdx];
+    if (!it) return;
+    var b = document.createElement('button');
+    b.className = 'ladder-btn';
+    b.textContent = it.label + '　▾';
+    b.addEventListener('click', function () {
+      b.parentNode.removeChild(b);
+      var d = document.createElement('div');
+      d.className = 'ladder-item';
+      d.innerHTML = '<div class="ladder-head">' + it.label + '</div><div class="ladder-body">' + it.body + '</div>';
+      ladderEl.appendChild(d);
+      ladderIdx++;
+      addLadderBtn();
+    });
+    ladderEl.appendChild(b);
   }
 
   /* ============ 提交 ============ */
@@ -678,21 +749,21 @@
     running = true;
     var p = PROBLEMS[cur];
     runBtn.disabled = true;
-    runBtn.textContent = '评审中…';
+    runBtn.textContent = '诊断中…';
     runStatus.className = 'run-status';
-    runStatus.textContent = 'AI 正在逐条对照用例评审…';
+    runStatus.textContent = 'AI 正在读你的代码…';
     testsBox.innerHTML = paintPending(p);
     passBadge.className = 'badge';
-    passBadge.textContent = '评审中';
+    passBadge.textContent = '诊断中';
 
     var out = judge(input.value, p);
     setTimeout(function () {
       if (out.compileError) {
-        testsBox.innerHTML = '<div class="tcase fail"><div class="mk">✕</div><div class="tcase-body"><div class="lb">代码无法解析</div><div class="dt">' + esc(out.compileError) + '</div></div></div>';
-        passBadge.className = 'badge bad';
-        passBadge.textContent = '0 / ' + p.tests.length;
-        runStatus.className = 'run-status bad';
-        runStatus.textContent = '✕ 代码有语法问题';
+        testsBox.innerHTML = '<div class="tcase warn"><div class="mk">!</div><div class="tcase-body"><div class="lb">代码无法解析</div><div class="dt">' + esc(out.compileError) + '</div></div></div>';
+        passBadge.className = 'badge warn';
+        passBadge.textContent = '1 处';
+        runStatus.className = 'run-status warn';
+        runStatus.textContent = '! 代码没法通过解析';
         paintCritique(p, 0, p.tests.length, hintLevel, out.compileError);
         finishRun();
         return;
@@ -701,17 +772,14 @@
       testsBox.innerHTML = '';
       (function step() {
         if (i >= out.results.length) {
-          var all = pass === out.results.length;
-          passBadge.className = 'badge ' + (all ? 'ok' : 'bad');
-          passBadge.textContent = pass + ' / ' + out.results.length;
-          runStatus.className = 'run-status ' + (all ? 'ok' : 'bad');
-          runStatus.textContent = all ? '✓ 全部通过' : '✕ ' + (out.results.length - pass) + ' 条未通过';
+          var warnCount = out.results.length - pass;
+          passBadge.className = 'badge ' + (warnCount ? 'warn' : 'ok');
+          passBadge.textContent = warnCount ? warnCount + ' 处' : '无异常';
+          runStatus.className = 'run-status ' + (warnCount ? 'warn' : 'ok');
+          runStatus.textContent = warnCount ? '! ' + warnCount + ' 处值得注意' : '✓ 没看出问题';
           paintCritique(p, pass, out.results.length, hintLevel, null);
-          if (all) {
-            solved[cur] = true;
-            lastRunUsedHint = hintLevel;
-            bumpSkill(p.skill, p.gain);
-            $('footHint').textContent = '评审通过 · 技能树已更新（' + p.skill + ' +' + p.gain + '%）';
+          if (!warnCount) {
+            $('footHint').textContent = 'AI 没看出问题 —— 但这不算通过，去 OJ 提交才算';
           }
           finishRun();
           return;
@@ -726,7 +794,7 @@
   function finishRun() {
     running = false;
     runBtn.disabled = false;
-    runBtn.textContent = '重新提交';
+    runBtn.textContent = '重新诊断';
   }
 
   /* ============ 技能树 ============ */
@@ -775,14 +843,18 @@
     pasteBtn.textContent = '贴上运行输出';
     hintBtn.textContent = '提示 0 / ' + p.hints.length;
     hintBtn.className = 'btn';
-    runBtn.textContent = '提交评审';
+    runBtn.textContent = '看代码诊断';
     runStatus.className = 'run-status';
-    runStatus.textContent = '未提交';
+    runStatus.textContent = '未诊断';
     passBadge.className = 'badge';
-    passBadge.textContent = '未提交';
-    testsBox.innerHTML = '<div class="empty">提交后，AI 会逐条对照测试用例评审你的代码。<b>Knowbase 不执行任何代码</b> —— 请先在本地 IDE 里运行验证。</div>';
+    passBadge.textContent = '未诊断';
+    testsBox.innerHTML = '<div class="empty">点「看代码诊断」后，AI 会读完你的代码，列出<b>值得注意的地方</b>。<br><br>注意：AI 只提示、<b>不下对错结论</b> —— 题面与判定都来自 OJ。</div>';
+    setOjResult(null);
     critique.className = 'critique';
-    critique.textContent = '提交评审后，这里给出针对性点评与下一步建议。';
+    critique.textContent = '诊断之后，这里可按需逐层展开：诊断细节 → 引导 → 延伸。';
+    ladderEl.innerHTML = '';
+    ladderItems = [];
+    ladderIdx = 0;
 
     $('qNo').textContent = '练习 ' + p.no + ' / ' + p.total;
     $('qLevel').textContent = p.level;
@@ -859,6 +931,41 @@
   });
   $('openEditor').addEventListener('click', function () {
     runStatus.textContent = '→ 已在编辑器中打开落盘文件，本地运行请用你自己的 IDE';
+  });
+  $('openOj').addEventListener('click', function () {
+    runStatus.className = 'run-status';
+    runStatus.textContent = '→ 已在浏览器打开 OJ 题目页，提交后回来记一笔结果';
+  });
+
+  /* ============ 本题结果（技能树与复习队列的唯一数据来源） ============ */
+  var OJ_LABEL = { pass: '通过了', peek: '看了题解', fail: '没做出来' };
+
+  function setOjResult(res) {
+    [].forEach.call(ojOpts.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-res') === res);
+    });
+    if (!res) {
+      resBadge.className = 'badge';
+      resBadge.textContent = '未记录';
+      return;
+    }
+    resBadge.className = 'badge ' + (res === 'pass' ? 'ok' : res === 'fail' ? 'bad' : 'warn');
+    resBadge.textContent = OJ_LABEL[res];
+  }
+
+  ojOpts.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-res]');
+    if (!b) return;
+    var res = b.getAttribute('data-res');
+    setOjResult(res);
+    var p = PROBLEMS[cur];
+    var gain = res === 'pass' ? p.gain : res === 'peek' ? Math.round(p.gain * 0.35) : Math.round(p.gain * 0.1);
+    bumpSkill(p.skill, gain);
+    $('footHint').textContent = res === 'pass'
+      ? '已记录「通过」· 技能树 ' + p.skill + ' +' + gain + '%'
+      : res === 'peek'
+        ? '已记录「看了题解」· 已进复习队列，技能树小幅 +' + gain + '%'
+        : '已记录「没做出来」· 已进复习队列，下次优先重做';
   });
   pasteBtn.addEventListener('click', function () {
     pasteBox.classList.toggle('on');

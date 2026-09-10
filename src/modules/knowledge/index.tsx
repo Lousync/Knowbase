@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon, ArrowUp } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
+import { WelcomeHtmlView } from './components/WelcomeHtmlView'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
@@ -24,7 +25,9 @@ import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
 import { SpacePanel } from './components/SpacePanel'
-import { PageEditor } from './components/PageEditor'
+// Monaco 宿主单独 lazy：PageEditor 内联了 @monaco-editor/react，而 monaco 主包 8.3MB
+// 绝不能进首屏。知识库模块本身是静态引入的（切换零延迟），只有编辑器这一块按需加载。
+const PageEditor = lazy(() => import('./components/PageEditor').then((m) => ({ default: m.PageEditor })))
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { GraphView } from './components/graph/GraphView'
 import { QuizCollection } from './components/QuizCollection'
@@ -127,20 +130,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   }, [])
   useEffect(() => { void loadPluginViews() }, [loadPluginViews])
 
-  // AI 助手上下文：当前打开的页面（供全局侧栏"边看边问"）
-  useEffect(() => {
-    return registerAssistantContext(() => {
-      const pid = activePageIdRef.current
-      if (!pid) return null
-      const p = allPages.find(x => x.id === pid)
-      if (!p) return null
-      return {
-        type: 'knowledge.page',
-        label: `知识库页面「${p.title || '无标题'}」`,
-        data: { id: p.id, title: p.title, contentMd: (p.contentMd || '').slice(0, 8000) },
-      }
-    })
-  }, [allPages])
+  // AI 助手上下文（当前打开的页面 → 供全局侧栏「边看边问」）注册在下方 readingPage 声明之后：
+  // 正文来源需要读到阅读页，而 effect 的依赖数组无法引用尚未声明的变量。
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -452,7 +443,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       const p = await getKnowledgePageById(id)
       if (!p) return
       const ft = (p.fileType || 'md').toLowerCase()
-      if (ft !== 'md' && ft !== 'txt') {
+      // html（欢迎页）也可沉浸阅读：整页 iframe，阅读布局分支见下方渲染
+      if (ft !== 'md' && ft !== 'txt' && ft !== 'html') {
         showToast({ type: 'warning', message: '沉浸阅读仅支持 md / txt 页面' })
         return
       }
@@ -473,6 +465,24 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     } catch (e) { console.error(e) }
   }, [])
 
+  // AI 助手上下文：当前打开的页面（供全局侧栏「边看边问」）
+  // 正文来源（性能 2026-09-10）：列表接口已改为只回骨架，正文改从「沉浸阅读页」或
+  // 「编辑器实时内容」取——这两者正是用户当下真正在看/在改的文本。
+  useEffect(() => {
+    return registerAssistantContext(() => {
+      const pid = activePageIdRef.current
+      if (!pid) return null
+      const p = allPages.find(x => x.id === pid)
+      if (!p) return null
+      const content = (readingPage && readingPage.id === pid ? readingPage.contentMd : '') || liveContent || ''
+      return {
+        type: 'knowledge.page',
+        label: `知识库页面「${p.title || '无标题'}」`,
+        data: { id: p.id, title: p.title, contentMd: content.slice(0, 8000) },
+      }
+    })
+  }, [allPages, readingPage, liveContent])
+
   /** 图谱卡片「在阅读器中打开」：从图谱直接进入该页沉浸阅读（先退图谱覆盖层） */
   const openPageInReader = useCallback(async (pageId: string) => {
     try {
@@ -483,7 +493,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         return
       }
       const ft = (p.fileType || 'md').toLowerCase()
-      if (ft !== 'md' && ft !== 'txt') { showToast({ type: 'warning', message: '沉浸阅读仅支持 md / txt 页面' }); return }
+      if (ft !== 'md' && ft !== 'txt' && ft !== 'html') { showToast({ type: 'warning', message: '沉浸阅读仅支持 md / txt 页面' }); return }
       setGraphMode(false)
       setReadingPage(p)
       setReadingMode(true)
@@ -738,8 +748,9 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleExportPage = useCallback(async (pageId: string) => {
     try {
-      const page = await getKnowledgePageById(pageId) ?? allPages.find(p => p.id === pageId)
-      if (!page) { showToast({ type: 'error', message: '页面不存在' }); return }
+      // 性能 2026-09-10：列表骨架不再携带正文，导出必须走单页接口，否则会写出空文件
+      const page = await getKnowledgePageById(pageId)
+      if (!page) { showToast({ type: 'error', message: '页面不存在或为草稿，无法导出' }); return }
 
       // Determine file extension from fileType
       const ext = page.fileType || 'md'
@@ -757,7 +768,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       console.error(e)
       showToast({ type: 'error', message: '导出失败' })
     }
-  }, [allPages])
+  }, [])
 
   // --- drag & drop move ---
   /** 仓库内移动文件/目录（目录即分类：知识库拖拽 = 移动磁盘文件，编辑器是唯一写入方；ws:rename 已触发索引失效） */
@@ -795,6 +806,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const movePageToCategory = useCallback(async (pageId: string, targetCategoryId: string | null): Promise<boolean> => {
     const p = allPages.find((x) => x.id === pageId)
     if (!p?.path) { showToast({ type: 'warning', message: '该页面暂无仓库文件路径，请在编辑器模块中移动' }); return false }
+    // 欢迎页固定在仓库根（kbview:// 白名单只收根同名文件，索引也只扫根）——移走即从知识库消失
+    if ((p.fileType || '').toLowerCase() === 'html' && p.path === '欢迎.html') {
+      showToast({ type: 'warning', message: '「欢迎」需保留在仓库根，不能移动；要改内容请在编辑器里直接编辑它' })
+      return false
+    }
     if (!vaultReadonly) { // sqlite 过渡期：沿用改分类归属
       try { await updateKnowledgePage(pageId, { categoryId: targetCategoryId }); return true }
       catch { showToast({ type: 'error', message: '移动失败' }); return false }
@@ -1029,9 +1045,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     return [...allLoosePages, ...chapterPages, ...starredPages].find(p => p.id === activePageId) ?? null
   }, [activePageId, allLoosePages, chapterPages, starredPages])
   const outlineHeadings = useMemo(() => {
-    const md = liveContent || activePageForOutline?.contentMd || ''
+    // 性能 2026-09-10：列表骨架不再携带正文，改为从阅读页取（编辑器态由 liveContent 兜底）
+    const md = liveContent || (readingPage && readingPage.id === activePageId ? readingPage.contentMd : '') || ''
     return parseHeadings(md)
-  }, [liveContent, activePageForOutline?.contentMd])
+  }, [liveContent, readingPage, activePageId])
 
   // 搜索定位到分类/笔记本（展开树并滚动到目标）
   const handleLocateCategory = useCallback((categoryId: string) => {
@@ -1201,6 +1218,18 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     return () => { alive = false }
   }, [isActive, knownWikiTitles])
 
+  // onWikiLink 稳定化（性能 2026-09-10）：原先以内联箭头传入 MarkdownPreview，每次渲染都是
+  // 新函数引用 → 组件的 React.memo 恒失效、正文被反复重解析（模块内任意 setState 都会命中）。
+  const handleReadingWikiLink = useCallback((t: string) => {
+    if (draftWikiTitles.has(t)) {
+      showToast({ type: 'warning', message: `「${t}」为草稿，归档后可阅读` })
+      return
+    }
+    const hit = allPages.find(p => p.title === t)
+    if (hit) void openInReading(hit.id)
+    else showToast({ type: 'warning', message: `未找到「${t}」` })
+  }, [draftWikiTitles, allPages, openInReading])
+
   return (
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full flex-col bg-[var(--bg-primary)]">
@@ -1221,6 +1250,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               </div>
             </div>
 
+            {readingPage && (readingPage.fileType || '').toLowerCase() === 'html' ? (
+              /* 欢迎页（唯一放行的 HTML）：整页沙箱渲染，不走 720px 阅读排版 */
+              <WelcomeHtmlView path={readingPage.path || '欢迎.html'} />
+            ) : (
             <div className="h-full overflow-y-auto">
               <div className="max-w-[720px] mx-auto px-10 py-14" style={{ fontSize: '15px', lineHeight: 1.9 }}>
                 <h1 className="text-[26px] font-bold leading-snug mb-6">{readingPage?.title || '无标题'}</h1>
@@ -1262,19 +1295,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                     pageTitle={readingPage.title}
                     knownWikiTitles={knownWikiTitles}
                     draftWikiTitles={draftWikiTitles}
-                    onWikiLink={t => {
-                      if (draftWikiTitles.has(t)) {
-                        showToast({ type: 'warning', message: `「${t}」为草稿，归档后可阅读` })
-                        return
-                      }
-                      const hit = allPages.find(p => p.title === t)
-                      if (hit) void openInReading(hit.id)
-                      else showToast({ type: 'warning', message: `未找到「${t}」` })
-                    }}
+                    onWikiLink={handleReadingWikiLink}
                   />
                 )}
               </div>
             </div>
+            )}
             <div className="absolute bottom-4 right-5 text-[10px] text-[var(--text-disabled)] select-none pointer-events-none">
               沉浸阅读 · Esc 退出
             </div>
@@ -1523,25 +1549,27 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               onOpenInReader={(id) => void openPageInReader(id)}
             />
           ) : activePageId ? (
-            <PageEditor
-              pageId={activePageId}
-              categories={categories}
-              allPages={allPages}
-              zoom={zoom}
-              onBack={handleBackToList}
-              onDeleted={() => handlePageDeleted(activePageId)}
-              onNavigate={handleOpenPage}
-              onUpdate={handleRefresh}
-              onTitleChange={handleTitleChange}
-              onFileTypeChange={handleFileTypeChange}
-              onContentChange={setLiveContent}
-              onTagsChange={handleSearchRefresh}
-              onMarkDirty={handleMarkDirty}
-              onClearDirty={handleClearDirty}
-              onRequestReading={enterReading}
-              vaultMode={true} // R6 D9 后恒 vault
-              onOpenInEditor={() => handleOpenInEditor(activePageId)}
-            />
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">正在加载编辑器…</div>}>
+              <PageEditor
+                pageId={activePageId}
+                categories={categories}
+                allPages={allPages}
+                zoom={zoom}
+                onBack={handleBackToList}
+                onDeleted={() => handlePageDeleted(activePageId)}
+                onNavigate={handleOpenPage}
+                onUpdate={handleRefresh}
+                onTitleChange={handleTitleChange}
+                onFileTypeChange={handleFileTypeChange}
+                onContentChange={setLiveContent}
+                onTagsChange={handleSearchRefresh}
+                onMarkDirty={handleMarkDirty}
+                onClearDirty={handleClearDirty}
+                onRequestReading={enterReading}
+                vaultMode={true} // R6 D9 后恒 vault
+                onOpenInEditor={() => handleOpenInEditor(activePageId)}
+              />
+            </Suspense>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)]">
               <FileText size={48} className="opacity-25" />

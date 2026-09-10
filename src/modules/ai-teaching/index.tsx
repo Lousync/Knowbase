@@ -527,7 +527,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [])
 
   const refreshSessions = useCallback(async () => {
-    const list = await agentSessions().catch(() => [])
+    // 只保留 AI 教学来源的会话：助手侧栏 / AI 学堂的会话有自己的列表（同表存储，按 source 分流）
+    const list = (await agentSessions().catch(() => [])).filter(s => s.source !== 'assistant')
     setSessions(list)
     // P5：选择页状态（activeWs=null）不自动开会话；进工作区后只在本工作区会话里选
     const cur = activeIdRef.current ? list.find(s => s.id === activeIdRef.current) : undefined
@@ -663,7 +664,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
 
   // 新建任务（模板）：播种场景规则到 CONSTRAINTS.md，再用虚拟首轮触发 AI 开口
   const newTask = useCallback(async (tpl: Template) => {
-    const row = await agentNewSession(`${tpl.label}`).catch(() => null)
+    const row = await agentNewSession(`${tpl.label}`, 'aiTeaching').catch(() => null)
     if (!row) return
     // P5：先归属当前工作区（元数据真相源），再建夹——ensure 在主进程读归属决定两层路径
     if (activeWs && activeWs !== '__none__') await aiTeachAssignSession(row.id, activeWs).catch(() => null)

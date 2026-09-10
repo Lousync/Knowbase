@@ -697,9 +697,15 @@ export interface AgentContextInfo {
   data?: Record<string, unknown>
 }
 
+/** 会话来源：把「通用 AI 助手」（侧栏 / AI 学堂）与「AI 教学」的会话列表互相隔离。
+ *  二者同表存储、同一套 AgentRunner，仅列表展示分流。与主进程 agentSessionRepo 同构。 */
+export type AgentSessionSource = 'assistant' | 'aiTeaching'
+
 export interface AgentSessionInfo {
   id: string
   title: string
+  /** 来源（缺省=assistant） */
+  source?: AgentSessionSource
   /** 会话级全局要求（仅本会话生效；空串/缺省=无） */
   instructions?: string
   createdAt: string
@@ -1153,6 +1159,9 @@ export interface ElectronAPI {
   workspaceGetCurrent: () => Promise<{ rootId: string; name: string; path: string } | null>
   // 在系统文件管理器中打开当前仓库文件夹（标题栏仓库菜单入口）
   workspaceRevealVault: () => Promise<{ ok: boolean; error?: string }>
+  // 设置 → 新手引导：把《欢迎》导览页（HTML）导入仓库根并收录进知识库
+  // （force=false 且已存在同名文件时返回 exists=true 而不写盘，由渲染层确认后带 force 重来）
+  workspaceImportWelcomeDoc: (force?: boolean) => Promise<{ ok: boolean; created?: boolean; exists?: boolean; hasLegacyMd?: boolean; relPath?: string; error?: string }>
   // P8（D8）：重命名当前仓库展示名（roots/登记表/meta.json/最近列表同步，不动磁盘目录名）
   workspaceRenameVault: (name: string) => Promise<{ ok?: boolean; name?: string; error?: string }>
   workspaceForget: (rootId: string) => Promise<{ ok: boolean }>
@@ -1375,7 +1384,7 @@ export interface ElectronAPI {
   /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
   onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void
   agentSessions: () => Promise<AgentSessionInfo[]>
-  agentNewSession: (title?: string) => Promise<AgentSessionInfo>
+  agentNewSession: (title?: string, source?: AgentSessionSource) => Promise<AgentSessionInfo>
   agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>
   agentRenameSession: (id: string, title: string) => Promise<boolean>
   agentSetSessionInstructions: (id: string, instructions: string) => Promise<{ ok: boolean; error?: string }>

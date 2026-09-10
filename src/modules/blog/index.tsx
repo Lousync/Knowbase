@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { Star, ListTree, ChevronLeft, ChevronRight, X, FileText } from 'lucide-react'
 import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags, workspaceGetCurrent } from '../../lib/ipc'
@@ -14,7 +14,9 @@ import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { Sidebar } from './components/Sidebar'
 import { EntryList } from './views/EntryList'
-import { MarkdownEditor } from './components/MarkdownEditor'
+// 惰性化（性能 2026-09-10）：MarkdownEditor 是 Monaco 宿主，静态引入会把 monaco 主包拖进
+// blog chunk——而 blog 又是默认 Tab，等于首屏照旧加载编辑器。改为进入编辑视图时才加载。
+const MarkdownEditor = lazy(() => import('./components/MarkdownEditor').then((m) => ({ default: m.MarkdownEditor })))
 import { SummaryPanel } from './components/SummaryPanel'
 
 type BlogView = 'list' | 'editor' | 'detail'
@@ -394,16 +396,18 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
           </>
         )}
         {view === 'editor' && selectedId && (
-          <MarkdownEditor
-            key={selectedId}
-            entryId={selectedId}
-            showLineNumbers={showLineNumbers}
-            zoom={zoom}
-            onSave={goToList}
-            onCancel={goToList}
-            onContentChange={setLiveContent}
-            onToggleOutline={handleToggleOutline}
-          />
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">正在加载编辑器…</div>}>
+            <MarkdownEditor
+              key={selectedId}
+              entryId={selectedId}
+              showLineNumbers={showLineNumbers}
+              zoom={zoom}
+              onSave={goToList}
+              onCancel={goToList}
+              onContentChange={setLiveContent}
+              onToggleOutline={handleToggleOutline}
+            />
+          </Suspense>
         )}
         {view === 'detail' && selectedId && (
           <EntryDetail

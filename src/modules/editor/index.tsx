@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText, ArrowLeft,
@@ -19,8 +19,12 @@ import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
 import { shouldExitZen } from '../../lib/zenMode'
 import { FileTree } from './components/FileTree'
-import { MonacoPane, type MonacoPaneHandle } from './components/MonacoPane'
-import { PdfReaderView } from './components/PdfReaderView'
+import { type MonacoPaneHandle } from './components/MonacoPane'
+// monaco 主包 8.3MB —— 绝不能进首屏。宿主组件单独 lazy（使用处见下方 Suspense）：
+// 代价只是「本次运行第一次打开编辑器」多一瞬加载，而不是每次切模块都等。
+const MonacoPane = lazy(() => import('./components/MonacoPane').then((m) => ({ default: m.MonacoPane })))
+// pdfjs 主包 ~800KB：与 monaco 同理不进首屏，PDF 阅读器单独 lazy（使用处见下方 Suspense）
+const PdfReaderView = lazy(() => import('./components/PdfReaderView').then((m) => ({ default: m.PdfReaderView })))
 import { extractOutline } from '../../lib/markdownOutline'
 import type { EditorDoc, DirCache, TreeNode, CreateIntent } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
@@ -1088,7 +1092,9 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
           <div className="min-h-0 flex-1 relative" onClick={() => setOutlineOpen(false)}>
             {/* 主体：pdf 文档类型 → PdfReaderView（懒加载 canvas）；其余 → R5 分栏（Monaco | 预览） */}
             {activeDoc?.language === 'pdf' && rootId ? (
-              <PdfReaderView key={activeDoc.relPath} rootId={rootId} relPath={activeDoc.relPath} name={baseName(activeDoc.relPath)} />
+              <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">正在加载 PDF…</div>}>
+                <PdfReaderView key={activeDoc.relPath} rootId={rootId} relPath={activeDoc.relPath} name={baseName(activeDoc.relPath)} />
+              </Suspense>
             ) : (
             <div className="flex h-full min-h-0">
               {/* 禅模式 Z1+：正文限宽居中（宽度设置 zenWidth），背景延伸全屏（§4）；
@@ -1100,17 +1106,19 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                   className={`h-full zen-transition ${zenLevel >= 1 ? 'w-full' : 'min-w-0 flex-1'}`}
                   style={zenLevel >= 1 ? { maxWidth: zenSettings.zenWidth, padding: '0 20px' } : undefined}
                 >
-                  <MonacoPane
-                    ref={monacoRef}
-                    doc={activeDoc}
-                    onChange={handleChange}
-                    dimEnabled={markdownDim || zenLevel >= 1}
-                    zen={zenLevel >= 1}
-                    typewriter={zenLevel >= 1 && !!zenSettings.zenTypewriter}
-                    zenPaper={!!zenSettings.zenPaper}
-                    layoutKey={zenLevel}
-                    onPasteImage={activeDoc?.language === 'markdown' ? handlePasteImageFile : undefined}
-                  />
+                  <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">正在加载编辑器…</div>}>
+                    <MonacoPane
+                      ref={monacoRef}
+                      doc={activeDoc}
+                      onChange={handleChange}
+                      dimEnabled={markdownDim || zenLevel >= 1}
+                      zen={zenLevel >= 1}
+                      typewriter={zenLevel >= 1 && !!zenSettings.zenTypewriter}
+                      zenPaper={!!zenSettings.zenPaper}
+                      layoutKey={zenLevel}
+                      onPasteImage={activeDoc?.language === 'markdown' ? handlePasteImageFile : undefined}
+                    />
+                  </Suspense>
                 </div>
               </div>
               {previewOpen && activeDoc?.language === 'markdown' && (

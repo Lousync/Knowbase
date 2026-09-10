@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
 import type { AppSettings, SettingsKey } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 import { getAllSettings, setSetting } from './ipc'
@@ -36,7 +36,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  return <Ctx.Provider value={{ s, ready, update }}>{children}</Ctx.Provider>
+  // value 引用稳定化：Provider 因父级重渲染而重跑时不再产生新对象，
+  // 避免全体 useSettings() 消费者被连带重渲染（原先内联字面量每次都新）。
+  const value = useMemo(() => ({ s, ready, update }), [s, ready, update])
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
 export function useSettings(): SettingsCtx {

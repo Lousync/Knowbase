@@ -73,9 +73,30 @@ export default defineConfig({
     build: {
       outDir: 'out/renderer',
       emptyOutDir: false,   // 同上：规避 safe-delete 拦截
+      // monaco / pdfjs 等天然超过默认 500KB 提示阈值——它们是**按需加载**的独立 chunk，
+      // 不属于首屏负担，调高阈值避免噪音警告。
+      chunkSizeWarningLimit: 8000,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'index.html')
+        },
+        output: {
+          // 显式分包（性能 2026-09-10）：只把明确的重量级依赖钉成独立 chunk，其余一律交还 rollup
+          // 按引用关系自动分配。⚠️ 不可兜底成单个 'vendor'——入口只要用到其中一个包，
+          // 就会把全部第三方代码拖进首屏（实测兜底版首屏静态闭包 14.4MB，vendor 独占 4.5MB）。
+          manualChunks(id: string) {
+            // Vite 注入的 __vitePreload 辅助必须单独隔离：它被所有 chunk 共享，若被提升进
+            // monaco 这类大 chunk，入口会为了引用这一个函数而静态 import 整个 chunk
+            // ——这是「monaco 明明已懒加载却仍出现在首屏」的直接成因。
+            if (id.includes('preload-helper')) return 'vite-helpers'
+            if (!id.includes('node_modules')) return undefined
+            if (id.includes('monaco-editor')) return 'monaco'
+            if (id.includes('pdfjs-dist')) return 'pdfjs'
+            if (id.includes('katex')) return 'katex'
+            if (id.includes('highlight.js')) return 'highlight'
+            if (id.includes('react-dom') || id.includes('scheduler') || /[\\/]react[\\/]/.test(id)) return 'react-vendor'
+            return undefined
+          }
         }
       }
     },
