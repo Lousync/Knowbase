@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, FileText, Image as ImageIcon, Presentation, ExternalLink } from 'lucide-react'
+import { X, FileText, Image as ImageIcon, Presentation, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { ArtHtmlView } from './ArtHtmlView'
 import type { ArtTab } from './artifacts'
@@ -8,13 +8,16 @@ import type { ArtTab } from './artifacts'
  * 工件栏（docs/ai-teaching-artifacts-pane-design.md §2）：页签条 + 工具条 + 内容区。
  * 对话固定左主区永不替换，材料/产物/示意图全部进这里以页签切换；
  * 开合纯内容驱动：有页签即渲染、关完即消失（2026-09-09 拍板，不设手动收起/展开把手——与素材库拉出条打架）；
+ * expanded（宿主管状态）= 原位占满内容区放大阅读（仿编辑器全屏，非弹窗），页签行 ⤢/⤡ 切换、Esc 退出；
  * 页签列表为会话内存态（切会话清空），阅读位置记忆 per-rel 保存在本组件（跨会话不失效）。
  */
-export function ArtifactsPane({ tabs, activeId, widthPx, htmlSeq, onActivate, onClose, onReload, onPptxPage, onTalkPage, pending, onEdit }: {
+export function ArtifactsPane({ tabs, activeId, widthPx, htmlSeq, expanded, onToggleExpanded, onActivate, onClose, onReload, onPptxPage, onTalkPage, pending, onEdit }: {
   tabs: ArtTab[]
   activeId: string | null
   widthPx: number
   htmlSeq: Record<string, number>
+  expanded: boolean
+  onToggleExpanded: (v: boolean) => void
   onActivate: (id: string) => void
   onClose: (id: string) => void
   onReload: (tab: ArtTab) => void
@@ -27,6 +30,17 @@ export function ArtifactsPane({ tabs, activeId, widthPx, htmlSeq, onActivate, on
   const mdScrollRef = useRef<HTMLDivElement>(null)
   const mdScrollPos = useRef<Record<string, number>>({})
   const [outline, setOutline] = useState<Array<{ id: string; text: string; lv: number }>>([])
+  // 放大态 Esc 退出（捕获层拦截，不进模块 Esc 链——勿连带退禅/关弹层）
+  useEffect(() => {
+    if (!expanded) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onToggleExpanded(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [expanded, onToggleExpanded])
 
   // md 页签渲染完成：收集 h2/h3 大纲 + 恢复滚动位置（§2 阅读位置记忆，沿原 docView §3.9-2 口径）
   useEffect(() => {
@@ -64,6 +78,13 @@ export function ArtifactsPane({ tabs, activeId, widthPx, htmlSeq, onActivate, on
           </div>
         ))}
         <div className="flex-1 min-w-[8px]" />
+        {/* 原位放大阅读切换（页签行右端，仿编辑器全屏）：占满内容区而非弹窗；Esc 同退出 */}
+        {tab && !tab.generating && tab.rel && (
+          <button onClick={() => onToggleExpanded(!expanded)} title={expanded ? '退出全屏阅读 (Esc)' : '全屏阅读：工件占满窗口（Esc 退出）'}
+            className={`shrink-0 self-start mb-1 p-1 rounded-md transition-colors ${expanded ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}`}>
+            {expanded ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+          </button>
+        )}
       </div>
       {/* 工具条：落盘路径 + ↗编辑 + ⟳ + ✕关闭（§2） */}
       {tab && (
@@ -121,7 +142,7 @@ export function ArtifactsPane({ tabs, activeId, widthPx, htmlSeq, onActivate, on
             )}
           </>
         ) : tab.kind === 'html' ? (
-          <div className="kb-art-in flex-1 min-h-0"><ArtHtmlView relPath={tab.rel} reloadSeq={htmlSeq[tab.rel] ?? 0} /></div>
+          <div className="kb-art-in flex-1 min-h-0"><ArtHtmlView relPath={tab.rel} reloadSeq={htmlSeq[tab.rel] ?? 0} fit={expanded} /></div>
         ) : (
           /* pptx 逐页阅读并入页签（§1.4：页码即内容） */
           <div className="kb-art-in flex-1 min-h-0 flex flex-col">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText, Image as ImageIcon } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText, Image as ImageIcon, Quote } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentStartScene, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
@@ -19,6 +19,7 @@ import { QuizMode } from '../../components/shared/QuizMode'
 import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
+import { registerSelectionAskHost, selectionContext } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { WebSourceDialog } from './components/WebSourceDialog'
 import type { AgentSessionInfo, AgentStoredMessage, AgentTraceStep, AgentChange, AgentChatResult, AiTeachInjectionStats, LlmUsageInfo, LlmProviderInfo, LlmVisionModelInfo, AiTeachWorkspaceInfo, AiTeachSourceEntry } from '../../types'
@@ -277,6 +278,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [template, setTemplate] = useState<Template>(TEMPLATES[0])
   const [messages, setMessages] = useState<UiMsg[]>([])
   const [input, setInput] = useState('')
+  /** 划词引用片段（「问 AI」就地追问时填入输入区上方，发送后一次性消费） */
+  const [quote, setQuote] = useState('')
   const [pending, setPending] = useState(false)
   const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
   const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
@@ -343,6 +346,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   })
   /** html 页签 ⟳ 刷新计数（key 版本，ArtHtmlView 重读磁盘） */
   const [htmlSeq, setHtmlSeq] = useState<Record<string, number>>({})
+  /** ⤢ 原位放大：工件栏占满内容区（absolute 盖过对话/左右栏，组件不卸载 → 对话滚动与 iframe 全存活），⤡/Esc 退出 */
+  const [artZoom, setArtZoom] = useState(false)
+  useEffect(() => { if (artTabs.length === 0) setArtZoom(false) }, [artTabs.length])
   const artTabsRef = useRef<ArtTab[]>([])
   useEffect(() => { artTabsRef.current = artTabs }, [artTabs])
   const setArtPct = useCallback((v: number) => {
@@ -474,6 +480,10 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   }, [activeId, midView, artTabs, artActive])
   const [activeIdRef, chatIdRef] = [useRef<string | null>(null), useRef('')]
   const bottomRef = useRef<HTMLDivElement>(null)
+  /** 输入区（划词「问 AI」就地追问时聚焦用） */
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  /** 引用片段的 ref 镜像——sendText 是 useCallback，读 ref 避免闭包捕获旧值 */
+  const quoteRef = useRef('')
   // P3a 快速定位条：消息滚动容器 + 当前锚点高亮
   const scrollRef = useRef<HTMLDivElement>(null)
   /** 对话流滚动记忆（2026-09-08）：跳文档阅读视图会卸载对话容器（scrollTop 丢失）——
@@ -484,6 +494,20 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
 
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
   useEffect(() => { liveRef.current = liveSteps }, [liveSteps])
+
+  // 划词「问 AI」就地接管：提问落进本模块「当前对话」往后答，而不是弹出侧边栏另开一个对话。
+  // 无当前对话时不接管（accept=false）→ 回退侧边栏行为，用户始终有路可走。
+  useEffect(() => {
+    if (!isActive) return
+    return registerSelectionAskHost({
+      accept: () => !!activeIdRef.current,
+      ask: (text) => {
+        quoteRef.current = text
+        setQuote(text)
+        setTimeout(() => inputRef.current?.focus(), 60)
+      },
+    })
+  }, [isActive])
 
   // ---- 禅模式（唯一作用域 = 本模块）----
   // Esc 的「先关本模块浮层，再退禅」统一放在 askVisible/srcForm 等浮层 state 声明之后（见 §P8 画像小节），
@@ -572,6 +596,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // 切换会话
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
+    quoteRef.current = ''; setQuote('') // 引用片段属于发起时那个对话，切会话即失效
     setArtTabs([]); setArtActive(null) // 工件栏页签=会话内存态：切会话清空（§2，阅读位置记忆保留在页签组件内）
     setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
     const row = sessions.find(s => s.id === sid)
@@ -585,13 +610,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     if (nav.midView === 'quiz') setMidView('quiz')
   }, [refreshMessages, sessions, loadConstraints, openArtFile])
 
-  const sendText = useCallback(async (raw: string, cid: string): Promise<AgentChatResult | null> => {
+  const sendText = useCallback(async (raw: string, cid: string, withQuote = false): Promise<AgentChatResult | null> => {
     setPending(true); setLiveSteps([])
     const sid = activeIdRef.current
     if (!sid) { setPending(false); return null }
     setMessages(prev => [...prev, { role: 'user', content: raw, createdAt: new Date().toISOString() }]) // 条目4：乐观时间存 ISO（原纯时刻串必 Invalid Date）
     const ov = convoLlm.current.get(sid)
-    const r = await agentChat(sid, raw, undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
+    // 划词引用片段：仅「输入框发送」路径消费（withQuote），避免逐页讲解/模板等命令误带上无关引用；
+    // 经 context 注入主进程 buildSystemPrompt 的【当前上下文】，与侧边栏口径一致
+    const q = withQuote ? quoteRef.current : ''
+    if (q) { quoteRef.current = ''; setQuote('') }
+    const r = await agentChat(sid, raw, q ? selectionContext(q) : undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
     // V-2：失败提示下沉到 sendText——模板开场/ask 发送/PPT 逐页讲解等 5 处 void sendText 路径统一覆盖（原先只有 doSend 有 toast）
     if (r && !r.ok && r.code !== 'ABORTED') showToast({ type: 'error', message: `AI 调用失败：${r.error ?? ''}` })
     // 条目9②：本轮 system 注入分段按会话留存（hover 构成摘要）；条目9③：月度用量随每轮刷新
@@ -611,7 +640,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setInput('')
     const cid = crypto.randomUUID()
     chatIdRef.current = cid
-    await sendText(text, cid) // 失败 toast 已下沉 sendText（V-2），此处不再重复提示
+    await sendText(text, cid, true) // 失败 toast 已下沉 sendText（V-2），此处不再重复提示
   }, [input, pending, sendText])
 
   // 场景启动：不落任何用户消息，用虚拟首轮触发（主进程 allowEmptyHistory）
@@ -1328,23 +1357,35 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const artExpanded = artTabs.length > 0
   /** 窄窗兜底（§1.3）：<1100px 工件栏降宽至 40% */
   const artPctEff = rowW > 0 && rowW < 1100 ? Math.min(artPct, 40) : artPct
-  // 工件栏展开 → 素材库自动收起（一次折叠动画，不改意图态）；工件栏收起 → 按意图恢复
+  // 工件栏展开 → 素材库自动收起（一次折叠动画，不改意图态）；工件栏关闭 → 不自动弹出素材库（2026-09-09 用户拍板），
+  // 需要时经顶栏「素材库」chip / 右缘拉出条 / Ctrl+Alt+B 手动展开
   useEffect(() => {
     if (artExpanded) setSrcVisible(false)
-    else setSrcVisible(localStorage.getItem('aiTeach.rightOpen') !== '0')
   }, [artExpanded])
+  // 工件栏分隔条拖拽：dead-zone 防误触（2026-09-09 修）
+  // 老逻辑 mousedown 立刻改 cursor + 监听 mousemove，鼠标移动 1px 就 setArtPct；
+  // 触摸板"轻敲"瞬间 / 用户没意识到按下时手稍微抖一下，都会被解释成"拖拽"，看起来像"鼠标掠过手柄就自动被点击"。
+  // 改为 mousedown 后先 armed=false 待命，只有 mousemove 横向位移 ≥4px 才算真拖——cursor 才变 col-resize、setArtPct 才被调用。
   const onDividerDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const row = rowRef.current
     if (!row) return
     const rect = row.getBoundingClientRect()
-    const onMove = (ev: MouseEvent): void => { setArtPct(Math.min(60, Math.max(24, (rect.right - ev.clientX) / rect.width * 100))) }
+    const startX = e.clientX
+    let armed = false
+    const onMove = (ev: MouseEvent): void => {
+      if (!armed) {
+        if (Math.abs(ev.clientX - startX) < 4) return
+        armed = true
+        document.body.style.cursor = 'col-resize'
+      }
+      setArtPct(Math.min(60, Math.max(24, (rect.right - ev.clientX) / rect.width * 100)))
+    }
     const onUp = (): void => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
     }
-    document.body.style.cursor = 'col-resize'
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }, [setArtPct])
@@ -1649,7 +1690,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         </div>
       </div>
 
-      <div ref={rowRef} className="flex flex-1 min-h-0">
+      <div ref={rowRef} className="relative flex flex-1 min-h-0">
         {/* 左栏（P4 §3.7 + UI 优化条目2/3）：ResizablePanel 可调宽持久化 + 折叠贴边条（悬停高亮，点/拖展开）；
             分区体 grid-rows 动画常挂载（滚动/展开状态自然保留），折叠态 visibility 兜底 */}
         <ResizablePanel side="left" storageKey="aiTeach.leftWidth" defaultWidth={248} minWidth={200} maxWidth={400}
@@ -1996,10 +2037,22 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                     </div>
                   )
                 })() : (
-                  <textarea value={input} onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void doSend() } }}
-                    rows={2} placeholder="粘贴资料或输入指令…（Enter 发送）"
-                    className="w-full px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] resize-none outline-none focus:border-[var(--accent)]" />
+                  <>
+                    {quote && (
+                      <div className="mb-1.5 flex items-start gap-1.5 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                        <Quote size={11} className="mt-[3px] shrink-0 text-[var(--accent)]" />
+                        <span className="flex-1 min-w-0 text-[11px] leading-[1.5] text-[var(--text-secondary)] line-clamp-3">{quote}</span>
+                        <button type="button" onClick={() => { quoteRef.current = ''; setQuote('') }} title="移除引用"
+                          className="shrink-0 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                          <X size={11} />
+                        </button>
+                      </div>
+                    )}
+                    <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void doSend() } }}
+                      rows={2} placeholder={quote ? '针对选中片段提问…（Enter 发送）' : '粘贴资料或输入指令…（Enter 发送）'}
+                      className="w-full px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] resize-none outline-none focus:border-[var(--accent)]" />
+                  </>
                 )}
                 <div className="flex items-center gap-2 mt-1.5">
                   <div className="flex-1" />
@@ -2211,18 +2264,25 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
         {/* 工件栏（docs/ai-teaching-artifacts-pane-design.md §1.2）：分隔条可拖 24%~60%、双击复位 46、宽度持久化。
             无打开页签即不渲染——工件栏没有主动展开把手（2026-09-09 用户拍板：右缘把手与素材库拉出条冲突），
             打开任意文件/工件卡自动出现，关掉全部页签自动消失 */}
-        {artExpanded && (
-          <>
+        {/* 分隔条（2026-09-09 修抖动）：5px 热区 + 视觉线**居中**、hover 只加粗变色不改位置。
+            老版 `left-2 w-px group-hover:left-1 group-hover:w-[3px]` 让视觉线静止时落在热区**外面**（8~9px，热区仅 0~5px），
+            hover 又跳到 4~7px——鼠标在热区边缘微动会让 :hover 反复进出，视觉线带 transition-all 来回位移 4px，
+            看着就是"手柄被来回小范围拖拽抖动"。现在 left-1/2 -translate-x-1/2 固定居中，只剩宽度/颜色过渡。 */}
+        {artExpanded && !artZoom && (
           <div onMouseDown={onDividerDown} onDoubleClick={() => setArtPct(46)} title="拖拽调宽（24%~60%）· 双击复位"
             className="group shrink-0 w-[5px] cursor-col-resize relative z-[5]">
-            <div className="absolute top-0 bottom-0 left-2 w-px group-hover:left-1 group-hover:w-[3px] bg-[var(--border-color)] group-hover:bg-[var(--accent)] transition-all" />
+            <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px group-hover:w-[3px] bg-[var(--border-color)] group-hover:bg-[var(--accent)] transition-[width,background-color] duration-150" />
           </div>
-          <div className="shrink-0 min-h-0" style={{ width: `${artPctEff}%`, minWidth: 300 }}>
+        )}
+        {artExpanded && (
+          <div className={artZoom ? 'absolute inset-0 z-40 min-h-0' : 'shrink-0 min-h-0'} style={artZoom ? undefined : { width: `${artPctEff}%`, minWidth: 300 }}>
             <ArtifactsPane
               tabs={artTabs}
               activeId={artActive}
-              widthPx={rowW > 0 ? Math.floor(rowW * artPctEff / 100) : 480}
+              widthPx={artZoom ? rowW : (rowW > 0 ? Math.floor(rowW * artPctEff / 100) : 480)}
               htmlSeq={htmlSeq}
+              expanded={artZoom}
+              onToggleExpanded={setArtZoom}
               onActivate={setArtActive}
               onClose={closeArtTab}
               onReload={reloadArtTab}
@@ -2232,7 +2292,6 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               onEdit={(rel) => window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { relPath: rel, from: 'aiTeaching' } }))}
             />
           </div>
-          </>
         )}
 
         {/* 右栏（UI 优化条目2/5）：ResizablePanel 可调宽持久化 + 折叠贴边条；「素材库/资料来源」双区块合并为素材库单一区块。

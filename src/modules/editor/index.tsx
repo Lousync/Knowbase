@@ -14,6 +14,7 @@ import {
 import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { VaultSwitcher } from '../../components/shared/VaultSwitcher'
 import { showToast } from '../../lib/toast'
+import { recordFileOp, type FileOpResult } from '../../lib/fileOpHistory'
 import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
 import { shouldExitZen } from '../../lib/zenMode'
@@ -580,6 +581,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
     const actualRel = res.relPath ?? rel
     if (res.renamed) showToast({ type: 'info', message: `「${baseName(rel)}」已存在，已创建为「${baseName(actualRel)}」` })
+    recordFileOp({ kind: 'create', rootId: root, relPath: actualRel, isDir: type === 'dir', name: baseName(actualRel) })
     setExpanded((prev) => new Set(prev).add(dirRel))
     await refreshDir(dirRel)
     if (type === 'file') {
@@ -606,6 +608,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     const actualRel = res.relPath ?? rel
     if (!res.ok) { showToast({ type: 'error', message: res.error || '创建失败' }); return }
     if (res.renamed) showToast({ type: 'info', message: `已存在同名，已创建为「${baseName(actualRel)}」` })
+    // 记录 content：重做时按原内容重建（撤销 = 移除）
+    recordFileOp({ kind: 'create', rootId: root, relPath: actualRel, isDir: false, content, name: baseName(actualRel) })
     setExpanded((prev) => new Set(prev).add(dirRel))
     await refreshDir(dirRel)
     await openFile({ name: baseName(actualRel), type: 'file', size: 0, mtime: Date.now(), relPath: actualRel })
@@ -633,6 +637,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     if (!root) return
     const res = await workspaceRename(root, node.relPath, newRel)
     if (!res.ok) { showToast({ type: 'error', message: res.error || '重命名失败' }); return }
+    recordFileOp({ kind: 'move', rootId: root, from: node.relPath, to: newRel, name: baseName(newRel) })
     setOpenFiles((prev) => {
       const next = { ...prev }
       const d = next[node.relPath]
@@ -690,6 +695,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     if (newRel === srcRel) return
     const res = await workspaceRename(root, srcRel, newRel)
     if (!res.ok) { showToast({ type: 'error', message: res.error || '移动失败' }); return }
+    recordFileOp({ kind: 'move', rootId: root, from: srcRel, to: newRel, name: baseName(newRel) })
     // 移动的是打开中的文件 → 更新文档 key（目录不会被打开，无需处理其下子文件）
     setOpenFiles((prev) => {
       const next = { ...prev }
@@ -813,6 +819,32 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     window.addEventListener('kb-file-moved', handler)
     return () => window.removeEventListener('kb-file-moved', handler)
   }, [refreshDir, refreshArchived])
+
+  /** Ctrl+Z 撤销 / 重做文件操作（kb-fs-op-changed）→ 刷新目录 + 迁移打开文档 key + 关闭被移除文档的标签 */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<FileOpResult>).detail
+      if (!d?.ok) return
+      if (d.remap && d.remap.from !== d.remap.to) {
+        const { from: rmFrom, to: rmTo } = d.remap
+        setOpenFiles((prev) => {
+          const next = { ...prev }
+          const doc = next[rmFrom]
+          if (doc) {
+            delete next[rmFrom]
+            next[rmTo] = { ...doc, relPath: rmTo }
+          }
+          return next
+        })
+        setActivePath((p) => (p === rmFrom ? rmTo : p))
+      }
+      if (d.removed) closeTab(d.removed) // 撤销「新建」：文件被移除后关掉可能开着的标签
+      d.dirs.forEach((dir) => { void refreshDir(dir) })
+      void refreshArchived()
+    }
+    window.addEventListener('kb-fs-op-changed', handler)
+    return () => window.removeEventListener('kb-fs-op-changed', handler)
+  }, [refreshDir, refreshArchived, closeTab])
 
   const activeDoc = activePath ? openFiles[activePath] ?? null : null
 

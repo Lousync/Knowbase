@@ -534,6 +534,9 @@ const api = {
   fillPopupGetEntries: () => ipcRenderer.invoke('fillPopup:getEntries'),
   fillPopupCopy: (field: string, value: string) => ipcRenderer.invoke('fillPopup:copy', field, value),
   fillPopupHide: () => ipcRenderer.invoke('fillPopup:hide'),
+  fillPopupCreateEntry: (data: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }) =>
+    ipcRenderer.invoke('fillPopup:createEntry', data),
+  fillPopupSetAlwaysOnTop: (on: boolean) => ipcRenderer.invoke('fillPopup:setAlwaysOnTop', on),
   onFillPopupRefresh: (cb: () => void) => {
     const handler = () => cb()
     ipcRenderer.on('fillPopup:refresh', handler)

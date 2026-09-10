@@ -1,0 +1,821 @@
+<mxfile host="WorkBuddy" modified="2026-09-01T00:00:00.000Z" agent="WorkBuddy" version="21.0.0">
+  <diagram id="kb-current" name="1-改动范围与现状">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c1t" value="改动范围：仅「中间主体区域」内的知识库浏览层（左 ActivityBar / 右 DayPanel·AI 助手 / 编辑器本体 均不动）" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="22" width="1000" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1left" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef2;strokeColor=#dfe2e8;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="60" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="c1leftl" value="左&lt;br&gt;ActivityBar" style="text;html=1;horizontal=0;align=center;verticalAlign=middle;fontSize=10;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="40" y="360" width="60" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1scope" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#e24b4a;strokeWidth=2;dashed=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="108" y="84" width="1012" height="652" as="geometry" />
+        </mxCell>
+        <mxCell id="c1scopel" value="▼ 本次唯一改动范围：中间主体区域（Main Card）" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=1;fontColor=#e24b4a;" vertex="1" parent="1">
+          <mxGeometry x="108" y="60" width="400" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1mid" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="112" y="90" width="1000" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;" vertex="1" parent="1">
+          <mxGeometry x="112" y="90" width="280" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l1h" value="工作区（L1 · NotebookList 1191 行）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;align=left;spacingLeft=10;fontSize=11;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="112" y="90" width="280" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r1" value="◫  学习空间" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#3b6d11;" vertex="1" parent="1">
+          <mxGeometry x="112" y="124" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r2" value="　　▸ ⛕ 408计算机" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="112" y="146" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r3" value="　　　　📁 数据结构" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d0e4f7;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="112" y="168" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r4" value="　　　　　　📄 线性表.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=10;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="112" y="190" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r5" value="　　　　　　📄 树与图.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=10;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="112" y="212" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r6" value="　　　　📁 组成原理" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="112" y="234" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r7" value="　　⛕ 英语词汇" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="112" y="256" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r8" value="◫  工作" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#3b6d11;" vertex="1" parent="1">
+          <mxGeometry x="112" y="286" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r9" value="★  收藏 (3)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#8a6d15;" vertex="1" parent="1">
+          <mxGeometry x="112" y="320" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1r10" value="📄  零散页面 (5)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=10;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="112" y="342" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l1n" value="展开/折叠 · 5 种排序 · 右键菜单 · 拖拽移动&lt;br&gt;删除吞噬动画 · 剪贴板 · Ctrl+N 内联新建" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#888780;lineHeight=1.5;" vertex="1" parent="1">
+          <mxGeometry x="124" y="400" width="260" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l1f" value="⚑ 错题本 / 收藏&lt;br&gt;🧩 插件视图入口" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3f4f6;strokeColor=#dfe2e8;align=left;spacingLeft=10;fontSize=10;fontColor=#5b6470;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="112" y="684" width="280" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1l2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;" vertex="1" parent="1">
+          <mxGeometry x="392" y="90" width="240" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2h" value="← 408计算机（L2 · ChapterPanel）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;align=left;spacingLeft=10;fontSize=11;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="392" y="90" width="240" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2c1" value="章节" style="text;html=1;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#888780;" vertex="1" parent="1">
+          <mxGeometry x="392" y="124" width="240" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2c2" value="📁 数据结构" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d0e4f7;strokeColor=none;align=left;spacingLeft=14;fontSize=11;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="392" y="144" width="240" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2c3" value="📁 组成原理" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=14;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="392" y="166" width="240" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2c4" value="📁 操作系统" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=14;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="392" y="188" width="240" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2p1" value="页面" style="text;html=1;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#888780;" vertex="1" parent="1">
+          <mxGeometry x="392" y="228" width="240" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2p2" value="📄 线性表.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=14;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="392" y="248" width="240" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2p3" value="📄 树与图.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=14;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="392" y="270" width="240" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1l2p4" value="📄 排序.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=14;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="392" y="292" width="240" height="22" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1ed" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fafbfc;strokeColor=#dfe2e8;" vertex="1" parent="1">
+          <mxGeometry x="632" y="90" width="480" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="c1edt" value="线性表.md　×" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3f4f6;strokeColor=#dfe2e8;align=left;spacingLeft=12;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="632" y="90" width="140" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c1edb" value="# 线性表&lt;br&gt;&lt;br&gt;线性表是最基本的线性结构…" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=16;verticalAlign=top;spacingTop=14;fontSize=12;fontColor=#444441;lineHeight=1.8;" vertex="1" parent="1">
+          <mxGeometry x="632" y="130" width="480" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="c1edn" value="编辑器（PageTabBar + PageEditor）· 本次不改&lt;br&gt;Ctrl+Shift+R 沉浸阅读亦保持原样" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#888780;lineHeight=1.5;" vertex="1" parent="1">
+          <mxGeometry x="646" y="270" width="460" height="36" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;dashed=1;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1128" y="90" width="160" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="c1rightl" value="右&lt;br&gt;DayPanel&lt;br&gt;AI 助手" style="text;html=1;horizontal=0;align=center;verticalAlign=middle;fontSize=10;fontColor=#888780;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="1128" y="340" width="160" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1ht" value="数据层级（KnowledgeCategory / KnowledgePage）" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="88" width="340" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="c1h1" value="空间 Space&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;categoryType='space' · 顶层容器&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#b7ddc4;fontSize=12;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="126" width="300" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c1h2" value="笔记本 Notebook&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;'notebook' · 唯一拥有章节层的类型&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=12;fontColor=#185FA5;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="218" width="300" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c1h3" value="章节 Chapter&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;'folder' 且 parent 为 notebook&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faeeda;strokeColor=#efcfa0;fontSize=12;fontColor=#854f0b;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="310" width="300" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c1h4" value="页面 Page&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;categoryId 可指向章节/目录/空间/null&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;fontSize=12;fontColor=#5F5E5A;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="402" width="300" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c1hs1" value="零散页面 · categoryId = null" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;dashed=1;fontSize=10;fontColor=#5F5E5A;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="494" width="300" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c1hs2" value="收藏 · isStarred（跨层虚拟分组）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;dashed=1;fontSize=10;fontColor=#5F5E5A;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="538" width="300" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c1e1" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c1h1" target="c1h2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c1e2" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c1h2" target="c1h3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c1e3" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c1h3" target="c1h4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1pain" value="现状痛点（为什么不能直接在 NotebookList 上加个 if）&lt;br&gt;① 交互行为与树形渲染强耦合在 NotebookList（1191 行），换皮 = 复制整套逻辑&lt;br&gt;② 同一套右键菜单在 NotebookList / ChapterPanel 各写一遍，语义已开始漂移&lt;br&gt;③ 空间沉浸、章节下钻、大纲切换三种显示态由多个布尔量堆出隐式状态机，再加一个模式维度会失控&lt;br&gt;④ L1 只有 180–400px 宽，「书架」塞进这个宽度里会被压成一条，视觉隐喻立不住" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=14;verticalAlign=middle;fontSize=11;fontColor=#791F1F;lineHeight=1.7;" vertex="1" parent="1">
+          <mxGeometry x="40" y="770" width="1100" height="100" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="kb-switch" name="2-模式切换作用域">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c2t" value="呈现模式切换 · 只换「中间区域的浏览层」，编辑器与左右两区不受影响" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="22" width="800" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2e1" value="入口 A · L1 标题栏&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;「工作区」栏右侧分段控件 ▤ 列表 / ▥ 书架&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=12;fontColor=#185FA5;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="76" width="280" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e2" value="入口 B · 设置面板&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;外观 → 知识库 → 呈现模式（含密度子项）&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=12;fontColor=#185FA5;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="380" y="76" width="280" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e3" value="入口 C · 快捷键&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;Ctrl+Shift+M 两种模式轮换&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=12;fontColor=#185FA5;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="700" y="76" width="280" height="64" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2st" value="settings.knowledgeViewMode  :  'explorer'  |  'shelf'&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;默认 'explorer' — 老用户升级零感知；写入 settings 表，随设置同步/导出&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faeeda;strokeColor=#efcfa0;fontSize=13;fontColor=#854f0b;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="176" width="920" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="c2ea" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c2e1" target="c2st">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2eb" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c2e2" target="c2st">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2ec" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c2e3" target="c2st">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2frame" value="中间主体区域（Main Card）· 改动范围" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafbfc;strokeColor=#c9cdd4;verticalAlign=top;spacingTop=6;fontSize=11;fontStyle=1;fontColor=#5b6470;" vertex="1" parent="1">
+          <mxGeometry x="60" y="264" width="920" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="c2browse" value="浏览层（可切换）· 模式只作用于此" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeedfe;strokeColor=#cecbf6;fontSize=12;fontStyle=1;fontColor=#534AB7;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="88" y="300" width="540" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="c2ed" value="编辑器（模式无关 · 零改动）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;PageTabBar + PageEditor + 沉浸阅读&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;fontSize=12;fontColor=#5F5E5A;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="652" y="300" width="300" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="c2eS" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#c5a332;strokeWidth=1.5;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c2st" target="c2browse">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2v1" value="ExplorerView（保持原样）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#888780&quot;&gt;L1 树形 NotebookList + L2 ChapterPanel&lt;br&gt;180–400px 三栏下钻，代码不挪动&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;fontSize=13;fontColor=#5F5E5A;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1">
+          <mxGeometry x="60" y="440" width="440" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c2v2" value="ShelfView（新增 · 书架模式）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#3B6D11&quot;&gt;L1/L2 让位，书柜占满整个中间区域宽度&lt;br&gt;Bookcase / ShelfBoard / BookSpine / ArchiveBox / LooseDesk&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#b7ddc4;fontSize=13;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1">
+          <mxGeometry x="540" y="440" width="440" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c2v1e" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c2browse" target="c2v1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2v2e" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c2browse" target="c2v2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2sh" value="共享状态（切换模式不丢失 · 两个 View 都是纯消费者）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeedfe;strokeColor=#cecbf6;fontSize=12;fontStyle=1;fontColor=#534AB7;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="560" width="920" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh1" value="selectedSpaceId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="608" width="170" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh2" value="selectedCategoryId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="262" y="608" width="170" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh3" value="selectedChapterId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="444" y="608" width="170" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh4" value="openPageIds / dirty" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="626" y="608" width="170" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh5" value="clipboard / deletingMap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="808" y="608" width="152" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh6" value="searchQuery / locatePageId / locateCategoryId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="654" width="352" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="c2sh7" value="expanded（书架模式下退化为「哪层展开」，语义兼容）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cecbf6;fontSize=11;fontColor=#3C3489;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="444" y="654" width="516" height="34" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2rule" value="切换语义（硬约束）&lt;br&gt;① 模式只影响中间区域的「浏览层」，不改数据结构、不动任何 IPC、不改编辑器与右区&lt;br&gt;② 书架模式下 L1/L2 完全让位，书柜独占中间区域宽度（这正是书架立得住的前提）—— 现有 sidebarWidth_knowledgeCat/Pages/Chapters 在该模式下失效，改由「书柜密度」接管&lt;br&gt;③ 切换时把选中三元组翻译成目标模式的等价呈现；书架无对应层级时回退到最近的有形祖先（Chapter → Notebook → Space）&lt;br&gt;④ 搜索定位 locateCategory / locatePage 对两个 View 发同一事件，各 View 自行决定滚到哪个可视单元&lt;br&gt;⑤ 删除动画 deletingMap、剪贴板半透明 cutItemIds 为跨模式共享契约，禁止在 View 内各自实现" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;align=left;spacingLeft=14;verticalAlign=middle;fontSize=11;fontColor=#444441;lineHeight=1.8;" vertex="1" parent="1">
+          <mxGeometry x="60" y="716" width="920" height="150" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="kb-shelf" name="3-书架模式线框">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1360" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c3t" value="书架模式线框 · 灰色部分为不参与改动的三区，红色虚线内为中间主体卡片" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="22" width="900" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3left" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef2;strokeColor=#dfe2e8;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="60" height="700" as="geometry" />
+        </mxCell>
+        <mxCell id="c3leftl" value="左&lt;br&gt;ActivityBar" style="text;html=1;horizontal=0;align=center;verticalAlign=middle;fontSize=10;fontColor=#7a828e;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="c3right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;dashed=1;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="70" width="200" height="700" as="geometry" />
+        </mxCell>
+        <mxCell id="c3rightl" value="右&lt;br&gt;DayPanel / AI 助手&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;（可显示，不影响书架布局）&lt;/font&gt;" style="text;html=1;horizontal=0;align=center;verticalAlign=middle;fontSize=10;fontColor=#888780;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="370" width="200" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3scope" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#e24b4a;strokeWidth=2;dashed=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="116" y="64" width="988" height="712" as="geometry" />
+        </mxCell>
+        <mxCell id="c3card" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="120" y="70" width="980" height="700" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3bar" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;" vertex="1" parent="1">
+          <mxGeometry x="120" y="70" width="980" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="c3crumb" value="◫ 学习空间　›　12 本 · 3 盒 · 5 散页" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=14;fontSize=12;fontColor=#3b6d11;" vertex="1" parent="1">
+          <mxGeometry x="120" y="70" width="300" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="c3seg1" value="▤ 列表" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=11;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="796" y="80" width="72" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="c3seg2" value="▥ 书架" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=11;fontStyle=1;fontColor=#185FA5;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="872" y="80" width="72" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="c3seg3" value="⤢ 密度" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=11;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="952" y="80" width="64" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="c3seg4" value="＋" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=12;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1022" y="80" width="30" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="c3seghint" value="L1/L2 收起后，模式切换抬到主体卡片顶栏（不新增高度）" style="text;html=1;align=right;verticalAlign=middle;fontSize=9;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="500" y="48" width="420" height="14" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3case" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f5f0;strokeColor=#c9cdd4;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="132" y="126" width="956" height="632" as="geometry" />
+        </mxCell>
+        <mxCell id="c3plate" value="学 习 空 间 · 书 架　（点击重命名 · 拖书到铜牌 = 换柜 / 换空间）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e6dfd2;strokeColor=#cbbb9c;fontSize=11;fontColor=#6b5a3e;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="152" y="138" width="916" height="28" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3fav" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffaf0;strokeColor=#efcfa0;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="152" y="176" width="916" height="138" as="geometry" />
+        </mxCell>
+        <mxCell id="c3favl" value="① 收藏展示格 · 顶部暖光位（最多 6 本，只读快捷入口，不改归属）" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#854f0b;" vertex="1" parent="1">
+          <mxGeometry x="160" y="180" width="420" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="c3fav1" value="线&lt;br&gt;性&lt;br&gt;表" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#c98b5e;strokeColor=#a06a42;fontSize=11;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="176" y="234" width="56" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="c3fav2" value="树&lt;br&gt;与&lt;br&gt;图" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7f77dd;strokeColor=#534ab7;fontSize=11;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="248" y="228" width="64" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="c3fav3" value="组&lt;br&gt;成&lt;br&gt;原&lt;br&gt;理" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1d9e75;strokeColor=#0f6e56;fontSize=11;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="328" y="238" width="52" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="c3fav4" value="英&lt;br&gt;语" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b4472f;strokeColor=#8c3524;fontSize=11;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="396" y="226" width="72" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="c3fav5" value="政&lt;br&gt;治" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#c98b5e;strokeColor=#a06a42;fontSize=11;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="484" y="236" width="58" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="c3fav6" value="论&lt;br&gt;文" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2f6fb4;strokeColor=#185FA5;fontSize=11;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="558" y="230" width="66" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c3favadd" value="＋ 收藏" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#efcfa0;dashed=1;fontSize=10;fontColor=#854f0b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="640" y="240" width="90" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="c3favnote" value="收藏是虚拟分组：这里显示的是指向真实页面的投影，&lt;br&gt;删除/取消收藏只影响 isStarred，不动 categoryId" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#a08050;lineHeight=1.5;" vertex="1" parent="1">
+          <mxGeometry x="760" y="234" width="300" height="34" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3b1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d9cbb4;strokeColor=#bda98d;" vertex="1" parent="1">
+          <mxGeometry x="152" y="314" width="916" height="12" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3s2l" value="③ 书脊 = 笔记本 Notebook · 宽度 ∝ 页数 · 色相 = hash(id) 稳定 · 右侧为抽出详情抽屉" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#854f0b;" vertex="1" parent="1">
+          <mxGeometry x="160" y="330" width="480" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk1" value="408&lt;br&gt;计算&lt;br&gt;机" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b4472f;strokeColor=#8c3524;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="168" y="362" width="60" height="118" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk2" value="英语&lt;br&gt;词汇" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2f6fb4;strokeColor=#185FA5;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="236" y="374" width="78" height="106" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk3" value="政治" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#c98b5e;strokeColor=#a06a42;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="322" y="348" width="48" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk4" value="数学&lt;br&gt;复习&lt;br&gt;笔记" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#5a5a52;strokeColor=#3f3f39;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="378" y="338" width="96" height="142" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk4r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#185FA5;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="374" y="334" width="104" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="c3ribbon" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#c5a332;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="452" y="318" width="10" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3ribbonl" value="⑤ 书签带 = 章节" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#854f0b;" vertex="1" parent="1">
+          <mxGeometry x="466" y="322" width="120" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk5" value="读书&lt;br&gt;笔记" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1d9e75;strokeColor=#0f6e56;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="482" y="370" width="64" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk6" value="错题" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7f77dd;strokeColor=#534ab7;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="554" y="384" width="56" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk7" value="论文&lt;br&gt;精读" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b4472f;strokeColor=#8c3524;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="618" y="354" width="84" height="126" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk8" value="速查&lt;br&gt;手册" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2f6fb4;strokeColor=#185FA5;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="710" y="376" width="76" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk9" value="模板" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#c98b5e;strokeColor=#a06a42;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="794" y="342" width="68" height="138" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bk10" value="周报" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#5a5a52;strokeColor=#3f3f39;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="870" y="388" width="58" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bkadd" value="＋&lt;br&gt;新建" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9cfe8;dashed=1;fontSize=10;fontColor=#185FA5;align=center;verticalAlign=middle;spacing=1;" vertex="1" parent="1">
+          <mxGeometry x="936" y="368" width="90" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="c3drop" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d0e4f7;strokeColor=#185FA5;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="928" y="336" width="8" height="144" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dropl" value="⑦ 插入指示器" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="310" width="100" height="14" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3b2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d9cbb4;strokeColor=#bda98d;" vertex="1" parent="1">
+          <mxGeometry x="152" y="480" width="916" height="12" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3s3l" value="④ 档案盒 = 普通目录 folder（不含章节层）· 与书脊造型明确区分，避免和 Notebook 同级错觉" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#854f0b;" vertex="1" parent="1">
+          <mxGeometry x="160" y="496" width="520" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="c3box1" value="参考资料&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;12 项&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfcabf;strokeColor=#a8a296;fontSize=11;fontColor=#3f3f39;align=center;verticalAlign=middle;spacing=1;" vertex="1" parent="1">
+          <mxGeometry x="168" y="514" width="170" height="118" as="geometry" />
+        </mxCell>
+        <mxCell id="c3box1t" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f4f1ea;strokeColor=#a8a296;" vertex="1" parent="1">
+          <mxGeometry x="188" y="526" width="64" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="c3box2" value="归档 2025&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;8 项&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfcabf;strokeColor=#a8a296;fontSize=11;fontColor=#3f3f39;align=center;verticalAlign=middle;spacing=1;" vertex="1" parent="1">
+          <mxGeometry x="352" y="514" width="170" height="118" as="geometry" />
+        </mxCell>
+        <mxCell id="c3box2t" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f4f1ea;strokeColor=#a8a296;" vertex="1" parent="1">
+          <mxGeometry x="372" y="526" width="64" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="c3box3" value="素材库&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;5 项&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfcabf;strokeColor=#a8a296;fontSize=11;fontColor=#3f3f39;align=center;verticalAlign=middle;spacing=1;" vertex="1" parent="1">
+          <mxGeometry x="536" y="514" width="150" height="118" as="geometry" />
+        </mxCell>
+        <mxCell id="c3box3t" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f4f1ea;strokeColor=#a8a296;" vertex="1" parent="1">
+          <mxGeometry x="556" y="526" width="64" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bkf1" value="杂&lt;br&gt;项" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1d9e75;strokeColor=#0f6e56;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;spacing=-1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="526" width="52" height="106" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bkf2" value="剪藏" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7f77dd;strokeColor=#534ab7;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="760" y="536" width="68" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bkf3" value="待读" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b4472f;strokeColor=#8c3524;fontSize=10;fontColor=#ffffff;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="836" y="542" width="56" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="c3boxadd" value="＋ 新建目录" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9cfe8;dashed=1;fontSize=10;fontColor=#185FA5;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="908" y="536" width="110" height="96" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3b3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d9cbb4;strokeColor=#bda98d;" vertex="1" parent="1">
+          <mxGeometry x="152" y="632" width="916" height="12" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f2efe8;strokeColor=none;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="152" y="644" width="916" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="c3s4l" value="⑥ 散页桌面 = 零散页面（categoryId = null）· 平放 · 倾角由 id 哈希生成（稳定不抖）" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#854f0b;" vertex="1" parent="1">
+          <mxGeometry x="160" y="648" width="520" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="c3p1" value="临时想法.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="176" y="690" width="160" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c3p2" value="会议记录.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="352" y="694" width="160" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c3p3" value="草稿.txt" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="528" y="688" width="160" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c3p4" value="摘录.md" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d5d8de;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="704" y="692" width="160" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c3padd" value="＋ 新建页面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9cfe8;dashed=1;fontSize=10;fontColor=#185FA5;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="880" y="702" width="110" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bfloor" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d9cbb4;strokeColor=#bda98d;" vertex="1" parent="1">
+          <mxGeometry x="152" y="776" width="916" height="12" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3drawer" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b9cfe8;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="740" y="126" width="348" height="632" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dh" value="📖 数学复习笔记　　　　　×" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=none;align=left;spacingLeft=16;fontSize=13;fontStyle=1;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="126" width="348" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dc1" value="章节 · 3　（点击 = 书翻到该章，书签带随之移动）" style="text;html=1;align=left;spacingLeft=16;verticalAlign=middle;fontSize=10;fontColor=#888780;" vertex="1" parent="1">
+          <mxGeometry x="740" y="174" width="348" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dc2" value="🔖 高数" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d0e4f7;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="194" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dc3" value="🔖 线代" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="220" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dc4" value="🔖 概率论" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="246" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dp1" value="页面 · 12" style="text;html=1;align=left;spacingLeft=16;verticalAlign=middle;fontSize=10;fontColor=#888780;" vertex="1" parent="1">
+          <mxGeometry x="740" y="284" width="348" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dp2" value="📄 极限与连续" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="304" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dp3" value="📄 导数与微分" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="330" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dp4" value="📄 中值定理" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="356" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dp5" value="📄 洛必达法则" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;align=left;spacingLeft=22;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="382" width="348" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dnote" value="此抽屉 = ChapterPanel 的「书架皮肤」&lt;br&gt;数据、排序、右键菜单、拖拽全部复用&lt;br&gt;只把行换成「书签 + 纸页」卡片&lt;br&gt;&lt;br&gt;Esc / 点空白 = 收回抽屉，书架复原" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3f4f6;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=10;fontColor=#5b6470;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="756" y="430" width="316" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dbl" value="双击书 / 点页面 → 中间区切到编辑器态（编辑器本体不变）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c5a332;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#854f0b;" vertex="1" parent="1">
+          <mxGeometry x="756" y="560" width="316" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c3dclose" value="◀ 收起" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;fontSize=10;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="740" y="620" width="44" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="c3darrow_e" style="html=1;rounded=0;strokeColor=#185FA5;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c3bk4" target="c3dh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3lg" value="图例 · 全部元素均落在中间主体卡片内" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="812" width="500" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l1" value="① 书柜 = 空间 Space&lt;br&gt;铜牌可重命名，柜体区分于其它空间" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="842" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l2" value="② 收藏展示格 = isStarred&lt;br&gt;顶部暖光位，最多 6 本" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffaf0;strokeColor=#efcfa0;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#854f0b;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="362" y="842" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l3" value="③ 书脊 = 笔记本 Notebook&lt;br&gt;厚度 ∝ 页数，色相 = hash(id) 稳定" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="684" y="842" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l4" value="④ 档案盒 = 目录 folder&lt;br&gt;带标签槽，与书脊造型区分" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="1006" y="842" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l5" value="⑤ 书签带 = 章节 Chapter&lt;br&gt;从书顶凸出，点击定位" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="902" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l6" value="⑥ 散页桌面 = 零散页面&lt;br&gt;平放纸张，随机小倾角" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="362" y="902" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l7" value="⑦ 插入指示器 / ⑧ 虚线空槽&lt;br&gt;拖到两书之间 = 调 sortOrder；与 Explorer 同源" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="684" y="902" width="310" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="c3l8" value="抽出详情抽屉（覆盖书柜右侧）&lt;br&gt;= ChapterPanel 换皮，非新组件" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=10;verticalAlign=middle;fontSize=10;fontColor=#444441;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="1006" y="902" width="310" height="48" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="kb-mapping" name="4-映射与交互">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c4t" value="数据实体 → 呈现映射 与 交互矩阵（两种模式必须逐项对齐 · 均发生在中间区域内）" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="22" width="900" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4h1" value="数据实体" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;fontSize=12;fontStyle=1;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c4h2" value="Explorer 呈现（L1+L2）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;fontSize=12;fontStyle=1;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="220" y="70" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c4h3" value="Shelf 呈现（书柜内）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#b7ddc4;fontSize=12;fontStyle=1;fontColor=#3b6d11;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="460" y="70" width="260" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c4h4" value="交互契约（两模式完全一致）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;fontSize=12;fontStyle=1;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="70" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4a1" value="空间 Space" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=11;fontStyle=1;fontColor=#3b6d11;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="110" width="180" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4a2" value="L1 树根节点，点击进入沉浸视图&lt;br&gt;（SpacePanel 返回栏 + 文件/大纲切换）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="110" width="240" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4a3" value="整个书柜（柜体 + 铜牌 + 柜脚）&lt;br&gt;切换空间 = 换一个书柜，横向滑入" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3faf5;strokeColor=#dfe2e8;fontSize=10;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="460" y="110" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4a4" value="左键=进入 / 右键=重命名·删除·复制·剪切·粘贴·新建子项 / 拖放=不接受拖入（保持现有约束）/ 双击=重命名" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="110" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4b1" value="笔记本 Notebook" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=11;fontStyle=1;fontColor=#185FA5;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="162" width="180" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4b2" value="L1 可展开节点，点击显示 L2&lt;br&gt;ChapterPanel（章节 + 页面）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="162" width="240" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4b3" value="书脊（竖立，宽度 ∝ 页面数）&lt;br&gt;单击=抽出详情抽屉 / 双击=打开最近阅读页" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3faf5;strokeColor=#dfe2e8;fontSize=10;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="460" y="162" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4b4" value="左键=抽出 / 右键=全部现有项 + 新建章节 / 拖页面入=落到首个章节（无则自动建「默认章节」）/ 拖书=层内排序或跨柜移动" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="162" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4c1" value="章节 Chapter" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=11;fontStyle=1;fontColor=#854f0b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="214" width="180" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4c2" value="L2 面板中的章节行，点击过滤页面&lt;br&gt;不内联展开（不可再嵌套）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="214" width="240" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4c3" value="书签带（从书顶凸出的丝带）+&lt;br&gt;抽屉内「🔖 章节」卡片，两者联动" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3faf5;strokeColor=#dfe2e8;fontSize=10;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="460" y="214" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4c4" value="左键=定位 / 右键=重命名·删除·排序 / 拖页面入=移入该章 / 拖书签=跨书移动（校验目标必须为 notebook）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="214" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4d1" value="页面 Page" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=11;fontStyle=1;fontColor=#5F5E5A;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="266" width="180" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4d2" value="L1/L2 中的文件行（FileIcon 按类型）&lt;br&gt;点击=编辑器预览标签打开" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="266" width="240" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4d3" value="抽屉内纸页卡片 / 散页区的平放纸张&lt;br&gt;星标 = 书角折角标记" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3faf5;strokeColor=#dfe2e8;fontSize=10;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="460" y="266" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4d4" value="左键=打开 / 右键=重命名·删除·复制·剪切·导出·收藏 / 拖=移动归属 / Ctrl+拖=复制（沿用 duplicate）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="266" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4e1" value="零散页面" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=11;fontStyle=1;fontColor=#5F5E5A;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="318" width="180" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4e2" value="L1 底部「零散页面」分组（虚线落区）&lt;br&gt;拖入 = categoryId 置 null" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="318" width="240" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4e3" value="书柜最底层「散页桌面」&lt;br&gt;拖到桌面 = 移出所有容器" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3faf5;strokeColor=#dfe2e8;fontSize=10;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="460" y="318" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4e4" value="落区高亮 = 现有 drag-over-loose 样式；移动走 onDropOnLooseArea，不新增 IPC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="318" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4f1" value="收藏 Starred" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=11;fontStyle=1;fontColor=#8a6d15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="370" width="180" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4f2" value="L1 中「收藏 (n)」可折叠虚拟分组" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="370" width="240" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4f3" value="书柜顶部「展示格」+ 暖光&lt;br&gt;只读快捷位，不改变归属" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3faf5;strokeColor=#dfe2e8;fontSize=10;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="460" y="370" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="c4f4" value="点击=直接打开 / 右键=取消收藏 / 不可拖入（拖入=取消收藏而非移动，需显式确认）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;fontSize=10;fontColor=#444441;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="370" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4note" value="对齐原则：映射表里每一行都必须在书柜中有唯一对应物；凡 Explorer 能做的操作，书架模式必须也能做（允许入口不同，不允许能力缺失）。&lt;br&gt;反例警戒：不要把「章节」做成书架上一本独立的小书 —— 那会让 Chapter 与 Notebook 视觉同级，破坏用户对层级的直觉；也不要把书架塞回 180–400px 的 L1，隐喻立不住。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=14;verticalAlign=middle;fontSize=11;fontColor=#791F1F;lineHeight=1.7;" vertex="1" parent="1">
+          <mxGeometry x="40" y="450" width="1280" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4kb" value="导航与键盘（书架模式新增 / 沿用 · 作用域：中间区域）" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="536" width="600" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c4kb1" value="← →　同层内左右移动（到头自动跳上一本/下一层末）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#444441;" vertex="1" parent="1">
+          <mxGeometry x="40" y="564" width="310" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c4kb2" value="↑ ↓　跨层移动（Shelf 特有：隔板 = 逻辑分组）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#444441;" vertex="1" parent="1">
+          <mxGeometry x="362" y="564" width="310" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c4kb3" value="Enter　抽出 / 打开　　Esc　收回抽屉" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#444441;" vertex="1" parent="1">
+          <mxGeometry x="684" y="564" width="310" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c4kb4" value="沿用：Ctrl+N 新建 / Ctrl+W 关标签 / Ctrl+C·X·V 剪贴板 / Delete 上下文删除 / Ctrl+Shift+R 沉浸阅读" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#444441;" vertex="1" parent="1">
+          <mxGeometry x="1006" y="564" width="314" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c4kb5" value="Ctrl+Shift+M　呈现模式轮换（新增，写入设置）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#185FA5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="608" width="310" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="c4kb6" value="Ctrl+B　仍为 L1 折叠（书架模式下退化为「隐藏书柜，只看编辑器」）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#444441;" vertex="1" parent="1">
+          <mxGeometry x="362" y="608" width="632" height="32" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="kb-arch" name="5-重构分层">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c5t" value="重构后分层：状态 / 行为 / 呈现 三层分离（现有 index.tsx 的 handler 契约保持不变）" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="22" width="900" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l1" value="① 状态层 · KnowledgeModule（src/modules/knowledge/index.tsx）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#5F5E5A&quot;&gt;categories / allPages / chapterPages / starred / 选中三元组 / openPageIds / dirty / clipboard / deletingMap / readingMode&lt;br&gt;以及全部 handler：增删改移、导入导出、剪贴板、定位、插件视图 —— 一个字都不动&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeedfe;strokeColor=#cecbf6;fontSize=13;fontColor=#534AB7;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1">
+          <mxGeometry x="200" y="70" width="700" height="76" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l2" value="② 派生层 · useKnowledgeViewModel()（新增 · src/modules/knowledge/model/useKnowledgeViewModel.ts）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#5F5E5A&quot;&gt;从 NotebookList 抽出：sortCats / rootCats / 树构建 / 展开集 / 类型判定(isSpace·isNotebook·isChapter) / 分组（收藏·零散）/ locate 计算&lt;br&gt;输出纯数据，不含任何 DOM 与样式 —— 两种 View 消费同一份视图模型&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeedfe;strokeColor=#cecbf6;fontSize=13;fontColor=#534AB7;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1">
+          <mxGeometry x="200" y="176" width="700" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e12" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l1" target="c5l2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l3" value="③ 路由 · ViewSwitch（settings.knowledgeViewMode）· 只切换浏览层" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#faeeda;strokeColor=#efcfa0;fontSize=13;fontStyle=1;fontColor=#854f0b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="292" width="500" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e23" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l2" target="c5l3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l4a" value="ExplorerView（零改动）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#5F5E5A&quot;&gt;NotebookList + ChapterPanel&lt;br&gt;逐步改为消费 ViewModel，UI 输出不变&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;fontSize=13;fontColor=#5F5E5A;align=center;verticalAlign=middle;spacing=3;" vertex="1" parent="1">
+          <mxGeometry x="120" y="386" width="330" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c5l4b" value="ShelfView（新增）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#3B6D11&quot;&gt;Bookcase / ShelfBoard / BookSpine / ArchiveBox&lt;br&gt;/ RibbonMark / LooseDesk / ShowcaseShelf&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#b7ddc4;fontSize=13;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=3;" vertex="1" parent="1">
+          <mxGeometry x="650" y="386" width="350" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e34a" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l3" target="c5l4a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e34b" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l3" target="c5l4b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l5" value="④ 行为层 · 共享 hooks（新增 · src/modules/knowledge/model/）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#3B6D11&quot;&gt;useContextMenuItems() 菜单项定义数据化 · useDragDrop() payload 与命中判定 · useDeleteFx() 吞噬动画 · useInlineCreate() 内联命名&lt;br&gt;两个 View 传「命中单元 id + 坐标」进来，拿到同一套菜单与同一套落点校验 —— 杜绝语义漂移&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#b7ddc4;fontSize=13;fontColor=#3b6d11;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1">
+          <mxGeometry x="120" y="512" width="880" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e4a5" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l4a" target="c5l5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e4b5" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l4b" target="c5l5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l6" value="⑤ 视觉原子 · ShelfPrimitives（纯展示 · 无状态无逻辑）&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#5F5E5A&quot;&gt;BookSpine（厚度/色相/烫金书名/压凹纹理）· ArchiveBox · RibbonMark · PaperCard · ShelfBoard（木纹 CSS 渐变）· ShowcaseLight&lt;br&gt;全部走 CSS 变量，随 light / dark 主题自动切换，不使用位图&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c9cdd4;fontSize=13;fontColor=#444441;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1">
+          <mxGeometry x="120" y="632" width="880" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e56" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;dashed=1;" edge="1" parent="1" source="c5l5" target="c5l6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5l7" value="⑥ 持久化 · settings（knowledgeViewMode / knowledgeShelfDensity）+ IPC 层（src/lib/ipc.ts 不动）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1efe8;strokeColor=#d3d1c7;fontSize=12;fontColor=#5F5E5A;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="120" y="748" width="880" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="c5e37" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#c5a332;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c5l7" target="c5l3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5side" value="目录建议&lt;br&gt;&lt;font style=&quot;font-size:10px&quot; color=&quot;#5F5E5A&quot;&gt;modules/knowledge/&lt;br&gt;├ index.tsx　（状态层，微调）&lt;br&gt;├ model/&lt;br&gt;│ ├ useKnowledgeViewModel.ts&lt;br&gt;│ ├ useContextMenuItems.ts&lt;br&gt;│ ├ useDragDrop.ts&lt;br&gt;│ └ useDeleteFx.ts&lt;br&gt;├ views/&lt;br&gt;│ ├ ExplorerView.tsx&lt;br&gt;│ └ ShelfView.tsx&lt;br&gt;└ components/&lt;br&gt;　 ├ NotebookList.tsx（原地）&lt;br&gt;　 ├ ChapterPanel.tsx（原地）&lt;br&gt;　 └ shelf/&lt;br&gt;　　 ├ Bookcase.tsx&lt;br&gt;　　 ├ BookSpine.tsx&lt;br&gt;　　 ├ ArchiveBox.tsx&lt;br&gt;　　 └ LooseDesk.tsx&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafbfc;strokeColor=#c9cdd4;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=11;fontColor=#2C2C2A;lineHeight=1.5;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="70" width="230" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="c5warn" value="红线：不得 fork NotebookList.tsx 另存为 ShelfView 骨架。1191 行里真正与「树形」耦合的只有 renderCategory 与行内拖拽 DOM 操作，其余全是可复用行为。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=14;verticalAlign=middle;fontSize=11;fontColor=#791F1F;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="510" width="230" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="kb-plan" name="6-落地分期">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="840" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c6t" value="落地分期（每期可独立合入、可独立回滚 · 前一期不通过不进入下一期）" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="22" width="800" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6p0h" value="P0 · 抽派生层" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e9ebef;strokeColor=#d5d8de;fontSize=12;fontStyle=1;fontColor=#5b6470;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="230" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p0" value="· 把 sortCats / rootCats / 类型判定 / 分组 抽到 useKnowledgeViewModel&lt;br&gt;· NotebookList 改为消费 hook&lt;br&gt;· 零 UI 变化&lt;br&gt;&lt;br&gt;验收：树形展开、排序切换、空间沉浸、搜索定位 全量回归通过" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=10;fontColor=#444441;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="106" width="230" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6p1h" value="P1 · 模式开关 + 骨架" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=12;fontStyle=1;fontColor=#185FA5;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="290" y="70" width="230" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p1" value="· settings.knowledgeViewMode 落地（默认 explorer）&lt;br&gt;· 模式切换抬到主体卡片顶栏&lt;br&gt;· ShelfView 骨架：书柜 + 一层隔板 + 静态书脊&lt;br&gt;· L1/L2 让位，书柜占满中区宽度&lt;br&gt;· 选中三元组双向同步（切模式不丢位置）&lt;br&gt;&lt;br&gt;验收：切换后选中项在另一模式中等价高亮" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=10;fontColor=#444441;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="290" y="106" width="230" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6p2h" value="P2 · 交互对齐（关键期）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2ebfa;strokeColor=#b9cfe8;fontSize=12;fontStyle=1;fontColor=#185FA5;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="540" y="70" width="230" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p2" value="· useContextMenuItems 数据化，两 View 共用&lt;br&gt;· useDragDrop：书脊/档案盒/散页/插入指示器四类落点&lt;br&gt;· useDeleteFx 吞噬动画接到书脊与纸页&lt;br&gt;· 内联新建（书柜空槽 / 散页 ＋）&lt;br&gt;· 收藏展示格、书签带定位、抽出抽屉&lt;br&gt;&lt;br&gt;验收：映射表 6 行 × 交互 4 项 逐格走查无缺" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=10;fontColor=#444441;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="540" y="106" width="230" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6p3h" value="P3 · 视觉打磨" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faeeda;strokeColor=#efcfa0;fontSize=12;fontStyle=1;fontColor=#854f0b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="790" y="70" width="230" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p3" value="· 书脊烫金书名 / 压凹 / 顶部装饰线&lt;br&gt;· 抽出动画（书 → 抽屉，缓动 240ms）&lt;br&gt;· 换柜横向滑入、隔板木纹、柜脚阴影&lt;br&gt;· 散页随机倾角（由 id 哈希，稳定不抖）&lt;br&gt;· light / dark 双主题变量补齐&lt;br&gt;&lt;br&gt;验收：两主题下对比度 ≥ 4.5:1，无位图资源" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=10;fontColor=#444441;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="790" y="106" width="230" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6p4h" value="P4 · 密度 / 键盘 / 性能" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faeeda;strokeColor=#efcfa0;fontSize=12;fontStyle=1;fontColor=#854f0b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="70" width="220" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p4" value="· 三档书柜密度（紧凑/标准/宽松）&lt;br&gt;· 右区展开时书柜自动重排（不变窄就挤）&lt;br&gt;· 方向键网格导航 + 焦点环&lt;br&gt;· content-visibility 窗口化，500+ 书脊不卡&lt;br&gt;· 快捷键 Ctrl+Shift+M 与设置项&lt;br&gt;&lt;br&gt;验收：500 节点下滚动 &gt; 55fps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#dfe2e8;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;fontSize=10;fontColor=#444441;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="106" width="220" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6p0e" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c6p0" target="c6p1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p1e" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c6p1" target="c6p2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p2e" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c6p2" target="c6p3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c6p3e" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeColor=#888780;strokeWidth=1;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="c6p3" target="c6p4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6riskh" value="风险与对策" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2C2C2A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="400" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c6r1" value="风险：NotebookList 的拖拽依赖直接 DOM 操作（dragRef + classList 高亮），绕开 React，抽取时易漏&lt;br&gt;对策：P0 只抽纯计算，拖拽留到 P2 用 useDragDrop 重写；新实现只在 ShelfView 使用，Explorer 原样不动" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#791F1F;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="428" width="600" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="c6r2" value="风险：书柜是二维布局，「上/下一项」不再线性，与 sortOrder 上移/下移语义打架&lt;br&gt;对策：排序仍以 sortOrder 为准，视觉顺序 = 层序 + 层内序；方向键按视觉序走，写入时翻译回 sortOrder" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#791F1F;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="428" width="600" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="c6r3" value="风险：空间沉浸、章节下钻、大纲切换已用多个布尔量堆出隐式状态机，再加模式维度会爆炸&lt;br&gt;对策：模式是正交于「显示态」的顶层维度；显示态收拢为 viewState: 'tree' | 'chapter' | 'outline' 单一枚举" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#791F1F;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="514" width="600" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="c6r4" value="风险：右区（DayPanel / AI 助手）展开时会挤压中间卡片，书架重排可能闪动&lt;br&gt;对策：书架按容器宽度断点重排（&lt;640 单列 / &lt;960 两层 / 其余三层），用 ResizeObserver + 防抖，不用窗口事件" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcebeb;strokeColor=#f7c1c1;align=left;spacingLeft=12;verticalAlign=middle;fontSize=10;fontColor=#791F1F;lineHeight=1.6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="514" width="600" height="72" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c6open" value="待你拍板的四个决策点（我已在原型里按倾向方案绘制）&lt;br&gt;&lt;font style=&quot;font-size:11px&quot; color=&quot;#5F5E5A&quot;&gt;A. 章节 Chapter 在书架上做「书签带」还是「书中夹页」？　→ 原型按书签带&lt;br&gt;B. 单击书是「右侧抽出抽屉（保留书架场景）」还是「整个中区替换为书内视图（层级更清晰）」？　→ 原型按抽出抽屉&lt;br&gt;C. 书架模式下编辑器如何出现：中区整块切换到编辑器态 / 抽屉内直接打开 / 新开右侧子面板？　→ 原型按中区整块切换（对现有 PageTabBar 改动最小）&lt;br&gt;D. 书柜是否允许「空间列表」层（先看一排书柜再进某个柜），还是始终只显示当前空间一个柜？　→ 原型按始终单柜 + 顶栏面包屑返回空间列表&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeedfe;strokeColor=#cecbf6;align=left;spacingLeft=14;verticalAlign=middle;fontSize=12;fontColor=#534AB7;lineHeight=1.8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="1220" height="130" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

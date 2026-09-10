@@ -34,8 +34,8 @@
 模块现有右栏是素材库（240-420px，改造方案见 `ai-teaching-sources-panel-rework.md`），与工件栏同为右侧。**并存口径（2026-09-09 用户拍板）**：
 
 - 双右栏并存：工件栏紧贴对话（教学主视图），素材库窄栏在其右
-- **工件栏展开（"双窗口"）时，素材库自动收起**（贴边条态，沿表现有 ResizablePanel 折叠动画）；工件栏折叠/关闭时素材库自动恢复
-- 自动收起**不改用户意图态**：素材库记录 `aiTeach.srcUserIntent`（open/closed），自动收起与恢复都按意图执行；工件栏开着时用户仍可手动点贴边条展开素材库（尊重用户，两者允许短暂同屏）
+- **工件栏展开（"双窗口"）时，素材库自动收起**（贴边条态，沿表现有 ResizablePanel 折叠动画）；**工件栏关闭时素材库不自动弹出**（2026-09-09 实现期拍板：与右缘拉出条体验冲突），需要时经顶栏「素材库」chip / 贴边条 / Ctrl+Alt+B 手动展开
+- 自动收起**不改用户意图态**：素材库记录 `aiTeach.rightOpen`（open/closed，实现即意图态）；工件栏开着时用户仍可手动展开素材库（尊重用户，两者允许短暂同屏）
 - 空间不足兜底：窗口宽度 < 1100px 时工件栏自动降宽至 40%，仍不足则素材库维持收起
 
 ### 1.4 各类视图去向
@@ -107,8 +107,11 @@ result: { relPath: string, lines: number }
 
 新文件 `src/modules/ai-teaching/ArtHtmlView.tsx`：
 
-- 内容获取：`workspaceReadFile(rootId, relPath)` 读磁盘全文 → `<iframe srcDoc={injected} sandbox="allow-scripts">`。
-  不注册新协议、不走 file://——路径安全已由工具侧 pathGuard 保证，读内容与 md 页签同一条 IPC。
+- 内容获取：`workspaceReadFile(rootId, relPath)` 读磁盘全文 → 注入外壳后渲染。
+  > 2026-09-09 实修裁决（三改）：`srcDoc` 子框架会**继承父文档 CSP**（index.html `script-src 'self'`），示意图内联脚本与宿主量高脚本被拦、每次刷新报 Refused；
+  > `blob:` 又被 `sandbox`（无 `allow-same-origin` → 不透明源）拒载。**最终载体 = 主进程 `kbview://vault/<rel>` 自定义协议**
+  > （`electron/lib/kbVisualProtocol.ts`，跨 scheme 正常导航绕开父文档 CSP，响应头 CSP 与量高/主题外壳由主进程统一注入）；
+  > 宿主侧只读路径 `relPath`（安全由工具侧 pathGuard 保证），`index.html` CSP 已放行 `frame-src 'self' plugin: kbview:`。
 - ⟳ 刷新 = 重读文件重挂 iframe（编辑器改完保存 → 点刷新即见，§2 工具条已有 ⟳）。
 - `key` 绑定 `relPath + 文件 mtime/hash`，内容未变不重挂。
 - 「↗ 编辑」沿用工具条现有按钮（kb-open-in-editor 事件，from:'aiTeaching' 返回 chip 机制不变）。
@@ -118,7 +121,7 @@ result: { relPath: string, lines: number }
 | 威胁 | 对策 |
 |---|---|
 | 生成脚本触达宿主 window/preload IPC 桥 | `sandbox="allow-scripts"`，**绝不加 `allow-same-origin`**（不透明源即隔离） |
-| 外链追踪 / 加载远端脚本 | srcDoc 头部注入 `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:">`（禁 eval、禁一切网络请求） |
+| 外链追踪 / 加载远端脚本 | 外壳 `<head>` 注入（现由 `kbview` 协议侧完成，原 srcDoc 同口径）`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:">`（禁 eval、禁一切网络请求） |
 | iframe 内导航劫持工件栏 | sandbox 天然无 `allow-top-navigation`；兜底监听 `e.source===frame.contentWindow` 之外的消息一律忽略 |
 | 资源/高度耗尽 | 高度钳制 §4.4；文件 >150 行时页签顶部黄条提示「超出产物约束，渲染可能不佳」（AI 约束由 §3.2 提示词保证，此处仅提示不拒绝） |
 | XSS 于源码视图 | 源码以高亮代码块展示（React 转义），不用 innerHTML |
@@ -127,9 +130,11 @@ result: { relPath: string, lines: number }
 
 ### 4.4 尺寸与主题适配
 
-- 高度：注入脚本 `ResizeObserver → parent.postMessage({__kbArtH: h}, '*')`，宿主按 `e.source` 校验后设定 iframe 高，钳制 [120, 4000]px，超限工件栏内容区自身滚动；
-- 宽度：跟随工件栏（分隔条可拖 24%~60%），iframe `width:100%`；AI 按 §3.2 画幅约束生成，重排自适应；
-- 主题：注入时把应用 CSS 变量当前值（`--bg-primary/--text-primary/--accent` 等）展开为 iframe 内 `:root{}` 内联声明，图随明暗主题走；生成失败（iframe 报错兜底）→ 占位框 + 「查看源码」按钮。
+- 高度（2026-09-09 三修后的四修口径）：iframe 直接 `absolute inset-0` 铺满分栏高度。
+  沙箱内 `html body{min-height:100% !important; display:grid !important; place-items:center !important}`（所有关键布局属性加 !important 且选择器提到 `html body`，压过 AI 模板自身的 `body{display:block}` / `body{min-height:100vh}` 等样板）——内容矮于画布时上下留白对称、内容高于画布时 wrap 自然撑高、内部 overflow 滚动。**垂直居中作为所有 kbview:// 渲染的默认行为，不针对单个文件**。
+  量高改测 `__kbWrap` 自然高（body min-height:100% 会把 scrollHeight 拉到视口高，污染 fit baseH）。⤢ fit 态同铺满分栏高度，另由沙箱内壳对 `documentElement` 施加 `zoom` 把内容物理放大到 ~92% 高（上限 4×），横向超出时图内拖动。
+- 宽度：跟随工件栏（分隔条可拖 24%~60%），iframe `width:100%`；AI 按 §3.2 画幅约束生成，重排自适应。
+- 主题：响应头 CSP 不剥自带的 `:root{}`，但走 `postMessage({__kbArtTheme}) → 沙箱 message handler → documentElement.style.setProperty(k, v)` 实时同步（明暗切换不重挂 iframe）；生成失败（iframe 报错兜底）→ 占位框 +「查看源码」按钮。
 
 ## 5. 落地改动点
 
@@ -153,7 +158,7 @@ result: { relPath: string, lines: number }
 - [ ] pptx 逐页阅读进工件栏后，「讲当前页」类对话联动不回归
 - [ ] 切会话清页签、栏宽/折叠态记忆保持
 - [ ] 工具参数含越权路径（`..`/绝对路径）被 pathGuard 拒绝
-- [ ] 双右栏联动：工件栏展开时素材库自动收起；关闭工件栏素材库按意图恢复；手动展开素材库后不被强制收回
+- [ ] 双右栏联动：工件栏展开时素材库自动收起；工件栏关闭后素材库不自动弹出（顶栏 chip/贴边条/快捷键可手动展开）；手动展开素材库后不被强制收回
 - [ ] 窄窗（<1100px）下工件栏降宽、素材库维持收起，无横向溢出
 - [ ] AI 主动生成门槛：纯文字可答的问题不触发工具（抽查 10 轮）
 - [ ] 安全抽查：生成的图内 `fetch('https://…')` 被 CSP 拦、`parent.document` 访问抛跨源异常、iframe 内链接无法导航宿主（§4.3 全表逐项验证）

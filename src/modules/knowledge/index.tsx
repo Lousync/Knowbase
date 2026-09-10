@@ -18,6 +18,7 @@ import {
   workspaceRename, workspaceGetCurrent
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
+import { recordFileOp } from '../../lib/fileOpHistory'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
@@ -198,6 +199,19 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     // 阅读详情页也是 keep-alive：编辑器改过磁盘后必须重读（2026-09-09 修复"回知识库看不到修改"）
     window.dispatchEvent(new Event('kb-reload-detail'))
   }, [isActive])
+
+  /** Ctrl+Z 撤销 / 重做文件操作（kb-fs-op-changed）→ 重读页面与分类（不限 isActive：
+   *  撤销常发生在编辑区，此时知识库虽保活但不在前台，回来时数据必须已是新的） */
+  useEffect(() => {
+    const handler = () => {
+      refreshCategories(); refreshAllPages(); refreshStarred(); refreshTags()
+      if (selectedChapterId) refreshChapterPages()
+      window.dispatchEvent(new Event('kb-graph-refresh'))
+      window.dispatchEvent(new Event('kb-reload-detail'))
+    }
+    window.addEventListener('kb-fs-op-changed', handler)
+    return () => window.removeEventListener('kb-fs-op-changed', handler)
+  }, [refreshCategories, refreshAllPages, refreshStarred, refreshTags, refreshChapterPages, selectedChapterId])
 
   // .ignore 规则提示（§10.1）：只有用户可行动的 .ignore 规则问题才 Toast + 终端计数；
   // 信息性警告（frontmatter.id 缺失=草稿机制等）完全静默——fingerprint 只记 actionable，
@@ -748,6 +762,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       // 对已存在目录调用会造出镜像空目录。目标父目录由 ws:rename 主进程侧在缺失时自动补建（mkdir -p）。
       const res = await workspaceRename(cur.rootId, srcRel, dstRel)
       if (!res.ok) { showToast({ type: 'error', message: res.error || '移动失败' }); return false }
+      // 记入跨模块撤销栈：编辑区与知识库共用一份，Ctrl+Z 可撤回（kb-fs-op-changed 回流刷新）
+      recordFileOp({ kind: 'move', rootId: cur.rootId, from: srcRel, to: dstRel, name: base })
       window.dispatchEvent(new CustomEvent('kb-file-moved', { detail: { srcRel, dstRel } })) // 通知编辑器刷新树
       showToast({ type: 'info', message: `已移动 ${label} → ${dstDirRel || '仓库根目录'}` })
       return true

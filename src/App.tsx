@@ -50,6 +50,7 @@ import { Onboarding } from './components/shared/Onboarding'
 import { ImportModal } from './modules/shared/components/ImportModal'
 import { useCheckinReminder } from './lib/useCheckinReminder'
 import { useHabitAutoCheckinToast } from './lib/useHabitAutoCheckin'
+import { installFileOpUndoShortcuts } from './lib/fileOpHistory'
 import { AssistantPanel } from './components/shared/AssistantPanel'
 import { DayPanelWindowApp } from './daypanel/DayPanelWindowApp'
 import { DayPanel } from './daypanel/DayPanel'
@@ -87,6 +88,10 @@ export default function App() {
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+
+  // 文件操作撤销快捷键（Ctrl+Z 撤销 / Ctrl+Shift+Z·Ctrl+Y 重做）：
+  // 编辑区与知识库共用一份栈；焦点在 Monaco/输入框时自动让路给文本撤销（isEditingInput）
+  useEffect(() => installFileOpUndoShortcuts(), [])
   const dayPanelMaxWidth = Math.max(300, Math.min(500, Math.floor(winWidth * 0.4)))
 
   // 窗口圆角：透明窗口自绘 18px 大圆角；最大化/全屏时切直角（贴满屏幕时圆角会露四角缝）。
@@ -145,6 +150,9 @@ export default function App() {
   const [fileLoading, setFileLoading] = useState(false)
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
+  // 工具箱「回主页」信号（单调递增）：已在工具箱时点击活动栏图标 → +1，工具箱模块据此退出当前工具。
+  // 用信号而非命令布尔值：同一信号值不会重复触发，连续点击每次都生效
+  const [toolboxHomeSignal, setToolboxHomeSignal] = useState(0)
 
   // 禅模式档位统一出口：内存 + 持久化。唯一入口在 AI 教学模块（aiTeaching 顶栏按钮），
   // 该模块 Esc/离开 Tab 自动退出；顶部热区退出也走这里保持持久化一致
@@ -526,7 +534,12 @@ export default function App() {
 
   const handleTabChange = (tab: TabName) => {
     setEditorJumpFrom(null) // 手动切 Tab 即清除「返回来源」上下文（条目6）
-    if (tab === activeTab) { setSidebarOpen(v => !v); return }
+    if (tab === activeTab) {
+      // 工具箱专属（2026-09-10）：已在工具箱时再点活动栏图标 = 退出当前工具、回到工具箱主界面。
+      // 通用行为（折叠侧栏）对工具箱无意义（本模块无侧栏），故仅 toolbox 走这条分支
+      if (tab === 'toolbox') { setToolboxHomeSignal(n => n + 1); return }
+      setSidebarOpen(v => !v); return
+    }
     // 分屏冲突：目标已在副栏 → 主栏显示它、旧主栏进副栏（避免同模块双实例）
     if (secondaryTab === tab) {
       const old = activeTab
@@ -596,7 +609,7 @@ export default function App() {
       case 'aiTeaching': return <AiTeachingModule isActive={on} zenLevel={zenLevel} onZenLevelChange={changeZen} />
       case 'recycle': return <RecycleBinModule isActive={on} />
       case 'settings': return <SettingsModule />
-      case 'toolbox': return <ToolboxModule />
+      case 'toolbox': return <ToolboxModule homeSignal={toolboxHomeSignal} />
       case 'plugins': return <PluginsModule />
       case 'help': return <HelpModule />
       case 'devtools': return DevToolsModuleDynamic ? <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} /> : null

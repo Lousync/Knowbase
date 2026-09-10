@@ -4,7 +4,7 @@ import {
   Pencil, RefreshCw, Languages, ArrowUpRight,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { getAssistantContext } from '../../../lib/assistantContext'
+import { getAssistantContext, getSelectionAskHost, selectionContext } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
 import { MarkdownPreview } from '../MarkdownPreview'
 import { TranslateCard } from '../TranslateCard'
@@ -303,7 +303,14 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
   const askSelection = useCallback((text: string) => {
     window.getSelection()?.removeAllRanges()
     setSelFloat(null)
-    setSelCtx({ type: 'selection', label: `选中片段「${text.slice(0, 24)}${text.length > 24 ? '…' : ''}」`, data: { text } })
+    // 模块接管优先（如 AI 教学：提问要落进它自己的「当前对话」往后答，而不是另开侧边栏对话）
+    const host = getSelectionAskHost()
+    if (host) {
+      try {
+        if (host.accept()) { host.ask(text); return }
+      } catch { /* 宿主异常 → 回退侧边栏，不阻断用户 */ }
+    }
+    setSelCtx(selectionContext(text))
     openPanel()
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [openPanel])

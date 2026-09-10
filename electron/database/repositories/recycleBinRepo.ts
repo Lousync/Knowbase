@@ -231,6 +231,7 @@ export function registerRecycleBinHandlers(): void {
         id: record.id, title: record.title || '', url: record.url || null, username: record.username || null,
         account: record.account || null, password: storedPwd, notes: record.notes || null,
         sort_order: nextOrder, created_at: record.createdAt, updated_at: record.updatedAt,
+        favorite: record.favorite === true, group: record.group || '',
       })
       vaultPasswordsSave(vrows)
     } else if (item.module === 'moments') {

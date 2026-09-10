@@ -40,6 +40,7 @@ import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
 import { registerAiToolHandlers } from '../lib/aiTools'
+import { registerKbVisualProtocol } from '../lib/kbVisualProtocol'
 import { registerBuiltinTools } from '../lib/builtinTools'
 import { registerMcpHandlers, restoreMcpConnections } from '../lib/mcpService'
 import { registerSkillHandlers } from '../lib/skillService'
@@ -62,9 +63,11 @@ import { SETTINGS } from '../../src/lib/settings'
 
 // 附件自定义协议：attachment://{id}/ 与 attachment://{id}/?thumb=1
 // 插件自定义协议：plugin://{id}/{file} — UI 插件的沙箱页面(配合 iframe sandbox 使用)
+// AI教学示意图渲染协议：kbview://vault/<rel>.html — 工件栏沙箱 iframe 载体（不继承父文档 CSP，见 kbVisualProtocol.ts）
 protocol.registerSchemesAsPrivileged([
-{ scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-{ scheme: 'plugin', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'attachment', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  { scheme: 'plugin', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'kbview', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ])
 
 // ===== 数据隔离：开发版（npm run dev）使用独立 userData 目录 =====
@@ -685,6 +688,9 @@ app.whenReady().then(async () => {
       return new Response('Bad Request', { status: 400 })
     }
   })
+
+  // AI 教学示意图渲染协议 kbview://vault/<rel>.html（工件栏沙箱 iframe；白名单/CSP 见 kbVisualProtocol.ts 头注释）
+  registerKbVisualProtocol((key) => settingsCache[key])
 
   protocol.handle('attachment', async (request) => {
     try {

@@ -368,9 +368,9 @@ function TrafficLight({ color, title, onClick, children }: {
   return (
     <button onClick={onClick} title={title}
       className="flex items-center justify-center w-5 h-5 transition-[filter] duration-100 hover:brightness-90">
-      <span className="flex items-center justify-center w-4 h-4 rounded-full text-black/60"
+      <span className="flex items-center justify-center w-4 h-4 rounded-full text-black/60 leading-none"
         style={{ backgroundColor: color }}>
-        <span className="flex items-center justify-center opacity-0 group-hover/traffic:opacity-100 transition-opacity duration-100">
+        <span className="flex items-center justify-center leading-none opacity-0 group-hover/traffic:opacity-100 transition-opacity duration-100">
           {children}
         </span>
       </span>

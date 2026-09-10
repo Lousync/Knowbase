@@ -111,7 +111,16 @@ if (typeof window !== 'undefined') {
   })
 }
 
-export function ToolboxModule() {
+interface ToolboxModuleProps {
+  /**
+   * 「回主页」信号（App 层单调递增）。已在工具箱模块时点击活动栏工具箱图标 → App +1，
+   * 本模块据此退出当前工具回到画廊（仅工具箱有此效果，其余模块点自身图标仍是折叠侧栏）。
+   * 0 = 从未触发（首挂载不误清状态）。
+   */
+  homeSignal?: number
+}
+
+export function ToolboxModule({ homeSignal = 0 }: ToolboxModuleProps) {
   const [activeTool, setActiveTool] = useState<string | null>(null)
   const [pluginTools, setPluginTools] = useState<PluginTool[]>([])
   const [activePluginTool, setActivePluginTool] = useState<PluginTool | null>(null)
@@ -169,6 +178,14 @@ export function ToolboxModule() {
     }
     setActiveTool(toolId)
   }
+
+  // 回主页信号（2026-09-10）：值变化即退出当前工具/插件工具回到画廊。
+  // 退出前若有工具在运行（如番茄钟面板由全局状态管理）不受影响，仅收起全屏工具视图
+  useEffect(() => {
+    if (!homeSignal) return
+    setActiveTool(null)
+    setActivePluginTool(null)
+  }, [homeSignal])
 
   // 深链消费：挂载时吃掉 pending（首访场景），已挂载则实时响应 toolbox:open-tool
   useEffect(() => {

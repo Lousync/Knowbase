@@ -101,15 +101,26 @@ function parseInline(line: string): ParsedToken[] {
 /**
  * 单行淡化计算。activeLine=true（光标所在行）→ 空（编辑不受干扰）。
  */
+/**
+ * 单行装饰：
+ * - 'dim'（标记淡显）只作用于非光标行——纯 opacity 不改字宽，光标行还原「原始标记可见」；
+ * - 'strong'/'em'/'code' 是**改字宽类**（粗体/斜体/等宽+padding），必须跨行恒定：
+ *   若随光标进出切换，该行会在粗体↔正常间重排版，光标视觉上左右「漂移」（2026-09-09 修复）。
+ *   内容强调在所有行一致渲染，光标行仅少一层标记淡显，不多一份宽度变化。
+ */
+const WIDTH_STABLE: Set<DimCls> = new Set(['strong', 'em', 'code'])
+
 export function dimMarkdownLine(line: string, activeLine: boolean): DimSpan[] {
-  if (activeLine || line.length === 0) return []
+  if (line.length === 0) return []
   const out: DimSpan[] = []
 
-  for (const re of LINE_PREFIX_PATTERNS) {
-    const m = re.exec(line)
-    if (m && m[0].length > 0) {
-      out.push({ cls: 'dim', start: 0, end: m[0].length })
-      break
+  if (!activeLine) {
+    for (const re of LINE_PREFIX_PATTERNS) {
+      const m = re.exec(line)
+      if (m && m[0].length > 0) {
+        out.push({ cls: 'dim', start: 0, end: m[0].length })
+        break
+      }
     }
   }
 
@@ -120,9 +131,9 @@ export function dimMarkdownLine(line: string, activeLine: boolean): DimSpan[] {
     let ce = tk.contentEnd
     while (cs < ce && /\s/.test(line[cs])) cs++
     while (ce > cs && /\s/.test(line[ce - 1])) ce--
-    out.push({ cls: 'dim', start: tk.start, end: cs })
-    if (ce > cs) out.push({ cls: tk.cls, start: cs, end: ce })
-    out.push({ cls: 'dim', start: ce, end: tk.end })
+    if (!activeLine) out.push({ cls: 'dim', start: tk.start, end: cs })
+    if (ce > cs && (!activeLine || WIDTH_STABLE.has(tk.cls))) out.push({ cls: tk.cls, start: cs, end: ce })
+    if (!activeLine) out.push({ cls: 'dim', start: ce, end: tk.end })
   }
 
   out.sort((a, b) => a.start - b.start)
@@ -140,8 +151,9 @@ export interface DimDecoration {
 export function dimMarkdownText(lines: string[], activeLine1Based: number): DimDecoration[] {
   const decos: DimDecoration[] = []
   for (let i = 0; i < lines.length; i++) {
-    if (i + 1 === activeLine1Based) continue
-    for (const s of dimMarkdownLine(lines[i], false)) {
+    // 不再整行跳过光标行：宽度稳定类（strong/em/code）全行恒定渲染，
+    // 仅 dim 由 dimMarkdownLine 内部按 activeLine 关闭（光标不漂移，标记仍还原）
+    for (const s of dimMarkdownLine(lines[i], i + 1 === activeLine1Based)) {
       if (s.end <= s.start) continue
       decos.push({ line: i + 1, cls: s.cls, startCol: s.start + 1, endCol: s.end + 1 })
     }

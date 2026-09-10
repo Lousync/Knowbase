@@ -99,9 +99,21 @@ export interface UpdateToolboxScriptDTO { name?: string; description?: string; c
 export interface PasswordEntry {
   id: string; title: string; url: string; username: string; account: string; password: string; notes: string
   sortOrder: number; createdAt: string; updatedAt: string
+  /** 收藏（总览页置顶常用条目） */
+  favorite: boolean
+  /** 分组名（总览页折叠展示）；空 = 未分组 */
+  group: string
 }
-export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }
-export interface UpdatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number }
+export interface CreatePasswordEntryDTO { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; favorite?: boolean; group?: string }
+export interface UpdatePasswordEntryDTO {
+  title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string
+  sortOrder?: number; favorite?: boolean; group?: string
+  /**
+   * 乐观锁：客户端持有的 updatedAt 版本。传入且与磁盘不一致时后端拒写（抛 PASSWORD_CONFLICT）。
+   * 不传 = 不做校验（局部更新如「收藏」用）。
+   */
+  expectedUpdatedAt?: string
+}
 
 // moments
 export interface MomentsAlbum {
@@ -1269,6 +1281,10 @@ export interface ElectronAPI {
   fillPopupGetEntries: () => Promise<PasswordEntry[]>
   fillPopupCopy: (field: string, value: string) => Promise<void>
   fillPopupHide: () => Promise<void>
+  /** 悬浮小密码本内直接新增条目（返回带明文密码的新条目） */
+  fillPopupCreateEntry: (data: { title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string }) => Promise<PasswordEntry>
+  /** 切换小密码本置顶（同时由渲染层写入 settings.fillPopupAlwaysOnTop 持久化） */
+  fillPopupSetAlwaysOnTop: (on: boolean) => Promise<boolean>
   onFillPopupRefresh: (cb: () => void) => () => void
   // AI tools (ToolRegistry)
   aiToolsList: () => Promise<AiToolsListResult>

@@ -18,6 +18,10 @@ export interface SecretPwdRow {
   sort_order: number
   created_at: string
   updated_at: string
+  /** 收藏（2026-09-10 总览页）：置顶常用条目；旧数据无此字段 → 读取端按 false */
+  favorite?: boolean
+  /** 分组名（折叠展示用）；空/缺失 = 未分组 */
+  group?: string | null
 }
 
 const MOD = 'secret'

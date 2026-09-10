@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 教学 · 伴读分屏原型（方案 B）</title>
+<style>
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f7f9;
+    --bg-hover: #ececf0;
+    --border: #e2e4e9;
+    --text-1: #1f2328;
+    --text-2: #57606a;
+    --text-3: #8b949e;
+    --accent: #4f6bed;
+    --accent-soft: rgba(79, 107, 237, 0.10);
+    --success: #2da44e;
+    --warn: #bf8700;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+    background: #dfe3ea;
+    color: var(--text-1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    overflow: hidden;
+  }
+  .app-desc {
+    position: fixed; top: 10px; left: 14px; font-size: 11px; color: #6b7280; user-select: none;
+  }
+  /* ===== 窗口外框 ===== */
+  .window {
+    width: min(1280px, 96vw); height: min(820px, 94vh);
+    background: var(--bg-primary);
+    border: 1px solid #c9cdd6; border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(20,30,60,.18);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  /* 标题栏 */
+  .titlebar {
+    height: 32px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 10px; gap: 6px; flex-shrink: 0; user-select: none;
+  }
+  .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .titlebar .t { margin-left: 8px; font-size: 11px; color: var(--text-3); }
+  /* ===== 顶栏 ===== */
+  .topbar {
+    height: 38px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px; padding: 0 10px; flex-shrink: 0; user-select: none;
+  }
+  .ws-chip {
+    display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px;
+    font-weight: 600; font-size: 12px; cursor: pointer;
+  }
+  .ws-chip:hover { background: var(--bg-hover); }
+  .tab {
+    display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
+    font-size: 12px; color: var(--text-2); cursor: pointer; max-width: 170px; white-space: nowrap;
+  }
+  .tab.active { background: var(--bg-hover); color: var(--text-1); box-shadow: inset 0 0 0 1px rgba(79,107,237,.35); }
+  .tab .x { opacity: .45; font-size: 11px; }
+  .tools { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .tool-btn {
+    display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;
+    font-size: 11.5px; color: var(--text-2); cursor: pointer; border: none; background: none; font-family: inherit;
+  }
+  .tool-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .mode-pill {
+    font-size: 10.5px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft);
+    color: var(--accent); font-weight: 600; margin-right: 6px; white-space: nowrap;
+  }
+  /* ===== 主体 ===== */
+  .body { flex: 1; display: flex; min-height: 0; }
+  /* 左栏 文件树 */
+  .sidebar {
+    width: 216px; flex-shrink: 0; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; background: var(--bg-primary); min-height: 0;
+    transition: margin-left .22s ease;
+  }
+  .sidebar.collapsed { margin-left: -216px; }
+  .sec-head {
+    display: flex; align-items: center; gap: 5px; padding: 8px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-3); text-transform: uppercase;
+  }
+  .file-item {
+    display: flex; align-items: center; gap: 7px; padding: 5px 10px; margin: 0 6px; border-radius: 6px;
+    font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; overflow: hidden;
+  }
+  .file-item:hover { background: var(--bg-hover); color: var(--text-1); }
+  .file-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .file-item .tag { margin-left: auto; font-size: 9.5px; color: var(--text-3); background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px; }
+  .sidebar-foot {
+    margin-top: auto; border-top: 1px solid var(--border); padding: 7px 10px;
+    display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); cursor: pointer;
+  }
+  .sidebar-foot:hover { background: var(--bg-secondary); }
+  .sb-handle {
+    width: 14px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); font-size: 11px; background: var(--bg-primary);
+  }
+  .sb-handle:hover { background: var(--bg-hover); color: var(--text-1); }
+  /* ===== 中栏 ===== */
+  .main { flex: 1; display: flex; min-width: 0; min-height: 0; position: relative; }
+  /* --- 文档主区 --- */
+  .doc-pane {
+    display: flex; flex-direction: column; min-width: 0; min-height: 0;
+    flex-shrink: 0; overflow: hidden;
+  }
+  .doc-pane.hidden { display: none; }
+  .doc-toolbar {
+    height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    border-bottom: 1px solid var(--border); background: var(--bg-secondary); font-size: 11.5px; user-select: none;
+  }
+  .doc-toolbar .name { font-weight: 600; display: flex; align-items: center; gap: 5px; }
+  .doc-toolbar .path { color: var(--text-3); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-toolbar .sp { flex: 1; }
+  .chip-btn {
+    border: none; background: none; font-family: inherit; font-size: 11px; color: var(--text-2);
+    padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;
+  }
+  .chip-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .chip-btn.accent { color: var(--accent); }
+  .doc-body-wrap { flex: 1; display: flex; min-height: 0; }
+  .doc-scroll { flex: 1; overflow-y: auto; min-width: 0; }
+  .doc-content { max-width: 680px; margin: 0 auto; padding: 22px 26px 60px; line-height: 1.75; font-size: 13.5px; }
+  .doc-content h1 { font-size: 20px; margin: 6px 0 14px; }
+  .doc-content h2 { font-size: 15.5px; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .doc-content h3 { font-size: 13.5px; margin: 16px 0 6px; }
+  .doc-content p { margin: 8px 0; color: #333a44; }
+  .doc-content .formula {
+    background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; margin: 10px 0; font-family: Consolas, "Cambria Math", serif; font-size: 13px; text-align: center;
+  }
+  .doc-content .callout {
+    border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0;
+    padding: 8px 12px; margin: 10px 0; font-size: 12.5px; color: #3d4db8;
+  }
+  .doc-content mark { background: #fff3bf; border-radius: 3px; padding: 0 2px; }
+  .doc-outline {
+    width: 132px; flex-shrink: 0; border-left: 1px solid var(--border); overflow-y: auto; padding: 10px 0;
+  }
+  .doc-outline .oh { padding: 2px 10px; font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+  .doc-outline a {
+    display: block; padding: 2.5px 10px; font-size: 10.5px; color: var(--text-2); text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  }
+  .doc-outline a.lv3 { padding-left: 20px; }
+  .doc-outline a:hover { background: var(--bg-hover); color: var(--text-1); }
+  /* --- 分隔条 --- */
+  .divider {
+    width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; z-index: 5;
+  }
+  .divider::after {
+    content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 1px; background: var(--border);
+    transition: background .15s, width .15s;
+  }
+  .divider:hover::after, .divider.dragging::after { background: var(--accent); width: 3px; left: 1px; }
+  /* --- 伴读栏（对话） --- */
+  .chat-pane {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--bg-primary);
+    position: relative; transition: flex-basis .18s ease, opacity .18s ease;
+  }
+  .chat-pane.collapsed { display: none; }
+  .chat-head {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 7px 12px 5px;
+    border-bottom: 1px solid var(--border); background: var(--bg-secondary); user-select: none;
+  }
+  .chips { display: flex; gap: 4px; }
+  .mchip {
+    border: none; background: none; font-family: inherit; font-size: 11.5px; padding: 3px 9px;
+    border-radius: 99px; cursor: pointer; color: var(--text-2);
+  }
+  .mchip.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .mchip:hover:not(.active) { background: var(--bg-hover); }
+  .companion-note {
+    margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--accent);
+    background: var(--accent-soft); padding: 2.5px 9px; border-radius: 99px; max-width: 55%;
+  }
+  .companion-note .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-head .icon-btn {
+    border: none; background: none; cursor: pointer; color: var(--text-3); padding: 3px; border-radius: 5px;
+    display: flex; font-size: 13px; line-height: 1;
+  }
+  .chat-head .icon-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  /* 消息流 */
+  .chat-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 100%; }
+  .msg.user { align-self: flex-end; max-width: 82%; }
+  .msg.user .bubble {
+    background: var(--accent); color: #fff; border-radius: 12px 12px 3px 12px; padding: 8px 12px;
+    font-size: 12.5px; line-height: 1.6; white-space: pre-wrap;
+  }
+  .msg.ai .body { font-size: 12.5px; line-height: 1.7; color: #2b3138; }
+  .msg.ai .body p { margin: 6px 0; }
+  .msg.ai .body b { color: var(--text-1); }
+  .msg.ai .body code { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 11.5px; }
+  .msg.ai .quote {
+    border-left: 3px solid var(--accent); background: var(--bg-secondary); border-radius: 0 6px 6px 0;
+    padding: 6px 10px; margin: 6px 0; font-size: 11.5px; color: var(--text-2);
+  }
+  .msg .ops { display: flex; align-items: center; gap: 8px; margin-top: 5px; font-size: 11px; color: var(--text-3); }
+  .msg .ops button {
+    border: none; background: none; font-family: inherit; font-size: 11px; color: var(--text-2);
+    cursor: pointer; padding: 2px 6px; border-radius: 5px; display: flex; align-items: center; gap: 4px;
+  }
+  .msg .ops button:hover { background: var(--bg-hover); color: var(--text-1); }
+  .open-doc-btn {
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; padding: 4px 11px;
+    border: 1px solid rgba(79,107,237,.45); background: var(--accent-soft); color: var(--accent);
+    border-radius: 7px; font-size: 11.5px; cursor: pointer; font-family: inherit;
+  }
+  .open-doc-btn:hover { background: rgba(79,107,237,.18); }
+  .typing { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-3); }
+  .typing .dots span {
+    display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--text-3);
+    margin-right: 3px; animation: blink 1.2s infinite;
+  }
+  .typing .dots span:nth-child(2) { animation-delay: .2s; }
+  .typing .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,70%,100% { opacity: .25; } 35% { opacity: 1; } }
+  /* 输入区 */
+  .chat-input-wrap { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--bg-secondary); padding: 9px 12px 11px; }
+  .quote-chip {
+    display: none; align-items: center; gap: 6px; margin-bottom: 7px; padding: 4px 9px;
+    background: var(--accent-soft); border: 1px solid rgba(79,107,237,.35); border-radius: 7px;
+    font-size: 11px; color: var(--accent); max-width: 100%;
+  }
+  .quote-chip.show { display: flex; }
+  .quote-chip .q { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quote-chip .rm { cursor: pointer; opacity: .6; }
+  .quote-chip .rm:hover { opacity: 1; }
+  .input-row { display: flex; align-items: flex-end; gap: 8px; }
+  .input-box {
+    flex: 1; min-height: 38px; max-height: 110px; resize: none; border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 12px; font-family: inherit; font-size: 12.5px; line-height: 1.55;
+    outline: none; background: var(--bg-primary); color: var(--text-1);
+  }
+  .input-box:focus { border-color: rgba(79,107,237,.55); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .send-btn {
+    width: 38px; height: 38px; flex-shrink: 0; border: none; border-radius: 10px; background: var(--accent);
+    color: #fff; font-size: 15px; cursor: pointer; transition: opacity .15s;
+  }
+  .send-btn:hover { opacity: .88; }
+  .send-btn:disabled { opacity: .4; cursor: default; }
+  .input-hint { margin-top: 5px; font-size: 10px; color: var(--text-3); display: flex; gap: 10px; }
+  /* 沉浸模式悬浮把手 */
+  .chat-ghost {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    width: 22px; padding: 14px 0; background: var(--bg-secondary); border: 1px solid var(--border);
+    border-right: none; border-radius: 8px 0 0 8px; cursor: pointer; z-index: 20;
+    display: none; align-items: center; justify-content: center; color: var(--text-3); font-size: 11px;
+    writing-mode: vertical-lr; letter-spacing: 2px; box-shadow: -3px 0 10px rgba(0,0,0,.06);
+  }
+  .chat-ghost:hover { color: var(--accent); background: var(--accent-soft); }
+  .chat-ghost.show { display: flex; }
+  /* 划词浮钮 */
+  .ask-float {
+    position: fixed; z-index: 99; display: none; padding: 4px 10px; background: #1f2328; color: #fff;
+    border-radius: 7px; font-size: 11.5px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    white-space: nowrap;
+  }
+  .ask-float:hover { background: var(--accent); }
+  /* 提示条 */
+  .hint-bar {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: #1f2328; color: #e8eaee; padding: 8px 14px; border-radius: 10px; font-size: 11.5px;
+    display: flex; align-items: center; gap: 10px; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    max-width: 88%; white-space: nowrap; overflow: hidden;
+  }
+  .hint-bar b { color: #ffd76a; font-weight: 600; }
+  .hint-bar .close { cursor: pointer; opacity: .55; padding: 0 2px; }
+  .hint-bar .close:hover { opacity: 1; }
+  .hint-bar kbd {
+    background: #33383f; border-radius: 4px; padding: 1px 5px; font-size: 10px; font-family: inherit;
+  }
+  /* toast */
+  .toast {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    background: #1f2328; color: #fff; font-size: 12px; padding: 7px 16px; border-radius: 9px;
+    z-index: 100; opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  .toast.show { opacity: .94; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: #d3d7de; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #b8bdc6; background-clip: content-box; }
+</style>
+</head>
+<body>
+<div class="app-desc">AI 教学模块 · 「主视图 + 伴读栏」交互原型（方案 B） — 数据为演示假数据</div>
+
+<div class="window">
+  <!-- 标题栏 -->
+  <div class="titlebar">
+    <span class="dot" style="background:#ff5f57"></span>
+    <span class="dot" style="background:#febc2e"></span>
+    <span class="dot" style="background:#28c840"></span>
+    <span class="t">Knowbase — AI 教学</span>
+  </div>
+
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <div class="ws-chip">📚 跟我学（数学） <span style="font-size:9px;opacity:.5">▾</span></div>
+    <div class="tab active">二次函数 · 基础 <span class="x">×</span></div>
+    <div class="tab">错题复盘 <span class="x">×</span></div>
+    <div class="tools">
+      <span class="mode-pill" id="modePill">💬 对话模式</span>
+      <button class="tool-btn">✎ 会话要求</button>
+      <button class="tool-btn">⏱ 时间线</button>
+      <button class="tool-btn">📄 文档地图</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- 左栏 -->
+    <div class="sidebar" id="sidebar">
+      <div class="sec-head">📂 资料</div>
+      <div class="file-item" data-doc="jiangyi">📄 课程讲义 · 二次函数.md</div>
+      <div class="file-item" data-doc="liti">📄 例题精讲 3 道.md</div>
+      <div class="file-item">🖼 PPT 素材 <span class="tag">2</span></div>
+      <div class="sec-head">📦 产物</div>
+      <div class="file-item" data-doc="report">📊 随堂测验报告.md</div>
+      <div class="sec-head">✏️ 本次改动</div>
+      <div class="file-item" style="color:var(--text-3)">本轮暂无写入改动</div>
+      <div class="sidebar-foot" id="collapseSb">◀ 折叠侧栏</div>
+    </div>
+    <div class="sb-handle" id="sbHandle" title="展开侧栏" style="display:none">▶</div>
+
+    <!-- 中栏：主视图 + 伴读栏 -->
+    <div class="main" id="main">
+      <!-- 文档主区 -->
+      <div class="doc-pane hidden" id="docPane" style="flex-basis:58%">
+        <div class="doc-toolbar">
+          <button class="chip-btn" id="closeDoc" title="关闭材料，回到纯对话">← 返回对话</button>
+          <span class="name">📄 <span id="docName">课程讲义 · 二次函数.md</span></span>
+          <span class="path" id="docPath">/讲义/课程讲义 · 二次函数.md</span>
+          <span class="sp"></span>
+          <button class="chip-btn accent" id="immersiveBtn" title="折叠对话栏，沉浸阅读（随时右缘唤回）">⛶ 沉浸阅读</button>
+          <button class="chip-btn">↗ 在编辑器中打开</button>
+        </div>
+        <div class="doc-body-wrap">
+          <div class="doc-scroll" id="docScroll">
+            <div class="doc-content" id="docContent"></div>
+          </div>
+          <div class="doc-outline" id="docOutline"></div>
+        </div>
+      </div>
+
+      <!-- 分隔条 -->
+      <div class="divider" id="divider" style="display:none" title="拖拽调宽 · 双击复位"></div>
+
+      <!-- 伴读栏（对话） -->
+      <div class="chat-pane" id="chatPane">
+        <div class="chat-head">
+          <div class="chips">
+            <button class="mchip active">💬 对话</button>
+            <button class="mchip" onclick="toast('原型演示：题目视图与现状一致，仍可从此切换')">📝 题目（3）</button>
+          </div>
+          <div class="companion-note" id="companionNote" style="display:none">
+            📖 正在伴读：<span class="n" id="companionName"></span>
+          </div>
+          <button class="icon-btn" id="collapseChat" title="折叠对话栏 → 沉浸阅读" style="margin-left:6px">⇥</button>
+        </div>
+        <div class="chat-scroll" id="chatScroll"></div>
+        <div class="chat-input-wrap">
+          <div class="quote-chip" id="quoteChip">
+            <span>❝</span><span class="q" id="quoteText"></span><span class="rm" id="quoteRm">✕</span>
+          </div>
+          <div class="input-row">
+            <textarea class="input-box" id="inputBox" placeholder="继续提问，或选中左侧材料文字直接问…（Enter 发送）"></textarea>
+            <button class="send-btn" id="sendBtn">↑</button>
+          </div>
+          <div class="input-hint"><span>伴读栏 = 完整对话能力（输入 / 提问卡 / 操作条）</span></div>
+        </div>
+      </div>
+
+      <!-- 沉浸模式唤回把手 -->
+      <div class="chat-ghost" id="chatGhost" title="唤回对话栏">‹ 对话</div>
+
+      <!-- 提示条 -->
+      <div class="hint-bar" id="hintBar">
+        <span>💡 试试：<b>点左栏文件</b> → 自动分屏 · <b>拖中间分隔条</b> · <kbd>双击</kbd>复位 · <b>折叠对话栏</b>沉浸阅读 · <b>选中材料文字</b>→「问 AI」</span>
+        <span class="close" id="hintClose">✕</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ask-float" id="askFloat">❝ 问 AI</div>
+<div class="toast" id="toastEl"></div>
+
+<script>
+/* ============ 文档数据 ============ */
+const DOCS = {
+  jiangyi: {
+    name: '课程讲义 · 二次函数.md', path: '/讲义/课程讲义 · 二次函数.md',
+    outline: [
+      { t: '一、定义与一般形式', lv: 2, id: 'h1' },
+      { t: '二、图像与顶点', lv: 2, id: 'h2' },
+      { t: '开口方向', lv: 3, id: 'h2-1' },
+      { t: '对称轴', lv: 3, id: 'h2-2' },
+      { t: '三、五种解析式', lv: 2, id: 'h3' },
+    ],
+    html: `
+      <h1>二次函数 · 基础讲义</h1>
+      <p>二次函数是形如 <b>y = ax² + bx + c</b>（a ≠ 0）的函数。它的图像是一条抛物线，是初中代数的核心内容之一。</p>
+      <h2 id="h1">一、定义与一般形式</h2>
+      <div class="formula">y = ax² + bx + c　（a、b、c 为常数，a ≠ 0）</div>
+      <p>判断一个函数是不是二次函数，关键看两点：① 含有自变量的<b>二次项</b>；② 二次项系数 <b>a ≠ 0</b>。例如 y = 2x² − 3x + 1 是二次函数，而 y = 0·x² + x + 1 不是。</p>
+      <h2 id="h2">二、图像与顶点</h2>
+      <p>抛物线有三要素：<mark>开口方向、对称轴、顶点坐标</mark>。配方法是研究这三要素的万能钥匙。</p>
+      <div class="formula">y = ax² + bx + c = a(x + b/2a)² + (4ac − b²)/4a</div>
+      <h3 id="h2-1">开口方向</h3>
+      <p>a &gt; 0 时开口向上，顶点是最低点（最小值）；a &lt; 0 时开口向下，顶点是最高点（最大值）。|a| 越大，开口越窄。</p>
+      <h3 id="h2-2">对称轴与顶点</h3>
+      <p>对称轴是直线 <b>x = −b/2a</b>，顶点坐标为 <b>(−b/2a, (4ac−b²)/4a)</b>。</p>
+      <div class="callout">💡 记忆口诀： 「b 分之负 b 抛物线，4a 分之 4ac 减 b² 顶点现」——先用对称轴定 x，再代入求 y。</div>
+      <h2 id="h3">三、五种解析式</h2>
+      <p>① 一般式 y = ax² + bx + c（已知三点）；② 顶点式 y = a(x−h)² + k（已知顶点）；③ 交点式 y = a(x−x₁)(x−x₂)（已知与 x 轴交点）……实际解题中<b>根据已知条件选择最合适的解析式</b>，是求解析式问题的第一步。</p>
+    `
+  },
+  liti: {
+    name: '例题精讲 3 道.md', path: '/讲义/例题精讲 3 道.md',
+    outline: [
+      { t: '例 1 · 求顶点坐标', lv: 2, id: 'e1' },
+      { t: '例 2 · 含参讨论', lv: 2, id: 'e2' },
+      { t: '例 3 · 实际应用', lv: 2, id: 'e3' },
+    ],
+    html: `
+      <h1>例题精讲（3 道）</h1>
+      <h2 id="e1">例 1 · 求顶点坐标</h2>
+      <p>已知 y = x² − 4x + 3，求抛物线的顶点坐标与对称轴。</p>
+      <p><b>解：</b>配方得 y = (x−2)² − 1，故顶点为 <mark>(2, −1)</mark>，对称轴 x = 2。</p>
+      <h2 id="e2">例 2 · 含参讨论</h2>
+      <p>已知 y = ax² + 2ax + 1（a ≠ 0），求对称轴，并讨论开口方向。</p>
+      <p><b>解：</b>对称轴 x = −2a/2a = <b>−1</b>；a &gt; 0 开口向上，a &lt; 0 开口向下。注意对称轴与 a 的取值无关，这是一个常见陷阱。</p>
+      <h2 id="e3">例 3 · 实际应用</h2>
+      <p>用 20 m 的篱笆围一个一边靠墙的矩形菜园，怎样围面积最大？</p>
+      <p><b>解：</b>设垂直于墙的一边长 x m，则 S = x(20 − 2x) = −2x² + 20x = −2(x−5)² + 50。当 x = 5 时面积最大，为 <mark>50 m²</mark>。</p>
+      <div class="callout">💡 应用题套路：设变量 → 列二次函数 → 配方求最值 → 检验实际意义（x 的取值范围）。</div>
+    `
+  },
+  report: {
+    name: '随堂测验报告.md', path: '/产物/随堂测验报告.md',
+    outline: [
+      { t: '成绩概览', lv: 2, id: 'r1' },
+      { t: '错题分析', lv: 2, id: 'r2' },
+    ],
+    html: `
+      <h1>随堂测验报告 · 二次函数基础</h1>
+      <h2 id="r1">成绩概览</h2>
+      <p>得分 <b style="color:var(--success)">4 / 5</b> · 用时 6 分 32 秒 · 正确率 80%</p>
+      <h2 id="r2">错题分析</h2>
+      <p>第 3 题考查<b>对称轴公式</b>：你选择了 x = b/2a，漏掉了负号。正确答案 x = <mark>−b/2a</mark>。建议结合讲义「二、图像与顶点」一节复习配方过程。</p>
+    `
+  }
+};
+
+/* ============ 状态 ============ */
+const $ = id => document.getElementById(id);
+let mode = 'chat';          // chat | split | immersive
+let curDoc = null;
+let docRatio = 58;          // 文档主区宽度 %
+let collapsedSb = false;
+let quotePending = '';
+
+/* ============ 消息数据 ============ */
+const messages = [
+  { role: 'ai', html: `<p>你好！我是你的数学助教。今天我们从<b>二次函数</b>开始——先看定义和图像三要素，我会边讲边带你翻讲义。准备好了就说「开始」。</p>` },
+  { role: 'user', text: '开始吧，先讲讲怎么求顶点' },
+  { role: 'ai', html: `<p>好，求顶点用<b>配方法</b>三步走：</p><p>① 提取二次项系数 → ② 配完全平方 → ③ 读出顶点。<code>y = x²−4x+3 = (x−2)²−1</code>，顶点就是 <b>(2, −1)</b>。</p>
+    <p>我把完整讲义打开给你对照着看，讲到哪咱们看到哪 👇</p>`, doc: 'jiangyi' },
+  { role: 'user', text: '那对称轴一定是 x = -b/2a 吗？' },
+  { role: 'ai', html: `<p>对，<b>任何</b>二次函数的对称轴都是 <code>x = −b/2a</code>。有个易错点：例 2 里 <code>y = ax²+2ax+1</code>，对称轴恒为 <b>x = −1</b>，跟 a 无关——很多人在这里丢分。</p><p>要不要我出两道题检验一下？</p>` },
+];
+
+function renderMessages() {
+  const box = $('chatScroll');
+  box.innerHTML = '';
+  messages.forEach(m => {
+    const div = document.createElement('div');
+    if (m.role === 'user') {
+      div.className = 'msg user';
+      div.innerHTML = `<div class="bubble"></div>`;
+      div.querySelector('.bubble').textContent = m.text;
+    } else {
+      div.className = 'msg ai';
+      div.innerHTML = `<div class="body">${m.html}</div>
+        <div class="ops"><button onclick="toast('已复制本条回答（原型）')">⧉ 复制</button><button onclick="toast('已整理成文档（原型）')">📄 整理成文档</button><span>14:2${Math.floor(Math.random()*9)}</span></div>`;
+      if (m.doc) {
+        const btn = document.createElement('button');
+        btn.className = 'open-doc-btn';
+        btn.innerHTML = '📖 打开材料对照阅读 →';
+        btn.onclick = () => openDoc(m.doc, true);
+        div.querySelector('.body').appendChild(btn);
+      }
+    }
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ============ 模式切换 ============ */
+function applyMode() {
+  const dp = $('docPane'), dv = $('divider'), cp = $('chatPane'), gh = $('chatGhost');
+  const pill = $('modePill');
+  dp.classList.toggle('hidden', mode === 'chat');
+  dv.style.display = mode === 'split' ? 'block' : 'none';
+  cp.classList.toggle('collapsed', mode === 'immersive');
+  gh.classList.toggle('show', mode === 'immersive');
+  $('companionNote').style.display = (mode !== 'chat' && curDoc) ? 'flex' : 'none';
+  if (curDoc) $('companionName').textContent = DOCS[curDoc].name;
+  dp.style.flexBasis = mode === 'split' ? docRatio + '%' : '';
+  pill.textContent = mode === 'chat' ? '💬 对话模式' : mode === 'split' ? '📖 伴读分屏' : '⛶ 沉浸阅读';
+  // 分屏时确保文档可见的左栏文件高亮
+  document.querySelectorAll('.file-item[data-doc]').forEach(el =>
+    el.classList.toggle('active', el.dataset.doc === curDoc && mode !== 'chat'));
+}
+
+function openDoc(key, fromChat) {
+  curDoc = key;
+  const d = DOCS[key];
+  $('docName').textContent = d.name;
+  $('docPath').textContent = d.path;
+  $('docContent').innerHTML = d.html;
+  $('docOutline').innerHTML = '<div class="oh">大纲</div>' + d.outline.map(o =>
+    `<a class="${o.lv === 3 ? 'lv3' : ''}" data-t="${o.id}">${o.t}</a>`).join('');
+  $('docOutline').querySelectorAll('a').forEach(a =>
+    a.onclick = () => $(a.dataset.t)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  mode = 'split';
+  applyMode();
+  $('docScroll').scrollTop = 0;
+  if (fromChat) toast('已进入伴读分屏：左边材料，右边继续聊');
+}
+
+$('closeDoc').onclick = () => { curDoc = null; mode = 'chat'; applyMode(); };
+$('immersiveBtn').onclick = () => { mode = 'immersive'; applyMode(); toast('沉浸阅读中 · 点右缘「‹ 对话」随时唤回'); };
+$('collapseChat').onclick = () => { mode = 'immersive'; applyMode(); };
+$('chatGhost').onclick = () => { mode = curDoc ? 'split' : 'chat'; applyMode(); };
+
+/* 左栏文件 */
+document.querySelectorAll('.file-item[data-doc]').forEach(el =>
+  el.onclick = () => openDoc(el.dataset.doc, false));
+
+/* 侧栏折叠 */
+$('collapseSb').onclick = () => { collapsedSb = true; $('sidebar').style.display = 'none'; $('sbHandle').style.display = 'flex'; };
+$('sbHandle').onclick = () => { collapsedSb = false; $('sidebar').style.display = 'flex'; $('sbHandle').style.display = 'none'; };
+
+/* ============ 分隔条拖拽 ============ */
+(() => {
+  const dv = $('divider'), main = $('main');
+  let dragging = false;
+  const setRatio = e => {
+    const rect = main.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width * 100;
+    docRatio = Math.min(72, Math.max(30, pct));
+    $('docPane').style.flexBasis = docRatio + '%';
+  };
+  dv.addEventListener('mousedown', e => { dragging = true; dv.classList.add('dragging'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+  window.addEventListener('mousemove', e => { if (dragging) setRatio(e); });
+  window.addEventListener('mouseup', () => { dragging = false; dv.classList.remove('dragging'); document.body.style.cursor = ''; });
+  dv.addEventListener('dblclick', () => { docRatio = 58; $('docPane').style.flexBasis = '58%'; toast('已复位 58 / 42'); });
+})();
+
+/* ============ 划词提问 ============ */
+(() => {
+  const fl = $('askFloat');
+  document.addEventListener('mouseup', e => {
+    if (e.target === fl) return;
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const txt = sel ? sel.toString().trim() : '';
+      if (txt.length > 1 && mode !== 'chat' && sel.rangeCount &&
+          $('docPane').contains(sel.anchorNode)) {
+        const r = sel.getRangeAt(0).getBoundingClientRect();
+        fl.style.display = 'block';
+        fl.style.left = Math.min(r.left, window.innerWidth - 110) + 'px';
+        fl.style.top = (r.top - 34) + 'px';
+        fl.dataset.quote = txt;
+        return;
+      }
+      fl.style.display = 'none';
+    }, 10);
+  });
+  fl.onclick = () => {
+    quotePending = fl.dataset.quote || '';
+    fl.style.display = 'none';
+    $('quoteText').textContent = quotePending.slice(0, 60) + (quotePending.length > 60 ? '…' : '');
+    $('quoteChip').classList.add('show');
+    $('inputBox').value = '这段我没看懂：';
+    $('inputBox').focus();
+    if (mode === 'immersive') { mode = 'split'; applyMode(); }
+  };
+})();
+$('quoteRm').onclick = () => { quotePending = ''; $('quoteChip').classList.remove('show'); $('inputBox').value = ''; };
+
+/* ============ 发送（假回复） ============ */
+function send() {
+  const box = $('inputBox');
+  const txt = box.value.trim();
+  if (!txt) return;
+  const withQuote = quotePending ? `「${quotePending.slice(0, 40)}${quotePending.length > 40 ? '…' : ''}」\n` : '';
+  messages.push({ role: 'user', text: withQuote + txt });
+  quotePending = ''; $('quoteChip').classList.remove('show');
+  box.value = ''; renderMessages();
+  // typing
+  const t = document.createElement('div');
+  t.className = 'msg ai'; t.innerHTML = `<div class="typing"><span class="dots"><span></span><span></span><span></span></span>正在思考…</div>`;
+  $('chatScroll').appendChild(t); $('chatScroll').scrollTop = 1e6;
+  setTimeout(() => {
+    messages.push({ role: 'ai', html: `<p>好问题！这个点在讲义「二、图像与顶点」里有对应推导——<b>核心是配方后常数项的符号决定纵坐标</b>。你现在左边就能看到那一段，我标了重点的句子就是关键 👀</p><p>还有哪里不清楚，直接选中那段文字问我就行。</p>` });
+    renderMessages();
+  }, 1200);
+}
+$('sendBtn').onclick = send;
+$('inputBox').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+/* ============ 杂项 ============ */
+let toastTimer;
+function toast(msg) {
+  const t = $('toastEl');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+$('hintClose').onclick = () => $('hintBar').style.display = 'none';
+setTimeout(() => { if ($('hintBar')) $('hintBar').style.transition = 'opacity .5s'; }, 100);
+
+renderMessages();
+applyMode();
+</script>
+</body>
+</html>

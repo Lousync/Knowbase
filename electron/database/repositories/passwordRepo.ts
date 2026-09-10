@@ -9,7 +9,14 @@ interface PasswordRow {
   id: string; title: string; url: string | null; username: string | null
   account: string | null; password: string; notes: string | null
   sort_order: number; created_at: string; updated_at: string
+  /** 收藏（总览页置顶） */
+  favorite?: boolean
+  /** 分组名（总览页折叠）；空 = 未分组 */
+  group?: string | null
 }
+
+/** 新建/更新入参中新加的两个可选字段（favorite / group） */
+type EntryMetaInput = { favorite?: boolean; group?: string | null }
 
 // ---- 密码加密(safeStorage/DPAPI) ----
 // 密文格式: 'enc1:' + base64(加密字节);无前缀视为历史明文,读取时原样返回。
@@ -40,7 +47,9 @@ function rowToPassword(row: PasswordRow) {
     id: row.id, title: row.title, url: row.url || '',
     username: row.username || '', account: row.account || '',
     password: decryptPassword(row.password), notes: row.notes || '',
-    sortOrder: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at
+    sortOrder: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at,
+    // 旧行无这两列 → 缺省 false / ''（向后兼容，无需迁移）
+    favorite: row.favorite === true, group: row.group || '',
   }
 }
 
@@ -52,6 +61,27 @@ function vaultRows(): PasswordRow[] {
 
 function vaultNextSortOrder(rows: PasswordRow[]): number {
   return rows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0)
+}
+
+/**
+ * 新建密码条目（写入 vault 并返回明文行）。
+ * 抽出为独立函数：主窗口 passwordVault:create 与悬浮小密码本 fillPopup:createEntry
+ * 共用同一份创建逻辑（排序号、时间、DPAPI 加密口径一致），避免两处漂移。
+ */
+export function createPasswordEntryRow(data: {
+  title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string
+} & EntryMetaInput): ReturnType<typeof rowToPassword> {
+  const id = randomUUID()
+  const now = new Date().toISOString()
+  const rows = vaultRows()
+  const row: PasswordRow = {
+    id, title: data.title || '', url: data.url || '', username: data.username || '',
+    account: data.account || '', password: encryptPassword(data.password || ''), notes: data.notes || '',
+    sort_order: vaultNextSortOrder(rows), created_at: now, updated_at: now,
+    favorite: data.favorite === true, group: data.group?.trim() || '',
+  }
+  vaultPasswordsSave([...rows, row] as unknown as SecretPwdRow[])
+  return rowToPassword(row)
 }
 
 // ---- IPC handlers ----
@@ -69,26 +99,22 @@ export function registerPasswordHandlers(): void {
 
   ipcMain.handle('passwordVault:create', (_e, data: {
     title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string
-  }) => {
-    const id = randomUUID()
-    const now = new Date().toISOString()
-    const rows = vaultRows()
-    const row: PasswordRow = {
-      id, title: data.title || '', url: data.url || '', username: data.username || '',
-      account: data.account || '', password: encryptPassword(data.password || ''), notes: data.notes || '',
-      sort_order: vaultNextSortOrder(rows), created_at: now, updated_at: now,
-    }
-    vaultPasswordsSave([...rows, row] as unknown as SecretPwdRow[])
-    return rowToPassword(row)
+  } & EntryMetaInput) => {
+    return createPasswordEntryRow(data)
   })
 
   ipcMain.handle('passwordVault:update', (_e, id: string, data: {
     title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string; sortOrder?: number
-  }) => {
+  } & EntryMetaInput & { expectedUpdatedAt?: string }) => {
     const rows = vaultRows()
     const i = rows.findIndex((r) => r.id === id)
     if (i < 0) return null
     const cur = rows[i]
+    // 乐观锁（防跨窗口/跨条目串写覆盖）：客户端持有的版本与磁盘不一致即拒写。
+    // 任一侧缺 updated_at 时跳过校验（旧数据向后兼容）；不传 expectedUpdatedAt 视为不做校验（局部更新）。
+    if (data.expectedUpdatedAt && cur.updated_at && data.expectedUpdatedAt !== cur.updated_at) {
+      throw new Error('PASSWORD_CONFLICT')
+    }
     const next: PasswordRow = {
       ...cur,
       title: data.title !== undefined ? data.title : cur.title,
@@ -98,6 +124,8 @@ export function registerPasswordHandlers(): void {
       password: data.password !== undefined ? encryptPassword(data.password) : cur.password,
       notes: data.notes !== undefined ? data.notes : cur.notes,
       sort_order: data.sortOrder !== undefined ? data.sortOrder : cur.sort_order,
+      favorite: data.favorite !== undefined ? data.favorite === true : cur.favorite,
+      group: data.group !== undefined ? (data.group?.trim() || '') : cur.group,
       updated_at: new Date().toISOString(),
     }
     rows[i] = next

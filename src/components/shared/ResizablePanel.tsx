@@ -87,6 +87,12 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
     setDragging(true)
   }, [])
 
+  // onSnapClose 经 ref 转发（2026-09-09 修）：调用方普遍传内联箭头函数，若直接进依赖数组，
+  // 拖拽期间每次 setWidth 渲染都会 cleanup + 重注册 window 监听，顺带把 body.cursor 反复置空再设回
+  // （cursor 闪烁），且局部 snapped 被重置。改为 ref 后监听器只在 dragging 翻转时绑定一次。
+  const onSnapCloseRef = useRef(onSnapClose)
+  onSnapCloseRef.current = onSnapClose
+
   // 全局拖拽事件（只在 dragging 切换时重新绑定）
   useEffect(() => {
     if (!dragging) return
@@ -99,10 +105,10 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       const delta = (e.clientX - startXRef.current) * (side === 'right' ? -1 : 1)
       const raw = startWRef.current + delta
       // VS Code snap-close: drag past half of minWidth → auto-collapse
-      if (onSnapClose && raw < minWidth * 0.5) {
+      if (onSnapCloseRef.current && raw < minWidth * 0.5) {
         snapped = true
         setDragging(false)
-        onSnapClose()
+        onSnapCloseRef.current()
         return
       }
       const next = Math.max(minWidth, Math.min(maxWidth, raw))
@@ -130,8 +136,9 @@ export function ResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, v
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
     }
-  }, [dragging, minWidth, maxWidth, storageKey, onSnapClose, side])
+  }, [dragging, minWidth, maxWidth, storageKey, side])
   // 注意：width 不在依赖中 — 用 widthRef 避免每次像素变化都重建监听器
+  // onSnapClose 同理走 ref（见上），不进依赖
 
   // 折叠时重置为边条宽度（贴窗缘的面板用 collapsedWidth 避开系统缩放热区）
   const displayWidth = visible ? width : (onSnapOpen ? collapsedWidth : 0)

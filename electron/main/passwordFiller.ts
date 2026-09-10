@@ -1,10 +1,28 @@
 import { BrowserWindow, globalShortcut, screen, clipboard, app, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
-import { decryptPassword } from '../database/repositories/passwordRepo'
+import { decryptPassword, createPasswordEntryRow } from '../database/repositories/passwordRepo'
 import { vaultPasswordsAll } from '../lib/kbStore/secretVaultRepo'
 
 let fillWindow: BrowserWindow | null = null
+
+/**
+ * 置顶等级：'screen-saver' 是 Electron 在 Windows/macOS 上的最高层级，
+ * 高于普通 always-on-top（'floating'）窗口 —— 小密码本要能盖住浏览器/编辑器
+ * 以及其它同样是置顶窗口的应用（旧值 'floating' 会被同级置顶窗口压住）。
+ */
+const TOP_LEVEL = 'screen-saver' as const
+
+/** 当前是否置顶（默认 true；用户可在弹窗标题栏取消，写入 settings.fillPopupAlwaysOnTop） */
+function isPinned(): boolean {
+  return getSettingsJSON().fillPopupAlwaysOnTop !== false
+}
+
+function applyPin(win: BrowserWindow, pinned: boolean): void {
+  if (win.isDestroyed()) return
+  win.setAlwaysOnTop(pinned, TOP_LEVEL)
+  if (pinned) win.moveTop()
+}
 
 function getSettingsJSON(): Record<string, unknown> {
   try {
@@ -33,7 +51,11 @@ function createFillWindow(): BrowserWindow {
   })
 
   // Never steal focus — user stays in their target app
-  win.setAlwaysOnTop(true, 'floating')
+  win.setAlwaysOnTop(true, TOP_LEVEL)
+  // 全屏应用/其它工作区之上仍可见（macOS 全屏空间、Windows 全屏窗口场景）
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // 抢回 z 序：被其它置顶窗口压住后，本窗获得焦点时重新置顶（不改变焦点归属）
+  win.on('focus', () => { if (isPinned()) win.moveTop() })
 
   // 与主窗口同级的导航防护:悬浮窗自身永不导航、永不开新窗口
   win.webContents.on('will-navigate', (event) => {
@@ -63,7 +85,9 @@ function showFillPopup() {
   if (y + 420 > height) y = cursor.y - 430
 
   fillWindow.setPosition(x, y)
+  applyPin(fillWindow, isPinned()) // 每次唤出都按当前设置重断言层级（用户可能中途改过）
   fillWindow.showInactive() // show but don't steal focus
+  fillWindow.moveTop()
   fillWindow.webContents.send('fillPopup:refresh')
 }
 
@@ -74,11 +98,15 @@ export function initPasswordFiller() {
     // R6 去库化：密码本读 .knowbase/secret/passwords.json（行结构与旧表一致；排序同原 SQL）
     return vaultPasswordsAll()
       .slice()
-      .sort((a, b) => (a.sort_order - b.sort_order) || (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0))
+      // 收藏优先（与主窗口总览页口径一致），其次 sort_order，最后更新时间倒序
+      .sort((a, b) => (Number(b.favorite === true) - Number(a.favorite === true))
+        || (a.sort_order - b.sort_order)
+        || (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0))
       .map((r) => ({
       id: r.id, title: r.title, url: r.url || '', account: r.account || '',
       username: r.username || '', password: decryptPassword(r.password), notes: r.notes || '',
-      sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at
+      sortOrder: r.sort_order, createdAt: r.created_at, updatedAt: r.updated_at,
+      favorite: r.favorite === true, group: r.group || ''
     }))
   })
 
@@ -96,6 +124,19 @@ export function initPasswordFiller() {
 
   ipcMain.handle('fillPopup:hide', () => {
     if (fillWindow && !fillWindow.isDestroyed()) fillWindow.hide()
+  })
+
+  // 悬浮窗内直接新增密码条目（与主窗口 passwordVault:create 同一份创建逻辑）
+  ipcMain.handle('fillPopup:createEntry', (_e, data: {
+    title?: string; url?: string; username?: string; account?: string; password?: string; notes?: string
+  }) => {
+    return createPasswordEntryRow(data || {})
+  })
+
+  // 置顶开关：立即生效 + 落盘（settings 通道由渲染层写入，主进程只负责窗口层级）
+  ipcMain.handle('fillPopup:setAlwaysOnTop', (_e, on: boolean) => {
+    if (fillWindow && !fillWindow.isDestroyed()) applyPin(fillWindow, !!on)
+    return !!on
   })
 
   const settings = getSettingsJSON()
