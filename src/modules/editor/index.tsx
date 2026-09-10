@@ -2,13 +2,13 @@ import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, use
 import { createPortal } from 'react-dom'
 import {
   FolderOpen, Plus, FolderPlus, Save, SaveAll, X, Folder, FileText, ArrowLeft,
-  Pencil, Trash2, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, FilePenLine, Link2, ImagePlus,
+  Pencil, Trash2, FilePlus2, Braces, ListTree, Eye, PanelRightClose, Archive, ArchiveRestore, FilePenLine, Link2, ImagePlus,
 } from 'lucide-react'
 import type { WorkspaceRecent } from '../../types'
 import {
   workspaceOpenById, workspaceListDir, workspaceReadFile, workspaceWriteFile,
   workspaceCreateFile, workspaceMkdir, workspaceRename, workspaceTrash, workspaceGetRecent,
-  workspaceGetCurrent, workspaceSetMdStatus, getKnowledgePages, getKnowledgeGraph, onWsExternalChange,
+  workspaceGetCurrent, workspaceSetArchiveStatus, workspaceGetArchiveEntries, getKnowledgePages, getKnowledgeGraph, onWsExternalChange,
   workspacePickImages, workspaceSaveImage, onAiTeachTreeRefresh,
 } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
@@ -99,6 +99,8 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
   const [creating, setCreating] = useState<CreateIntent | null>(null)
   /** 双态模型：已归档（published）知识页 path 集合——编辑器树隐藏它们（树只留目录+草稿/非知识文件） */
   const [archivedPaths, setArchivedPaths] = useState<Set<string>>(new Set())
+  /** 全类型归档：清单中的目录条目 path 集合（目录右键菜单态 + 文件是否被目录覆盖判定） */
+  const [archivedDirPaths, setArchivedDirPaths] = useState<string[]>([])
   /** archivedPaths 的同步引用：saveDoc（闭包稳定）判定「保存的是已归档页 → 编辑即转草稿」 */
   const archivedRef = useRef<Set<string>>(new Set())
   useEffect(() => { archivedRef.current = archivedPaths }, [archivedPaths])
@@ -662,6 +664,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
       const pages = await getKnowledgePages()
       setArchivedPaths(new Set(pages.filter((p) => p.path).map((p) => p.path as string)))
     } catch { /* 无仓库/失败：保持现状 */ }
+    // 全类型归档清单：目录条目（右键菜单态 + 覆盖判定）
+    try {
+      const r = await workspaceGetArchiveEntries(rootIdRef.current ?? '')
+      setArchivedDirPaths((r.entries ?? []).filter((e) => e.type === 'dir').map((e) => e.path))
+    } catch { setArchivedDirPaths([]) }
     // 草稿标记集：graph 节点（draft 保留 id 故在图谱缓存）→ 树内草稿文件显「草稿」徽标
     try {
       const g = await getKnowledgeGraph()
@@ -669,12 +676,21 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     } catch { /* 保持现状 */ }
   }, [])
 
+  /** 文件是否被某个已归档目录覆盖（B1：目录状态优先，单独「取消归档」对其无意义） */
+  const isCoveredByArchivedDir = useCallback((rel: string): boolean =>
+    archivedDirPaths.some((d) => rel === d || rel.startsWith(`${d}/`))
+  , [archivedDirPaths])
+
   useEffect(() => {
     if (!isActive) return
     void refreshArchived()
   }, [isActive, refreshArchived])
 
-  /** 归档(draft=false)/转草稿(draft=true)：主进程改 frontmatter status + 索引失效；本地重载 */
+  /**
+   * 归档/取消归档（全类型统一走 ws:setArchiveStatus）：
+   * md → 主进程分流 frontmatter 双态（draft 取反）；非 md → 归档清单增删。
+   * draft=true 表示「转为草稿/取消归档」，false 表示归档。
+   */
   const togglePageStatus = useCallback(async (relPath: string, draft: boolean) => {
     const root = rootIdRef.current
     if (!root) return
@@ -683,13 +699,24 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
       showToast({ type: 'warning', message: '该文件有未保存修改，请先 Ctrl+S 保存' })
       return
     }
-    const res = await workspaceSetMdStatus(root, relPath, draft)
+    const res = await workspaceSetArchiveStatus(root, relPath, !draft)
     if (!res.ok) { showToast({ type: 'error', message: res.error || '操作失败' }); return }
-    showToast({ type: 'info', message: draft ? '已转为草稿：知识库暂不可见，编辑后可再次归档' : '已归档为知识页：可在知识库中阅读' })
+    showToast({ type: 'info', message: draft ? '已取消归档：知识库暂不可见' : '已归档为知识页：可在知识库中阅读' })
     if (openFilesRef.current[relPath]) closeTab(relPath)
     await refreshDir(parentRel(relPath))
     await refreshArchived()
   }, [refreshDir, refreshArchived, closeTab])
+
+  /** 目录整体归档/取消（动态前缀：目录下文件随目录进出知识库，B1 目录状态优先） */
+  const toggleDirArchive = useCallback(async (relPath: string, archive: boolean) => {
+    const root = rootIdRef.current
+    if (!root) return
+    const res = await workspaceSetArchiveStatus(root, relPath, archive)
+    if (!res.ok) { showToast({ type: 'error', message: res.error || '操作失败' }); return }
+    showToast({ type: 'info', message: archive ? `已归档目录：${res.count ?? 0} 个文件可在知识库查看` : '已取消目录归档' })
+    await refreshDir(parentRel(relPath))
+    await refreshArchived()
+  }, [refreshDir, refreshArchived])
 
   /** 拖拽移动：把 srcRel 移动到 targetDirRel 下（复用 ws:rename 跨目录移动） */
   const moveNode = useCallback(async (srcRel: string, targetDirRel: string) => {
@@ -1305,6 +1332,20 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
                   <FilePlus2 size={13} className="text-[var(--text-muted)]" />新建知识页
                 </button>
+                {/* 全类型归档（docs/vault-archive-all-files-design.md）：目录整体进出知识库（动态前缀） */}
+                {ctxMenu.node.relPath !== '' && (
+                  archivedDirPaths.includes(ctxMenu.node.relPath) ? (
+                    <button onClick={() => { const d = ctxMenu.node.relPath; setCtxMenu(null); void toggleDirArchive(d, false) }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                      <ArchiveRestore size={13} className="text-[var(--text-muted)]" />取消目录归档
+                    </button>
+                  ) : (
+                    <button onClick={() => { const d = ctxMenu.node.relPath; setCtxMenu(null); void toggleDirArchive(d, true) }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                      <Archive size={13} className="text-[var(--text-muted)]" />归档整个目录
+                    </button>
+                  )
+                )}
                 <div className="mx-2 my-0.5 border-t border-[var(--border-color)]" />
               </>
             )}
@@ -1314,10 +1355,17 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                 <FileText size={13} className="text-[var(--text-muted)]" />打开
               </button>
             )}
-            {ctxMenu.node.type === 'file' && ctxMenu.node.relPath.toLowerCase().endsWith('.md') && !archivedPaths.has(ctxMenu.node.relPath) && (
+            {/* 全类型归档：非 md 文件同 md 一进出；被目录覆盖的文件不提供单独取消（语义随目录） */}
+            {ctxMenu.node.type === 'file' && !archivedPaths.has(ctxMenu.node.relPath) && (
               <button onClick={() => { const rel = ctxMenu.node.relPath; setCtxMenu(null); void togglePageStatus(rel, false) }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
                 <Archive size={13} className="text-[var(--text-muted)]" />归档为知识页
+              </button>
+            )}
+            {ctxMenu.node.type === 'file' && archivedPaths.has(ctxMenu.node.relPath) && !isCoveredByArchivedDir(ctxMenu.node.relPath) && (
+              <button onClick={() => { const rel = ctxMenu.node.relPath; setCtxMenu(null); void togglePageStatus(rel, true) }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                <ArchiveRestore size={13} className="text-[var(--text-muted)]" />取消归档
               </button>
             )}
             {ctxMenu.node.relPath !== '' && (
@@ -1353,13 +1401,30 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
             style={{ left: tabCtx.x, top: tabCtx.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            {tabCtx.rel.toLowerCase().endsWith('.md') && (
+            {tabCtx.rel.toLowerCase().endsWith('.md') ? (
               <>
                 {archivedPaths.has(tabCtx.rel) ? (
                   <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); void togglePageStatus(rel, true) }}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
                     <FilePenLine size={13} className="text-[var(--text-muted)]" />转为草稿（修改中）
                   </button>
+                ) : (
+                  <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); void togglePageStatus(rel, false) }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                    <Archive size={13} className="text-[var(--text-muted)]" />归档为知识页
+                  </button>
+                )}
+                <div className="mx-2 my-0.5 border-t border-[var(--border-color)]" />
+              </>
+            ) : (
+              <>
+                {archivedPaths.has(tabCtx.rel) ? (
+                  !isCoveredByArchivedDir(tabCtx.rel) && (
+                    <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); void togglePageStatus(rel, true) }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+                      <ArchiveRestore size={13} className="text-[var(--text-muted)]" />取消归档
+                    </button>
+                  )
                 ) : (
                   <button onClick={() => { const rel = tabCtx.rel; setTabCtx(null); void togglePageStatus(rel, false) }}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">

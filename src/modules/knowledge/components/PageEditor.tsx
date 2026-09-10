@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../../components/shared'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 import { PdfViewer } from './PdfViewer'
 import { WelcomeHtmlView } from './WelcomeHtmlView'
+import { FileMetaCard } from './FileMetaCard'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { MonacoErrorBoundary } from '../../../components/shared/MonacoErrorBoundary'
 import type * as Monaco from 'monaco-editor'
@@ -123,6 +124,10 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   /** 欢迎页（唯一放行 HTML 渲染的知识页，主进程 kbview 白名单只收仓库根同名文件）：
    *  走沙箱 iframe 整页渲染，不入 Monaco / MarkdownPreview，也不参与收藏等文件重写通道 */
   const isWelcomeHtml = fileType === 'html' && (page?.path ?? '') === '欢迎.html'
+  /** 全类型归档：清单归档的非 md 文件（docs/vault-archive-all-files-design.md §7）——
+   *  html 走同一沙箱 iframe（kbview 白名单③收清单内归档 html）；其余类型元信息卡，不进 Monaco/预览 */
+  const isArchiveFile = page?.entryKind === 'file'
+  const isArchiveHtml = isArchiveFile && fileType === 'html'
 
   useEffect(() => { contentRef.current = content }, [content])
   useEffect(() => { pageIdRef.current = pageId }, [pageId])
@@ -727,8 +732,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
             {showMoreMenu && (
               <div className="absolute top-full right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl z-50 w-44 py-1"
                 onMouseLeave={() => setShowMoreMenu(false)}>
-                {/* 欢迎页不走 frontmatter 收藏（会毁掉整页 HTML，主进程同样拒绝） */}
-                {!isWelcomeHtml && (
+                {/* 欢迎页/归档非 md 文件不走 frontmatter 收藏（会毁掉文件，主进程同样拒绝） */}
+                {!isWelcomeHtml && !isArchiveFile && (
                   <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
                     <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? 'currentColor' : 'none'} />
@@ -771,8 +776,8 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* Main editing area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 注解层：非 md/txt 页面的通用备注条（支持 [[双链]]，自动入图） */}
-        {fileType !== 'md' && fileType !== 'txt' && !isWelcomeHtml && (
+        {/* 注解层：非 md/txt 页面的通用备注条（支持 [[双链]]，自动入图）；归档非 md 文件无 frontmatter 承载，不显示 */}
+        {fileType !== 'md' && fileType !== 'txt' && !isWelcomeHtml && !isArchiveFile && (
           <div className="shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
             <button onClick={() => setShowAnnotation(o => !o)}
               className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
@@ -796,7 +801,14 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         )}
 
         {/* Content */}
-        {isXmindFile ? (
+        {isArchiveFile ? (
+          /* 归档非 md 文件：html 沙箱渲染（kbview 白名单③），其余元信息卡（D1） */
+          isArchiveHtml && page?.path ? (
+            <WelcomeHtmlView path={page.path} />
+          ) : (
+            <FileMetaCard title={title} fileType={fileType} path={page?.path} updatedAt={page?.updatedAt} sizeBytes={page?.sizeBytes} />
+          )
+        ) : isXmindFile ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--text-secondary)]">
               <FileText size={64} className="opacity-20" />

@@ -5,6 +5,7 @@ import { getCurrentVault, KB_INBOX_DIR } from './vaultContext'
 import { readJson, writeJson, deleteFile } from './jsonStore'
 import { parseMarkdown } from './mdStore'
 import { WELCOME_DOC_FILENAME } from './welcomeDoc'
+import { findCoveringDirEntry, gcArchiveEntries, isArchivedByManifest, readManifest, type ArchivedManifest } from './archivedFilesRepo'
 import { getVaultIgnore, isDirIgnored, getVaultIgnoreState, auditIgnoreRules, type VaultIgnoreResult, type VaultIgnoreState } from './ignoreFile'
 import type { Ignore } from 'ignore'
 
@@ -57,6 +58,14 @@ export interface KnowledgePageIndexEntry {
   status: 'draft' | 'published'
   /** 正文 [[出链]] 标题集合（R2：反链面板据此反查，不必全文扫） */
   outgoingTitles: string[]
+  /**
+   * 条目种类（docs/vault-archive-all-files-design.md §5）：
+   * doc = md/欢迎页（有正文，全功能：正文搜索/双链/quiz）；file = 清单归档的非 md 文件
+   * （元信息卡或 html 沙箱渲染；不进图谱/AI 检索/quiz，不参与正文索引）。undefined = 旧缓存，按 doc 处理
+   */
+  entryKind?: 'doc' | 'file'
+  /** 文件大小（字节，元信息卡展示）；undefined = 旧缓存 */
+  sizeBytes?: number
 }
 
 /** 抽取 md 正文中的 [[wiki link]] 出链标题（别名取 | 前段，去重） */
@@ -72,7 +81,7 @@ export function extractWikiOutlinks(md: string): string[] {
 }
 
 export interface KnowledgeIndex {
-  schemaVersion: 3
+  schemaVersion: 4
   generatedAt: string
   source: 'vault'
   categories: KnowledgeCategoryIndexEntry[]
@@ -94,16 +103,18 @@ function asStringArray(value: unknown): string[] {
 }
 
 /**
- * 扫描仓库 .md（P5a 嵌套防护）：全仓库最多一个 `.knowbase`（仓库根直属那个）；
- * 深层再出现 `.knowbase` 视为布局违规——跳过不扫描，并经 warnings 提示（D4/§1 完整性规则）。
+ * 扫描仓库全类型文件（docs/vault-archive-all-files-design.md §5，由 scanMarkdownFiles 放宽）：
+ * 全仓库最多一个 `.knowbase`（仓库根直属那个）；深层再出现 `.knowbase` 视为布局违规——
+ * 跳过不扫描，并经 warnings 提示（D4/§1 完整性规则）。
  *
- * 唯一非 md 例外：仓库根 `欢迎.html`（见 WELCOME_DOC_FILENAME / WELCOME_PAGE_ID 注释）。
+ * 非 md 文件**全部收集**，是否入索引由调用方按归档清单判定（md 由 frontmatter 判定）；
+ * 唯一非 md 特例：仓库根 `欢迎.html`（见 WELCOME_DOC_FILENAME / WELCOME_PAGE_ID 注释）。
  *
  * .ignore 过滤层（docs/ignore-filter-design.md）：叠加在系统区跳过之后——
  * 系统目录（. 开头 / _inbox / _attachments / 嵌套 .knowbase）先按固有规则跳过，
  * 用户规则对系统区无效（不可被 ! 取反救回）；目录命中 → 整棵剪枝不递归。
  */
-function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: string[], ign?: Ignore | null, audit?: { files: string[]; dirs: string[] }): void {
+function scanVaultFiles(root: string, dir: string, out: string[], warnings?: string[], ign?: Ignore | null, audit?: { files: string[]; dirs: string[] }): void {
   let entries: Dirent[]
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -122,11 +133,11 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
     if (entry.isDirectory() && entry.name.toLowerCase() === '_inbox') continue
     const abs = join(dir, entry.name)
     // 规则对账收集（§10.1）：必须在 .ignore 剪枝判定**之前**记录——命中的条目会被剪枝排除，
-    // 事后对过滤后清单对账会把「正常命中」误报成「未匹配」。文件只收 .md（知识可见性口径）
+    // 事后对过滤后清单对账会把「正常命中」误报成「未匹配」。文件收全类型（归档可见性口径）
     if (audit) {
       const relAudit = relative(root, abs).replace(/\\/g, '/')
       if (entry.isDirectory()) audit.dirs.push(relAudit)
-      else if (entry.isFile() && (entry.name.toLowerCase().endsWith('.md') || (atRoot && entry.name === WELCOME_DOC_FILENAME))) audit.files.push(relAudit)
+      else if (entry.isFile()) audit.files.push(relAudit)
     }
     // .ignore 过滤：目录命中整棵剪枝；文件命中不入扫描结果（rel = 仓库内 posix 相对路径）
     if (ign) {
@@ -149,13 +160,12 @@ function scanMarkdownFiles(root: string, dir: string, out: string[], warnings?: 
         if (entry.name.startsWith('.')) {
           if (entry.name === '.knowbase') {
             const inbox = join(abs, '_inbox')
-            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanMarkdownFiles(root, inbox, out, warnings, ign, audit)
+            if (existsSync(inbox) && lstatSync(inbox).isDirectory()) scanVaultFiles(root, inbox, out, warnings, ign, audit)
           }
           continue
         }
-        scanMarkdownFiles(root, abs, out, warnings, ign, audit)
-      } else if (entry.isFile() && (entry.name.toLowerCase().endsWith('.md') || (atRoot && entry.name === WELCOME_DOC_FILENAME))) {
-        // 欢迎页例外：唯一放行的 html，仅限仓库根同名文件（子目录同名不收）
+        scanVaultFiles(root, abs, out, warnings, ign, audit)
+      } else if (entry.isFile()) {
         out.push(abs)
       }
     } catch {
@@ -420,7 +430,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const warnings: string[] = []
   if (!current) {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       generatedAt: new Date().toISOString(),
       source: 'vault',
       categories: [],
@@ -441,37 +451,77 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   // §10.1 规则对账：未命中任何磁盘条目的规则（典型=目录名连续空格肉眼不可对齐）进 warnings 提示，
   // 不再静默不生效——用户能立刻看出是规则写错而非「功能不稳定」
   const ignoreAudit = ignoreResult.ign ? { files: [] as string[], dirs: [] as string[] } : undefined
-  scanMarkdownFiles(current.rootPath, current.rootPath, files, warnings, ignoreResult.ign, ignoreAudit)
+  scanVaultFiles(current.rootPath, current.rootPath, files, warnings, ignoreResult.ign, ignoreAudit)
   if (ignoreResult.ign && ignoreAudit) {
     warnings.push(...auditIgnoreRules(ignoreResult, ignoreAudit))
   }
 
-  // 第一遍：读入全部 md（目录派生需先知道「所有知识页所在目录」，再统一补建分类）
-  const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown> }> = []
+  // 第一遍：读入全部条目（目录派生需先知道「所有知识页所在目录」，再统一补建分类）
+  // 全类型归档（§5）：先 GC 对账清单，再读清单；md 由 frontmatter 判定、非 md 由清单判定
+  const gcRemoved = gcArchiveEntries()
+  if (gcRemoved > 0) warnings.push(`归档清单已清理 ${gcRemoved} 个磁盘已消失的条目`)
+  const manifest: ArchivedManifest = readManifest()
+  const docs: Array<{ abs: string; rel: string; doc: ReturnType<typeof parseMarkdown>; entryKind: 'doc' | 'file' }> = []
   for (const abs of files) {
     try {
       const rel = relative(current.rootPath, abs).replace(/\\/g, '/')
-      const raw = readFileSync(abs, 'utf8')
+      const mtime = new Date(statSync(abs).mtimeMs).toISOString()
       // 欢迎页（唯一放行的 html）：无 frontmatter，条目字段在此合成；正文取纯文本供搜索
-      const isWelcome = rel === WELCOME_DOC_FILENAME
-      const mtime = isWelcome ? new Date(statSync(abs).mtimeMs).toISOString() : ''
+      if (rel === WELCOME_DOC_FILENAME) {
+        const raw = readFileSync(abs, 'utf8')
+        docs.push({
+          abs,
+          rel,
+          doc: {
+            frontmatter: {
+              id: WELCOME_PAGE_ID,
+              title: '欢迎',
+              fileType: 'html',
+              status: 'published',
+              starred: 'false',
+              created: mtime,
+              updated: mtime,
+            },
+            body: welcomeHtmlToPlain(raw),
+          },
+          entryKind: 'doc',
+        })
+        continue
+      }
+      if (/\.md$/i.test(rel)) {
+        const doc = parseMarkdown(readFileSync(abs, 'utf8'))
+        // B1（目录状态优先）：被目录条目覆盖、且自身无 frontmatter id 的普通 md → 自动 id 收录
+        if (!asString(doc.frontmatter.id) && findCoveringDirEntry(rel, manifest)) {
+          const fileName = rel.slice(rel.lastIndexOf('/') + 1)
+          const dot = fileName.lastIndexOf('.')
+          doc.frontmatter.id = `auto:${rel}`
+          if (!asString(doc.frontmatter.title)) doc.frontmatter.title = dot > 0 ? fileName.slice(0, dot) : fileName
+          doc.frontmatter.fileType = 'md'
+          doc.frontmatter.status = 'published'
+        }
+        docs.push({ abs, rel, doc, entryKind: 'doc' })
+        continue
+      }
+      // 非 md：仅清单归档的文件入索引（元信息卡 / html 沙箱）；不读内容（二进制可能很大）
+      if (!isArchivedByManifest(rel, manifest)) continue
+      const exact = manifest.entries.find((e) => e.type === 'file' && e.path === rel)
+      const fileName = rel.slice(rel.lastIndexOf('/') + 1)
+      const dot = fileName.lastIndexOf('.')
       docs.push({
         abs,
         rel,
-        doc: isWelcome
-          ? {
-              frontmatter: {
-                id: WELCOME_PAGE_ID,
-                title: '欢迎',
-                fileType: 'html',
-                status: 'published',
-                starred: 'false',
-                created: mtime,
-                updated: mtime,
-              },
-              body: welcomeHtmlToPlain(raw),
-            }
-          : parseMarkdown(raw),
+        doc: {
+          frontmatter: {
+            id: exact?.id ?? `auto:${rel}`,
+            title: dot > 0 ? fileName.slice(0, dot) : fileName,
+            fileType: (dot > 0 ? fileName.slice(dot + 1) : '').toLowerCase(),
+            status: 'published',
+            created: mtime,
+            updated: mtime,
+          },
+          body: '',
+        },
+        entryKind: 'file',
       })
     } catch {
       warnings.push(`页面读取失败，已跳过：${relative(current.rootPath, abs)}`)
@@ -515,7 +565,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const pages: KnowledgePageIndexEntry[] = []
   const byId: Record<string, KnowledgePageIndexEntry> = {}
 
-  for (const { abs, rel, doc } of docs) {
+  for (const { abs, rel, doc, entryKind } of docs) {
     try {
       const id = asString(doc.frontmatter.id)
       if (!id) {
@@ -527,6 +577,8 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
         continue
       }
       const stat = statSync(abs)
+      // B1（目录状态优先）：路径被目录条目覆盖 → 一律按已归档消费（draft md 放出、图谱不虚化）
+      const coveredByDir = findCoveringDirEntry(rel, manifest) !== null
       const entry: KnowledgePageIndexEntry = {
         id,
         title: asString(doc.frontmatter.title) || abs.slice(Math.max(abs.lastIndexOf('\\'), abs.lastIndexOf('/')) + 1).replace(/\.md$/i, ''),
@@ -540,10 +592,12 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
         attachmentId: asString(doc.frontmatter.attachmentId),
         createdAt: asString(doc.frontmatter.created),
         updatedAt: asString(doc.frontmatter.updated),
-        status: asString(doc.frontmatter.status).toLowerCase() === 'draft' ? 'draft' : 'published',
+        status: coveredByDir || asString(doc.frontmatter.status).toLowerCase() !== 'draft' ? 'published' : 'draft',
         mtimeMs: stat.mtimeMs,
         // 欢迎页不入双链图：它是导览页，正文里的 [[...]] 只是语法示例（见 welcomeHtmlToPlain）
         outgoingTitles: rel === WELCOME_DOC_FILENAME ? [] : extractWikiOutlinks(doc.body),
+        entryKind,
+        sizeBytes: stat.size,
       }
       pages.push(entry)
       byId[id] = entry
@@ -557,7 +611,9 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   // 搜索用纯文本索引（性能 2026-09-10）：复用本已读入内存的 docs 正文顺手产出并落盘。
   // 放在这里而不是搜索时懒建，是因为此刻正文已在内存 —— 零额外读盘。
   const textById: Record<string, string> = {}
-  for (const { doc } of docs) {
+  for (const { doc, entryKind } of docs) {
+    // 非 md 归档文件无正文，不进文本索引（搜索层按标题匹配）
+    if (entryKind === 'file') continue
     const id = asString(doc.frontmatter.id)
     if (id) textById[id] = mdToPlain(doc.body || '')
   }
@@ -568,7 +624,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   })
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     source: 'vault',
     categories: visibleCategories.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hans')),
@@ -644,6 +700,8 @@ export function getKnowledgeTextIndex(): Record<string, string> {
   const byId: Record<string, string> = {}
   if (root) {
     for (const e of getKnowledgeIndex().pages) {
+      // 非 md 归档文件无正文（二进制不读），固定空串
+      if (e.entryKind === 'file') { byId[e.id] = ''; continue }
       try { byId[e.id] = mdToPlain(parseMarkdown(readFileSync(join(root, e.path), 'utf-8')).body || '') }
       catch { byId[e.id] = '' }
     }
@@ -679,7 +737,7 @@ export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
     const cached = readJson<KnowledgeIndex | null>('cache', 'knowledge-index.json', null)
     if (
       cached &&
-      cached.schemaVersion === 3 &&
+      cached.schemaVersion === 4 &&
       cached.source === 'vault' &&
       Array.isArray(cached.pages) &&
       cached.byId &&

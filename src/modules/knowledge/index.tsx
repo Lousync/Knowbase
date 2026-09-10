@@ -3,6 +3,7 @@ import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as Ima
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { WelcomeHtmlView } from './components/WelcomeHtmlView'
+import { FileMetaCard } from './components/FileMetaCard'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import {
   getKnowledgeCategories, createKnowledgeCategory, updateKnowledgeCategory, deleteKnowledgeCategory,
@@ -1250,7 +1251,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               </div>
             </div>
 
-            {readingPage && (readingPage.fileType || '').toLowerCase() === 'html' ? (
+            {readingPage && (readingPage.entryKind ?? 'doc') === 'file' ? (
+              /* 归档非 md 文件（全类型归档 D1/D2）：html 沙箱渲染，其余元信息卡 */
+              (readingPage.fileType || '').toLowerCase() === 'html' && readingPage.path ? (
+                <WelcomeHtmlView path={readingPage.path} />
+              ) : (
+                <FileMetaCard title={readingPage.title} fileType={readingPage.fileType || ''} path={readingPage.path} updatedAt={readingPage.updatedAt} sizeBytes={readingPage.sizeBytes} />
+              )
+            ) : readingPage && (readingPage.fileType || '').toLowerCase() === 'html' ? (
               /* 欢迎页（唯一放行的 HTML）：整页沙箱渲染，不走 720px 阅读排版 */
               <WelcomeHtmlView path={readingPage.path || '欢迎.html'} />
             ) : (

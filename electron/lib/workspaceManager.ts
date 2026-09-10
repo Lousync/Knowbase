@@ -8,6 +8,8 @@ import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
 import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
+import { addArchiveEntry, removeArchiveEntry, renameArchiveEntries, readManifest, relPosixOf } from './kbStore/archivedFilesRepo'
+import { broadcastDataChanged } from '../main/windowBus'
 import { globalReadJson, globalWriteJson } from './globalJsonStore'
 import { isAllowedClearRoot, trashVaultFolder } from './vaultDelete'
 import { rootDirName } from './aiTeachingFolders'
@@ -541,6 +543,34 @@ function isKnowledgeIndexSensitive(relPath: string): boolean {
   const lower = name.toLowerCase()
   return lower.endsWith('.md') || lower === IGNORE_FILE_NAME
 }
+
+/**
+ * md 归档双态核心（ws:setMdStatus 与 ws:setArchiveStatus 共用）：
+ * draft=true 转草稿；draft=false 归档（缺 id 注入 id 与 title，否则知识索引仍跳过）。
+ * §9.3-3 双保险：.ignore 拒绝被归档注入 frontmatter id（UI 层已隐藏入口，此守卫防
+ * AI/插件直调 IPC 绕过；大小写不敏感与 findIgnoreFile 同口径）。
+ */
+function setMdStatusImpl(rootId: string, abs: string, draft: boolean): { ok: boolean; error?: string } {
+  if (basename(abs).toLowerCase() === IGNORE_FILE_NAME) {
+    return { ok: false, error: '.ignore 是过滤规则文件，不能归档为知识页' }
+  }
+  const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
+  if (draft) {
+    doc.frontmatter.status = 'draft'
+  } else {
+    delete doc.frontmatter.status
+    if (!doc.frontmatter.id || typeof doc.frontmatter.id !== 'string') {
+      doc.frontmatter.id = randomUUID()
+      if (!doc.frontmatter.title || typeof doc.frontmatter.title !== 'string') {
+        doc.frontmatter.title = basename(abs).replace(/\.md$/i, '')
+      }
+    }
+  }
+  writeWorkspaceFile(abs, serializeMarkdown(doc.frontmatter, doc.body))
+  invalidateIndexIfCurrentVault(rootId)
+  invalidateGraphIndex() // 图谱节点 status（draft 虚化）需重建缓存
+  return { ok: true }
+}
 /** 重命名/移动（跨目录；ws:rename 与 AI vault.rename 共用同一语义，成功后失效索引） */
 export function renameWorkspacePath(rootId: string, oldRel: string, newRel: string): void {
   const from = requireInside(rootId, oldRel)
@@ -551,6 +581,9 @@ export function renameWorkspacePath(rootId: string, oldRel: string, newRel: stri
   // 与「新建目录」的 ws:mkdir（重名自动加后缀）严格区分，绝不产生 (1) 镜像目录
   mkdirSync(dirname(to), { recursive: true })
   renameSync(from, to)
+  // 归档清单跟随（全类型归档 §4.2）：文件条目精确改 path、目录条目及其下条目前缀级联；
+  // 清单按当前仓库落盘（jsonStore 作用域），非当前仓库的 rename 不动清单
+  if (getCurrentVault()?.rootId === rootId) renameArchiveEntries(oldRel, newRel)
   invalidateIndexIfCurrentVault(rootId)
 }
 
@@ -811,31 +844,57 @@ export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown)
   })
 
   // 双态模型：置/去 .md 的 frontmatter status: draft（draft=true=转草稿[保留 id 供虚化锚定]，false=归档为知识页）
+  /**
+   * md 归档双态通道（ws:setMdStatus 原语义保留；ws:setArchiveStatus 对 md 分流到同一实现）。
+   * draft=true 转草稿；draft=false 归档（缺 id 注入）。
+   */
   ipcMain.handle('ws:setMdStatus', (_e, rootId: string, relPath: string, draft: unknown) => {
     try {
+      return setMdStatusImpl(rootId, requireInside(rootId, relPath), draft === true)
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  /**
+   * 全类型归档统一通道（docs/vault-archive-all-files-design.md §4.1）：
+   * - md → setMdStatusImpl（frontmatter 双态，archive 取反为 draft）
+   * - 非 md / 目录 → 归档清单 addArchiveEntry / removeArchiveEntry
+   * 成功后失效索引 + 广播 knowledge（主进程写操作必须广播，保活模块才能重读）。
+   */
+  ipcMain.handle('ws:setArchiveStatus', (_e, rootId: string, relPath: string, archive: unknown) => {
+    try {
       const abs = requireInside(rootId, relPath)
-      // §9.3-3 双保险：.ignore 是过滤规则文件，拒绝被归档注入 frontmatter id（UI 层已隐藏入口，
-      // 此守卫防 AI/插件直调 IPC 绕过；大小写不敏感与 findIgnoreFile 同口径）
+      const rel = relPosixOf(requireRoot(rootId).rootPath, abs)
       if (basename(abs).toLowerCase() === IGNORE_FILE_NAME) {
-        return { ok: false, error: '.ignore 是过滤规则文件，不能归档为知识页' }
+        return { ok: false, error: '.ignore 是过滤规则文件，不能归档' }
       }
-      const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
-      if (draft === true) {
-        doc.frontmatter.status = 'draft'
-      } else {
-        delete doc.frontmatter.status
-        // 归档时若尚无 id（纯 markdown 草稿/普通文件）→ 注入知识页 id 与 title，否则知识索引仍跳过
-        if (!doc.frontmatter.id || typeof doc.frontmatter.id !== 'string') {
-          doc.frontmatter.id = randomUUID()
-          if (!doc.frontmatter.title || typeof doc.frontmatter.title !== 'string') {
-            doc.frontmatter.title = basename(abs).replace(/\.md$/i, '')
-          }
-        }
+      if (/\.md$/i.test(rel)) {
+        const res = setMdStatusImpl(rootId, abs, archive !== true)
+        if (res.ok) broadcastDataChanged('knowledge')
+        return res
       }
-      writeWorkspaceFile(abs, serializeMarkdown(doc.frontmatter, doc.body))
+      const isDir = statSync(abs).isDirectory()
+      if (archive === true) {
+        const { count } = addArchiveEntry(rel, isDir ? 'dir' : 'file')
+        invalidateIndexIfCurrentVault(rootId)
+        broadcastDataChanged('knowledge')
+        return { ok: true, count }
+      }
+      removeArchiveEntry(rel)
       invalidateIndexIfCurrentVault(rootId)
-      invalidateGraphIndex() // 图谱节点 status（draft 虚化）需重建缓存
+      broadcastDataChanged('knowledge')
       return { ok: true }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+
+  // 归档清单读取（渲染层右键菜单态：目录是否已归档）
+  ipcMain.handle('ws:getArchiveEntries', (_e, rootId: string) => {
+    try {
+      requireRoot(rootId)
+      return { ok: true, entries: readManifest().entries }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

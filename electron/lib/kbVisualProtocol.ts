@@ -1,25 +1,31 @@
 import { existsSync, readFileSync, statSync } from 'fs'
 import { protocol } from 'electron'
 import { getCurrentVault } from './kbStore/vaultContext'
+import { isArchivedByManifest } from './kbStore/archivedFilesRepo'
 import { rootDirName } from './aiTeachingFolders'
 import { WELCOME_DOC_FILENAME } from './kbStore/welcomeDoc'
 import { safePathInside } from './pathGuard'
 
 /**
- * kbview:// 协议 —— 仓库内受控 HTML 的沙箱渲染载体，两个白名单入口：
+ * kbview:// 协议 —— 仓库内受控 HTML 的沙箱渲染载体，三个白名单入口：
  *
  *  ① AI教学工件栏「示意图渲染」（docs/ai-teaching-artifacts-pane-design.md §4 实修裁决）
  *  ② 仓库根「欢迎.html」（新用户导览页；知识库阅读器内渲染，2026-09-10）
+ *  ③ 归档清单内的 html（全类型归档 docs/vault-archive-all-files-design.md §4.3；知识库阅读器内渲染，2026-09-10）
  *
  * 为什么不用 iframe srcDoc：srcdoc 子框架会**继承父文档 CSP**（index.html `script-src 'self'`），
  * 文档脚本与宿主量高脚本全被拦（2026-09-09 实锤 Refused to execute inline script）；
  * blob: 载体又被 sandbox（无 allow-same-origin → opaque origin）拒绝加载。
  * 跨 scheme 正常导航不继承，与既有 plugin:// 同思路。
  *
- * 安全边界（**只放行这两个白名单，其余一律 403**——「知识库可渲染的 html 仅限欢迎页」由本处收敛）：
+ * 安全边界（**只放行这三个白名单，其余一律 403**）：
  * - AI教学：仅「AI教学产物根/{...}/*.html」——safePathInside 防穿越 + 前缀与扩展名白名单 + 2MB 上限；
  * - 欢迎页：仅仓库根同名文件（精确相等，不接受子目录同名）+ 4MB 上限；
- * - 响应头 CSP 锁死网络（default-src 'none'，仅放行内联样式脚本与 data:/blob: 图片），并剥掉文档自带的 CSP meta（取交集会反噬）；
+ * - 归档 html：仅归档清单（archived-files.json）覆盖到的 *.html + 2MB 上限——清单外 html 一律 403，
+ *   「归档了才可渲染」由本处收敛（未归档的 html 不能经 kbview 探测）；
+ * - 响应头 CSP 锁死网络（default-src 'none'，仅放行内联样式脚本与 data:/blob: 图片——connect-src 'none'
+ *   即「沙箱渲染+断外联」档：页面 JS 可跑但 fetch/XHR 全断，无法外传数据），并剥掉文档自带的 CSP meta
+ *   （取交集会反噬）；
  * - 渲染侧仍必须配合 iframe sandbox="allow-scripts"（无 allow-same-origin，不透明源拿不到宿主 bridge）。
  */
 
@@ -79,6 +85,23 @@ export function registerKbVisualProtocol(getSetting: (key: string) => unknown): 
         if (!existsSync(welcomeAbs) || !statSync(welcomeAbs).isFile()) return new Response('Not Found', { status: 404 })
         if (statSync(welcomeAbs).size > MAX_WELCOME_BYTES) return new Response('Too Large', { status: 413 })
         return new Response(stripCspMeta(readFileSync(welcomeAbs, 'utf-8')), {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'Content-Security-Policy': VISUAL_CSP,
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
+      }
+
+      // ③ 归档清单内的 html（全类型归档）：整页原样返回（同欢迎页，不注入 AI 工件的居中/量高壳）；
+      //    CSP 同样锁死网络（断外联档），清单外 html 落到 ① 的前缀校验被 403
+      if (isArchivedByManifest(rel)) {
+        const abs = safePathInside(vault.rootPath, rel)
+        if (!abs) return new Response('Forbidden', { status: 403 })
+        if (!existsSync(abs) || !statSync(abs).isFile()) return new Response('Not Found', { status: 404 })
+        if (statSync(abs).size > MAX_VISUAL_BYTES) return new Response('Too Large', { status: 413 })
+        return new Response(stripCspMeta(readFileSync(abs, 'utf-8')), {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-cache',

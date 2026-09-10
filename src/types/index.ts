@@ -329,6 +329,10 @@ export interface KnowledgePage {
   attachments?: string[]
   /** 页面状态：draft=草稿（知识库正式列表不显示，编辑器侧/图谱虚化可见）；published=归档（默认） */
   status?: 'draft' | 'published'
+  /** 条目种类：file=清单归档的非 md 文件（元信息卡/沙箱渲染，不参与正文/双链）；缺省=md 知识页 */
+  entryKind?: 'doc' | 'file'
+  /** 文件大小（字节；元信息卡展示） */
+  sizeBytes?: number
 }
 /** 反链条目（带引用上下文摘录） */
 export interface KnowledgeBacklinkItem {
@@ -684,7 +688,21 @@ export interface AgentTraceStep {
   args?: Record<string, unknown>
   /** visual.html 成功产物（落库随消息 trace）：对话流工件卡数据源 */
   artifact?: { rel: string; title: string; lines: number; slug: string }
+  /** 过程旁白（落库）：带工具轮次里模型输出的说明文本，历史回看用 */
+  processText?: string
+  /** 思考耗时 ms（落库；reasoning 全文不落库） */
+  thinkingMs?: number
 }
+
+/**
+ * 流式增量事件（agent:stream，与 agent:step 分工）：
+ * step 承载「步骤完成」（落库），stream 承载「增量与进行中」（不落库）。两者合起来才是完整过程时间线。
+ */
+export type AgentStreamEvent =
+  | { kind: 'round-start'; round: number }
+  | { kind: 'thinking'; delta: string }
+  | { kind: 'text'; delta: string }
+  | { kind: 'tool-start'; name: string; label: string; target?: string }
 
 export interface AgentChatMessage {
   role: 'user' | 'assistant'
@@ -1149,6 +1167,9 @@ export interface ElectronAPI {
   workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => Promise<WorkspaceRangeResult & { error?: string }>
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => Promise<WorkspaceWriteResult>
   workspaceSetMdStatus: (rootId: string, relPath: string, draft: boolean) => Promise<{ ok: boolean; error?: string }>
+  /** 全类型归档（docs/vault-archive-all-files-design.md）：md 分流 frontmatter 双态，非 md/目录走清单 */
+  workspaceSetArchiveStatus: (rootId: string, relPath: string, archive: boolean) => Promise<{ ok: boolean; count?: number; error?: string }>
+  workspaceGetArchiveEntries: (rootId: string) => Promise<{ ok: boolean; entries?: Array<{ id: string; path: string; type: 'file' | 'dir'; archivedAt: string }>; error?: string }>
   workspaceCreateFile: (rootId: string, relPath: string, content?: string) => Promise<{ ok: boolean; error?: string; relPath?: string; renamed?: boolean }>
   workspaceMkdir: (rootId: string, relPath: string) => Promise<{ ok: boolean; error?: string; relPath?: string; renamed?: boolean }>
   workspaceRename: (rootId: string, oldRel: string, newRel: string) => Promise<{ ok: boolean; error?: string }>
@@ -1383,6 +1404,8 @@ export interface ElectronAPI {
   agentAbort: (chatId: string) => Promise<boolean>
   /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
   onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void
+  /** AgentRunner 流式增量（思考链 / 正文 / 工具进行中；主进程已合批，payload {chatId, event}） */
+  onAgentStream: (cb: (p: { chatId: string; event: AgentStreamEvent }) => void) => () => void
   agentSessions: () => Promise<AgentSessionInfo[]>
   agentNewSession: (title?: string, source?: AgentSessionSource) => Promise<AgentSessionInfo>
   agentMessages: (sessionId: string) => Promise<AgentStoredMessage[]>

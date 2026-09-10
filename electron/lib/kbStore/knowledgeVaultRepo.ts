@@ -36,6 +36,10 @@ export interface VaultPage {
   attachments: string[]
   /** 页面状态（draft/published）：draft 不出现在知识库正式列表/阅读（编辑器草稿/修改中） */
   status: 'draft' | 'published'
+  /** 条目种类：doc=md/欢迎页；file=清单归档的非 md 文件（缺省按 doc 消费，向后兼容） */
+  entryKind?: 'doc' | 'file'
+  /** 文件大小（字节；元信息卡展示） */
+  sizeBytes?: number
 }
 
 /** 正式页过滤（草稿隐藏）：知识库列表/阅读/搜索/星标/反链源只含 published */
@@ -102,7 +106,18 @@ function entryToPage(entry: KnowledgePageIndexEntry, contentMd = '', attachments
     path: entry.path,
     attachments,
     status: entry.status,
+    entryKind: entry.entryKind ?? 'doc',
+    sizeBytes: entry.sizeBytes,
   }
+}
+
+/**
+ * 非 md 归档文件（entryKind==='file'）：frontmatter 重写通道一律拒绝——
+ * 二进制/非 md 文件写入 frontmatter 会毁掉文件（与欢迎页同一铁律）。
+ */
+const NON_MD_ARCHIVE_DENY = '该文件不是 markdown 知识页：不支持改名 / 排序 / 收藏（可在编辑器中管理它）'
+function isNonMdArchiveEntry(entry: { entryKind?: string }): boolean {
+  return entry.entryKind === 'file'
 }
 
 /** 原子写仓库根内文件（tmp + rename，与 jsonStore 同策略） */
@@ -343,6 +358,8 @@ export function vaultGetPages(categoryId?: string | null): VaultPage[] {
 export function vaultGetPageById(id: string): VaultPage | null {
   const entry = getKnowledgeIndex().byId[id]
   if (!entry || entry.status === 'draft') return null // 草稿（修改中）不出现在知识库阅读
+  // 非 md 归档文件：不读正文（二进制/HTML），渲染方式由渲染层按 entryKind 决定
+  if (isNonMdArchiveEntry(entry)) return entryToPage(entry)
   const doc = readPageDoc(entry)
   return entryToPage(entry, doc.contentMd, doc.attachments)
 }
@@ -352,6 +369,7 @@ export function vaultToggleStar(id: string): VaultPage | null {
   const entry = getKnowledgeIndex().byId[id]
   if (!entry) return null
   if (isWelcomeEntry(entry)) throw new Error(WELCOME_WRITE_DENY)
+  if (isNonMdArchiveEntry(entry)) throw new Error(NON_MD_ARCHIVE_DENY)
   const abs = join(requireRoot(), entry.path)
   const doc = parseMarkdown(readFileSync(abs, 'utf-8'))
   const cur = String(doc.frontmatter.starred ?? '').toLowerCase() === 'true'
@@ -519,6 +537,7 @@ export function vaultRenamePage(id: string, newTitle: string): void {
   const entry = idx.byId[id]
   if (!entry) throw new Error('页面不存在')
   if (isWelcomeEntry(entry)) throw new Error(WELCOME_WRITE_DENY) // 欢迎页拒绝改名（会连带改成 .md）
+  if (isNonMdArchiveEntry(entry)) throw new Error(NON_MD_ARCHIVE_DENY)
   const clean = newTitle.trim()
   if (!clean) throw new Error('名称不能为空')
   const root = requireRoot()
@@ -554,11 +573,12 @@ export function vaultMovePageOrder(id: string, direction: 'up' | 'down'): void {
   const me = idx.byId[id]
   if (!me) throw new Error('页面不存在')
   if (isWelcomeEntry(me)) throw new Error(WELCOME_WRITE_DENY)
+  if (isNonMdArchiveEntry(me)) throw new Error(NON_MD_ARCHIVE_DENY)
   const root = requireRoot()
   const dirOf = (p: string): string => { const s = p.lastIndexOf('/'); return s >= 0 ? p.slice(0, s) : '' }
   const dirRel = dirOf(me.path)
-  // 欢迎页不参与同目录排序（它没有 frontmatter，写 sortOrder 会毁掉整页）
-  const siblings = idx.pages.filter((p) => dirOf(p.path) === dirRel && !isWelcomeEntry(p))
+  // 欢迎页与非 md 归档文件不参与同目录排序（没有 frontmatter，写 sortOrder 会毁掉文件）
+  const siblings = idx.pages.filter((p) => dirOf(p.path) === dirRel && !isWelcomeEntry(p) && !isNonMdArchiveEntry(p))
   siblings.sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'zh-Hans'))
   const i = siblings.findIndex((p) => p.id === id)
   if (i < 0) return

@@ -70,11 +70,13 @@ export function rebuildGraphIndex(): GraphIndexData {
   const resolver = createLinkResolver(idx)
 
   // 有向引用（页→页 resolved），自环跳过
+  // 非 md 归档文件（entryKind==='file'）无正文无出链，不进图谱（docs/vault-archive-all-files-design.md §6）
+  const graphPages = idx.pages.filter((e) => e.entryKind !== 'file')
   const srcToDst = new Map<string, Set<string>>() // src -> resolved targets
   const tagPages = new Map<string, Set<string>>() // tagName -> pageIds
   const unresolvedMap = new Map<string, Set<string>>() // name -> source pageIds
 
-  for (const entry of idx.pages) {
+  for (const entry of graphPages) {
     for (const out of entry.outgoingTitles) {
       const name = resolver.normalize(out)
       if (!name) continue
@@ -118,7 +120,7 @@ export function rebuildGraphIndex(): GraphIndexData {
   }
 
   const nodes: GraphNode[] = []
-  for (const entry of idx.pages) {
+  for (const entry of graphPages) {
     for (const dst of srcToDst.get(entry.id) ?? []) {
       linkBoth(entry.id, dst)
       addEdge(entry.id, dst)

@@ -231,6 +231,12 @@ const api = {
     ipcRenderer.on('agent:step', handler)
     return () => { ipcRenderer.removeListener('agent:step', handler) }
   },
+  /** 流式增量（思考链 / 正文 / 工具进行中；主进程已按 40ms·64 字符合批） */
+  onAgentStream: (cb: (p: { chatId: string; event: unknown }) => void) => {
+    const handler = (_e: unknown, p: { chatId: string; event: unknown }) => cb(p)
+    ipcRenderer.on('agent:stream', handler)
+    return () => { ipcRenderer.removeListener('agent:stream', handler) }
+  },
   agentSessions: () => ipcRenderer.invoke('agent:sessions'),
   agentNewSession: (title?: string, source?: string) => ipcRenderer.invoke('agent:newSession', title, source),
   agentMessages: (sessionId: string) => ipcRenderer.invoke('agent:messages', sessionId),
@@ -578,6 +584,9 @@ const api = {
   workspaceReadRange: (rootId: string, relPath: string, offset: number, length: number) => ipcRenderer.invoke('ws:readRange', rootId, relPath, offset, length),
   workspaceWriteFile: (rootId: string, relPath: string, content: string, expectedMtimeMs?: number) => ipcRenderer.invoke('ws:writeFile', rootId, relPath, content, expectedMtimeMs),
   workspaceSetMdStatus: (rootId: string, relPath: string, draft: boolean) => ipcRenderer.invoke('ws:setMdStatus', rootId, relPath, draft),
+  // 全类型归档（docs/vault-archive-all-files-design.md）：md 分流 frontmatter 双态，非 md/目录走清单
+  workspaceSetArchiveStatus: (rootId: string, relPath: string, archive: boolean) => ipcRenderer.invoke('ws:setArchiveStatus', rootId, relPath, archive),
+  workspaceGetArchiveEntries: (rootId: string) => ipcRenderer.invoke('ws:getArchiveEntries', rootId),
   workspaceCreateFile: (rootId: string, relPath: string, content?: string) => ipcRenderer.invoke("ws:createFile", rootId, relPath, content),
   workspaceMkdir: (rootId: string, relPath: string) => ipcRenderer.invoke('ws:mkdir', rootId, relPath),
   workspaceRename: (rootId: string, oldRel: string, newRel: string) => ipcRenderer.invoke('ws:rename', rootId, oldRel, newRel),
