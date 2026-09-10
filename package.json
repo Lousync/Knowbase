@@ -1,6 +1,6 @@
 {
   "name": "knowbase",
-  "version": "3.0.1-beta",
+  "version": "3.0.0",
   "description": "Knowbase Programmer Edition — 本地 Windows 桌面知识管理工具",
   "main": "./out/main/index.js",
   "scripts": {
@@ -65,6 +65,10 @@
       {
         "from": "clipper-extension",
         "to": "clipper-extension"
+      },
+      {
+        "from": "resources/help",
+        "to": "help"
       }
     ],
     "directories": {
