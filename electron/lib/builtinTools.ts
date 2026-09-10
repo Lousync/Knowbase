@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto'
 import { readdirSync, lstatSync, readFileSync, statSync, mkdirSync } from 'fs'
 import { join, relative, extname, sep, dirname } from 'path'
-import { listTools, registerTool, getSettingReader } from './aiTools'
+import { listTools, registerTool, getSettingReader, checkModulePermission } from './aiTools'
+import { broadcastDataChanged } from '../main/windowBus'
 import { webSearch, webReadPage } from './webSearch'
 import { writeVisual } from './aiTeachingSources'
 import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
@@ -496,6 +497,10 @@ export function registerBuiltinTools(): void {
     }
     // 受控写层：与 UI 同一份磁盘 .md（frontmatter id 由 repo 生成并登记索引）
     const page = vaultCreatePage({ title, contentMd, categoryId })
+    // 与 vault.write 同规则：.md 落盘即失效索引（页面立刻进入列表/图谱/AI 检索），
+    // 并广播通知渲染层重取 —— 知识库是保活模块，不通知就看不到（2026-09-10 修）
+    invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
+    broadcastDataChanged('knowledge')
     return { ok: true, id: page.id, title }
   })
 
@@ -529,6 +534,9 @@ export function registerBuiltinTools(): void {
     // 与 UI 同一份 .knowbase/blog/*.md（vaultCreateEntry 自带每天一篇防重）
     const e = vaultCreateEntry({ title: str(args.title).trim(), contentMd, date })
     if (e.contentMd !== contentMd) throw new Error(`${date} 已存在日记（应用限制每天一篇），可改用其他日期`)
+    // 同 knowledge.create-page：日记也是仓库内 .md，落盘即失效索引并通知博客列表重取
+    invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
+    broadcastDataChanged('blog')
     return { ok: true, id: e.id, date }
   })
 
@@ -567,6 +575,9 @@ export function registerBuiltinTools(): void {
       task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
       end_criteria: '', parent_id: null, created_at: now, updated_at: now,
     })
+    // 主进程写盘后必须主动广播：日程模块是保活的（切 Tab 不重载），
+    // 不通知就只能靠切月份/重启才能看到（2026-09-10 修）
+    broadcastDataChanged('schedule')
     return { ok: true, id, date, quadrant }
   })
 
@@ -597,6 +608,8 @@ export function registerBuiltinTools(): void {
     const hit = hs.find(h => h.name.toLowerCase() === q) ?? hs.find(h => h.name.toLowerCase().includes(q))
     if (!hit) throw new Error(`未找到匹配的习惯「${str(args.name)}」`)
     const isNew = vaultHabitRecordAddIfAbsent(hit.id, date, 'manual')
+    // 真的新增了才广播（已打卡是幂等空操作，数据未变无需刷新）
+    if (isNew) broadcastDataChanged('habit')
     return isNew
       ? { ok: true, habitId: hit.id, name: hit.name, checked: true }
       : { ok: true, habitId: hit.id, name: hit.name, alreadyChecked: true }
@@ -648,18 +661,40 @@ export function registerBuiltinTools(): void {
     const raw = str(args.tools)
     const names = raw.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean)
     if (names.length === 0) throw new Error('缺少必填参数: tools')
-    const known = new Set(listTools().map(t => t.name))
+    const all = listTools()
+    const reader = getSettingReader()
     const enabled: string[] = []
     const unknown: string[] = []
+    const denied: Array<{ name: string; module: string; reason: string }> = []
     for (const n of names) {
-      if (known.has(n)) enabled.push(n)
-      else unknown.push(n)
+      const t = all.find(x => x.name === n)
+      if (!t) { unknown.push(n); continue }
+      // 权限不足的工具不能"申请成功"（2026-09-10 修）：
+      // 否则模型会误以为已启用，进而向用户宣称操作完成 —— 而下一轮它依然不在工具列表里，
+      // 结果是"AI 说创建成功、实际上什么都没发生"。
+      const permErr = checkModulePermission(t, reader)
+      if (permErr) {
+        denied.push({
+          name: n,
+          module: t.module ?? '',
+          reason: permErr === 'MODULE_READONLY' ? '对 AI 只读' : '已对 AI 关闭',
+        })
+        continue
+      }
+      enabled.push(n)
     }
+    const deniedHint = denied.length
+      ? `以下工具未启用：${denied.map(d => `${d.name}（模块「${d.module}」${d.reason}）`).join('；')}。`
+        + '请在回答中如实告知用户该操作未执行，并提示可在 设置 → AI 工具 → 权限 中把对应模块调为「读写」后重试；不要声称已完成。'
+      : undefined
     return {
       ok: true,
       enabled,
       ...(unknown.length ? { unknown, hint: '以下工具名不存在（命名规则 builtin.<域>.<动作>，可用工具以系统列表为准）' } : {}),
-      message: `已启用 ${enabled.length} 个工具（本会话内持续可用），下一轮起生效。写操作会真实生效并留审计记录，执行前确认用户意图`,
+      ...(denied.length ? { denied, deniedHint } : {}),
+      message: enabled.length
+        ? `已启用 ${enabled.length} 个工具（本会话内持续可用），下一轮起生效。写操作会真实生效并留审计记录，执行前确认用户意图`
+        : '本次没有工具被启用，请根据 deniedHint 如实告知用户未执行的原因',
     }
   })
 

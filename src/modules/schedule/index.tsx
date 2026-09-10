@@ -16,8 +16,13 @@ import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
 import { TagManageModal } from './components/TagManageModal'
 import { useDataChanged, notifyDataChanged } from '../../lib/dataChanged'
-const QUADRANT_LABELS: Record<number, string> = { 0: '紧急重要', 1: '重要不紧急', 2: '紧急不重要', 3: '不紧急不重要' }
-const QUADRANT_COLORS: Record<number, string> = { 0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]' }
+import { useSettings } from '../../lib/SettingsContext'
+import { showToast } from '../../lib/toast'
+import {
+  orderedQuadrants, QUADRANT_TEXT_CLASS,
+  type QuadrantIcon, type QuadrantOrder,
+} from '../../lib/scheduleQuadrant'
+import { celebrateAllDone, playDoneSound, type TaskFeedbackLevel } from './components/TodoItem'
 
 const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; placeholder: string; meta: string; metaIcon: number; sectionTitle: string }> = {
   sm: { icon: 14, text: 'text-[11px]', padY: 'py-1.5', placeholder: '零碎任务...', meta: 'text-[11px]', metaIcon: 10, sectionTitle: 'text-[12px]' },
@@ -30,7 +35,7 @@ function localToday(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar }: { sidebarOpen?: boolean; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void }) {
+export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar }: { isActive?: boolean; sidebarOpen?: boolean; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void }) {
   const now = new Date()
   const today = localToday()
   const [year, setYear] = useState(now.getFullYear())
@@ -39,6 +44,19 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   const [dotDates, setDotDates] = useState<Set<string>>(new Set())
   const [deadlineCounts, setDeadlineCounts] = useState<Map<string, number>>(new Map())
   const [tags, setTags] = useState<ScheduleTag[]>([])
+
+  // ---- 日程任务设置（设置 → 模块设置 → 日程任务）----
+  const { s: appSettings } = useSettings()
+  /** 完成反馈强度：light / medium / heavy */
+  const feedbackLevel: TaskFeedbackLevel =
+    appSettings.scheduleFeedbackLevel === 'light' || appSettings.scheduleFeedbackLevel === 'heavy'
+      ? appSettings.scheduleFeedbackLevel
+      : 'medium'
+  const quadrantIcon = (appSettings.scheduleQuadrantIcon || 'bars') as QuadrantIcon
+  const quadrantOrder = (appSettings.scheduleQuadrantOrder || 'ladder') as QuadrantOrder
+  const quadrantText: 'show' | 'hide' = appSettings.scheduleQuadrantText === 'hide' ? 'hide' : 'show'
+  /** 四象限视图的分组展示顺序（跟随排序设置） */
+  const quadrantList = useMemo(() => orderedQuadrants(quadrantOrder), [quadrantOrder])
 
   const [viewMode, setViewMode] = useState<ViewMode>('date')
   const [monthTodos, setMonthTodos] = useState<ScheduleTodo[]>([])
@@ -147,6 +165,17 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
   // 监听跨窗口数据变更 — 日程打卡小窗内的增删改/勾选实时同步到本模块
   useDataChanged('schedule', () => { refreshAllRef.current(); loadTagsRef.current() })
 
+  // 激活重读（2026-09-10）：本模块保活（切 Tab 不卸载），而主进程侧的写操作（AI 工具等）
+  // 即便已有广播兜底，切回时也主动重取一次，确保界面与磁盘一致。
+  // 首次挂载不重取（交给上面 [ym] 的 effect），避免重复请求。
+  const activatedOnce = useRef(false)
+  useEffect(() => {
+    if (!isActive) return
+    if (!activatedOnce.current) { activatedOnce.current = true; return }
+    refreshAllRef.current()
+    loadTagsRef.current()
+  }, [isActive])
+
   // ---- calendar navigation ----
   function goToPrevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1)
@@ -197,16 +226,37 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
     } catch (e) { console.error(e) }
   }
 
+  /**
+   * 任务状态变更 —— 乐观更新。
+   * TodoItem 已在完成动效播完后才回调（见其 SETTLE_MS），所以这里立即改本地状态上屏、
+   * 落盘放后台跑、失败回滚；不再是「await IPC 再 refreshAll」那种点完等一拍的手感。
+   */
+  async function applyTodoStatus(id: string, next: 'done' | 'pending', prev: 'done' | 'pending') {
+    setMonthTodos(prevList => prevList.map(t => (t.id === id ? { ...t, status: next } : t)))
+    try {
+      await updateScheduleTodo(id, { status: next })
+      notifyDataChanged('schedule')
+    } catch (e) {
+      setMonthTodos(prevList => prevList.map(t => (t.id === id ? { ...t, status: prev } : t)))
+      showToast({ type: 'error', message: '任务状态更新失败' })
+      console.error(e)
+    }
+  }
+
   async function handleToggleDone(todo: ScheduleTodo) {
-    await updateScheduleTodo(todo.id, { status: todo.status === 'done' ? 'pending' : 'done' })
-    notifyDataChanged('schedule')
-    await refreshAll()
+    const next: 'done' | 'pending' = todo.status === 'done' ? 'pending' : 'done'
+    // heavy 档：这是最后一条待办时，放一次全清庆祝（上行三音 + 彩纸）
+    if (next === 'done' && feedbackLevel === 'heavy') {
+      const rest = monthTodos.filter(t =>
+        t.status === 'pending' && t.id !== todo.id && (t.taskType === 'daily' ? t.date === todo.date : true))
+      if (rest.length === 0) { playDoneSound(true); celebrateAllDone() }
+    }
+    await applyTodoStatus(todo.id, next, todo.status as 'done' | 'pending')
   }
 
   async function handleRestoreDone(id: string) {
-    await updateScheduleTodo(id, { status: 'pending' })
-    notifyDataChanged('schedule')
-    await refreshAll()
+    const prev = (monthTodos.find(t => t.id === id)?.status ?? 'done') as 'done' | 'pending'
+    await applyTodoStatus(id, 'pending', prev)
   }
 
   const [showDone, setShowDone] = useState(false)
@@ -501,7 +551,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                     </h4>
                     <div className="space-y-1.5">
                       {dateDaily.map(todo => (
-                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText}
                           onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                       ))}
                     </div>
@@ -512,7 +562,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                     {dateDaily.length > 0 && <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--accent)] mb-2`}>📋 正式任务 · {dateRegular.length}</h4>}
                     <div className="space-y-2">
                       {dateRegular.map(todo => (
-                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText}
                           onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                       ))}
                     </div>
@@ -532,7 +582,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                   <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--danger)] mb-2`}>⚠ 超期未完成 ({deadlineOverdue.length})</h4>
                   <div className="space-y-2">
                     {deadlineOverdue.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                     ))}
                   </div>
@@ -545,7 +595,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                   <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--accent)] mb-2`}>⏰ 即将截止 ({deadlineUpcoming.length})</h4>
                   <div className="space-y-2">
                     {deadlineUpcoming.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                     ))}
                   </div>
@@ -558,7 +608,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                   <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--text-muted)] mb-2`}>✅ 已完成 ({deadlineDone.length})</h4>
                   <div className="space-y-2">
                     {deadlineDone.map(todo => (
-                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} showRemaining
+                      <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText} showRemaining
                         onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                     ))}
                   </div>
@@ -571,15 +621,15 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
           {/* ===== QUADRANT MODE ===== */}
           {viewMode === 'quadrant' && (
             <div className="space-y-4">
-              {([0, 1, 2, 3] as const).map(q => {
-                const items = quadrantGrouped[q]
+              {quadrantList.map(q => {
+                const items = quadrantGrouped[q.value]
                 return (
-                  <div key={q}>
-                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium ${QUADRANT_COLORS[q]} mb-2`}>{QUADRANT_LABELS[q]} ({items.length})</h4>
+                  <div key={q.value}>
+                    <h4 className={`${INPUT_SZ[iconSize].meta} font-medium ${QUADRANT_TEXT_CLASS[q.value]} mb-2`}>{q.label} ({items.length})</h4>
                     {items.length === 0 ? <p className={`${INPUT_SZ[iconSize].meta} text-[var(--text-disabled)] italic ml-1`}>暂无</p> : (
                       <div className="space-y-2">
                         {items.map(todo => (
-                          <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                          <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText}
                             onClick={() => openEdit(todo)} onToggleDone={() => handleToggleDone(todo)} onDelete={() => handleDelete(todo.id)} onToggleSubtask={handleToggleSubtaskAny} onDeleteSubtask={handleDeleteSubtaskAny} />
                         ))}
                       </div>
@@ -620,7 +670,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
                     <h4 className={`${INPUT_SZ[iconSize].meta} font-medium text-[var(--text-disabled)] mb-1.5`}>{date} · {items.length} 项</h4>
                     <div className="space-y-1.5">
                       {items.map(todo => (
-                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize}
+                        <TodoItem key={todo.id} todo={todo} tag={todo.tag} iconSize={iconSize} feedbackLevel={feedbackLevel} quadrantIcon={quadrantIcon} quadrantText={quadrantText}
                           onClick={() => openEdit(todo)}
                           onToggleDone={() => handleToggleDone(todo)}
                           onRestore={() => handleRestoreDone(todo.id)}
@@ -643,6 +693,7 @@ export function ScheduleModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         onToggleSubtask={handleToggleSubtask}
         onDeleteSubtask={handleDeleteSubtask}
         onCreateSubtask={handleCreateSubtask}
+        quadrantIcon={quadrantIcon} quadrantOrder={quadrantOrder} quadrantText={quadrantText}
       />
       <QuadrantChart open={quadrantOpen} todos={pendingTodos.filter(t => t.taskType !== 'daily')} tags={tags} onClose={() => setQuadrantOpen(false)} />
       <TagManageModal open={tagManageOpen} tags={tags} onClose={() => setTagManageOpen(false)} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} />

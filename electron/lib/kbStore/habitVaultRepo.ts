@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { exists, readJson, writeJson } from './jsonStore'
+import { exists, readJson, writeJsonOrThrow } from './jsonStore'
 
 /**
  * 打卡模块 vault 数据仓库（去库化：storageData=vault 时 habits / habit_records 的真相源）。
@@ -44,7 +44,7 @@ export function vaultHabitsAll(): HabitRow[] {
 
 /** 整表写回习惯行 */
 export function vaultHabitsSave(rows: HabitRow[]): void {
-  writeJson(MOD, HABITS_FILE, rows)
+  writeJsonOrThrow(MOD, HABITS_FILE, rows)
 }
 
 /** 全量打卡记录行（文件原始顺序，未排序） */
@@ -54,7 +54,7 @@ export function vaultRecordsAll(): RecordRow[] {
 
 /** 整表写回打卡记录行 */
 export function vaultRecordsSave(rows: RecordRow[]): void {
-  writeJson(MOD, RECORDS_FILE, rows)
+  writeJsonOrThrow(MOD, RECORDS_FILE, rows)
 }
 
 /**
@@ -65,13 +65,13 @@ export function vaultHabitRecordAddIfAbsent(habitId: string, date: string, sourc
   const rows = readRecords()
   if (rows.some((r) => r.habit_id === habitId && r.date === date)) return false
   rows.push({ id: randomUUID(), habit_id: habitId, date, source })
-  writeJson(MOD, RECORDS_FILE, rows)
+  writeJsonOrThrow(MOD, RECORDS_FILE, rows)
   return true
 }
 
 /** 删除某习惯某天的打卡记录（对标 UNIQUE(habit_id, date) 上的 DELETE） */
 export function vaultHabitRecordRemove(habitId: string, date: string): void {
-  writeJson(MOD, RECORDS_FILE, readRecords().filter((r) => !(r.habit_id === habitId && r.date === date)))
+  writeJsonOrThrow(MOD, RECORDS_FILE, readRecords().filter((r) => !(r.habit_id === habitId && r.date === date)))
 }
 
 // ===== 习惯联动规则（R6 去库化，D9）：原 sqlite habit_links 表 → links.json（两库存量均为空，空起步） =====
@@ -89,5 +89,5 @@ export function vaultHabitLinksAll(): HabitLinkRow[] {
 }
 
 export function vaultHabitLinksSave(rows: HabitLinkRow[]): void {
-  writeJson(MOD, 'links.json', rows)
+  writeJsonOrThrow(MOD, 'links.json', rows)
 }

@@ -284,6 +284,13 @@ async function runAgentLoop(
   const toolsHint = toolsState.hasOnDemandHidden
     ? '\n\n【扩展工具提示】写入类工具（写文件/建页面/写日记/建待办/打卡等）默认不在上方工具列表中。需要执行写操作时，先调用 builtin.tool.request 申请（tools 传逗号分隔的工具注册名），确认后本会话内持续可用；申请通过后按工具描述使用。不要申请当前任务用不到的工具。'
     : ''
+  // 执行纪律（2026-09-10 修）：写操作以"真实调用 + 拿到成功结果"为唯一完成判据。
+  // 起因：日程模块权限为只读时，创建工具被预过滤出模型视野，模型无从调用却回复"创建成功"——
+  // 用户看到的是一次静默失败被包装成了成功；同样，tool.request 若申请未通过也不得当作已可用。
+  const executionHint = '\n\n【执行纪律】对「创建 / 修改 / 删除 / 打卡」这类写操作，只有**真正调用工具并收到成功结果**之后，才能告诉用户已完成。'
+    + '若工具不在可用列表中、被权限拒绝、或返回失败，必须如实说明「未执行」及原因（含如何开放权限），'
+    + '绝不用「已创建 / 已完成 / 已打卡」之类表述掩盖，也不要用文字描述代替工具调用、或编造 id、时间等执行细节。'
+    + '工具返回 ok:false 时如实转述，不要改写为成功。'
   // 注入 skill 清单：让 AI 明确知道自己配置了多少个提示词能力包及其用途（描述截断防 token 膨胀）
   const skillHint = skills.length > 0
     ? `\n\n【已配置 Skill】当前共有 ${skills.length} 个提示词能力包（skill 工具）：\n` +
@@ -353,7 +360,7 @@ async function runAgentLoop(
       }
     : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint },
     ...history,
   ]
   // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。

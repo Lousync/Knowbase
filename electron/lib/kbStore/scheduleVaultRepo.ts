@@ -1,4 +1,4 @@
-import { exists, readJson, writeJson } from './jsonStore'
+import { exists, readJson, writeJsonOrThrow } from './jsonStore'
 
 /**
  * 日程 vault 数据仓库（去库化 P2）：storageData=vault 时日程的真相源。
@@ -47,7 +47,8 @@ export function vaultTodosAll(): TodoRow[] {
 }
 
 export function vaultTodosSave(rows: TodoRow[]): void {
-  writeJson(MOD, TODOS_FILE, rows)
+  // 必须落盘：写失败抛错，避免调用方（尤其 AI 写工具）把失败当成功上报
+  writeJsonOrThrow(MOD, TODOS_FILE, rows)
 }
 
 /** 全部标签行（文件原序） */
@@ -57,7 +58,7 @@ export function vaultTagsAll(): TagRow[] {
 }
 
 export function vaultTagsSave(rows: TagRow[]): void {
-  writeJson(MOD, TAGS_FILE, rows)
+  writeJsonOrThrow(MOD, TAGS_FILE, rows)
 }
 
 // ===== SQL 语义小工具 =====

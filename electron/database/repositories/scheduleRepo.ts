@@ -48,8 +48,14 @@ export function registerScheduleHandlers(): void {
   // 获取某月全部待办（象限图用）— 自动清理 7 天前已完成任务 — 排除子任务
   // 附加未完成的计划类任务（plan 无截止日期，跨月常驻显示直到完成）
   ipcMain.handle('schedule:getMonthTodos', (_e, yearMonth: string) => {
-    // 清掉 7 天前完成的待办（含子任务）
-    V.vaultPurgeStaleDoneTodos()
+    // 清掉 7 天前完成的待办（含子任务）。
+    // 清理是尽力而为的维护动作，且写盘失败现在会抛错（writeJsonOrThrow）——
+    // 这里必须兜住，否则磁盘异常会连带把「读取当月待办」一起弄挂。
+    try {
+      V.vaultPurgeStaleDoneTodos()
+    } catch (e) {
+      console.error('[schedule] 清理过期已完成待办失败：', e)
+    }
     return V.vaultMonthTodos(yearMonth).map(rowToTodo)
   })
 

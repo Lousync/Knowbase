@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>日程任务 · 完成反馈 & 四象限图标 · 原型</title>
+<style>
+:root{
+  --bg-primary:#ffffff; --bg-secondary:#f3f3f3; --bg-tertiary:#ececec; --bg-hover:#e8e8e8;
+  --text-primary:#333333; --text-secondary:#666666; --text-muted:#999999; --text-disabled:#aaaaaa;
+  --accent:#0078d4; --accent-hover:#106ebe; --danger:#d01020; --success:#107c10; --warning:#8a6d15;
+  --border-color:#e0e0e0;
+  --q0:#d01020; --q1:#0078d4; --q2:#c9700f; --q3:#9a9a9a;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:28px 32px 64px; background:#fafafa; color:var(--text-primary);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:940px;margin:0 auto}
+h1{font-size:19px;font-weight:600;margin:0 0 6px}
+.sub{color:var(--text-muted);font-size:12.5px;margin:0 0 26px;line-height:1.7}
+h2{font-size:15px;font-weight:600;margin:34px 0 4px;display:flex;align-items:center;gap:8px}
+h2 .num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px}
+h2 + .note{color:var(--text-muted);font-size:12px;margin:0 0 14px;line-height:1.7}
+.card{background:#fff;border:1px solid var(--border-color);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+.card.dash{border-style:dashed;background:#fcfcfc}
+
+/* ---------- 通用小控件 ---------- */
+.seg{display:inline-flex;background:var(--bg-tertiary);border-radius:8px;padding:3px;gap:2px}
+.seg button{
+  border:0;background:transparent;color:var(--text-secondary);font-size:12.5px;font-family:inherit;
+  padding:5px 14px;border-radius:6px;cursor:pointer;transition:background .15s,color .15s;
+}
+.seg button.on{background:#fff;color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:500}
+.seg button:hover:not(.on){color:var(--text-primary)}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.row .label{font-size:12px;color:var(--text-muted);min-width:52px}
+.btn-ghost{
+  border:1px solid var(--border-color);background:#fff;color:var(--text-secondary);font-family:inherit;
+  font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;transition:.15s;
+}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- 任务条目 ---------- */
+.tasklist{display:flex;flex-direction:column;gap:8px;min-height:4px}
+.titem{
+  display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--bg-tertiary);
+  border:1px solid var(--border-color);border-radius:8px;cursor:pointer;position:relative;
+  transition:border-color .15s, opacity .3s, transform .3s, background .3s; overflow:hidden;
+}
+.titem:hover{border-color:var(--accent)}
+.titem.exit{opacity:0;transform:translateX(26px) scale(.97)}
+.titem .body{flex:1;min-width:0;position:relative}
+.titem .meta{font-size:11px;color:var(--text-muted);display:flex;gap:8px;align-items:center}
+.titem .meta .deadline{margin-left:auto;color:var(--danger);font-weight:600}
+.titem .title{font-size:14.5px;font-weight:500;margin-top:2px;position:relative;display:inline-block;max-width:100%}
+.titem.done .title{color:var(--text-muted)}
+.titem.done{opacity:.55}
+.titem .strike{
+  position:absolute;left:0;top:50%;height:1.5px;background:var(--text-muted);width:0;
+  transition:width .22s cubic-bezier(.4,0,.2,1);
+}
+.titem.done .strike{width:100%}
+.titem .flash{position:absolute;inset:0;background:var(--success);opacity:0;pointer-events:none}
+@keyframes rowflash{0%{opacity:.13}100%{opacity:0}}
+.titem.justdone .flash{animation:rowflash .55s ease-out}
+
+/* 勾选框 */
+.cbox{
+  width:22px;height:22px;border-radius:6px;border:2px solid var(--border-color);background:transparent;
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto;position:relative;
+  transition:background .18s,border-color .18s,transform .18s;
+}
+.titem:hover .cbox{border-color:var(--accent)}
+.cbox svg{width:13px;height:13px;color:#fff}
+.cbox path{fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:26;stroke-dashoffset:26;transition:stroke-dashoffset .2s ease-out .06s}
+.titem.done .cbox{background:var(--success);border-color:var(--success)}
+.titem.done .cbox path{stroke-dashoffset:0}
+@keyframes pop{0%{transform:scale(1)}38%{transform:scale(.82)}70%{transform:scale(1.14)}100%{transform:scale(1)}}
+.titem.done .cbox.pop{animation:pop .34s cubic-bezier(.34,1.56,.64,1)}
+/* 涟漪 */
+.ripple{
+  position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;
+  background:var(--success);opacity:.35;pointer-events:none;transform:scale(.4);
+}
+@keyframes rip{to{transform:scale(3.4);opacity:0}}
+.ripple.go{animation:rip .5s ease-out forwards}
+/* 粒子 */
+.spark{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--success);pointer-events:none;opacity:0}
+@keyframes fly{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.3)}}
+.spark.go{animation:fly .52s ease-out forwards}
+
+/* 已完成区 */
+.donezone{margin-top:12px;border-top:1px dashed var(--border-color);padding-top:10px}
+.donezone .hd{font-size:12px;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.roll{display:inline-block;transition:transform .22s cubic-bezier(.4,0,.2,1)}
+.roll.tick{transform:translateY(-120%);opacity:0}
+.titem.mini{padding:6px 12px;opacity:.6}
+.titem.mini .title{font-size:13.5px}
+.titem.mini .cbox{width:18px;height:18px;border-radius:5px}
+.titem.mini .cbox svg{width:11px;height:11px}
+/* 分组完成微光 */
+.groupbar{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);margin-bottom:8px;
+  position:relative;overflow:hidden;padding:2px 0;
+}
+.groupbar .glow{
+  position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(16,124,16,.14),transparent);
+  transform:translateX(-100%);opacity:0;
+}
+@keyframes sweep{0%{transform:translateX(-100%);opacity:1}100%{transform:translateX(100%);opacity:0}}
+.groupbar.all .glow{animation:sweep .9s ease-out}
+.groupbar .tag-done{color:var(--success);font-weight:600;display:none}
+.groupbar.all .tag-done{display:inline}
+/* 动画微光高亮 */
+@keyframes pulsehl{0%,100%{box-shadow:0 0 0 0 rgba(0,120,212,0)}50%{box-shadow:0 0 0 4px rgba(0,120,212,.12)}}
+.pulse{animation:pulsehl 1.1s ease-out 1}
+
+/* confetti */
+.cf{position:fixed;width:8px;height:8px;top:-14px;pointer-events:none;z-index:99;border-radius:2px}
+@keyframes fall{to{transform:translateY(105vh) rotate(560deg);opacity:0}}
+
+/* ---------- 四象限 ---------- */
+.qwrap{display:flex;gap:8px;flex-wrap:wrap}
+.qbtn{
+  flex:1 1 0;min-width:132px;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:9px 10px;border:1px solid var(--border-color);border-radius:8px;background:#fff;
+  color:var(--text-secondary);font-family:inherit;font-size:12.5px;cursor:pointer;
+  transition:border-color .15s,background .15s,color .15s,transform .12s;
+}
+.qbtn:hover{transform:translateY(-1px);border-color:var(--q,var(--accent))}
+.qbtn.on{border-color:var(--q,var(--accent));background:color-mix(in srgb,var(--q,#0078d4) 9%,#fff);color:var(--text-primary);font-weight:500}
+.qbtn .lbl{white-space:nowrap}
+.qi{width:19px;height:16px;flex:0 0 auto;overflow:visible}
+.qbtn.icononly{min-width:60px}
+.qbtn.icononly .lbl{display:none}
+.qbtn.selected-ring{box-shadow:0 0 0 2px color-mix(in srgb,var(--q,#0078d4) 28%,transparent)}
+/* 信号格：亮格用档位色（不依赖选中态，四档并排即可读出阶梯） */
+.qi .bar{fill:#e3e3e3;transition:fill .15s}
+.qi .bar.lit{fill:var(--q)}
+/* 火焰 */
+.qi .flame{fill:#efefef}
+.qi .flame.lit{fill:var(--q)}
+/* 阶梯折线 */
+.qi .step{fill:none;stroke:var(--q);opacity:.5;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:opacity .15s}
+.qi.on .step{opacity:1}
+.qi .dot{fill:#d5d5d5}
+.qi .dot.lit{fill:var(--q)}
+/* 迷你象限 */
+.qi .cell{fill:#eaeaea}
+.qi .cell.lit{fill:var(--q)}
+
+.optcard{border:1px solid var(--border-color);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fff}
+.optcard.reco{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,120,212,.07)}
+.optcard .head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.optcard .name{font-size:13px;font-weight:600}
+.optcard .badge{font-size:10.5px;padding:2px 7px;border-radius:20px;background:rgba(0,120,212,.1);color:var(--accent);font-weight:600}
+.optcard .badge.gray{background:var(--bg-tertiary);color:var(--text-muted)}
+.optcard .desc{font-size:12px;color:var(--text-muted);line-height:1.7;margin:10px 0 0}
+.optcard .desc b{color:var(--text-secondary)}
+.kvs{font-size:12px;color:var(--text-muted);line-height:1.85;margin:8px 0 0;padding-left:2px}
+.kvs b{color:var(--text-secondary);font-weight:600}
+.pill{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:20px;background:var(--bg-tertiary);color:var(--text-secondary);margin:0 4px 4px 0}
+
+/* ---------- 设置项形态 ---------- */
+.setlist{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.setrow{display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:8px;transition:background .15s}
+.setrow:hover{background:var(--bg-secondary)}
+.setrow .info{flex:1;min-width:0}
+.setrow .t{font-size:13px;font-weight:500}
+.setrow .d{font-size:11.5px;color:var(--text-muted);margin-top:3px;line-height:1.65}
+.setrow select{
+  font-family:inherit;font-size:12.5px;color:var(--text-primary);background:#fff;
+  border:1px solid var(--border-color);border-radius:7px;padding:6px 10px;min-width:150px;cursor:pointer;
+  transition:border-color .15s;
+}
+.setrow select:hover{border-color:var(--accent)}
+.setsec{font-size:11px;color:var(--text-muted);letter-spacing:.4px;margin:16px 0 6px;font-weight:600}
+.setsec:first-child{margin-top:2px}
+code{font-family:var(--font-mono,Consolas,monospace);font-size:11.5px;background:var(--bg-tertiary);padding:1px 5px;border-radius:4px;color:var(--text-secondary)}
+
+/* ---------- 方向条 ---------- */
+.dirbar{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border-color);flex-wrap:wrap}
+.dirtxt{font-size:11.5px;color:var(--text-muted)}
+.dirtxt b{color:var(--text-secondary)}
+.foot{margin-top:26px;font-size:12px;color:var(--text-muted);line-height:1.9;border-top:1px solid var(--border-color);padding-top:14px}
+.foot b{color:var(--text-secondary)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>日程任务模块 · 原型预览</h1>
+  <p class="sub">
+    已拍板：<b>反馈三档全部实现</b>（设置可调）　<b>四象限四个图标方案全部实现</b>（设置可调）　排序默认<b>紧迫阶梯</b>　文字默认<b>图标 + 文字</b>。<br>
+    上半区可直接点击体验，下半区给出「设置 → 模块 → 日程」里这四项的形态。配色取自 App 浅色主题令牌。
+  </p>
+
+  <!-- ================= 1. 完成反馈 ================= -->
+  <h2><span class="num">1</span>勾选完成的反馈感</h2>
+  <p class="note">
+    现状：点击勾选 → 等 IPC 往返 → 整表 <b>refreshAll</b> 重排，条目直接从待办区消失，切换动画只有变色，所以"点下去没有反应"。<br>
+    下面三档都建立在同一个前提上：<b>乐观更新</b>——点击瞬间本地先置为完成并立刻播放动画，数据落盘在后台跑（失败再回滚）。这是反馈感的地基。
+  </p>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:16px">
+      <span class="label">预览档位</span>
+      <div class="seg" id="lvlSeg">
+        <button data-lvl="1">轻 · 微交互</button>
+        <button data-lvl="2" class="on">中 · 行内动效（默认）</button>
+        <button data-lvl="3">重 · 庆祝 + 音效</button>
+      </div>
+      <button class="btn-ghost" id="resetBtn" style="margin-left:auto">↺ 重播</button>
+    </div>
+    <p class="note" style="margin:-8px 0 14px">三档都会实现，实际使用时在「设置 → 任务完成反馈」里切换；此处仅用于逐个体验。</p>
+
+    <div class="groupbar" id="groupbar">
+      <div class="glow"></div>
+      <span>📋 正式任务 · <span id="countNum">3</span></span>
+      <span class="tag-done">✅ 全部完成</span>
+    </div>
+
+    <div class="tasklist" id="tasklist"></div>
+
+    <div class="donezone" id="donezone" style="display:none">
+      <div class="hd">✅ 已完成 (<span id="doneNum">0</span>)</div>
+      <div class="tasklist" id="doneList"></div>
+    </div>
+
+    <p class="desc" id="lvlDesc" style="font-size:12px;color:var(--text-muted);line-height:1.8;margin:16px 0 0;border-top:1px dashed var(--border-color);padding-top:12px"></p>
+  </div>
+
+  <!-- ================= 2. 四象限图标 ================= -->
+  <h2><span class="num">2</span>四象限标签 · 紧迫感图标</h2>
+  <p class="note">
+    现状是四个纯文字按钮（紧急重要 / 重要不紧急 / 紧急不重要 / 不紧急不重要），彼此只有颜色差别。<br>
+    图标语言统一为「<b>紧迫度档位 n</b>」，n 越大越紧迫；按钮可切换、可对比 hover / 选中态。
+  </p>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <span class="label">图标方案</span>
+      <div class="seg" id="iconSeg">
+        <button data-icon="bars" class="on">A 信号格</button>
+        <button data-icon="flame">B 火焰</button>
+        <button data-icon="step">C 上升阶梯</button>
+        <button data-icon="grid">D 迷你象限</button>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:18px">
+      <span class="label">排序</span>
+      <div class="seg" id="orderSeg">
+        <button data-order="keep">保持现状（4·2·3·1）</button>
+        <button data-order="ladder" class="on">紧迫阶梯（1·2·3·4）</button>
+      </div>
+      <span class="label" style="margin-left:8px">文字</span>
+      <div class="seg" id="textSeg">
+        <button data-text="show" class="on">图标 + 文字</button>
+        <button data-text="hide">纯图标</button>
+      </div>
+    </div>
+    <div class="qwrap" id="qwrap"></div>
+    <div class="dirbar" id="dirbar"></div>
+  </div>
+
+  <div id="iconOpts"></div>
+
+  <!-- 排序说明 -->
+  <div class="optcard">
+    <div class="head"><span class="name">排序：为什么用紧迫阶梯</span><span class="badge">已采用</span></div>
+    <div class="kvs">
+      <b>保持现状</b>（紧急重要 → 重要不紧急 → 紧急不重要 → 不紧急不重要）的紧迫档位是 <b>4 · 2 · 3 · 1</b>，图标高低跳来跳去，"阶梯"读不出来。<br>
+      <b>按紧迫阶梯重排</b>（不紧急不重要 → 重要不紧急 → 紧急不重要 → 紧急重要）得到 <b>1 · 2 · 3 · 4</b>，从左到右一路升高，是一条朝右上走的阶梯。<br>
+      底层 quadrant 值 0/1/2/3 与数据结构不动，<b>只是渲染顺序</b>变了（数组重排即可），零迁移成本。
+    </div>
+  </div>
+
+  <!-- 设置项形态 -->
+  <h2><span class="num">3</span>设置项形态（设置 → 模块 → 日程）</h2>
+  <p class="note">四项都做成标准下拉控件。下面这些是真实可操作的 —— 改动会即时反映到上面的预览区。</p>
+  <div class="card">
+    <div class="setlist">
+      <div class="setrow">
+        <div class="info">
+          <div class="t">任务完成反馈</div>
+          <div class="d">勾选任务时的动效强度：轻（勾选动画）/ 中（+ 粒子与位移）/ 重（+ 音效与庆祝）</div>
+        </div>
+        <select id="selLevel">
+          <option value="1">轻 · 微交互</option>
+          <option value="2" selected>中 · 行内动效</option>
+          <option value="3">重 · 庆祝 + 音效</option>
+        </select>
+      </div>
+      <div class="setrow">
+        <div class="info">
+          <div class="t">四象限图标</div>
+          <div class="d">编辑任务时四象限选项的图标样式</div>
+        </div>
+        <select id="selIcon">
+          <option value="bars" selected>信号格（强度条）</option>
+          <option value="flame">火焰</option>
+          <option value="step">上升阶梯</option>
+          <option value="grid">迷你象限</option>
+        </select>
+      </div>
+      <div class="setrow">
+        <div class="info">
+          <div class="t">四象限排序</div>
+          <div class="d">紧迫阶梯 = 紧迫度<b>从左到右递增</b>（不紧急不重要 → 紧急重要）；保持现状 = 原「紧急重要 · 重要不紧急 · 紧急不重要 · 不紧急不重要」</div>
+        </div>
+        <select id="selOrder">
+          <option value="ladder" selected>紧迫阶梯（1·2·3·4）</option>
+          <option value="keep">保持现状（4·2·3·1）</option>
+        </select>
+      </div>
+      <div class="setrow">
+        <div class="info">
+          <div class="t">四象限文字</div>
+          <div class="d">显示文字标签；纯图标更紧凑，靠悬停提示含义</div>
+        </div>
+        <select id="selText">
+          <option value="show" selected>图标 + 文字</option>
+          <option value="hide">纯图标</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 已确认方案 -->
+  <h2><span class="num">4</span>已确认方案</h2>
+  <div class="card dash">
+    <div class="kvs">
+      <b>完成反馈</b>：三档全部实现，设置项「任务完成反馈」切换，默认 <b>中</b>。<br>
+      <b>四象限图标</b>：A/B/C/D 四个方案全部实现，设置项「四象限图标」切换，默认 <b>信号格</b>。<br>
+      <b>四象限排序</b>：默认 <b>紧迫阶梯</b> —— 从左到右 <b>1 → 2 → 3 → 4 递增</b>（不紧急不重要 → 紧急重要）；可切回现状。<br>
+      <b>四象限文字</b>：图标 + 文字 / 纯图标 两种都实现，默认 <b>图标 + 文字</b>。<br>
+      <b>落地文件</b>：<code>src/lib/settings.ts</code>（4 项）· <code>src/lib/scheduleQuadrant.tsx</code>（共享配置与图标）· <code>TodoItem.tsx</code> · <code>TodoEditModal.tsx</code> · <code>schedule/index.tsx</code>（乐观更新）· <code>views/ScheduleView.tsx</code>（设置页）。数据层不动。
+    </div>
+  </div>
+
+  <p class="foot">
+    本版已按拍板落地实现，原型保留作回归对照 —— 实际效果请在 App 内体验（<b>设置 → 模块设置 → 日程任务</b>）。<br>
+    关键点：<code>handleToggleDone</code> 已改为<b>乐观更新</b>，且完成动效由 <code>TodoItem</code> 播完后才回调父组件刷新，所以条目不会在动画播到一半就被抽走。
+  </p>
+
+</div>
+
+<script>
+/* ================= 音效 ================= */
+let actx = null;
+function ping(freqs, dur, gain){
+  try{
+    if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if(actx.state === 'suspended') actx.resume();
+    const t = actx.currentTime;
+    freqs.forEach(function(f, i){
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      const st = t + i * 0.055;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.linearRampToValueAtTime(gain, st + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + dur);
+      o.connect(g); g.connect(actx.destination);
+      o.start(st); o.stop(st + dur + 0.03);
+    });
+  }catch(e){}
+}
+
+/* ================= 状态 ================= */
+let level = 2;
+let order = 'ladder';
+let iconSet = 'bars';
+let showText = true;
+
+const TASKS = [
+  { id:'t1', title:'复习计算机网络 第三章', tagName:'考研408', quadrant:0, deadline:'明天截止！' },
+  { id:'t2', title:'整理错题本（本周新增 12 道）', tagName:'学习', quadrant:1, deadline:'' },
+  { id:'t3', title:'背 50 个单词', tagName:'每日', quadrant:2, deadline:'' },
+];
+let state = TASKS.map(t => Object.assign({}, t, { done:false }));
+
+const LVL_DESC = {
+  1:'<b>轻 · 微交互</b>：勾选框 0.34s 回弹（cubic-bezier 过冲）→ 勾号 0.2s 描边绘制 → 涟漪扩散 0.5s → 删除线 0.22s 从左划出、文字转灰。只动勾选框与标题，条目位置不变。',
+  2:'<b>中 · 行内动效（推荐）</b>：轻档全部 + 8 颗粒子从勾选框飞出、整行泛绿闪一下（0.55s）、结束后条目右移淡出并落入「已完成」区、分组计数滚动翻新；该分组清空时标题扫过一道微光并显示「✅ 全部完成」。',
+  3:'<b>重 · 庆祝 + 音效</b>：中档全部 + Web Audio 合成"叮"（完成时双音、全部完成时上行三音）；清空整个列表时屏幕顶部飘落 26 片彩纸。注意：音效在 Electron 渲染层无需额外权限，但需要用户先有一次点击（本原型已满足）。',
+};
+document.getElementById('lvlDesc').innerHTML = LVL_DESC[2];
+
+/* ================= 渲染任务 ================= */
+const listEl = document.getElementById('tasklist');
+const doneListEl = document.getElementById('doneList');
+const doneZone = document.getElementById('donezone');
+const countNum = document.getElementById('countNum');
+const doneNum = document.getElementById('doneNum');
+const groupbar = document.getElementById('groupbar');
+
+function render(){
+  listEl.innerHTML = '';
+  state.filter(t => !t.done).forEach(t => listEl.appendChild(makeItem(t, false)));
+  const doneArr = state.filter(t => t.done);
+  doneListEl.innerHTML = '';
+  doneArr.forEach(t => doneListEl.appendChild(makeItem(t, true)));
+  doneZone.style.display = doneArr.length ? 'block' : 'none';
+  countNum.textContent = state.filter(t => !t.done).length;
+  doneNum.textContent = doneArr.length;
+  groupbar.classList.toggle('all', state.filter(t => !t.done).length === 0 && state.length > 0);
+}
+
+function makeItem(t, mini){
+  const el = document.createElement('div');
+  el.className = 'titem' + (t.done ? ' done' : '') + (mini ? ' mini' : '');
+  el.innerHTML =
+    '<div class="cbox"><svg viewBox="0 0 24 24"><path d="M4 12.6l5.4 5.4L20 6.4"/></svg></div>' +
+    '<div class="body">' +
+      '<div class="meta"><span>' + t.tagName + '</span>' + (t.deadline ? '<span class="deadline">' + t.deadline + '</span>' : '') + '</div>' +
+      '<div class="title">' + t.title + '<span class="strike"></span></div>' +
+    '</div>' +
+    '<div class="flash"></div>';
+  if(!mini){
+    const box = el.querySelector('.cbox');
+    box.addEventListener('click', function(ev){ ev.stopPropagation(); toggle(t, el); });
+  }
+  return el;
+}
+
+/* ================= 完成动画 ================= */
+function toggle(t, el){
+  if(t.done) return;
+  const box = el.querySelector('.cbox');
+
+  /* 乐观更新：立即上屏 */
+  el.classList.add('done', 'justdone');
+  box.classList.add('pop');
+
+  /* 涟漪 */
+  const rip = document.createElement('div');
+  rip.className = 'ripple';
+  box.appendChild(rip);
+  requestAnimationFrame(() => rip.classList.add('go'));
+  setTimeout(() => rip.remove(), 560);
+
+  /* 档 2/3：粒子 */
+  if(level >= 2){
+    for(let i = 0; i < 8; i++){
+      const sp = document.createElement('div');
+      sp.className = 'spark';
+      const ang = (Math.PI * 2 * i / 8) + Math.random() * 0.5;
+      const dist = 14 + Math.random() * 16;
+      sp.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
+      sp.style.setProperty('--dy', Math.sin(ang) * dist + 'px');
+      if(i % 3 === 1) sp.style.background = '#0078d4';
+      if(i % 3 === 2) sp.style.background = '#e3a008';
+      box.appendChild(sp);
+      requestAnimationFrame(() => sp.classList.add('go'));
+      setTimeout(() => sp.remove(), 600);
+    }
+  }
+
+  /* 档 3：音效 */
+  if(level >= 3) ping([988, 1319], 0.17, 0.05);
+
+  /* 计数滚动 */
+  const before = state.filter(x => !x.done).length;
+  setTimeout(() => {
+    countNum.classList.add('tick');
+    setTimeout(() => { countNum.classList.remove('tick'); }, 200);
+  }, 170);
+
+  /* 延迟落位，让动画先播完 */
+  setTimeout(() => {
+    el.classList.add('exit');
+    setTimeout(() => {
+      t.done = true;
+      state = state.filter(x => x.id !== t.id).concat([t]); // 保持原顺序语义：先未完成后完成
+      render();
+      const left = state.filter(x => !x.done).length;
+      if(left === 0 && before > 0){
+        if(level >= 3){ ping([784, 988, 1319], 0.3, 0.06); confetti(); }
+      }
+    }, 300);
+  }, 620);
+}
+
+/* ================= confetti ================= */
+function confetti(){
+  const colors = ['#d01020','#0078d4','#107c10','#e3a008','#8e44ad'];
+  for(let i = 0; i < 26; i++){
+    const c = document.createElement('div');
+    c.className = 'cf';
+    c.style.background = colors[i % colors.length];
+    c.style.left = (Math.random() * 100) + 'vw';
+    c.style.animation = 'fall ' + (1.1 + Math.random() * 0.8) + 's linear ' + (Math.random() * 0.3) + 's forwards';
+    if(Math.random() > 0.6) c.style.borderRadius = '50%';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 2400);
+  }
+}
+
+/* ================= 控件 ================= */
+/** 预览控件（seg）与设置项下拉（select）双向同步 */
+function syncSegs(){
+  document.querySelectorAll('#lvlSeg button').forEach(x => x.classList.toggle('on', Number(x.dataset.lvl) === level));
+  document.querySelectorAll('#iconSeg button').forEach(x => x.classList.toggle('on', x.dataset.icon === iconSet));
+  document.querySelectorAll('#orderSeg button').forEach(x => x.classList.toggle('on', x.dataset.order === order));
+  document.querySelectorAll('#textSeg button').forEach(x => x.classList.toggle('on', x.dataset.text === (showText ? 'show' : 'hide')));
+  const sl = document.getElementById('selLevel'); if(sl) sl.value = String(level);
+  const si = document.getElementById('selIcon'); if(si) si.value = iconSet;
+  const so = document.getElementById('selOrder'); if(so) so.value = order;
+  const st = document.getElementById('selText'); if(st) st.value = showText ? 'show' : 'hide';
+}
+
+document.querySelectorAll('#lvlSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    level = Number(b.dataset.lvl);
+    document.getElementById('lvlDesc').innerHTML = LVL_DESC[level];
+    syncSegs();
+  });
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  state = TASKS.map(t => Object.assign({}, t, { done:false }));
+  groupbar.classList.remove('all');
+  render();
+});
+
+/* ================= 四象限 ================= */
+const QDEF = {
+  keep: [
+    { q:0, n:4, label:'紧急重要' },
+    { q:1, n:2, label:'重要不紧急' },
+    { q:2, n:3, label:'紧急不重要' },
+    { q:3, n:1, label:'不紧急不重要' },
+  ],
+  ladder: [
+    { q:3, n:1, label:'不紧急不重要' },
+    { q:1, n:2, label:'重要不紧急' },
+    { q:2, n:3, label:'紧急不重要' },
+    { q:0, n:4, label:'紧急重要' },
+  ],
+};
+const QCOLOR = { 0:'var(--q0)', 1:'var(--q1)', 2:'var(--q2)', 3:'var(--q3)' };
+const QCOLOR_LADDER = { 0:'var(--q0)', 2:'var(--q2)', 1:'var(--q1)', 3:'var(--q3)' };
+
+const ICON_OPT_DESC = {
+  bars: { name:'A · 信号格（强度条）', badge:'默认', cls:'reco',
+    desc:'四根等宽柱体高度递增，亮起的根数 = 紧迫档位。<b>优点</b>：信号强度是最通用的"强弱"语言，一眼可读；体积小（19×16），四个按钮并排不挤；选中态只需换填充色。<b>缺点</b>：与"重要性"维度无关，纯紧急度表达（但象限本就靠文字兜底）。' },
+  flame: { name:'B · 火焰强度', badge:'直观', cls:'',
+    desc:'燃烧的火焰个数（1～3）+ 无火（不紧急不重要）。<b>优点</b>：情绪张力最强，"急"的直觉最直接；与 QuadrantChart 视图里现成的 🔥📌⚡💤 体系同源。<b>缺点</b>：四档里"不紧急不重要"没有图形可画（只能留空或画个睡袋），阶梯的第四级视觉弱；彩色 emoji 与线性图标风格不统一。' },
+  step: { name:'C · 上升阶梯', badge:'最贴题', cls:'',
+    desc:'折线阶梯从左下逐级升到右上，最右一级为最高档，用圆点标出当前档位。<b>优点</b>：字面就是"阶梯上升"，和你的诉求完全对齐；能同时表达"档位"与"方向"。<b>缺点</b>：图形语义需要一眼学习（不如信号格直觉），线宽细时在小字号下略显嘈杂。' },
+  grid: { name:'D · 迷你象限', badge:'信息最全', cls:'',
+    desc:'2×2 微缩网格点亮对应象限，右/上分别代表紧急/重要。<b>优点</b>：唯一能把"紧急 × 重要"二维信息同时画出来的方案，和四象限视图弹窗的坐标系呼应；点亮的格子位置本身就是语义。<b>缺点</b>：16px 见方里塞四个格子，辨认需要集中注意力；颜色成为主要辨识线索，色弱用户不友好。' },
+};
+
+function iconSVG(n, key, on, q){
+  const c = ' qi' + (on ? ' on' : '');
+  if(key === 'bars'){
+    const h = [5,8,11.5,15];
+    let s = '<svg class="' + c.trim() + '" viewBox="0 0 20 16">';
+    for(let i = 0; i < 4; i++){
+      s += '<rect class="bar' + (i < n ? ' lit' : '') + '" x="' + (i * 5.2) + '" y="' + (16 - h[i]) + '" width="3.6" height="' + h[i] + '" rx="1.1"/>';
+    }
+    return s + '</svg>';
+  }
+  if(key === 'flame'){
+    let s = '<svg class="' + c.trim() + '" viewBox="0 0 34 16" style="width:32px">';
+    const cnt = n === 4 ? 3 : n; // 4 档 = 三团火 + 加粗
+    for(let i = 0; i < 3; i++){
+      const lit = i < cnt;
+      const sc = 1 + (n === 4 ? 0.14 : 0);
+      s += '<g transform="translate(' + (i * 11) + ',' + (lit ? 0 : 3) + ') scale(' + (lit ? sc : 0.55) + ')">' +
+           '<path class="flame' + (lit ? ' lit' : '') + '" d="M5.5 0C5.5 3 2 4.2 2 8.2 2 11.2 3.9 13 5.5 13 7.1 13 9 11.2 9 8.2 9 5.4 6.6 4.6 5.5 0Z"/></g>';
+    }
+    return s + '</svg>';
+  }
+  if(key === 'step'){
+    let s = '<svg class="' + c.trim() + '" viewBox="0 0 22 16">';
+    let d = 'M1 14';
+    for(let i = 1; i <= 4; i++){ d += ' L' + (1 + (i - 1) * 5) + ' ' + (14 - (i - 1) * 3.6) + ' L' + (1 + i * 5) + ' ' + (14 - (i - 1) * 3.6); }
+    s += '<path class="step" d="' + d + '"/>';
+    for(let i = 0; i < 4; i++){
+      s += '<circle class="dot' + (i === n - 1 ? ' lit' : '') + '" cx="' + (1 + i * 5 + 2.5) + '" cy="' + (14 - i * 3.6 - 1.6) + '" r="' + (i === n - 1 ? 2.6 : 1.7) + '"/>';
+    }
+    return s + '</svg>';
+  }
+  /* grid：点亮所在象限格（pos 与 QuadrantChart 坐标系一致：右=紧急、上=重要） */
+  let s = '<svg class="' + c.trim() + '" viewBox="0 0 16 16">';
+  const pos = { 0:[0,1], 1:[0,0], 2:[1,1], 3:[1,0] };
+  const hit = pos[q !== undefined ? q : (n - 1)] || [0,0];
+  for(const k of [0,1,2,3]){
+    const p = pos[k];
+    const lit = (p[0] === hit[0] && p[1] === hit[1]);
+    s += '<rect class="cell' + (lit ? ' lit' : '') + '" x="' + (p[1] * 8.4) + '" y="' + (p[0] * 8.4) + '" width="7.2" height="7.2" rx="2"/>';
+  }
+  return s + '</svg>';
+}
+
+function renderQuad(){
+  const wrap = document.getElementById('qwrap');
+  const defs = QDEF[order];
+  const colorMap = order === 'ladder' ? QCOLOR_LADDER : QCOLOR;
+  wrap.innerHTML = '';
+  defs.forEach((d, idx) => {
+    const b = document.createElement('button');
+    b.className = 'qbtn' + (idx === 0 ? ' on' : '') + (showText ? '' : ' icononly');
+    b.style.setProperty('--q', colorMap[d.q]);
+    b.innerHTML = iconSVG(d.n, iconSet, idx === 0, d.q) + '<span class="lbl">' + d.label + '</span>';
+    b.title = d.label + '（紧迫档 ' + d.n + '/4）';
+    b.addEventListener('click', () => {
+      // 只切换选中态；各按钮的亮格（lit）按自身档位常驻，保证四档并排可读出阶梯
+      document.querySelectorAll('#qwrap .qbtn').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    });
+    wrap.appendChild(b);
+  });
+  renderDir();
+  renderOpts();
+}
+
+/** 排序方向的可视说明：紧迫度从左到右递增（不紧急不重要 → 紧急重要），阶梯朝右上 */
+function renderDir(){
+  const el = document.getElementById('dirbar');
+  const ladderSVG =
+    '<svg width="126" height="24" viewBox="0 0 126 24">' +
+      '<path d="M3 20.5 H33 V15 H63 V9.5 H93 V4 H123" fill="none" stroke="#c9c9c9" stroke-width="1.6" stroke-linejoin="round"/>' +
+      '<circle cx="7" cy="20.5" r="2.7" fill="#9a9a9a"/>' +
+      '<circle cx="37" cy="15" r="2.7" fill="#0078d4"/>' +
+      '<circle cx="67" cy="9.5" r="2.7" fill="#c9700f"/>' +
+      '<circle cx="97" cy="4" r="2.7" fill="#d01020"/>' +
+    '</svg>';
+  el.innerHTML = order === 'ladder'
+    ? '<span class="dirtxt">从左到右：<b>1 → 2 → 3 → 4 递增</b>（不紧急不重要 → 紧急重要），阶梯朝右上走</span>' + ladderSVG
+    : '<span class="dirtxt">当前为旧顺序 <b>4 · 2 · 3 · 1</b>，图标高低不单调，"阶梯"读不出来</span>' + ladderSVG;
+}
+
+function renderOpts(){
+  const box = document.getElementById('iconOpts');
+  box.innerHTML = '';
+  Object.keys(ICON_OPT_DESC).forEach(k => {
+    const o = ICON_OPT_DESC[k];
+    const on = k === iconSet;
+    const d = document.createElement('div');
+    d.className = 'optcard' + (on ? ' ' + o.cls : '');
+    if(!on) d.style.opacity = '.72';
+    d.innerHTML =
+      '<div class="head"><span class="name">' + o.name + '</span>' +
+      '<span class="badge' + (o.badge === '默认' ? '' : ' gray') + '">' + o.badge + '</span>' +
+      (on ? '<span class="pill" style="margin-left:auto;background:rgba(0,120,212,.1);color:#0078d4">当前选择</span>' : '') +
+      '</div>' +
+      '<div class="qwrap" style="pointer-events:none">' + previewHTML(k) + '</div>' +
+      '<p class="desc">' + o.desc + '</p>';
+    box.appendChild(d);
+  });
+}
+
+function previewHTML(key){
+  const defs = QDEF[order];
+  const colorMap = order === 'ladder' ? QCOLOR_LADDER : QCOLOR;
+  return defs.map((d, i) =>
+    '<div class="qbtn' + (i === 0 ? ' on' : '') + (showText ? '' : ' icononly') + '" style="--q:' + colorMap[d.q] + '">' +
+    iconSVG(d.n, key, i === 0, d.q) + '<span class="lbl">' + d.label + '</span></div>'
+  ).join('');
+}
+
+document.querySelectorAll('#iconSeg button').forEach(b => {
+  b.addEventListener('click', () => { iconSet = b.dataset.icon; syncSegs(); renderQuad(); });
+});
+document.querySelectorAll('#orderSeg button').forEach(b => {
+  b.addEventListener('click', () => { order = b.dataset.order; syncSegs(); renderQuad(); });
+});
+document.querySelectorAll('#textSeg button').forEach(b => {
+  b.addEventListener('click', () => { showText = b.dataset.text === 'show'; syncSegs(); renderQuad(); });
+});
+
+/* 设置项（下拉）↔ 预览 双向联动 */
+document.getElementById('selLevel').addEventListener('change', e => {
+  level = Number(e.target.value);
+  document.getElementById('lvlDesc').innerHTML = LVL_DESC[level];
+  syncSegs();
+});
+document.getElementById('selIcon').addEventListener('change', e => { iconSet = e.target.value; syncSegs(); renderQuad(); });
+document.getElementById('selOrder').addEventListener('change', e => { order = e.target.value; syncSegs(); renderQuad(); });
+document.getElementById('selText').addEventListener('change', e => { showText = e.target.value === 'show'; syncSegs(); renderQuad(); });
+
+/* ================= init ================= */
+render();
+renderQuad();
+</script>
+</body>
+</html>

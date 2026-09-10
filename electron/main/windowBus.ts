@@ -19,3 +19,19 @@ export function registerWindowBus(): void {
     }
   })
 }
+
+/**
+ * 主进程侧主动广播数据变更（2026-09-10 补）。
+ *
+ * 与 data:notify 的区别：后者由**渲染层**发起、且刻意排除发送方（发送方自己已本地广播过）；
+ * 这里由**主进程内部**发起（AI 工具写盘、后台任务等），没有"发送方窗口"这个概念，
+ * 因此发给**所有**窗口 —— 否则主窗口永远收不到，AI 写完数据后界面不会刷新
+ * （表现为：AI 说创建成功了，日程/打卡页面却看不到，必须切月份或重启）。
+ *
+ * scope 取值与 src/lib/dataChanged.ts 的 DataChangeScope 对齐。
+ */
+export function broadcastDataChanged(scope: string): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('kb:data-changed', { scope })
+  }
+}

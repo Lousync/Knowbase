@@ -1,10 +1,62 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import type { CSSProperties } from 'react'
 import { Check, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag } from '../../../types'
+import { QuadrantIconGlyph, QUADRANT_TEXT_CLASS, quadrantMeta, type QuadrantIcon } from '../../../lib/scheduleQuadrant'
 
-const QUADRANT_LABELS: Record<number, string> = { 0: '紧急重要', 1: '重要不紧急', 2: '紧急不重要', 3: '不紧急不重要' }
-const QUADRANT_COLORS: Record<number, string> = {
-  0: 'text-[var(--danger)]', 1: 'text-[var(--accent)]', 2: 'text-[var(--warning)]', 3: 'text-[var(--text-muted)]'
+/** 完成反馈强度（设置项 scheduleFeedbackLevel） */
+export type TaskFeedbackLevel = 'light' | 'medium' | 'heavy'
+
+/**
+ * 完成动效的「落位延迟」：点勾后先让动效播完，再通知父组件更新列表。
+ * 否则父组件一刷新，条目就从待办区消失了，动画根本来不及看 —— 这正是原先"点了没反应"的根因。
+ * light 只播勾选/划线/涟漪（约 500ms）；medium/heavy 还要播退场位移（620ms 动效 + 300ms 退场）。
+ */
+const SETTLE_MS: Record<TaskFeedbackLevel, number> = { light: 520, medium: 920, heavy: 920 }
+
+// ---- 完成音效（heavy 档：Web Audio 合成，无需音频资源文件）----
+let audioCtx: AudioContext | null = null
+
+/** 播放完成音（final=true 为全部完成的上行三音） */
+export function playDoneSound(final = false): void {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext()
+    if (audioCtx.state === 'suspended') void audioCtx.resume()
+    const ctx = audioCtx
+    const t0 = ctx.currentTime
+    const notes = final ? [784, 988, 1319] : [988, 1319]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      const at = t0 + i * 0.055
+      gain.gain.setValueAtTime(0.0001, at)
+      gain.gain.linearRampToValueAtTime(0.05, at + 0.012)
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.17)
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.start(at); osc.stop(at + 0.2)
+    })
+  } catch { /* 音频不可用（无输出设备/被策略拒绝）时静默降级 */ }
+}
+
+/** 全清庆祝：屏幕顶部飘落彩纸（heavy 档），一次性 DOM 层，播完自清 */
+export function celebrateAllDone(): void {
+  if (typeof document === 'undefined') return
+  const colors = ['var(--danger)', 'var(--accent)', 'var(--success)', 'var(--warning)', '#8e44ad']
+  const layer = document.createElement('div')
+  layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden'
+  for (let i = 0; i < 26; i++) {
+    const p = document.createElement('i')
+    const size = 6 + Math.random() * 5
+    p.style.cssText = `position:absolute;top:-14px;left:${(Math.random() * 100).toFixed(2)}vw;`
+      + `width:${size}px;height:${size}px;border-radius:${Math.random() > 0.6 ? '50%' : '2px'};`
+      + `background:${colors[i % colors.length]};`
+      + `animation:kb-task-confetti ${(1.1 + Math.random() * 0.8).toFixed(2)}s linear ${(Math.random() * 0.3).toFixed(2)}s forwards`
+    layer.appendChild(p)
+  }
+  document.body.appendChild(layer)
+  window.setTimeout(() => layer.remove(), 2600)
 }
 
 interface Props {
@@ -12,6 +64,12 @@ interface Props {
   tag?: ScheduleTag | null
   showRemaining?: boolean
   iconSize?: 'sm' | 'md' | 'lg'
+  /** 完成反馈强度（设置项 scheduleFeedbackLevel，默认 medium） */
+  feedbackLevel?: TaskFeedbackLevel
+  /** 四象限图标方案（设置项 scheduleQuadrantIcon，默认 bars） */
+  quadrantIcon?: QuadrantIcon
+  /** 是否显示象限文字（设置项 scheduleQuadrantText，默认 show） */
+  quadrantText?: 'show' | 'hide'
   onClick: () => void
   onToggleDone: () => void
   onDelete: () => void
@@ -72,36 +130,133 @@ function urgencyClass(time: string): string {
   return ''
 }
 
-export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, onToggleDone, onDelete, onRestore, onToggleSubtask, onDeleteSubtask }: Props) {
+export function TodoItem({
+  todo, tag, showRemaining, iconSize = 'sm',
+  feedbackLevel = 'medium', quadrantIcon = 'bars', quadrantText = 'show',
+  onClick, onToggleDone, onDelete, onRestore, onToggleSubtask, onDeleteSubtask,
+}: Props) {
   const [subOpen, setSubOpen] = useState(false)
-  const isDone = todo.status === 'done'
-  const deadline = todo.taskType === 'deadline'
   const s = SZ[iconSize]
+  const deadline = todo.taskType === 'deadline'
   const isDaily = todo.taskType === 'daily'
   const hasSubs = (todo.subtasks?.length ?? 0) > 0
   const subtasks = todo.subtasks || []
   const subDone = subtasks.filter(st => st.status === 'done').length
+
+  const propsDone = todo.status === 'done'
+  /** 本地完成态覆盖：点击后立即可见，等 props 追平后再交还给 props 驱动 */
+  const [localDone, setLocalDone] = useState<boolean | null>(null)
+  const isDone = localDone ?? propsDone
+  /** 正在播完成动效（控制 pop / 涟漪 / 泛绿闪的 class） */
+  const [animating, setAnimating] = useState(false)
+  /** 已进入退场位移（medium/heavy：条目右移淡出后再通知父组件移除） */
+  const [leaving, setLeaving] = useState(false)
+  const [sparks, setSparks] = useState<{ id: number; dx: string; dy: string; color: string }[]>([])
+  const timers = useRef<number[]>([])
+
+  // props 追上本地乐观值 → 交还控制权
+  useEffect(() => {
+    if (localDone !== null && propsDone === localDone) setLocalDone(null)
+  }, [propsDone, localDone])
+
+  useEffect(() => () => { timers.current.forEach(t => window.clearTimeout(t)) }, [])
+
+  function spawnSparks() {
+    const list = Array.from({ length: 8 }, (_, i) => {
+      const ang = (Math.PI * 2 * i) / 8 + Math.random() * 0.5
+      const dist = 14 + Math.random() * 16
+      return {
+        id: Date.now() + i,
+        dx: `${(Math.cos(ang) * dist).toFixed(1)}px`,
+        dy: `${(Math.sin(ang) * dist).toFixed(1)}px`,
+        color: i % 3 === 1 ? 'var(--accent)' : i % 3 === 2 ? 'var(--warning)' : 'var(--success)',
+      }
+    })
+    setSparks(list)
+    timers.current.push(window.setTimeout(() => setSparks([]), 620))
+  }
+
+  function handleToggle(e: React.MouseEvent) {
+    e.stopPropagation()
+    // 动效播放期间忽略重复点击（否则第一次的延迟回调会和第二次的状态翻转打架）
+    if (leaving || animating) return
+
+    // 已完成 → 恢复：立即生效（恢复不需要完成动效）
+    if (isDone) {
+      setLocalDone(false)
+      if (onRestore) onRestore()
+      else onToggleDone()
+      return
+    }
+
+    // 未完成 → 完成：先播动效，播完再通知父组件更新列表（父组件移除条目时才不会打断动画）
+    setLocalDone(true)
+    setAnimating(true)
+    if (feedbackLevel !== 'light') spawnSparks()
+    if (feedbackLevel === 'heavy') playDoneSound()
+
+    const settle = SETTLE_MS[feedbackLevel]
+    if (feedbackLevel !== 'light') {
+      timers.current.push(window.setTimeout(() => setLeaving(true), Math.max(0, settle - 300)))
+    }
+    timers.current.push(window.setTimeout(() => {
+      setAnimating(false)
+      onToggleDone()
+    }, settle))
+  }
 
   return (
     <div>
       <div
         className={`
           flex items-center ${s.gap} ${s.padX} ${s.padY} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md
-          cursor-pointer hover:border-[var(--accent)] transition-all group
+          cursor-pointer hover:border-[var(--accent)] transition-all group relative
           ${isDone ? 'opacity-60 hover:opacity-90' : ''}
+          ${leaving ? 'kb-task-exit' : ''}
         `}
       >
+        {/* 整行泛绿闪（medium/heavy） */}
+        {animating && feedbackLevel !== 'light' && (
+          <span className="kb-task-flash absolute inset-0 rounded-md bg-[var(--success)] pointer-events-none" />
+        )}
+
         {/* 完成/恢复按钮 */}
         <button
-          onClick={e => { e.stopPropagation(); isDone && onRestore ? onRestore() : onToggleDone() }}
+          onClick={handleToggle}
           style={{ width: s.check, height: s.check }}
           className={`
-            rounded border-2 flex items-center justify-center shrink-0 transition-colors
-            ${isDone ? 'bg-[var(--accent)] border-[var(--accent)] hover:bg-[var(--accent-hover)]' : 'border-[var(--border-color)] hover:border-[var(--accent)]'}
+            relative rounded border-2 flex items-center justify-center shrink-0
+            ${animating ? 'kb-task-pop' : ''}
+            ${isDone
+              ? 'bg-[var(--success)] border-[var(--success)] transition-colors'
+              : 'border-[var(--border-color)] hover:border-[var(--accent)] transition-colors'}
           `}
           title={isDone ? '恢复任务' : '完成任务'}
         >
-          {isDone && <Check size={s.checkIcon} strokeWidth={3} className="text-white" />}
+          {/* 勾号：描边绘制（stroke-dashoffset 过渡） */}
+          <svg width={s.checkIcon} height={s.checkIcon} viewBox="0 0 24 24" className="text-white" style={{ overflow: 'visible' }}>
+            <path
+              d="M4 12.6l5.4 5.4L20 6.4"
+              fill="none" stroke="currentColor" strokeWidth={3.2}
+              strokeLinecap="round" strokeLinejoin="round"
+              strokeDasharray={26} strokeDashoffset={isDone ? 0 : 26}
+              style={{ transition: 'stroke-dashoffset 200ms ease-out 60ms' }}
+            />
+          </svg>
+          {/* 涟漪 */}
+          {animating && (
+            <span
+              className="kb-task-ripple absolute left-1/2 top-1/2 -ml-2.5 -mt-2.5 w-5 h-5 rounded-full bg-[var(--success)] pointer-events-none"
+            />
+          )}
+          {/* 粒子 */}
+          {sparks.map(sp => (
+            <span
+              key={sp.id}
+              className="kb-task-spark absolute left-1/2 top-1/2 w-[5px] h-[5px] rounded-full pointer-events-none"
+              style={{ background: sp.color, '--dx': sp.dx, '--dy': sp.dy } as CSSProperties}
+            />
+          ))}
         </button>
 
         {/* 主内容 */}
@@ -111,14 +266,28 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
             {tag && (
               <span className={`${s.tagBar} w-1 rounded shrink-0`} style={{ backgroundColor: tag.color }} />
             )}
-            {/* 象限 / 标签 */}
-            <span className={`${s.meta} ${QUADRANT_COLORS[todo.quadrant] ?? 'text-gray-400'}`}>
-              {QUADRANT_LABELS[todo.quadrant] ?? ''}
-            </span>
+            {/* 象限：图标 + （可选）文字 */}
+            {(() => {
+              const q = quadrantMeta(todo.quadrant)
+              const colorCls = QUADRANT_TEXT_CLASS[todo.quadrant] ?? 'text-[var(--text-muted)]'
+              return (
+                <span
+                  className={`inline-flex items-center gap-1 shrink-0 ${colorCls}`}
+                  title={quadrantText === 'hide' ? `${q.label}（紧迫度 ${q.level}/4）` : undefined}
+                >
+                  <QuadrantIconGlyph icon={quadrantIcon} meta={q} size={Math.max(13, Math.round(s.check * 0.8))} />
+                  {quadrantText === 'show' && <span className={s.meta}>{q.label}</span>}
+                </span>
+              )
+            })()}
             {tag && <span className={`${s.meta} text-[var(--text-muted)]`}>{tag.name}</span>}
           </div>
-          <p className={`${s.title} ${s.mTop} leading-snug font-medium ${isDone ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+          <p className={`${s.title} ${s.mTop} leading-snug font-medium relative inline-block max-w-full ${isDone ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
             {todo.title}
+            {/* 删除线：从左划出 */}
+            <span
+              className={`absolute left-0 top-1/2 h-[1.5px] bg-[var(--text-muted)] transition-[width] duration-200 ease-out ${isDone ? 'w-full' : 'w-0'}`}
+            />
           </p>
           {todo.description && (
             <p className={`${s.desc} text-[var(--text-muted)] mt-0.5 truncate`}>{todo.description}</p>
@@ -171,7 +340,7 @@ export function TodoItem({ todo, tag, showRemaining, iconSize = 'sm', onClick, o
                 <button
                   onClick={e => { e.stopPropagation(); onToggleSubtask?.(st.id) }}
                   style={{ width: s.check, height: s.check }}
-                  className={`rounded border flex items-center justify-center shrink-0 transition-colors ${stDone ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-[var(--border-color)] hover:border-[var(--accent)]'}`}
+                  className={`rounded border flex items-center justify-center shrink-0 transition-colors ${stDone ? 'bg-[var(--success)] border-[var(--success)]' : 'border-[var(--border-color)] hover:border-[var(--accent)]'}`}
                   title="切换完成状态"
                 >
                   {stDone && <Check size={s.checkIcon} strokeWidth={3} className="text-white" />}

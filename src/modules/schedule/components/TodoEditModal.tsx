@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { ScheduleTag, ScheduleTodo } from '../../../types'
 import { X, Plus, Trash2, Check } from 'lucide-react'
 import { localToday } from '../../../lib/date'
 import { isSummaryTagName } from '../../../lib/summary'
+import {
+  orderedQuadrants, QuadrantIconGlyph, QUADRANT_TEXT_CLASS,
+  type QuadrantIcon, type QuadrantOrder,
+} from '../../../lib/scheduleQuadrant'
 
 interface TodoForm {
   title: string; description: string; time: string
@@ -20,18 +24,23 @@ interface Props {
   onToggleSubtask?: (id: string) => void
   onDeleteSubtask?: (id: string) => void
   onCreateSubtask?: (data: { title: string; date: string; taskType: 'daily' }) => void
+  /** 四象限图标方案（设置项 scheduleQuadrantIcon） */
+  quadrantIcon?: QuadrantIcon
+  /** 四象限排序（设置项 scheduleQuadrantOrder） */
+  quadrantOrder?: QuadrantOrder
+  /** 是否显示象限文字（设置项 scheduleQuadrantText） */
+  quadrantText?: 'show' | 'hide'
 }
 
-const QUADRANTS = [
-  { value: 0, label: '紧急重要' },
-  { value: 1, label: '重要不紧急' },
-  { value: 2, label: '紧急不重要' },
-  { value: 3, label: '不紧急不重要' },
-]
-
-export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, onToggleSubtask, onDeleteSubtask, onCreateSubtask }: Props) {
+export function TodoEditModal({
+  open, initial, tags, onSave, onClose, subtasks, onToggleSubtask, onDeleteSubtask, onCreateSubtask,
+  quadrantIcon = 'bars', quadrantOrder = 'ladder', quadrantText = 'show',
+}: Props) {
   const [form, setForm] = useState<TodoForm>(initial)
   const [timeWarning, setTimeWarning] = useState('')
+
+  /** 象限选项展示顺序（默认按紧迫度从左到右递增） */
+  const quadrants = useMemo(() => orderedQuadrants(quadrantOrder), [quadrantOrder])
 
   // Sub-task inline form
   const [subtaskTitle, setSubtaskTitle] = useState('')
@@ -296,11 +305,20 @@ export function TodoEditModal({ open, initial, tags, onSave, onClose, subtasks, 
           {form.taskType !== 'daily' && (
             <Field label="四象限">
               <div className="flex gap-2">
-                {QUADRANTS.map(q => (
-                  <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
-                    className={`flex-1 py-1.5 text-[12px] rounded border transition-colors ${form.quadrant === q.value ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
-                  >{q.label}</button>
-                ))}
+                {quadrants.map(q => {
+                  const active = form.quadrant === q.value
+                  return (
+                    <button key={q.value} onClick={() => setForm(f => ({ ...f, quadrant: q.value }))}
+                      title={quadrantText === 'hide' ? `${q.label}（紧迫度 ${q.level}/4）` : undefined}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[12px] rounded border transition-colors ${active ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
+                    >
+                      <span className={`inline-flex ${QUADRANT_TEXT_CLASS[q.value] ?? ''}`}>
+                        <QuadrantIconGlyph icon={quadrantIcon} meta={q} size={17} />
+                      </span>
+                      {quadrantText === 'show' && <span>{q.label}</span>}
+                    </button>
+                  )
+                })}
               </div>
             </Field>
           )}

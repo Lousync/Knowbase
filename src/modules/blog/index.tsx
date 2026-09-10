@@ -9,6 +9,7 @@ import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { localToday } from '../../lib/date'
+import { useDataChanged } from '../../lib/dataChanged'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { Sidebar } from './components/Sidebar'
@@ -99,6 +100,10 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
     window.addEventListener('data-imported', handler)
     return () => window.removeEventListener('data-imported', handler)
   }, [loadEntries])
+
+  // 主进程侧写操作（AI 工具写日记等）→ 广播后重取列表（2026-09-10 修）：
+  // 博客模块随 App 启动即挂载并保活，不通知就只在重启后才看得到新日记
+  useDataChanged('blog', loadEntries)
 
   // Toggle star on an entry
   const handleToggleStar = useCallback(async (id: string) => {

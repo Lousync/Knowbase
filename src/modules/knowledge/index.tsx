@@ -19,6 +19,7 @@ import {
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { recordFileOp } from '../../lib/fileOpHistory'
+import { useDataChanged } from '../../lib/dataChanged'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { NotebookList } from './components/NotebookList'
 import { ChapterPanel } from './components/ChapterPanel'
@@ -212,6 +213,15 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     window.addEventListener('kb-fs-op-changed', handler)
     return () => window.removeEventListener('kb-fs-op-changed', handler)
   }, [refreshCategories, refreshAllPages, refreshStarred, refreshTags, refreshChapterPages, selectedChapterId])
+
+  /** 主进程侧写操作（AI 工具建页面/写文件等）→ 广播后重读（2026-09-10 修）。
+   *  与 kb-fs-op-changed 同一套刷新动作；不限 isActive —— 保活时也要把数据更新到位，回来即是最新。 */
+  useDataChanged('knowledge', () => {
+    refreshCategories(); refreshAllPages(); refreshStarred(); refreshTags()
+    if (selectedChapterId) refreshChapterPages()
+    window.dispatchEvent(new Event('kb-graph-refresh'))
+    window.dispatchEvent(new Event('kb-reload-detail'))
+  })
 
   // .ignore 规则提示（§10.1）：只有用户可行动的 .ignore 规则问题才 Toast + 终端计数；
   // 信息性警告（frontmatter.id 缺失=草稿机制等）完全静默——fingerprint 只记 actionable，

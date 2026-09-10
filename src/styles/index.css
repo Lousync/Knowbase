@@ -449,3 +449,58 @@ input:focus, textarea:focus, select:focus {
   .kb-art-in { animation: none; }
 }
 
+/* ===== 日程任务：完成反馈动效（设置项 scheduleFeedbackLevel，默认 medium）=====
+   三档共用同一套原子动画，由 TodoItem 按档位选择性触发：
+   light  = 勾选框回弹 + 勾号描边 + 涟漪 + 删除线划出
+   medium = 再加 粒子飞散 + 整行泛绿闪 + 条目退场位移
+   heavy  = 再加 完成音效（Web Audio 合成，见 TodoItem.playDoneSound）
+   reduced-motion 下只保留状态变化（不掉帧、不做位移缩放）。 */
+@keyframes kb-task-pop {
+  0%   { transform: scale(1); }
+  38%  { transform: scale(0.82); }
+  70%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.kb-task-pop { animation: kb-task-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes kb-task-ripple {
+  from { transform: scale(0.4); opacity: 0.35; }
+  to   { transform: scale(3.4); opacity: 0; }
+}
+.kb-task-ripple { animation: kb-task-ripple 500ms ease-out forwards; }
+
+@keyframes kb-task-spark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx, 0), var(--dy, 0)) scale(0.3); opacity: 0; }
+}
+.kb-task-spark { animation: kb-task-spark 520ms ease-out forwards; }
+
+@keyframes kb-task-flash {
+  from { opacity: 0.13; }
+  to   { opacity: 0; }
+}
+.kb-task-flash { animation: kb-task-flash 550ms ease-out; }
+
+/* 退场：目标值放在此类，过渡属性沿用元素自身的 transition-all（这里覆写时长） */
+.kb-task-exit {
+  opacity: 0;
+  transform: translateX(26px) scale(0.97);
+  transition-duration: 300ms !important;
+}
+
+@keyframes kb-task-sweep {
+  from { transform: translateX(-100%); opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+.kb-task-sweep { animation: kb-task-sweep 900ms ease-out; }
+
+/* 全清庆祝（heavy 档）：屏幕顶部飘落的彩纸 */
+@keyframes kb-task-confetti {
+  to { transform: translateY(105vh) rotate(560deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-task-pop, .kb-task-ripple, .kb-task-spark, .kb-task-flash, .kb-task-sweep { animation: none; }
+  .kb-task-exit { transform: none; transition-duration: 140ms !important; }
+}
+

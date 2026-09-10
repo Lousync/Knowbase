@@ -59,9 +59,19 @@ export function writeJson(module: string, key: string, data: unknown): boolean {
   }
 }
 
+/**
+ * 写 JSON 且**必须落盘**：失败抛错（无当前仓库 / 磁盘不可写 / 写盘异常）。
+ * 用于「调用方会据此向用户汇报成功」的场景（如 AI 写工具）——
+ * 沿用 writeJson 的静默 false 时，工具会照常返回 ok:true，等于把写盘失败伪装成成功。
+ */
+export function writeJsonOrThrow(module: string, key: string, data: unknown): void {
+  if (!writeJson(module, key, data)) {
+    throw new Error(`数据写入失败：${module}/${key}（可能没有打开仓库，或磁盘不可写）`)
+  }
+}
+
 /** 删除模块文件。成功返回 true（文件不存在视为成功） */
-export function deleteFile(module: string, key: string): boolean {
-  const p = kbModulePath(module, key)
+export function deleteFile(module: string, key: string): boolean {  const p = kbModulePath(module, key)
   if (!p || !existsSync(p)) return true
   try {
     unlinkSync(p)
