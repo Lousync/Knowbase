@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>「水墨」主题原型 · Knowbase</title>
+<style>
+  :root{
+    --ink:#1b1c1e; --ink-soft:#454a52; --paper:#e4e5e2; --paper-hi:#efefec;
+    --bg:#f4f4f2; --text:#26272b; --text-dim:#6b7076; --accent:#454a52;
+    --card:#eaebe8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+    background:var(--bg); color:var(--text); padding:48px 40px 80px;
+  }
+  .page{max-width:1360px; margin:0 auto;}
+  h1{font-size:34px; letter-spacing:2px;}
+  .sub{color:var(--text-dim); margin:10px 0 40px; font-size:15px;}
+  h2{font-size:20px; margin:56px 0 18px; letter-spacing:1px;}
+  .note{font-size:13px; color:var(--text-dim); margin:-10px 0 22px;}
+
+  /* ============ 主界面 mock ============ */
+  .app{
+    display:grid; grid-template-columns:56px 232px 1fr 220px; height:620px;
+    background:var(--paper-hi); position:relative;
+  }
+  .activity{display:flex; flex-direction:column; align-items:center; padding:16px 0; gap:6px;}
+  .activity .dot{width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-size:15px; color:var(--text-dim); cursor:default;}
+  .activity .dot.on{color:var(--ink); background:rgba(27,28,30,.07);}
+  .sidebar{padding:18px 14px; font-size:13.5px;}
+  .sidebar .repo{font-weight:700; letter-spacing:.5px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;}
+  .sidebar .repo span.plus{color:var(--text-dim);}
+  .tree-item{padding:5px 8px; color:var(--text-dim); border-radius:4px; display:flex; gap:7px; align-items:center;}
+  .tree-item.dir{color:var(--text);}
+  .tree-item.cur{background:rgba(27,28,30,.08); color:var(--ink); font-weight:600;}
+  .tree-item .ico{font-size:11px; width:14px;}
+  .editor{padding:30px 38px; overflow:hidden;}
+  .crumb{font-size:12px; color:var(--text-dim); margin-bottom:10px;}
+  .doc-title{font-size:24px; font-weight:800; margin-bottom:6px; letter-spacing:1px;}
+  .meta{font-size:12px; color:var(--text-dim); margin-bottom:20px;}
+  .editor p{font-size:14.5px; line-height:1.9; color:#33353a; margin-bottom:12px;}
+  .editor blockquote{
+    margin:14px 0; padding:10px 16px; font-size:13.5px; color:var(--ink-soft);
+    background:rgba(27,28,30,.045);
+  }
+  .editor h3{font-size:16px; margin:20px 0 10px;}
+  .rightbar{padding:18px 14px; font-size:13px;}
+  .rightbar .sec-t{font-weight:700; margin:10px 0 10px; letter-spacing:.5px;}
+  .toc-item{padding:4px 8px; color:var(--text-dim);}
+  .toc-item.on{color:var(--ink); font-weight:600;}
+  .backlink{padding:7px 9px; margin-bottom:8px; font-size:12.5px; color:var(--ink-soft);}
+
+  /* ============ 组件样张 ============ */
+  .comp-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:34px 30px;}
+  .comp{padding:26px 26px 22px; position:relative; background:var(--paper-hi);}
+  .comp-t{font-size:12px; color:var(--text-dim); letter-spacing:1px; margin-bottom:16px;}
+  .row{display:flex; gap:14px; align-items:center; flex-wrap:wrap;}
+  .btn{
+    padding:8px 22px; font-size:13.5px; cursor:default; background:transparent;
+    color:var(--text); letter-spacing:1px; user-select:none;
+  }
+  .btn.primary{background:var(--ink); color:#f4f4f3;}
+  .input{
+    padding:8px 14px; font-size:13.5px; color:var(--text-dim); background:transparent;
+    min-width:170px;
+  }
+  .switch{width:44px; height:24px; position:relative; cursor:default;}
+  .switch .knob{position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+    background:var(--ink); transition:left .15s;}
+  .switch.off .knob{left:23px; background:#9aa0a6;}
+  .tabs{display:flex; gap:22px; font-size:13.5px;}
+  .tabs span{color:var(--text-dim); padding-bottom:6px;}
+  .tabs span.on{color:var(--ink); font-weight:700;}
+  .tags{display:flex; gap:10px; flex-wrap:wrap;}
+  .tag{padding:4px 14px; font-size:12.5px; color:var(--ink-soft);}
+  .progress{width:100%; max-width:230px; height:10px; position:relative;}
+  .progress .fill{position:absolute; left:4px; top:3px; bottom:3px; width:62%;
+    background:var(--ink); border-radius:4px;}
+
+  /* ============ 深色预览 ============ */
+  .dark-wrap{
+    background:#232428; padding:34px 36px; display:flex; gap:40px; align-items:center;
+    --ink:#f4f4f3; --text:#e8e9e7; --text-dim:#9ba0a8; --ink-soft:#c6cbd2; --ink2:#d8dce2;
+  }
+  .dark-wrap .mini{width:300px; height:210px; background:#2b2d32; position:relative;
+    display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:13px;}
+  .dark-wrap .desc{flex:1; font-size:13.5px; line-height:1.9; color:#b9bdc4;}
+  .dark-wrap .desc b{color:#e8e9e7;}
+
+  .legend{display:flex; gap:26px; margin:14px 0 0; font-size:12.5px; color:var(--text-dim); flex-wrap:wrap;}
+  .legend b{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>「水墨」主题原型</h1>
+  <div class="sub">
+    Knowbase 界面主题探索 —— 面板边框、卡片、控件一律换成<b>毛笔手绘墨线</b>：起笔顿、行笔带自然摆动、转角顿笔、收笔出锋。
+    每次刷新墨迹都会轻微变化（模拟手绘的不可复制性）。
+  </div>
+  <div class="legend">
+    <span><b>■</b> 边框语言：起笔圆顿 · 行笔摆动 · 转角按笔 · 收笔出锋</span>
+    <span><b>■</b> 色板：纸 #E4E5E2 / 墨 #1B1C1E / 淡染 #757A83</span>
+    <span><b>■</b> 与图标同一套笔触语言</span>
+  </div>
+
+  <h2>一 · 主界面</h2>
+  <div class="app" id="app">
+    <div class="activity brush">
+      <div class="dot on">✦</div><div class="dot">🗄</div><div class="dot">📅</div>
+      <div class="dot">🤖</div><div class="dot">🧰</div><div class="dot">🔒</div>
+    </div>
+    <div class="sidebar brush">
+      <div class="repo">我的仓库 <span class="plus">＋</span></div>
+      <div class="tree-item dir"><span class="ico">▾</span>工作笔记</div>
+      <div class="tree-item cur"><span class="ico">📄</span>水墨主题评审</div>
+      <div class="tree-item"><span class="ico">📄</span>图标设计决策</div>
+      <div class="tree-item dir" style="margin-top:6px;"><span class="ico">▸</span>项目归档</div>
+      <div class="tree-item"><span class="ico">📄</span>2026 规划</div>
+      <div class="tree-item dir" style="margin-top:6px;"><span class="ico">▸</span>素材库</div>
+    </div>
+    <div class="editor brush">
+      <div class="crumb">工作笔记 / 水墨主题评审</div>
+      <div class="doc-title">水墨主题评审</div>
+      <div class="meta">2026-09-11 · 1,204 字 · 上次编辑 10 分钟前</div>
+      <p>把界面的「框」交给毛笔：面板边框不再是笔直的几何线，而是有起笔、行笔、转角与收笔的墨迹。直线上加轻微摆动，转角处顿笔加粗，收笔自然出锋——界面因此带上手作的温度。</p>
+      <blockquote>原则：墨线只负责「框」，不负责「内容」。正文的可读性字号、行高与对齐全部保持现有规范，主题只替换边框与装饰语言。</blockquote>
+      <h3>落地要点</h3>
+      <p>工程实现走 SVG 覆盖层：每个需要边框的容器叠加一层绝对定位的 SVG，由统一的生成器绘制墨线（起笔圆点、分段变宽、转角顿笔），窗口缩放时经 ResizeObserver 重绘。深色模式只需换墨色变量。</p>
+    </div>
+    <div class="rightbar brush">
+      <div class="sec-t">本页大纲</div>
+      <div class="toc-item on">落地要点</div>
+      <div class="toc-item">工程实现</div>
+      <div class="toc-item">深色适配</div>
+      <div class="sec-t" style="margin-top:22px;">反向链接</div>
+      <div class="backlink brush">图标设计决策</div>
+      <div class="backlink brush">主题系统评估</div>
+    </div>
+  </div>
+
+  <h2>二 · 控件样张</h2>
+  <div class="comp-grid">
+    <div class="comp brush">
+      <div class="comp-t">按钮 / BUTTON</div>
+      <div class="row">
+        <button class="btn primary brush">主要操作</button>
+        <button class="btn brush">次要操作</button>
+      </div>
+    </div>
+    <div class="comp brush">
+      <div class="comp-t">输入框 / INPUT</div>
+      <div class="row">
+        <div class="input brush">搜索笔记、仓库…</div>
+      </div>
+    </div>
+    <div class="comp brush">
+      <div class="comp-t">开关 / SWITCH</div>
+      <div class="row">
+        <div class="switch brush"><div class="knob"></div></div>
+        <div class="switch off brush"><div class="knob"></div></div>
+        <span style="font-size:13px;color:var(--text-dim)">启用 / 停用</span>
+      </div>
+    </div>
+    <div class="comp brush">
+      <div class="comp-t">标签页 / TABS</div>
+      <div class="tabs">
+        <span class="on">编辑</span><span>阅读</span><span>大纲</span>
+      </div>
+    </div>
+    <div class="comp brush">
+      <div class="comp-t">标签 / TAGS</div>
+      <div class="tags">
+        <span class="tag brush">水墨</span><span class="tag brush">主题</span><span class="tag brush">原型</span>
+      </div>
+    </div>
+    <div class="comp brush">
+      <div class="comp-t">进度 / PROGRESS</div>
+      <div class="progress brush"><div class="fill"></div></div>
+    </div>
+  </div>
+
+  <h2>三 · 深色模式</h2>
+  <div class="dark-wrap brush-dark">
+    <div class="mini brush">反白墨线 · 深墨底 #232428</div>
+    <div class="desc">
+      深色模式把「纸墨关系」反转：<b>墨池底 #232428</b> 上走<b>反白墨线 #F4F4F3</b>，
+      与已定稿的图标深色反白版本同一套语言。淡染块、次级文字用 <b>#C6CBD2 / #9BA0A8</b>，
+      保证对比度的同时不破坏水墨的灰阶层次。
+    </div>
+  </div>
+
+  <h2>四 · 工程落地说明</h2>
+  <div class="note" style="font-size:13.5px; line-height:2; color:var(--ink-soft);">
+    ① 边框生成器：<code>brushFrame(el, weight)</code> —— 对任意元素叠加绝对定位 SVG：四角随机漂移（矩形不方正）、每边沿法向做单方向低频弓形（弯而不抖）、Catmull-Rom 平滑过节点（接缝连贯）、
+    起收笔越过角点出锋、分段变宽描边（圆头衔接模拟提按），四角加顿笔圆点；每次调用墨迹不同，模拟手绘不可复制性。<br>
+    ② 接入方式：主题层给需要墨框的元素挂 <code>data-brush</code> 属性，主题初始化时统一扫描绘制，ResizeObserver 跟随缩放重绘；
+    不改动任何业务 DOM 结构。<br>
+    ③ 性能：静态界面仅绘制一次；滚动容器内的元素用 content-visibility 控制重绘范围。深浅模式切换只替换墨色 CSS 变量后重绘。<br>
+    ④ 边界：墨线只用于<b>面板外框、卡片、按钮、输入框、标签、分割线</b>等「框类」元素；正文文本、表格线、滚动条保持常规渲染，保证可读性与可访问性。
+  </div>
+</div>
+
+<script>
+/* ============ 毛笔边框生成器 ============ */
+const NS = 'http://www.w3.org/2000/svg';
+function rnd(a, b){ return a + Math.random()*(b-a); }
+
+function brushFrame(el, opts){
+  if(el.dataset.brushed) return;
+  el.dataset.brushed = '1';
+  const o = Object.assign({weight:1.9, wobble:0.55, bow:2.6, drift:1.4, ink:'#1b1c1e', margin:2, segs:4}, opts);
+  const styles = getComputedStyle(el);
+  o.ink = styles.getPropertyValue('--brush-ink') || o.ink;
+
+  const draw = () => {
+    const w = el.offsetWidth, h = el.offsetHeight;
+    if(!w || !h) return;
+    el.querySelectorAll('svg.brush-svg').forEach(s=>s.remove());
+    const svg = document.createElementNS(NS,'svg');
+    svg.setAttribute('class','brush-svg');
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;';
+    el.style.position = getComputedStyle(el).position === 'static' ? 'relative' : el.style.position;
+
+    const m = o.margin;
+    // 角点漂移：手绘矩形四角不是标准直角，先让角"走位"
+    const dft = Math.min(o.drift, Math.min(w,h)*0.03);
+    const corners = [
+      [m   + rnd(-dft,dft), m   + rnd(-dft,dft)],
+      [w-m + rnd(-dft,dft), m   + rnd(-dft,dft)],
+      [w-m + rnd(-dft,dft), h-m + rnd(-dft,dft)],
+      [m   + rnd(-dft,dft), h-m + rnd(-dft,dft)]
+    ];
+    const g = document.createElementNS(NS,'g');
+    const edgeEnds = []; // 每边实际起收点，供角点顿笔定位
+    for(let ei=0; ei<4; ei++){
+      const c1 = corners[ei], c2 = corners[(ei+1)%4];
+      const ex = c2[0]-c1[0], ey = c2[1]-c1[1];
+      const len = Math.hypot(ex,ey) || 1;
+      const ux = ex/len, uy = ey/len;      // 切向
+      const px = -uy, py = ux;             // 法向
+      // 起收笔越过角点一点（出锋），是手绘最强信号
+      const ov1 = rnd(0.8, 2.4), ov2 = rnd(0.8, 2.4);
+      // 低频弓形：整条边朝一个方向缓弯，幅度随边长封顶
+      const bow = (Math.random()<0.5?-1:1) * rnd(0.45, 1) * Math.min(o.bow, len*0.013);
+      // 节点级低频偏移：节点少、共享端点 → 弯而不碎
+      const knot = [];
+      for(let k=0;k<=o.segs;k++) knot.push(rnd(-o.wobble,o.wobble)*0.5);
+      const K = [];
+      for(let k=0;k<=o.segs;k++){
+        const t = k/o.segs;
+        const along = k===0 ? -ov1 : k===o.segs ? len+ov2 : t*len;
+        const off = bow*Math.sin(Math.PI*t) + knot[k];
+        K.push([c1[0]+ux*along + px*off, c1[1]+uy*along + py*off]);
+      }
+      edgeEnds.push([K[0], K[o.segs]]);
+      // Catmull-Rom 过节点：曲线平滑穿过所有节点，接缝天然连贯
+      for(let i=0;i<o.segs;i++){
+        const p0 = K[Math.max(i-1,0)], p1 = K[i], p2 = K[i+1], p3 = K[Math.min(i+2,o.segs)];
+        const cx1 = p1[0]+(p2[0]-p0[0])/6, cy1 = p1[1]+(p2[1]-p0[1])/6;
+        const cx2 = p2[0]-(p3[0]-p1[0])/6, cy2 = p2[1]-(p3[1]-p1[1])/6;
+        // 提按：起笔顿、行笔起伏、转角前按
+        let wgt = o.weight * rnd(0.82, 1.08);
+        if(i === 0) wgt = o.weight * rnd(1.1, 1.32);
+        if(i === o.segs-1) wgt = o.weight * rnd(1.0, 1.2);
+        const p = document.createElementNS(NS,'path');
+        p.setAttribute('d', `M${p1[0].toFixed(2)} ${p1[1].toFixed(2)} C${cx1.toFixed(2)} ${cy1.toFixed(2)} ${cx2.toFixed(2)} ${cy2.toFixed(2)} ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`);
+        p.setAttribute('stroke', o.ink);
+        p.setAttribute('stroke-width', wgt.toFixed(2));
+        p.setAttribute('stroke-linecap','round');
+        p.setAttribute('fill','none');
+        g.appendChild(p);
+      }
+    }
+    // 角点顿笔：落在相邻两边实际端点的中点（跟手，不再钉死在几何角上）
+    for(let ci=0; ci<4; ci++){
+      const prev = edgeEnds[(ci+3)%4][1], next = edgeEnds[ci][0];
+      const c = document.createElementNS(NS,'circle');
+      c.setAttribute('cx', (prev[0]+next[0])/2 + rnd(-0.6,0.6));
+      c.setAttribute('cy', (prev[1]+next[1])/2 + rnd(-0.6,0.6));
+      c.setAttribute('r', o.weight * rnd(0.5, 0.68));
+      c.setAttribute('fill', o.ink);
+      g.appendChild(c);
+    }
+    svg.appendChild(g);
+    el.appendChild(svg);
+  };
+
+  draw();
+  new ResizeObserver(()=>draw()).observe(el);
+}
+
+/* 深色容器用反白墨 */
+function inkColor(el){
+  return el.closest('.dark-wrap') ? '#f4f4f3' : '#1b1c1e';
+}
+document.querySelectorAll('.brush').forEach(el => {
+  const deep = el.closest('.comp, .app, .dark-wrap');
+  brushFrame(el, {
+    weight: el.classList.contains('btn') ? 1.6 :
+            el.classList.contains('tag') ? 1.4 :
+            el.classList.contains('switch') || el.classList.contains('progress') ? 1.6 :
+            el.classList.contains('backlink') ? 1.4 :
+            el.classList.contains('mini') ? 2.0 :
+            el.classList.contains('activity') || el.classList.contains('sidebar') ||
+            el.classList.contains('editor') || el.classList.contains('rightbar') ? 2.3 : 1.9,
+    wobble: el.classList.contains('activity') ? 0.7 : 0.5,
+    bow: el.classList.contains('activity') || el.classList.contains('sidebar') ||
+         el.classList.contains('editor') || el.classList.contains('rightbar') ||
+         el.classList.contains('mini') || el.classList.contains('comp') ? 2.8 : 1.8,
+    drift: el.classList.contains('comp') || el.classList.contains('mini') ? 1.6 : 1.2,
+    ink: inkColor(el)
+  });
+});
+</script>
+</body>
+</html>
