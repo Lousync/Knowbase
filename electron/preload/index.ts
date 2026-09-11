@@ -438,10 +438,6 @@ const api = {
   quizMigrateStatus: () => ipcRenderer.invoke('quizMigrate:status'),
   quizMigrateExport: () => ipcRenderer.invoke('quizMigrate:export'),
   quizMigrateDropPluginData: () => ipcRenderer.invoke('quizMigrate:dropPluginData'),
-  // plugin-mode quiz report (write to plugin namespace tables)
-  quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta: unknown) => ipcRenderer.invoke('quiz:pluginReport', pluginId, pageId, quizNo, correct, meta),
-  quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => ipcRenderer.invoke('quiz:pluginToggleFavorite', pluginId, pageId, quizNo),
-
   // fill popup
   isFillPopup,
   isDayPanel,

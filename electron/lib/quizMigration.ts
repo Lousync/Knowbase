@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { dropPluginTables, ensurePluginTables, pluginDumpTable, pluginInsert, pluginUpdate } from './pluginDataStore'
+import { dropPluginTables, pluginDumpTable } from './pluginDataStore'
 import type { PluginTableDef } from './pluginDataStore'
 
 /**
@@ -11,7 +11,7 @@ import type { PluginTableDef } from './pluginDataStore'
  * （sqlite 时代，MIGRATION_MAP + migrateTo/FromPlugin）。R6 D9 彻底 JSON 化后：
  * - 主库/sql.js 已退役 → 主表不复存在，迁移语义随之终结
  * - 插件命名空间数据改走 pluginDataStore 的 JSON 桶（userData/data/plugin-data.json）
- * - 本文件只剩：plugin 模式的实时记录通道（判题上报/收藏切换）+ 导出备份 + 清空
+ * - 本文件只剩：导出备份 + 清空（回收三件套，无新写入通道）
  * - 旧 migrateTo/FromPlugin 通道已随主表删除（QuizMigratePanel 同步精简）
  */
 
@@ -85,88 +85,8 @@ export const QUIZBOOK_TABLES: PluginTableDef[] = [
   },
 ]
 
-/** 本地时间戳（对齐 sqlite datetime('now','localtime') 与 quizVaultRepo.vaultLocalNow 格式） */
-function localNow(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
-
-/** 按 (page_id, quiz_no) 在 JSON 桶内定位记录（含 rowid，供 pluginUpdate 定位） */
-function findRecord(pageId: string, quizNo: number): Record<string, unknown> | null {
-  const rows = pluginDumpTable(QUIZBOOK_PLUGIN_ID, QUIZBOOK_TABLES, 'records') as Array<Record<string, unknown>>
-  return rows.find((r) => r.page_id === pageId && Number(r.quiz_no) === quizNo) ?? null
-}
-
-/**
- * 插件模式判题上报：写 JSON 桶 records（与内置版语义一致：
- * 答对 correct_count+1 / streak_correct+1 / last_result=1；
- * 答错 wrong_count+1 / streak_correct=0 / last_result=0；不存在则插入）。
- * 按 (page_id, quiz_no) 定位，幂等。
- */
-export function pluginReportRecord(pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: {
-  pageTitle?: string
-  snapshot?: unknown
-}): { ok: boolean; error?: string } {
-  try {
-    const now = localNow()
-    const existing = findRecord(pageId, quizNo)
-    if (existing) {
-      const rid = Number(existing.rowid)
-      if (correct) {
-        pluginUpdate(pluginId, QUIZBOOK_TABLES, 'records', rid, {
-          correct_count: Number(existing.correct_count ?? 0) + 1,
-          streak_correct: Number(existing.streak_correct ?? 0) + 1,
-          last_result: 1,
-          updated_at: now,
-        })
-      } else {
-        pluginUpdate(pluginId, QUIZBOOK_TABLES, 'records', rid, {
-          wrong_count: Number(existing.wrong_count ?? 0) + 1,
-          streak_correct: 0,
-          last_result: 0,
-          updated_at: now,
-        })
-      }
-    } else {
-      ensurePluginTables(pluginId, QUIZBOOK_TABLES)
-      pluginInsert(pluginId, QUIZBOOK_TABLES, 'records', {
-        id: pageId + ':' + quizNo,
-        page_id: pageId,
-        quiz_no: quizNo,
-        page_title: meta?.pageTitle ?? '',
-        is_favorite: 0,
-        wrong_count: correct ? 0 : 1,
-        correct_count: correct ? 1 : 0,
-        last_result: correct ? 1 : 0,
-        streak_correct: correct ? 1 : 0,
-        note: '',
-        snapshot_json: meta?.snapshot ? JSON.stringify(meta.snapshot) : '',
-        source_space: '',
-        source_notebook: '',
-        source_chapter: '',
-        created_at: now,
-        updated_at: now,
-      })
-    }
-    return { ok: true }
-  } catch (e: unknown) {
-    return { ok: false, error: String((e as Error)?.message || e) }
-  }
-}
-
-/** 插件模式收藏切换：翻转 JSON 桶 records.is_favorite */
-export function pluginToggleFavoriteRecord(pluginId: string, pageId: string, quizNo: number): { ok: boolean; favorite: boolean; error?: string } {
-  try {
-    const row = findRecord(pageId, quizNo)
-    if (!row) return { ok: false, favorite: false }
-    const next = row.is_favorite ? 0 : 1
-    const r = pluginUpdate(pluginId, QUIZBOOK_TABLES, 'records', Number(row.rowid), { is_favorite: next, updated_at: localNow() })
-    return { ok: r.ok, favorite: !!next }
-  } catch {
-    return { ok: false, favorite: false }
-  }
-}
+// 回收三件套（migrationStatus / exportQuizData / dropPluginData）见下方。
+// 原 plugin 模式实时写入通道（pluginReportRecord / pluginToggleFavoriteRecord）已随错题本全内置改造删除。
 
 /**
  * 迁移状态（主表/sql.js 已退役，main 恒为 0——保留通道签名兼容既有 UI，

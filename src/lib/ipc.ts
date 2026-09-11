@@ -404,9 +404,6 @@ export const quizCollectionDelete = (id: string): Promise<void> => a().quizColle
 export const quizMigrateStatus = (): Promise<QuizMigrateStatus> => a().quizMigrateStatus()
 export const quizMigrateExport = (): Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }> => a().quizMigrateExport()
 export const quizMigrateDropPluginData = (): Promise<{ ok: boolean; error?: string }> => a().quizMigrateDropPluginData()
-/** 插件模式判题上报 / 收藏切换（写 JSON 插件桶） */
-export const quizPluginReport = (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }): Promise<{ ok: boolean; error?: string }> => a().quizPluginReport(pluginId, pageId, quizNo, correct, meta)
-export const quizPluginToggleFavorite = (pluginId: string, pageId: string, quizNo: number): Promise<{ ok: boolean; favorite: boolean }> => a().quizPluginToggleFavorite(pluginId, pageId, quizNo)
 
 // ===== AI Tools (ToolRegistry) =====
 export const aiToolsList = (): Promise<AiToolsListResult> => a().aiToolsList()

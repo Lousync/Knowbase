@@ -919,21 +919,9 @@ export function PluginsModule() {
           )}
         </div>
 
-        {/* 错题本模式切换 + C 级白名单（两行紧凑，不与列表同流避免突兀） */}
+        {/* C 级白名单（与列表分离，避免突兀） */}
         {tab === 'installed' && (
           <div className="px-3 py-1.5 flex flex-col gap-1 text-[10px] text-[var(--text-muted)] border-b border-[var(--border-color)]/60">
-            <select
-              value={s.quizbookMode}
-              onChange={e => {
-                const next = e.target.value
-                update('quizbookMode', next as 'builtin' | 'plugin')
-                showToast({ type: 'info', message: next === 'plugin' ? '已切换为插件版（知识空间侧边栏查看）' : '已切换回内置版' })
-              }}
-              className="px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[var(--text-primary)] text-[10px] outline-none w-fit"
-            >
-              <option value="plugin">错题本 · 插件版（默认）</option>
-              <option value="builtin">错题本 · 内置版（回退）</option>
-            </select>
             <label className="flex items-center gap-1 cursor-pointer select-none">
               <input
                 type="checkbox"

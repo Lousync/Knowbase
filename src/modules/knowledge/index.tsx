@@ -17,7 +17,8 @@ import {
   showExportSaveDialog, writeExportTextFile,
   getKnowledgeTags, pluginListViews, getKnowledgeGraph,
   getKnowledgeIndexWarnings,
-  workspaceRename, workspaceGetCurrent
+  workspaceRename, workspaceGetCurrent,
+  quizMigrateStatus,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { recordFileOp } from '../../lib/fileOpHistory'
@@ -32,8 +33,7 @@ const PageEditor = lazy(() => import('./components/PageEditor').then((m) => ({ d
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { GraphView } from './components/graph/GraphView'
 import { QuizCollection } from './components/QuizCollection'
-import { QuizMode } from '../../components/shared/QuizMode'
-import type { QuizItem } from '../../components/shared/QuizParser'
+import { QuizMigratePanel } from './components/QuizMigratePanel'
 import { ConfirmDialog } from '../../components/shared'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { PluginFrame } from '../../components/shared/PluginFrame'
@@ -43,6 +43,9 @@ import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { useSettings } from '../../lib/SettingsContext'
 import { KNOWLEDGE_SIDEBAR_ITEM_VARS } from '../../lib/settings'
+
+// 插件表存量回收弹窗：本会话仅自动弹一次
+let quizMigrateAutoShown = false
 
 // ---- 剪贴板类型 ----
 interface ClipItem { type: 'category' | 'page'; id: string }
@@ -78,8 +81,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** C 级模块插件声明的视图（slot=knowledge.sidebar）+ 当前打开的插件视图 */
   const [pluginViews, setPluginViews] = useState<PluginViewContribution[]>([])
   const [activePluginView, setActivePluginView] = useState<PluginViewContribution | null>(null)
-  /** 插件通过 host.review 请求的重刷会话（宿主开 QuizMode，判题写插件表） */
-  const [pluginReview, setPluginReview] = useState<{ title: string; pageId?: string; items: QuizItem[] } | null>(null)
+  /** 插件表存量回收：启动自动检测一次，有存量则弹 QuizMigratePanel（导出/清空），处理后不再弹 */
+  const [showMigrate, setShowMigrate] = useState(false)
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
   const { s: settings } = useSettings()
   /** 数据形态 = vault：知识库为只读导航，一切写收口到编辑器模块（后端也已白名单拒绝，这里给前端护栏+明确提示） */
@@ -92,6 +95,23 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const sidebarItemVars = KNOWLEDGE_SIDEBAR_ITEM_VARS[settings.knowledgeSidebarItemSize] ?? KNOWLEDGE_SIDEBAR_ITEM_VARS.m
   /** 删除动画状态：条目删除时先被红色吞噬（animating），动画后消失（done，等待 IPC 完成） */
   const [deletingMap, setDeletingMap] = useState<Map<string, 'animating' | 'done'>>(new Map())
+
+  // 插件表存量回收：知识库模块启动自动检测一次，有存量则弹窗（导出/清空），处理后不再弹
+  useEffect(() => {
+    if (quizMigrateAutoShown) return
+    let cancelled = false
+    quizMigrateStatus()
+      .then(s => {
+        if (cancelled) return
+        const hasLeftover = s.pluginTablesExist || (s.plugin?.records ?? 0) > 0
+        if (hasLeftover) {
+          quizMigrateAutoShown = true
+          setShowMigrate(true)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
   const deletingRef = useRef(deletingMap)
   deletingRef.current = deletingMap
 
@@ -1505,16 +1525,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             {/* 侧边栏底部：错题本 / 收藏 + 插件视图入口（仅空间内显示，顶层工作区列表不显示） */}
             {selectedSpaceId && selectedSpace && (
               <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5 space-y-0.5">
-                {/* 内置错题本：设置切到 plugin 模式后让位给插件版（不删除代码，可随时切回） */}
-                {settings.quizbookMode !== 'plugin' && (
-                  <button
-                    onClick={() => setShowQuizCollection(true)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                  >
-                    <BookMarked size={14} />
-                    错题本 / 收藏
-                  </button>
-                )}
+                {/* 内置错题本：唯一入口，恒驻 */}
+                <button
+                  onClick={() => setShowQuizCollection(true)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <BookMarked size={14} />
+                  错题本 / 收藏
+                </button>
                 {/* C 级模块插件声明的视图挂载点（slot=knowledge.sidebar） */}
                 {pluginViews.map(v => (
                   <button
@@ -1635,31 +1653,13 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               pluginId={activePluginView.pluginId}
               entry={activePluginView.entry}
               grantedCapabilities={activePluginView.granted}
-              onHostAction={(action, payload) => {
-                if (action === 'host.review') {
-                  const p = (payload ?? {}) as { title?: string; pageId?: string; items?: QuizItem[] }
-                  if (Array.isArray(p.items) && p.items.length > 0) {
-                    setPluginReview({ title: p.title || activePluginView.title, pageId: p.pageId, items: p.items })
-                    return true
-                  }
-                }
-                return false
-              }}
+              onHostAction={() => false}
             />
           </div>
         </div>
       )}
 
-      {/* 插件模式重刷：宿主刷题器，判题/收藏写入插件命名空间表 */}
-      {pluginReview && activePluginView && (
-        <QuizMode
-          quizzes={pluginReview.items}
-          pageTitle={pluginReview.title}
-          pageId={pluginReview.pageId}
-          pluginReport={{ pluginId: activePluginView.pluginId }}
-          onClose={() => setPluginReview(null)}
-        />
-      )}
+      {showMigrate && <QuizMigratePanel onClose={() => setShowMigrate(false)} />}
     </ImportZone>
   )
 }
