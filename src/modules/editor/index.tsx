@@ -564,6 +564,27 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     setExpanded((prev) => new Set(prev).add(dirRel))
   }, [])
 
+  // Ctrl+N — 新建文件（根目录内联命名行）。与 Ctrl+S 同款不设 isEditingInput 守卫：
+  // Monaco 聚焦时也要可用（keydown 冒泡到 window，Monaco 不吞）
+  useEffect(() => {
+    if (!isActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.altKey || (e.key !== 'n' && e.key !== 'N')) return
+      e.preventDefault()
+      askCreateNode('', 'file')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isActive, askCreateNode])
+
+  // 知识库 Ctrl+N 跳转：App 切到编辑器 Tab 后触发「新建知识页」命名行
+  // （读写分工铁律：知识库=阅读器，建页写入只发生在编辑器）
+  useEffect(() => {
+    const h = () => askCreateKnowledgePage('')
+    window.addEventListener('kb-editor-new-page', h)
+    return () => window.removeEventListener('kb-editor-new-page', h)
+  }, [askCreateKnowledgePage])
+
   /** 内联提交：按类型清洗并执行创建（文件/目录直接建；知识页带 frontmatter 模板） */
   const commitCreate = useCallback(async (dirRel: string, type: 'file' | 'dir' | 'knowledge', rawName: string) => {
     setCreating(null)

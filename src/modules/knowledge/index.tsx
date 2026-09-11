@@ -949,6 +949,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       }
       if (isEditingInput(e)) return
 
+      // Ctrl+N — 新建知识页：跳编辑器触发内联命名行（读写分工：知识库为阅读器，建页在编辑器完成）
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { from: 'knowledge' } }))
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent('kb-editor-new-page')), 180)
+        return
+      }
+
       if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
         e.preventDefault()
         void enterReading()
