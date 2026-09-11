@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="assets/icon.png">
+<title>Phrontis — 本地 Windows 桌面知识日程管理工具 · 纯本地</title>
+<meta name="description" content="Phrontis：以知识库、AI 教学与 AI 侧栏为核心的 Windows 桌面应用。所有数据保存本地，无需注册点击即用。">
+<style>
+  :root {
+    --bg: #f6f6f5;
+    --surface: #ffffff;
+    --border: #e4e4e2;
+    --text: #22221f;
+    --text-2: #55554f;
+    --text-3: #7d7d76;
+    --accent: #2f2f2c;
+    --accent-soft: #f0efec;
+    --accent-deep: #161614;
+    --code-bg: #f1f1ef;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17171a;
+      --surface: #202022;
+      --border: #303032;
+      --text: #eeeeea;
+      --text-2: #b6b6b0;
+      --text-3: #8a8a84;
+      --accent: #b5b5af;
+      --accent-soft: #2b2b29;
+      --accent-deep: #e6e6e1;
+      --code-bg: #26262a;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; }
+  .logo-mark {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: var(--accent); color: #fff;
+    display: grid; place-items: center; font-size: 15px; font-weight: 700;
+  }
+  @media (prefers-color-scheme: dark) { .logo-mark { color: var(--accent-deep); } }
+  .nav-links { display: flex; align-items: center; gap: 28px; font-size: 14.5px; color: var(--text-2); }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta {
+    background: var(--accent); color: #fff !important;
+    display: inline-flex; align-items: center;
+    padding: 7px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    line-height: 18px;
+  }
+  @media (prefers-color-scheme: dark) { .nav-cta { color: var(--accent-deep) !important; } }
+  @media (max-width: 720px) { .nav-links a:not(.nav-cta) { display: none; } }
+
+  /* hero */
+  .hero { padding: 88px 0 64px; text-align: center; }
+  .hero-tag {
+    display: inline-block; font-size: 13.5px; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 5px 16px; margin-bottom: 22px;
+  }
+  h1 { font-size: clamp(32px, 5.5vw, 50px); font-weight: 600; letter-spacing: -0.5px; line-height: 1.25; }
+  .hero-sub { font-size: 18px; color: var(--text-2); margin: 20px auto 0; max-width: 640px; }
+  .hero-actions { margin-top: 36px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 26px; border-radius: 10px; font-size: 15.5px; font-weight: 500;
+    border: 1px solid var(--border); background: var(--surface);
+    transition: transform .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { .btn-primary { color: var(--accent-deep); } }
+  .hero-points { margin-top: 30px; font-size: 14px; color: var(--text-3); display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; }
+  .hero-points span::before { content: "·"; margin-right: 22px; color: var(--border); }
+  .hero-points span:first-child::before { content: ""; margin: 0; }
+
+  /* 产品演示：按真实主题令牌 1:1 复刻的应用窗口（编辑器/知识库/日程/AI 助手 四屏可切换） */
+  .kbw-wrap { max-width: 940px; margin: 60px auto 0; }
+  .kbw-wrap {
+    --k-bg:#ffffff; --k-sec:#f3f3f3; --k-ter:#ececec; --k-ab:#e8e8e8; --k-hover:#e8e8e8;
+    --k-border:#e0e0e0; --k-text:#333333; --k-text2:#666666; --k-muted:#999999;
+    --k-accent:#2f2f2c; --k-selected:#e6e5e2; --k-success:#107c10; --k-warning:#8a6d15; --k-danger:#d01020;
+  }
+  @media (prefers-color-scheme: dark) {
+    .kbw-wrap {
+      --k-bg:#1e1e1e; --k-sec:#252526; --k-ter:#2d2d2d; --k-ab:#333333; --k-hover:#2a2d2e;
+      --k-border:#3c3c3c; --k-text:#cccccc; --k-text2:#969696; --k-muted:#6a6a6a;
+      --k-accent:#b5b5af; --k-selected:#3a3a38; --k-success:#4ec9b0; --k-warning:#c5a332; --k-danger:#e81123;
+    }
+  }
+  .kbw-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .kbw-tab {
+    font-size: 13px; padding: 7px 18px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-2); transition: all .15s;
+  }
+  .kbw-tab:hover { border-color: var(--k-accent); color: var(--k-accent); }
+  .kbw-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .kbw-win {
+    background: var(--k-bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    text-align: left; box-shadow: 0 24px 64px rgba(0,0,0,.13);
+  }
+  .kbw-titlebar {
+    height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+    background: var(--k-sec); border-bottom: 1px solid var(--k-border); position: relative;
+  }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl.r { background: #ff5f57; } .tl.y { background: #febc2e; } .tl.g { background: #28c840; }
+  .kbw-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 12.5px; color: var(--k-text2); }
+  .kbw-body { display: flex; height: 500px; }
+  .kbw-ab {
+    width: 56px; padding: 8px 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    background: var(--k-ab); flex-shrink: 0;
+  }
+  .kbw-ab-btn {
+    width: 56px; height: 56px; display: flex; align-items: center; justify-content: center;
+    position: relative; color: var(--k-muted);
+  }
+  .kbw-ab-btn svg { width: 24px; height: 24px; }
+  .kbw-ab-btn.active {
+    color: var(--k-accent);
+    background: color-mix(in srgb, var(--k-hover) 80%, transparent);
+    box-shadow: inset 0 0 0 1px var(--k-border);
+    border-radius: 16px;
+  }
+  .kbw-ab-btn.active::before {
+    content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 36px; background: var(--k-accent); border-radius: 0 99px 99px 0;
+  }
+  .kbw-ab-spacer { flex: 1; }
+  .kbw-main { flex: 1; min-width: 0; position: relative; }
+  .kbw-view { display: none; height: 100%; flex-direction: column; }
+  .kbw-view.on { display: flex; }
+  .ic { width: 15px; height: 15px; flex-shrink: 0; }
+
+  .v-strip {
+    height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+    border-bottom: 1px solid var(--k-border); font-size: 12.5px; color: var(--k-text2); flex-shrink: 0;
+  }
+  .v-strip .sp { flex: 1; }
+  .v-strip .lnk { color: var(--k-muted); font-size: 12px; }
+  .v-strip .lnk.hot { color: var(--k-accent); font-weight: 600; }
+  .add-btn {
+    display: inline-flex; align-items: center; gap: 4px; background: var(--k-accent); color: #fff;
+    font-size: 12px; padding: 4px 12px; border-radius: 6px;
+  }
+  .v-cols { flex: 1; display: flex; min-height: 0; }
+  .v-side {
+    background: var(--k-sec); border-right: 1px solid var(--k-border);
+    display: flex; flex-direction: column; padding: 10px 8px; gap: 2px; flex-shrink: 0; min-width: 0;
+  }
+  .side-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; letter-spacing: .06em; color: var(--k-muted); padding: 2px 8px 8px;
+  }
+  .trow {
+    display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--k-text2);
+    padding: 3px 8px; border-radius: 6px; white-space: nowrap; overflow: hidden;
+  }
+  .trow .ic { width: 13px; height: 13px; color: var(--k-muted); }
+  .trow.cur { background: color-mix(in srgb, var(--k-selected) 45%, transparent); color: var(--k-text); }
+  .trow.cur .ic { color: var(--k-accent); }
+  .trow .badge { font-size: 8px; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--k-text2) 16%, transparent); color: var(--k-text2); }
+  .side-foot { margin-top: auto; border-top: 1px solid var(--k-border); padding-top: 6px; }
+  .side-foot .trow { font-size: 12px; }
+
+  .ed-tabs { display: flex; background: var(--k-sec); border-bottom: 1px solid var(--k-border); flex-shrink: 0; }
+  .ed-tab {
+    display: flex; align-items: center; gap: 7px; padding: 7px 14px; font-size: 12px;
+    background: var(--k-bg); color: var(--k-text); border-right: 1px solid var(--k-border);
+  }
+  .ed-tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--k-accent); }
+  .ed-tab .x { color: var(--k-muted); }
+  .monaco { flex: 1; overflow: hidden; padding: 16px 20px; font-family: Consolas, "Cascadia Code", monospace; font-size: 13px; line-height: 1.85; color: var(--k-text2); }
+  .monaco .ln { display: inline-block; width: 24px; color: var(--k-muted); opacity: .55; }
+  .monaco .h { color: var(--k-accent); font-weight: 700; }
+  .monaco .wiki { color: var(--k-accent); }
+  .monaco .q { display: block; border-left: 3px solid var(--k-accent); padding-left: 12px; color: var(--k-muted); margin: 4px 0; }
+  .monaco .cb { display: inline-block; width: 12px; height: 12px; border: 1.5px solid var(--k-accent); border-radius: 3px; vertical-align: -1px; }
+  .monaco .cb.on { background: var(--k-accent); }
+  .statusbar {
+    height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px;
+    background: var(--k-sec); border-top: 1px solid var(--k-border); font-size: 11px; color: var(--k-text2); flex-shrink: 0;
+  }
+  .statusbar .dirty { color: var(--k-warning); }
+
+  .doc-page { flex: 1; padding: 22px 28px; overflow: hidden; font-size: 13.5px; line-height: 1.8; color: var(--k-text2); }
+  .doc-page .dt { font-size: 19px; font-weight: 600; color: var(--k-text); display: flex; align-items: center; gap: 9px; }
+  .doc-page .dt .star { color: var(--k-warning); }
+  .doc-page .meta { font-size: 11.5px; color: var(--k-muted); margin: 6px 0 14px; }
+  .doc-page p { margin-bottom: 10px; }
+  .doc-page .wiki { color: var(--k-accent); }
+  .doc-page .h2 { font-size: 14.5px; font-weight: 600; color: var(--k-text); margin: 14px 0 6px; }
+  .doc-page .q { border-left: 3px solid var(--k-accent); padding: 2px 0 2px 12px; color: var(--k-muted); margin: 10px 0; }
+
+  .tray-cap { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--k-text2); padding: 2px 8px 6px; }
+  .tray-cap .n { font-size: 10px; background: var(--k-accent); color: #fff; border-radius: 999px; padding: 0 6px; line-height: 16px; }
+  .tray-item {
+    background: var(--k-ter); border: 1px solid var(--k-border); border-radius: 6px;
+    font-size: 12px; color: var(--k-text2); padding: 6px 9px; margin-bottom: 5px; white-space: nowrap; overflow: hidden;
+  }
+  .quick-add {
+    display: flex; align-items: center; gap: 9px; margin: 12px 18px 0; padding: 8px 12px;
+    border: 1px solid var(--k-border); border-radius: 8px; background: var(--k-bg); font-size: 12.5px; color: var(--k-muted);
+  }
+  .quick-add .ic { color: var(--k-warning); }
+  .todo-list { padding: 12px 18px 0; display: flex; flex-direction: column; gap: 8px; }
+  .todo-card {
+    display: flex; align-items: center; gap: 10px; background: var(--k-ter);
+    border: 1px solid var(--k-border); border-radius: 6px; padding: 8px 12px;
+  }
+  .todo-card .chk { width: 15px; height: 15px; border: 2px solid var(--k-muted); border-radius: 50%; flex-shrink: 0; }
+  .todo-card.done .chk { border-color: var(--k-success); background: var(--k-success); }
+  .todo-card .tt { flex: 1; font-size: 13px; font-weight: 500; color: var(--k-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .todo-card.done .tt { opacity: .6; text-decoration: line-through; }
+  .todo-card .qd { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--k-muted); flex-shrink: 0; }
+  .todo-card .qd .bar { width: 4px; height: 14px; border-radius: 2px; }
+  .todo-card .due { font-size: 11px; flex-shrink: 0; }
+  .due.hot { color: var(--k-danger); }
+  .due.soon { color: var(--k-warning); }
+  .fold-bar {
+    margin: auto 18px 12px; display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--k-text2); background: var(--k-sec); border: 1px solid var(--k-border);
+    border-radius: 6px; padding: 6px 12px;
+  }
+  .fold-bar .sp { flex: 1; }
+  .fold-bar .clr { color: var(--k-muted); font-size: 11px; }
+
+  .ai-back { flex: 1; padding: 22px 28px; font-size: 13.5px; color: var(--k-text2); overflow: hidden; opacity: .55; }
+  .ai-drawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 380px; max-width: 55%;
+    background: var(--k-bg); border-left: 1px solid var(--k-border); box-shadow: -12px 0 32px rgba(0,0,0,.10);
+    display: flex; flex-direction: column;
+  }
+  .ai-head { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--k-border); font-size: 12.5px; color: var(--k-text); flex-shrink: 0; }
+  .ai-head .ic { color: var(--k-accent); }
+  .ai-head .new { margin-left: auto; color: var(--k-accent); font-size: 11.5px; display: flex; align-items: center; gap: 3px; }
+  .ai-body { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 9px; overflow: hidden; }
+  .ai-ctx {
+    display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--k-muted);
+    border: 1px dashed var(--k-border); border-radius: 6px; padding: 4px 9px; width: fit-content; max-width: 100%;
+  }
+  .bubble { border-radius: 8px; padding: 8px 11px; font-size: 12px; line-height: 1.6; max-width: 88%; }
+  .bubble.u { align-self: flex-end; background: var(--k-selected); color: var(--k-text); margin-left: 24px; }
+  .bubble.a { align-self: flex-start; background: var(--k-sec); color: var(--k-text2); margin-right: 24px; border: 1px solid var(--k-border); }
+  .ai-tool { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--k-muted); font-family: Consolas, monospace; }
+  .ai-input {
+    margin: 0 12px 12px; border: 1px solid var(--k-border); border-radius: 10px; background: var(--k-bg);
+    padding: 9px 11px; font-size: 12px; color: var(--k-muted); display: flex; align-items: flex-end; gap: 9px; flex-shrink: 0;
+  }
+  .ai-input .ta { flex: 1; }
+  .ai-input .send {
+    width: 28px; height: 28px; border-radius: 8px; background: var(--k-accent); color: #fff;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  @media (max-width: 760px) { .v-side { display: none !important; } .kbw-body { height: 440px; } .ai-drawer { width: 100%; max-width: 100%; } }
+
+  /* sections */
+  section { padding: 72px 0; }
+  .section-head { text-align: center; margin-bottom: 48px; }
+  .section-head h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.3px; }
+  .section-head p { color: var(--text-2); margin-top: 10px; font-size: 15.5px; }
+  .alt { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+  /* local-first strip */
+  .local-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 56px; }
+  @media (max-width: 720px) { .local-strip { grid-template-columns: 1fr; } }
+  .local-card { text-align: center; padding: 28px 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .local-card .big { font-size: 21px; font-weight: 600; margin-bottom: 6px; }
+  .local-card .small { font-size: 14px; color: var(--text-3); }
+
+  /* module grid */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 26px 24px; transition: border-color .15s ease;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card h3 { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+  .card .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--accent); flex-shrink: 0; }
+  .card p { margin-top: 10px; font-size: 14px; color: var(--text-2); }
+  .card p b { color: var(--text); font-weight: 500; }
+
+  /* toolbox */
+  .tools { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 860px; margin: 0 auto; }
+  .chip {
+    border: 1px solid var(--border); background: var(--bg);
+    border-radius: 999px; padding: 8px 18px; font-size: 14px; color: var(--text-2);
+  }
+
+  /* plugins */
+  .plugin-layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: start; }
+  @media (max-width: 820px) { .plugin-layout { grid-template-columns: 1fr; } }
+  .plugin-copy h3 { font-size: 20px; font-weight: 600; margin-bottom: 14px; }
+  .plugin-copy p { color: var(--text-2); font-size: 15px; margin-bottom: 14px; }
+  .plugin-list { list-style: none; margin: 18px 0; }
+  .plugin-list li { padding: 9px 0 9px 26px; position: relative; font-size: 14.5px; color: var(--text-2); }
+  .plugin-list li::before {
+    content: ""; position: absolute; left: 4px; top: 17px;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  }
+  .plugin-list li b { color: var(--text); font-weight: 500; }
+  .plugin-panel {
+    border: 1px solid var(--border); border-radius: 14px; background: var(--bg);
+    padding: 26px 26px 22px;
+  }
+  .plugin-panel .panel-title { font-size: 13px; color: var(--text-3); letter-spacing: 1px; margin-bottom: 16px; }
+  .plug-item { display: flex; gap: 14px; padding: 13px 0; border-top: 1px solid var(--border); }
+  .plug-item:first-of-type { border-top: none; }
+  .plug-icon {
+    width: 38px; height: 38px; border-radius: 9px; background: var(--accent-soft);
+    color: var(--accent); display: grid; place-items: center; font-size: 17px; flex-shrink: 0;
+  }
+  .plug-item .pt { font-size: 15px; font-weight: 500; }
+  .plug-item .pd { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+  .repo-link {
+    margin-top: 18px; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 14px; color: var(--accent); font-weight: 500;
+  }
+  .repo-link:hover { text-decoration: underline; }
+
+  /* security */
+  .sec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  @media (max-width: 720px) { .sec-grid { grid-template-columns: 1fr; } }
+  .sec-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; background: var(--bg); }
+  .sec-card h3 { font-size: 15.5px; font-weight: 600; margin-bottom: 6px; }
+  .sec-card p { font-size: 14px; color: var(--text-2); }
+
+  /* download */
+  .dl-box {
+    text-align: center; border: 1px solid var(--border); border-radius: 16px;
+    background: var(--surface); padding: 56px 24px;
+  }
+  .dl-box h2 { font-size: 26px; font-weight: 600; }
+  .dl-box p { color: var(--text-2); margin: 12px auto 28px; max-width: 520px; font-size: 15px; }
+  .req { margin-top: 26px; font-size: 13px; color: var(--text-3); }
+  .req code { background: var(--code-bg); padding: 2px 7px; border-radius: 5px; font-size: 12.5px; }
+
+
+  /* ===== 图文交替特写 + 动画演示 ===== */
+  .feat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 36px 0; }
+  .feat-row + .feat-row { border-top: 1px dashed var(--border); }
+  .feat-row.rev .feat-copy { order: 2; }
+  @media (max-width: 860px) { .feat-row { grid-template-columns: 1fr; gap: 26px; padding: 28px 0; } .feat-row.rev .feat-copy { order: 0; } }
+  .feat-copy .k { font-size: 12.5px; color: var(--accent); letter-spacing: .06em; font-weight: 500; }
+  .feat-copy h3 { font-size: 21px; font-weight: 600; margin: 8px 0 10px; letter-spacing: -0.2px; }
+  .feat-copy p { font-size: 14.5px; color: var(--text-2); line-height: 1.78; }
+  .feat-copy p b { color: var(--text); font-weight: 500; }
+  .kbd-hint { margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
+  .kbd-hint code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; font-size: 11.5px; margin-right: 4px; }
+  .demo-card {
+    position: relative; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+    padding: 20px 22px; box-shadow: 0 12px 36px rgba(0,0,0,.07); overflow: hidden;
+  }
+  .demo-title { font-size: 11px; color: var(--text-3); letter-spacing: .08em; margin-bottom: 12px; }
+  .more-chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 26px; }
+
+  /* 演示 1：编辑器 · 打字 + 撤销 */
+  .tline { font-family: Consolas, "Cascadia Code", monospace; font-size: 13px; color: var(--text-2); padding: 5px 0; white-space: nowrap; overflow: hidden; }
+  .tline b { color: var(--text); }
+  .typing { display: inline-block; vertical-align: bottom; white-space: nowrap; overflow: hidden; max-width: 0; border-right: 2px solid var(--accent); animation: typ 8s steps(20, end) infinite; }
+  @keyframes typ { 0% { max-width: 0 } 45%, 88% { max-width: 240px } 100% { max-width: 240px } }
+  .strike { position: relative; }
+  .strike::after { content: ""; position: absolute; left: 0; top: 55%; height: 1.5px; background: var(--danger, #d01020); width: 0; animation: strike 8s ease infinite; }
+  @keyframes strike { 0%, 38% { width: 0 } 48%, 62% { width: 100% } 74%, 100% { width: 0 } }
+  .undo-pill {
+    position: absolute; right: 16px; top: 12px; font-size: 11px; color: var(--text-2);
+    border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; background: var(--bg);
+    opacity: 0; animation: pill 8s ease infinite;
+  }
+  @keyframes pill { 0%, 62% { opacity: 0; transform: translateY(5px) } 68%, 86% { opacity: 1; transform: none } 94%, 100% { opacity: 0 } }
+
+  /* 演示 2：知识图谱 · 流动与漂移 */
+  .edge { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 5 7; animation: flow 2.8s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -24 } }
+  .drift { animation: drift 5.5s ease-in-out infinite alternate; transform-box: fill-box; }
+  .dr2 { animation-delay: -1.4s } .dr3 { animation-delay: -2.8s } .dr4 { animation-delay: -2s } .dr5 { animation-delay: -4.2s }
+  @keyframes drift { from { transform: translate(0, 0) } to { transform: translate(7px, -8px) } }
+  .pulse { transform-box: fill-box; transform-origin: center; animation: pulse 2.4s ease-out infinite; }
+  @keyframes pulse { 0% { transform: scale(.55); opacity: .75 } 100% { transform: scale(2.2); opacity: 0 } }
+  .glabel {
+    font-size: 10.5px; fill: var(--text-2); font-weight: 500;
+    paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+  }
+  .glabel-core { fill: var(--surface); font-size: 10px; font-weight: 600; stroke: none; letter-spacing: .3px; }
+
+  /* 演示 3：日程 · 打勾完成 */
+  .demo-todo { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 10px 12px; margin-bottom: 9px; font-size: 13px; color: var(--text-2); }
+  .demo-todo .tt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .demo-chk { width: 16px; height: 16px; border: 2px solid var(--text-3); border-radius: 50%; flex-shrink: 0; position: relative; animation: chkbx 7s ease infinite; }
+  .demo-chk::after { content: ""; position: absolute; left: 3.5px; top: 0.5px; width: 5px; height: 8px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg) scale(0); animation: chkmark 7s ease infinite; }
+  @keyframes chkbx { 0%, 42% { background: transparent; border-color: var(--text-3) } 50%, 88% { background: var(--success); border-color: var(--success) } 96%, 100% { background: transparent; border-color: var(--text-3) } }
+  @keyframes chkmark { 0%, 44% { transform: rotate(45deg) scale(0) } 54%, 88% { transform: rotate(45deg) scale(1) } 96%, 100% { transform: rotate(45deg) scale(0) } }
+  .demo-todo .strike2 { position: relative; }
+  .demo-todo .strike2::after { content: ""; position: absolute; left: 0; top: 55%; height: 1.5px; background: var(--text-3); width: 0; animation: strike 7s ease infinite; }
+  .due-tag { font-size: 11px; color: var(--danger, #d01020); flex-shrink: 0; }
+
+  /* 演示 4：AI 对话 · 时序循环 */
+  .dc-bubble { border-radius: 10px; padding: 9px 12px; font-size: 12.5px; line-height: 1.65; max-width: 88%; }
+  .dc-u { align-self: flex-end; background: var(--accent-soft); color: var(--text); animation: msgU 9s ease infinite; }
+  .dc-a { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); animation: msgA 9s ease infinite; }
+  @keyframes msgU { 0% { opacity: 0; transform: translateY(10px) } 5%, 88% { opacity: 1; transform: none } 95%, 100% { opacity: 0 } }
+  @keyframes msgA { 0%, 46% { opacity: 0; transform: translateY(10px) } 52%, 88% { opacity: 1; transform: none } 95%, 100% { opacity: 0 } }
+  .dc-dots { display: flex; gap: 4px; padding: 7px 2px; align-self: flex-start; animation: gate 9s ease infinite; }
+  .dc-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); animation: dcb 1s ease-in-out infinite; }
+  .dc-dots i:nth-child(2) { animation-delay: .15s } .dc-dots i:nth-child(3) { animation-delay: .3s }
+  @keyframes gate { 0%, 8% { opacity: 0 } 12%, 42% { opacity: 1 } 46%, 100% { opacity: 0 } }
+  @keyframes dcb { 0%, 100% { transform: translateY(0); opacity: .5 } 50% { transform: translateY(-4px); opacity: 1 } }
+  .dc-ctx { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-3); border: 1px dashed var(--border); border-radius: 6px; padding: 3px 9px; margin-bottom: 4px; width: fit-content; }
+
+  /* 演示 5：密码填充 */
+  .pf-field { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; margin-bottom: 9px; font-size: 13px; background: var(--bg); }
+  .pf-lb { color: var(--text-3); flex-shrink: 0; }
+  .pf-val { color: var(--text-2); }
+  .pf-pw { position: relative; }
+  .pf-pw .pf-dots { opacity: 0; animation: pwin 7s ease infinite; letter-spacing: 2px; }
+  @keyframes pwin { 0%, 40% { opacity: 0 } 48%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+  .pf-ok { margin-left: auto; font-size: 11px; color: var(--success, #107c10); opacity: 0; animation: pwin 7s ease infinite; }
+  .pf-btn { text-align: center; background: var(--accent); color: #fff; border-radius: 8px; padding: 9px; font-size: 13.5px; margin-top: 4px; }
+  .pf-pop {
+    position: absolute; right: -10px; top: 34px; z-index: 2; font-size: 11.5px; color: var(--text-2);
+    background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 11px;
+    box-shadow: 0 8px 22px rgba(0,0,0,.12); animation: pfpop 7s ease infinite;
+  }
+  .pf-pop b { color: var(--accent); font-weight: 500; }
+  @keyframes pfpop { 0%, 8% { opacity: 0; transform: translateY(-6px) scale(.95) } 14%, 42% { opacity: 1; transform: none } 50%, 100% { opacity: 0; transform: translateY(-6px) } }
+
+  /* 演示 6：插件安装进度 */
+  .pi-row { display: flex; align-items: center; gap: 13px; }
+  .plug-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 16px; flex-shrink: 0; }
+  .pi-meta { flex: 1; min-width: 0; }
+  .pi-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .pi-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .pi-state { position: relative; width: 118px; height: 30px; flex-shrink: 0; }
+  .pi-state > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; border-radius: 7px; font-size: 12px; }
+  .pi-btn { border: 1px solid var(--border); color: var(--accent); background: var(--bg); animation: pib 7s ease infinite; }
+  @keyframes pib { 0%, 16% { opacity: 1 } 22%, 100% { opacity: 0 } }
+  .pi-bar { border: 1px solid var(--border); background: var(--bg); overflow: hidden; animation: pib2 7s ease infinite; }
+  .pi-bar i { display: block; height: 100%; background: var(--accent); width: 0; animation: pibar 7s ease infinite; }
+  @keyframes pib2 { 0%, 20% { opacity: 0 } 26%, 62% { opacity: 1 } 68%, 100% { opacity: 0 } }
+  @keyframes pibar { 0%, 24% { width: 0 } 60%, 100% { width: 100% } }
+  .pi-done { background: var(--success); color: #fff; animation: pid 7s ease infinite; }
+  @keyframes pid { 0%, 66% { opacity: 0 } 72%, 92% { opacity: 1 } 97%, 100% { opacity: 0 } }
+
+  /* 演示 7：AI 教学 · 讲解 → 出题 → 落盘 */
+  .tea-card { display: flex; flex-direction: column; }
+  .tea-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .tea-chip { font-size: 10.5px; color: var(--text-2); border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 2px 9px; }
+  .tea-seg { display: inline-flex; margin-left: auto; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; font-size: 11px; }
+  .tea-seg span { padding: 3px 10px; color: var(--text-3); }
+  .tea-seg .tea-z { animation: teaSeg 12s ease infinite; }
+  @keyframes teaSeg {
+    0%, 30% { color: var(--text-3); background: transparent; }
+    34%, 88% { color: var(--surface); background: var(--accent); }
+    94%, 100% { color: var(--text-3); background: transparent; }
+  }
+  .tea-u { align-self: flex-end; background: var(--accent-soft); color: var(--text); animation: teaU 12s ease infinite; }
+  .tea-a { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); animation: teaA 12s ease infinite; }
+  @keyframes teaU { 0% { opacity: 0; transform: translateY(8px) } 4%, 92% { opacity: 1; transform: none } 98%, 100% { opacity: 0 } }
+  @keyframes teaA { 0%, 12% { opacity: 0; transform: translateY(8px) } 18%, 92% { opacity: 1; transform: none } 98%, 100% { opacity: 0 } }
+  .tea-dots { display: flex; gap: 4px; padding: 7px 2px; align-self: flex-start; animation: teaGate 12s ease infinite; }
+  .tea-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); animation: dcb 1s ease-in-out infinite; }
+  .tea-dots i:nth-child(2) { animation-delay: .15s } .tea-dots i:nth-child(3) { animation-delay: .3s }
+  @keyframes teaGate { 0%, 4% { opacity: 0 } 8%, 14% { opacity: 1 } 18%, 100% { opacity: 0 } }
+  .tea-cite { display: inline-block; font-size: 10.5px; border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; margin-left: 4px; color: var(--text-2); background: var(--code-bg); white-space: nowrap; }
+  .tea-quiz { border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 11px 13px; margin-top: 6px; animation: teaQuiz 12s ease infinite; }
+  @keyframes teaQuiz { 0%, 32% { opacity: 0; transform: translateY(8px) } 38%, 90% { opacity: 1; transform: none } 96%, 100% { opacity: 0 } }
+  .tea-q { font-size: 12.5px; font-weight: 500; color: var(--text); margin-bottom: 8px; }
+  .tea-opt { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; margin-bottom: 6px; background: var(--surface); }
+  .tea-opt:last-child { margin-bottom: 0; }
+  .tea-ok { animation: teaOk 12s ease infinite; }
+  .tea-ok .tea-ck { color: var(--success); font-weight: 700; animation: teaCk 12s ease infinite; }
+  .tea-no { animation: teaNo 12s ease infinite; }
+  @keyframes teaOk { 0%, 50% { border-color: var(--border); color: var(--text-2) } 54%, 90% { border-color: var(--success); color: var(--text) } 96%, 100% { border-color: var(--border); color: var(--text-2) } }
+  @keyframes teaCk { 0%, 50% { opacity: 0; transform: scale(.6) } 54%, 90% { opacity: 1; transform: none } 96%, 100% { opacity: 0 } }
+  @keyframes teaNo { 0%, 54% { opacity: 1 } 58%, 90% { opacity: .45 } 96%, 100% { opacity: 1 } }
+  .tea-saved { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); border: 1px dashed var(--border); border-radius: 6px; padding: 3px 9px; margin-top: 8px; width: fit-content; animation: teaSaved 12s ease infinite; }
+  .tea-saved b { color: var(--success); }
+  @keyframes teaSaved { 0%, 66% { opacity: 0; transform: translateY(5px) } 72%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .feat-demo *, .demo-card *, .kbw-wrap * { animation: none !important; }
+  }
+
+  .lang-btn {
+    border: 1px solid var(--border); background: transparent; color: var(--text-2);
+    font-size: 12.5px; line-height: 18px; border-radius: 7px; padding: 6px 12px; cursor: pointer;
+    font-family: inherit; transition: all .15s; margin-right: 2px;
+  }
+  .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  footer { border-top: 1px solid var(--border); padding: 36px 0 44px; font-size: 13.5px; color: var(--text-3); }
+  .foot-inner { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .foot-links { display: flex; gap: 22px; }
+  .foot-links a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="#">
+      <img src="assets/icon.png" alt="" style="width:26px;height:26px;border-radius:7px;display:block">
+      Phrontis
+    </a>
+    <div class="nav-links">
+      <a href="#modules">功能模块</a>
+      <a href="#toolbox">工具箱</a>
+      <a href="#plugins">插件市场</a>
+      <a href="#security">安全</a>
+      <a href="docs.html">文档</a>
+      <button id="langBtn" class="lang-btn" title="Switch language / 切换语言">EN</button>
+      <a class="nav-cta" href="https://github.com/Lousync/Phrontis/releases" target="_blank" rel="noopener">下载</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <div class="hero-tag">Windows 桌面端 · 纯本地运行</div>
+  <h1>存好资料，AI 给你讲明白</h1>
+  <p class="hero-sub">
+    Phrontis 是一款以知识库、AI 教学与 AI 侧栏为核心的本地桌面应用。
+    所有数据保存本地，无需注册点击即用。
+  </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="https://github.com/Lousync/Phrontis/releases" target="_blank" rel="noopener">下载 Windows 安装包</a>
+    <a class="btn" href="https://github.com/Lousync/Phrontis" target="_blank" rel="noopener">GitHub 仓库</a>
+  </div>
+
+  <div class="kbw-wrap">
+    <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-cap" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5 10-5ZM6 12v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7l10-5ZM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7ZM14 2v5h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.1 2.1 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </svg>
+
+    <div class="kbw-tabs">
+      <button class="kbw-tab on" data-v="editor">编辑器</button>
+      <button class="kbw-tab" data-v="knowledge">知识库</button>
+      <button class="kbw-tab" data-v="schedule">日程</button>
+      <button class="kbw-tab" data-v="ai">AI 侧栏</button>
+    </div>
+
+    <div class="kbw-win">
+      <div class="kbw-titlebar">
+        <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+        <span class="kbw-title">我的知识仓库</span>
+      </div>
+      <div class="kbw-body">
+        <div class="kbw-ab">
+          <span class="kbw-ab-btn active" data-m="editor" title="编辑器"><svg><use href="#i-pen"/></svg></span>
+          <span class="kbw-ab-btn" data-m="knowledge" title="知识库"><svg><use href="#i-book"/></svg></span>
+          <span class="kbw-ab-btn" data-m="schedule" title="日程"><svg><use href="#i-cal"/></svg></span>
+          <span class="kbw-ab-spacer"></span>
+          <span class="kbw-ab-btn" title="用户"><svg><use href="#i-user"/></svg></span>
+          <span class="kbw-ab-btn" title="设置与主题"><svg><use href="#i-gear"/></svg></span>
+        </div>
+        <div class="kbw-main">
+
+          <!-- 编辑器 -->
+          <div class="kbw-view on" data-v="editor">
+            <div class="v-strip">
+              <svg class="ic" style="color:var(--k-accent)"><use href="#i-pen"/></svg>编辑区
+              <span class="sp"></span>
+              <span class="lnk">插图</span><span class="lnk">大纲</span><span class="lnk">预览</span>
+              <span class="lnk hot">保存全部 (3)</span>
+            </div>
+            <div class="v-cols">
+              <div class="v-side" style="width:216px">
+                <div class="side-head">资源管理器 <svg class="ic" style="width:12px;height:12px"><use href="#i-plus"/></svg></div>
+                <div class="trow"><svg class="ic"><use href="#i-chev"/></svg>工作</div>
+                <div class="trow cur" style="padding-left:26px"><svg class="ic"><use href="#i-file"/></svg>项目周报-第37周.md</div>
+                <div class="trow" style="padding-left:26px"><svg class="ic"><use href="#i-file"/></svg>面试复盘.md</div>
+                <div class="trow"><svg class="ic"><use href="#i-chev"/></svg>学习</div>
+                <div class="trow" style="padding-left:26px"><svg class="ic"><use href="#i-file"/></svg>双链笔记法.md</div>
+                <div class="trow" style="padding-left:26px"><svg class="ic"><use href="#i-file"/></svg>读书摘录.md</div>
+                <div class="side-foot">
+                  <div class="foot-cap">仓库</div>
+                  <div class="trow"><svg class="ic"><use href="#i-folder"/></svg>工作文档仓库</div>
+                </div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+                <div class="ed-tabs">
+                  <span class="ed-tab">项目周报-第37周.md <span class="dot"></span> <span class="x">✕</span></span>
+                  <span class="ed-tab" style="color:var(--k-muted)">读书摘录.md <span class="x">✕</span></span>
+                </div>
+                <div class="monaco">
+                  <div><span class="ln">1</span><span class="h"># 项目周报 · 第 37 周</span></div>
+                  <div><span class="ln">2</span></div>
+                  <div><span class="ln">3</span>本周完成知识库索引重构，<span class="wiki">[[双链笔记法]]</span> 与反链</div>
+                  <div><span class="ln">4</span>上下文已并入图谱口径，检索延迟下降约 40%。</div>
+                  <div><span class="ln">5</span></div>
+                  <div><span class="ln">6</span><span class="q">&gt; 按 Ctrl+J 随时唤起 AI 侧栏，"边看边问"。</span></div>
+                  <div><span class="ln">7</span></div>
+                  <div><span class="ln">8</span>- <span class="cb on"></span> 整理周视图拖拽排期的边界情况清单</div>
+                  <div><span class="ln">9</span>- <span class="cb"></span> 给新版本补一版快速上手文档</div>
+                </div>
+                <div class="statusbar">
+                  <span>项目周报-第37周.md</span><span>Markdown</span><span>UTF-8</span><span>2.1 KB</span>
+                  <span class="dirty">● 未保存</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 知识库 -->
+          <div class="kbw-view" data-v="knowledge">
+            <div class="v-strip">
+              <svg class="ic" style="color:var(--k-accent)"><use href="#i-book"/></svg>知识库
+              <span class="sp"></span>
+              <span class="lnk">错题本 / 收藏</span><span class="lnk hot">知识图谱</span>
+            </div>
+            <div class="v-cols">
+              <div class="v-side" style="width:232px">
+                <div class="side-head">空间与笔记本</div>
+                <div class="trow cur"><svg class="ic" style="color:var(--k-text2)"><use href="#i-layers"/></svg>程序员的空间</div>
+                <div class="trow" style="padding-left:22px"><svg class="ic"><use href="#i-chev"/></svg><svg class="ic"><use href="#i-book"/></svg>双链笔记法</div>
+                <div class="trow cur" style="padding-left:44px">什么是双链<span class="badge">MD</span></div>
+                <div class="trow" style="padding-left:44px">反链与互引<span class="badge">MD</span></div>
+                <div class="trow" style="padding-left:44px">卡片盒笔记法<span class="badge">MD</span></div>
+                <div class="trow" style="padding-left:22px"><svg class="ic"><use href="#i-chev"/></svg><svg class="ic"><use href="#i-book"/></svg>周报归档</div>
+                <div class="trow"><svg class="ic" style="color:var(--k-warning)"><use href="#i-star"/></svg>收藏</div>
+                <div class="trow" style="padding-left:22px">高效写作的十个习惯</div>
+              </div>
+              <div class="doc-page">
+                <div class="dt">什么是双链 <svg class="ic star"><use href="#i-star"/></svg></div>
+                <div class="meta">更新于今天 · 被 12 篇笔记引用 · 双链笔记法 / 第 1 章</div>
+                <p>双链的核心是让每条笔记成为网络中的一个节点：写作时通过 <span class="wiki">[[]]</span> 引用其他笔记，被引用的笔记会自动积累<b>反向链接</b>。</p>
+                <div class="h2">为什么反链重要</div>
+                <p>正向链接表达"我想到了什么"，反链回答"谁提到了我"。两者在知识图谱中同口径建模，检索时互为入口。</p>
+                <div class="q">相关：<span class="wiki">反链与互引</span> · <span class="wiki">卡片盒笔记法</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 日程 -->
+          <div class="kbw-view" data-v="schedule">
+            <div class="v-strip">
+              <svg class="ic" style="color:var(--k-accent)"><use href="#i-cal"/></svg>
+              <span class="lnk hot">周日程</span><span class="lnk">按日期</span><span class="lnk">按截止</span><span class="lnk">按象限</span>
+              <span class="sp"></span>
+              <span class="lnk">管理标签</span>
+              <span class="add-btn"><svg class="ic" style="width:11px;height:11px"><use href="#i-plus"/></svg>添加</span>
+            </div>
+            <div class="v-cols">
+              <div class="v-side" style="width:264px">
+                <div class="tray-cap">待安排 <span class="n">2</span></div>
+                <div class="tray-item">背单词 30 分钟</div>
+                <div class="tray-item">回复设备传输的反馈邮件</div>
+                <div class="tray-cap" style="margin-top:10px">本周概览</div>
+                <div class="tray-item">⚠ 超期未完成 (1)</div>
+                <div class="tray-item">⏰ 即将截止 (2)</div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+                <div class="quick-add"><svg class="ic"><use href="#i-zap"/></svg>快速添加当日零碎任务...</div>
+                <div class="todo-list">
+                  <div class="todo-card">
+                    <span class="chk"></span><span class="tt">整理周视图拖拽排期的边界情况清单</span>
+                    <span class="qd"><span class="bar" style="background:var(--k-danger)"></span>紧急重要</span>
+                    <span class="due hot">今天截止！</span>
+                  </div>
+                  <div class="todo-card">
+                    <span class="chk"></span><span class="tt">面试复盘笔记归档进知识库</span>
+                    <span class="qd"><span class="bar" style="background:var(--k-accent)"></span>重要不紧急</span>
+                    <span class="due soon">明天截止</span>
+                  </div>
+                  <div class="todo-card done">
+                    <span class="chk"></span><span class="tt">给新版本补一版快速上手文档</span>
+                    <span class="qd"><span class="bar" style="background:var(--k-muted)"></span>不紧急不重要</span>
+                  </div>
+                </div>
+                <div class="fold-bar">
+                  <svg class="ic" style="width:12px;height:12px;transform:rotate(90deg)"><use href="#i-chev"/></svg>已完成 · 3 项
+                  <span class="sp"></span><span class="clr">全部清除</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI 助手 -->
+          <div class="kbw-view" data-v="ai">
+            <div class="ai-back">
+              <div style="font-size:19px;font-weight:600;color:var(--k-text);margin-bottom:10px">什么是双链</div>
+              <p>双链的核心是让每条笔记成为网络中的一个节点：写作时通过 <span class="wiki" style="color:var(--k-accent)">[[]]</span> 引用其他笔记……</p>
+              <p style="margin-top:8px">正向链接表达"我想到了什么"，反链回答"谁提到了我"……</p>
+            </div>
+            <div class="ai-drawer">
+              <div class="ai-head">
+                <svg class="ic"><use href="#i-sparkle"/></svg>AI 侧栏
+                <span class="new"><svg class="ic" style="width:11px;height:11px"><use href="#i-plus"/></svg>新会话</span>
+                <svg class="ic" style="color:var(--k-muted)"><use href="#i-x"/></svg>
+              </div>
+              <div class="ai-body">
+                <div class="ai-ctx"><svg class="ic" style="width:11px;height:11px"><use href="#i-file"/></svg>项目周报-第37周.md · 将随提问附带</div>
+                <div class="bubble u">总结一下这一页的要点，再看看我今天还有什么没做完</div>
+                <div class="ai-tool"><svg class="ic" style="width:11px;height:11px"><use href="#i-wrench"/></svg>vault.search · schedule.today → 3 个结果</div>
+                <div class="bubble a">这一页的核心是「双链与反链同口径」：索引重构后检索延迟下降约 40%。日程方面你还有 1 项今天截止：「整理周视图拖拽排期的边界情况清单」，建议优先处理。</div>
+              </div>
+              <div class="ai-input">
+                <span class="ta">问问任何事…(Enter 发送)</span>
+                <span class="send"><svg class="ic" style="width:13px;height:13px"><use href="#i-send"/></svg></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="hero-points">
+    <span>数据 100% 本地</span><span>无需注册登录</span><span>离线可用</span><span>免费开源</span>
+  </div>
+</header>
+
+<section class="wrap">
+  <div class="local-strip">
+    <div class="local-card">
+      <div class="big">仓库 = 账户</div>
+      <div class="small">一个文件夹就是一个知识仓库，正文是 .md 文件，换电脑 = 拷走文件夹</div>
+    </div>
+    <div class="local-card">
+      <div class="big">Markdown + JSON</div>
+      <div class="small">纯文本存储、无数据库依赖，任何编辑器都能打开你的数据</div>
+    </div>
+    <div class="local-card">
+      <div class="big">AI 本地优先</div>
+      <div class="small">支持 OpenAI 兼容 / Ollama / Anthropic，本地大模型全程离线</div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="modules">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>功能模块</h2>
+      <p>高频场景逐一演示 · 其余模块见底部速览</p>
+    </div>
+    <div class="feat-row">
+      <div class="feat-copy">
+        <div class="k">编辑器</div>
+        <h3>VS Code 同款内核，同款体验</h3>
+        <p>Monaco 内核 + 文件树，分栏实时预览；<b>文件操作撤销栈</b>覆盖移动 / 重命名 / 新建——手滑之后，一键回到事故之前。</p>
+        <div class="kbd-hint"><code>Ctrl+Z</code>撤销文件操作 <code>Ctrl+N</code>新建</div>
+      </div>
+      <div class="demo-card feat-demo">
+        <div class="demo-title">项目周报-第37周.md</div>
+        <div class="undo-pill">Ctrl+Z 已撤销</div>
+        <div class="tline"><span class="typing"># 项目周报 · 第 37 周</span></div>
+        <div class="tline">检索延迟下降约 <b>40%</b>。</div>
+        <div class="tline"><span class="strike">边界情况：拖拽越界时占位闪烁</span></div>
+        <div class="tline" style="color:var(--text-3)">……</div>
+      </div>
+    </div>
+
+    <div class="feat-row rev">
+      <div class="feat-copy">
+        <div class="k">知识库</div>
+        <h3>[[双链]] 织成你的第二大脑</h3>
+        <p>空间 / 笔记本 / 章节 / 页面四级结构，反链上下文与相关性推荐；<b>知识图谱</b>力导向布局，可进入目录只看局部；<code style="font-size:12px">.ignore</code> 规则把私人目录从检索与图谱中整体隐藏。</p>
+        <div class="kbd-hint"><code>Ctrl+Shift+R</code>沉浸阅读 <code>Ctrl+O</code>快速打开</div>
+      </div>
+      <div class="demo-card feat-demo">
+        <div class="demo-title">知识图谱 · 力导向（节点可以拖着玩）</div>
+        <svg id="kg" viewBox="0 0 360 240" style="width:100%;display:block;touch-action:none;cursor:default">
+          <g id="kg-edges"></g>
+          <g id="kg-nodes"></g>
+          <g id="kg-labels"></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="feat-row">
+      <div class="feat-copy">
+        <div class="k">日程</div>
+        <h3>排期靠拖，完成靠点</h3>
+        <p>周视图<b>拖拽排期</b>、边缘拉伸调时长、未完成自动延后；四象限优先级 + 截止倒计时；<b>今日工作台小窗</b>贴边吸附，日程 / 打卡 / 番茄 / 导航四合一。</p>
+        <div class="kbd-hint"><code>Ctrl+Alt+S</code>日程与打卡小窗</div>
+      </div>
+      <div class="demo-card feat-demo">
+        <div class="demo-title">今日任务</div>
+        <div class="demo-todo"><span class="demo-chk"></span><span class="tt strike2">整理周视图排期的边界情况清单</span><span class="due-tag">今天截止！</span></div>
+        <div class="demo-todo"><span class="demo-chk" style="animation-delay:-3.5s"></span><span class="tt strike2" style="animation-delay:-3.5s">面试复盘笔记归档进知识库</span><span class="due-tag" style="color:var(--warning)">明天截止</span></div>
+        <div class="demo-todo" style="opacity:.55"><span class="demo-chk" style="background:var(--success);border-color:var(--success)"></span><span class="tt" style="text-decoration:line-through">给新版本补一版快速上手文档</span></div>
+      </div>
+    </div>
+
+    <div class="feat-row rev">
+      <div class="feat-copy">
+        <div class="k">AI 侧栏</div>
+        <h3>边看边问，还会替你动手</h3>
+        <p>全局侧栏随时唤起，<b>本地优先</b>模型网关（OpenAI 兼容 / Ollama / Anthropic）；自然语言驱动本地工具，≤8 轮推理、全程审计、<b>按模块权限分级</b>；支持 MCP 外部服务器与 Skill 提示词包。</p>
+        <div class="kbd-hint"><code>Ctrl+J</code>唤起 AI 侧栏 <code>设置 → AI 工具</code>配置模型</div>
+      </div>
+      <div class="demo-card feat-demo" style="display:flex;flex-direction:column">
+        <div class="dc-ctx">上下文：项目周报-第37周.md · 将随提问附带</div>
+        <div class="dc-bubble dc-u">总结这一页要点，再看看我今天还有什么没做完</div>
+        <div class="dc-dots"><i></i><i></i><i></i></div>
+        <div class="dc-bubble dc-a">核心是「双链与反链同口径」，检索延迟下降约 40%。你还有 1 项今天截止：「整理周视图排期的边界情况清单」，建议优先处理。</div>
+      </div>
+    </div>
+
+    <div class="feat-row">
+      <div class="feat-copy">
+        <div class="k">AI 教学</div>
+        <h3>一门课一个工作区，讲到出题一个闭环</h3>
+        <p>教材 / 课件入库作素材，讲解自带 <b>[1] p.34</b> 编号引用可溯源；「对话 ⇄ 题目」一键切换，随堂出题、即时判分；讲义与试卷<b>自动落盘</b>会话文件夹；<b>用户画像</b>持续记录薄弱点，越用越懂你。</p>
+        <div class="kbd-hint"><code>活动栏</code>进入 AI教学 <code>对话 ⇄ 题目</code>切换视图</div>
+      </div>
+      <div class="demo-card feat-demo tea-card">
+        <div class="demo-title">AI教学 · 计算机网络工作区</div>
+        <div class="tea-top">
+          <span class="tea-chip">计算机网络</span>
+          <span class="tea-seg"><span>对话</span><span class="tea-z">题目</span></span>
+        </div>
+        <div class="dc-bubble tea-u">用费曼技巧讲讲三次握手，引用教材</div>
+        <div class="tea-dots"><i></i><i></i><i></i></div>
+        <div class="dc-bubble tea-a">把握手想成两次喊话确认：「在吗？」「在，你说」——先约定规则再传正事，对应 SYN 与 SYN+ACK<span class="tea-cite">[1] p.34</span></div>
+        <div class="tea-quiz">
+          <div class="tea-q">随堂题 · 第一次握手携带的标志位是？</div>
+          <div class="tea-opt tea-ok"><span>A. SYN</span><span class="tea-ck">✓</span></div>
+          <div class="tea-opt tea-no"><span>B. ACK</span></div>
+        </div>
+        <div class="tea-saved"><b>✓</b> 讲义·三次握手.md 已存入会话文件夹</div>
+      </div>
+    </div>
+
+    <div class="more-chips">
+      <span class="chip">博客 · 周月总结</span>
+      <span class="chip">说说 · 相册</span>
+      <span class="chip">回收站 · 软删除可恢复</span>
+      <span class="chip">设置 · 关键词搜索直达</span>
+    </div>
+  </div>
+</section>
+
+<section id="toolbox">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>内置工具箱</h2>
+      <p>9 个常用工具，不必再为小事装一堆软件</p>
+    </div>
+    <div class="feat-row" style="padding:8px 0 0">
+      <div>
+        <div class="tools">
+          <span class="chip">密码本（DPAPI 加密）</span>
+          <span class="chip">网址导航</span>
+          <span class="chip">数据导出 / 整仓备份</span>
+          <span class="chip">设备传输（局域网扫码互传）</span>
+          <span class="chip">网页剪藏（浏览器扩展）</span>
+          <span class="chip">番茄钟</span>
+          <span class="chip">习惯打卡</span>
+          <span class="chip">远程监督（微信 / 钉钉 / 企微）</span>
+          <span class="chip">PDF 工具箱（合并 / 整理 / 提取）</span>
+        </div>
+      </div>
+      <div class="demo-card feat-demo">
+        <div class="demo-title">任意网页 · 一键填充</div>
+        <div class="pf-pop"><b>Phrontis 密码本</b> · Ctrl+Alt+P</div>
+        <div class="pf-field"><span class="pf-lb">账号</span><span class="pf-val">zhiyuan@example.com</span></div>
+        <div class="pf-field pf-pw"><span class="pf-lb">密码</span><span class="pf-val pf-dots">••••••••••</span><span class="pf-ok">已填充 ✓</span></div>
+        <div class="pf-btn">登 录</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="plugins">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>插件市场</h2>
+      <p>开放的内容生态：内容由插件带入，安全由沙箱把关</p>
+    </div>
+    <div class="plugin-layout">
+      <div class="plugin-copy">
+        <h3>官方市场一键安装，社区仓库开放共建</h3>
+        <p>
+          应用内插件市场提供一键安装与自动更新；所有插件源码托管在
+          开放的 GitHub 仓库中，欢迎提交你自己的插件与知识包。
+        </p>
+        <ul class="plugin-list">
+          <li><b>三级安全审核</b>：S / A / B 强算分级，风险等级一目了然</li>
+          <li><b>沙箱运行时</b>：code 插件运行在 Worker 沙箱，能力经网关逐项授权，未授权调用一律拒绝并记录审计</li>
+          <li><b>签名验签</b>：支持 ed25519 签名，插件来源可验证</li>
+          <li><b>事务导入</b>：内容包导入单事务执行，失败自动回滚</li>
+          <li><b>两类插件</b>：declarative 知识包（教材 / 题库 / 速查）与 code 功能插件（主题 / 番茄预设等）</li>
+        </ul>
+        <a class="repo-link" href="https://github.com/Lousync/Phrontis-plugins" target="_blank" rel="noopener">
+          github.com/Lousync/Phrontis-plugins →
+        </a>
+      </div>
+      <div class="plugin-panel">
+        <div class="panel-title">已上架精选</div>
+        <div class="demo-card feat-demo" style="margin-bottom:16px;padding:14px 16px">
+          <div class="pi-row">
+            <span class="plug-icon">色</span>
+            <div class="pi-meta"><div class="pi-name">主题包系列</div><div class="pi-sub">6 套配色主题 · 一键换装整个界面</div></div>
+            <div class="pi-state"><span class="pi-btn">一键安装</span><span class="pi-bar"><i></i></span><span class="pi-done">已安装 ✓</span></div>
+          </div>
+        </div>
+        <div class="plug-item">
+          <div class="plug-icon">暗色</div>
+          <div>
+            <div class="pt">GitHub Dark</div>
+            <div class="pd">经典暗色配色，代码人最熟悉的样子</div>
+          </div>
+        </div>
+        <div class="plug-item">
+          <div class="plug-icon">亮色</div>
+          <div>
+            <div class="pt">GitHub Light</div>
+            <div class="pd">明亮清爽的日间模式</div>
+          </div>
+        </div>
+        <div class="plug-item">
+          <div class="plug-icon">米白</div>
+          <div>
+            <div class="pt">护眼米白</div>
+            <div class="pd">低对比暖色纸感，长时间阅读不累眼</div>
+          </div>
+        </div>
+        <div class="plug-item">
+          <div class="plug-icon">赛博</div>
+          <div>
+            <div class="pt">赛博朋克</div>
+            <div class="pd">霓虹紫青高饱和夜色主题</div>
+          </div>
+        </div>
+        <div class="plug-item">
+          <div class="plug-icon">手绘</div>
+          <div>
+            <div class="pt">手绘线条</div>
+            <div class="pd">手绘风边框与笔触，界面像笔记本</div>
+          </div>
+        </div>
+        <div class="plug-item">
+          <div class="plug-icon">终端</div>
+          <div>
+            <div class="pt">OpenCode 终端灰</div>
+            <div class="pd">终端风格灰阶配色，极客向</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="security">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>安全设计</h2>
+      <p>本地优先不等于安全松懈——每一层都有明确防线</p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card">
+        <h3>数据本地 + 系统级加密</h3>
+        <p>数据 100% 本地存储；密码本列使用 Windows DPAPI 加密，复制的密码 30 秒后自动清空剪贴板。</p>
+      </div>
+      <div class="sec-card">
+        <h3>渲染进程沙箱</h3>
+        <p>Electron 沙箱 + contextIsolation，IPC 最小暴露面，路径操作防穿越（Zip Slip 防护）。</p>
+      </div>
+      <div class="sec-card">
+        <h3>AI 权限分级</h3>
+        <p>API Key 系统级加密、渲染层永不可见；工具按模块禁止 / 只读 / 读写分级，未授权工具对 AI 完全不可见；MCP 外部命令双重确认。</p>
+      </div>
+      <div class="sec-card">
+        <h3>内容渲染安全</h3>
+        <p>Markdown 默认不渲染原始 HTML，无 XSS；AI 生成的 HTML 产物经自定义协议沙箱渲染，响应头 default-src 'none'。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="dl-box">
+      <h2>现在开始使用</h2>
+      <p>免费开源，从 GitHub Releases 下载最新安装包。内置新手引导，首次启动跟着向导两分钟上手。</p>
+      <div class="hero-actions" style="margin-top:0;">
+        <a class="btn btn-primary" href="https://github.com/Lousync/Phrontis/releases" target="_blank" rel="noopener">下载最新版本</a>
+        <a class="btn" href="https://github.com/Lousync/Phrontis-plugins" target="_blank" rel="noopener">浏览插件仓库</a>
+      </div>
+      <div class="req">系统要求：<code>Windows 10 / 11（64 位）</code> · 发现问题欢迎 <a href="https://github.com/Lousync/Phrontis/issues" target="_blank" rel="noopener" style="color:var(--accent)">提交 Issue</a></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <div>Phrontis · 纯本地知识日程管理</div>
+    <div class="foot-links">
+      <a href="docs.html">文档</a>
+      <a href="https://github.com/Lousync/Phrontis" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/Lousync/Phrontis-plugins" target="_blank" rel="noopener">插件市场</a>
+      <a href="https://github.com/Lousync/Phrontis/releases" target="_blank" rel="noopener">下载</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var svg = document.getElementById('kg')
+  if (!svg) return
+  var NS = 'http://www.w3.org/2000/svg'
+  var W = 360, H = 240
+
+  // 节点：home 锚位保持构图稳定；label = [文字, dx, dy]
+  var nodes = [
+    { x: 180, y: 118, r: 14, home: [180, 118], core: true, label: ['双链笔记法', 0, -24], vx: 0, vy: 0 },
+    { x: 80,  y: 58,  r: 10, home: [80, 58], vx: 0, vy: 0 },
+    { x: 282, y: 52,  r: 9,  home: [282, 52], vx: 0, vy: 0 },
+    { x: 66,  y: 176, r: 9,  home: [66, 176], vx: 0, vy: 0 },
+    { x: 292, y: 172, r: 11, home: [292, 172], label: ['周报归档', 0, 26], vx: 0, vy: 0 },
+    { x: 182, y: 212, r: 8,  home: [182, 212], vx: 0, vy: 0 },
+  ]
+  var edges = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 3], [2, 4]]
+
+  var gE = document.getElementById('kg-edges')
+  var gN = document.getElementById('kg-nodes')
+  var gL = document.getElementById('kg-labels')
+
+  var lineEls = edges.map(function (e) {
+    var l = document.createElementNS(NS, 'line')
+    l.setAttribute('class', 'edge')
+    gE.appendChild(l)
+    return l
+  })
+
+  var pulse = document.createElementNS(NS, 'circle')
+  pulse.setAttribute('r', '16'); pulse.setAttribute('fill', 'none')
+  pulse.setAttribute('stroke', 'var(--accent)'); pulse.setAttribute('stroke-width', '1')
+  pulse.setAttribute('class', 'pulse')
+  gN.appendChild(pulse)
+
+  nodes.forEach(function (n, i) {
+    var c = document.createElementNS(NS, 'circle')
+    c.setAttribute('r', n.r)
+    if (n.core) { c.setAttribute('fill', 'var(--accent)') }
+    else { c.setAttribute('fill', 'var(--accent-soft)'); c.setAttribute('stroke', 'var(--accent)'); c.setAttribute('stroke-width', '1.2') }
+    c.style.cursor = 'grab'
+    c.__node = n
+    gN.appendChild(c)
+    n.el = c
+    if (n.label) {
+      var t = document.createElementNS(NS, 'text')
+      t.setAttribute('class', 'glabel')
+      t.setAttribute('text-anchor', 'middle')
+      if (n.core) { t.setAttribute('class', 'glabel glabel-core'); t.textContent = '双链' }
+      else { t.textContent = n.label[0] }
+      gL.appendChild(t)
+      n.labelEl = t
+    }
+  })
+  var coreText = gL.querySelector('text')
+
+  var drag = null
+  function toSvg(e) {
+    var r = svg.getBoundingClientRect()
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }
+  }
+  svg.addEventListener('pointerdown', function (e) {
+    var pt = toSvg(e), best = null, bd = 1e9
+    nodes.forEach(function (n) {
+      var d = Math.hypot(n.x - pt.x, n.y - pt.y)
+      if (d < n.r + 8 && d < bd) { bd = d; best = n }
+    })
+    if (!best) return
+    drag = best; best.vx = 0; best.vy = 0
+    svg.setPointerCapture(e.pointerId)
+    svg.style.cursor = 'grabbing'
+    if (best.el) best.el.style.cursor = 'grabbing'
+    e.preventDefault()
+  })
+  svg.addEventListener('pointermove', function (e) {
+    if (!drag) return
+    var pt = toSvg(e)
+    drag.x = pt.x; drag.y = pt.y; drag.vx = 0; drag.vy = 0
+  })
+  function release() { if (drag) { drag = null; svg.style.cursor = 'default' } }
+  svg.addEventListener('pointerup', release)
+  svg.addEventListener('pointercancel', release)
+
+  function step(t) {
+    var i, j, n, m
+    for (i = 0; i < nodes.length; i++) {
+      n = nodes[i]
+      if (n === drag) continue
+      // 回家力（保持构图）+ 呼吸扰动
+      n.vx += (n.home[0] - n.x) * 0.004 + Math.sin(t / 900 + i * 1.7) * 0.012
+      n.vy += (n.home[1] - n.y) * 0.004 + Math.cos(t / 1100 + i * 2.3) * 0.010
+    }
+    // 弹簧
+    edges.forEach(function (e, k) {
+      var a = nodes[e[0]], b = nodes[e[1]]
+      var dx = b.x - a.x, dy = b.y - a.y
+      var d = Math.hypot(dx, dy) || 1
+      var rest = Math.hypot(a.home[0] - b.home[0], a.home[1] - b.home[1])
+      var f = (d - rest) * 0.015, fx = dx / d * f, fy = dy / d * f
+      if (a !== drag) { a.vx += fx; a.vy += fy }
+      if (b !== drag) { b.vx -= fx; b.vy -= fy }
+      lineEls[k].setAttribute('x1', a.x); lineEls[k].setAttribute('y1', a.y)
+      lineEls[k].setAttribute('x2', b.x); lineEls[k].setAttribute('y2', b.y)
+    })
+    // 近距排斥
+    for (i = 0; i < nodes.length; i++) for (j = i + 1; j < nodes.length; j++) {
+      a = nodes[i]; b = nodes[j]
+      var dx2 = b.x - a.x, dy2 = b.y - a.y
+      var d2 = Math.hypot(dx2, dy2) || 1
+      if (d2 < 78) {
+        var f2 = (78 - d2) * 0.006, fx2 = dx2 / d2 * f2, fy2 = dy2 / d2 * f2
+        if (a !== drag) { a.vx -= fx2; a.vy -= fy2 }
+        if (b !== drag) { b.vx += fx2; b.vy += fy2 }
+      }
+    }
+    // 积分 + 阻尼 + 边界（拖拽节点跳过物理，但 DOM 位置每帧照常同步）
+    nodes.forEach(function (n) {
+      if (n !== drag) {
+        n.vx *= 0.86; n.vy *= 0.86
+        n.vx = Math.max(-3, Math.min(3, n.vx)); n.vy = Math.max(-3, Math.min(3, n.vy))
+        n.x += n.vx; n.y += n.vy
+        n.x = Math.max(n.r + 3, Math.min(W - n.r - 3, n.x))
+        n.y = Math.max(n.r + 3, Math.min(H - n.r - 3, n.y))
+      }
+      n.el.setAttribute('cx', n.x); n.el.setAttribute('cy', n.y)
+      if (n.labelEl) {
+        if (n.core) {
+          n.labelEl.setAttribute('x', n.x); n.labelEl.setAttribute('y', n.y + 3)
+        } else {
+          n.labelEl.setAttribute('x', n.x + n.label[1]); n.labelEl.setAttribute('y', n.y + n.label[2])
+        }
+      }
+    })
+    pulse.setAttribute('cx', nodes[0].x); pulse.setAttribute('cy', nodes[0].y)
+  }
+
+  step(0) // 同步首帧：rAF 首拍前不空白
+  var visible = true
+  new IntersectionObserver(function (en) { visible = en[0].isIntersecting }).observe(svg)
+  function loop(t) { if (visible) step(t || 0); requestAnimationFrame(loop) }
+  requestAnimationFrame(loop)
+})()
+</script>
+<script>
+(function () {
+  var tabs = document.querySelectorAll('.kbw-tab')
+  var views = document.querySelectorAll('.kbw-view')
+  var abs = document.querySelectorAll('.kbw-ab-btn[data-m]')
+  function show(v) {
+    tabs.forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-v') === v) })
+    views.forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-v') === v) })
+    abs.forEach(function (a) {
+      var m = a.getAttribute('data-m')
+      a.classList.toggle('active', m === v || (v === 'ai' && m === 'editor'))
+    })
+  }
+  tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.getAttribute('data-v')) }) })
+  var hash = location.hash.replace('#', '')
+  if (['editor', 'knowledge', 'schedule', 'ai'].indexOf(hash) >= 0) show(hash)
+})()
+</script>
+<script>
+(function () {
+  var ZH2EN = {"Phrontis — 本地 Windows 桌面知识日程管理工具 · 纯本地": "Phrontis — Local-first knowledge & scheduling for Windows",
+"功能模块": "Features",
+"工具箱": "Toolbox",
+"插件市场": "Plugins",
+"安全": "Security",
+"文档": "Docs",
+"下载": "Download",
+"Windows 桌面端 · 纯本地运行": "Windows desktop · 100% local",
+"存好资料，AI 给你讲明白": "Save your materials — AI explains the rest",
+"Phrontis 是一款以知识库、AI 教学与 AI 侧栏为核心的本地桌面应用。 所有数据保存本地，无需注册点击即用。": "Phrontis is a local desktop app built around a knowledge base, AI teaching and an AI sidebar. All data stays local — no sign-up, just click and go.",
+"下载 Windows 安装包": "Download for Windows",
+"GitHub 仓库": "GitHub Repo",
+"我的知识仓库": "My Knowledge Vault",
+"编辑区": "Editor",
+"插图": "Image",
+"大纲": "Outline",
+"预览": "Preview",
+"保存全部 (3)": "Save All (3)",
+"资源管理器": "Explorer",
+"工作": "Work",
+"项目周报-第37周.md": "weekly-report-w37.md",
+"面试复盘.md": "interview-retro.md",
+"学习": "Study",
+"双链笔记法.md": "linked-notes.md",
+"读书摘录.md": "reading-notes.md",
+"仓库": "Vault",
+"工作文档仓库": "Work Docs Vault",
+"# 项目周报 · 第 37 周": "# Weekly Report · W37",
+"本周完成知识库索引重构，": "Rebuilt the knowledge index this week — ",
+"[[双链笔记法]]": "[[Linked Notes]]",
+"与反链": "and backlinks",
+"上下文已并入图谱口径，检索延迟下降约 40%。": "are now aligned with the graph index; retrieval is ~40% faster.",
+"整理周视图拖拽排期的边界情况清单": "List edge cases of week-view drag scheduling",
+"给新版本补一版快速上手文档": "Add a quick-start doc for the new release",
+"● 未保存": "● Unsaved",
+"错题本 / 收藏": "Mistake Book / Favorites",
+"知识图谱": "Graph ",
+"空间与笔记本": "Spaces & Notebooks",
+"程序员的空间": "Programmer's Space",
+"双链笔记法": "Linked Notes",
+"什么是双链": "What Are Linked Notes",
+"反链与互引": "Backlinks & Cross-refs",
+"卡片盒笔记法": "Zettelkasten",
+"周报归档": "Weekly Reports",
+"收藏": "Favorites",
+"高效写作的十个习惯": "10 Habits of Efficient Writing",
+"更新于今天 · 被 12 篇笔记引用 · 双链笔记法 / 第 1 章": "Updated today · referenced by 12 notes · Linked Notes / Ch.1",
+"双链的核心是让每条笔记成为网络中的一个节点：写作时通过": "The core of linked notes: every note becomes a node in a network — when writing, ",
+"引用其他笔记，被引用的笔记会自动积累": "referencing others makes the referenced notes accumulate ",
+"反向链接": "backlinks",
+"为什么反链重要": "Why backlinks matter",
+"正向链接表达“我想到了什么”，反链回答“谁提到了我”。两者在知识图谱中同口径建模，检索时互为入口。": "Forward links say “what I thought of”; backlinks answer “who mentioned me”. Both are modeled in the graph and serve as each other's entry points.",
+"相关：": "Related: ",
+"周日程": "Week",
+"按日期": "By date",
+"按截止": "By deadline",
+"按象限": "By quadrant",
+"管理标签": "Tags",
+"添加": "Add",
+"待安排": "Unscheduled",
+"背单词 30 分钟": "Vocabulary · 30 min",
+"回复设备传输的反馈邮件": "Reply to device-transfer feedback email",
+"本周概览": "This week",
+"⚠ 超期未完成 (1)": "⚠ Overdue (1)",
+"⏰ 即将截止 (2)": "⏰ Due soon (2)",
+"快速添加当日零碎任务...": "Quick-add a quick task for today...",
+"紧急重要": "Urgent & Important",
+"今天截止！": "Due today!",
+"面试复盘笔记归档进知识库": "Archive interview retro notes into the knowledge base",
+"重要不紧急": "Important, Not Urgent",
+"明天截止": "Due tomorrow",
+"不紧急不重要": "Neither urgent nor important",
+"已完成 · 3 项": "Completed · 3",
+"全部清除": "Clear all",
+"引用其他笔记……": "referencing other notes…",
+"正向链接表达“我想到了什么”，反链回答“谁提到了我”……": "Forward links say “what I thought of”; backlinks answer “who mentioned me”…",
+"新会话": "New chat",
+"项目周报-第37周.md · 将随提问附带": "weekly-report-w37.md · attached with the question",
+"总结一下这一页的要点，再看看我今天还有什么没做完": "Summarize this page and check what's still open today",
+"vault.search · schedule.today → 3 个结果": "vault.search · schedule.today → 3 results",
+"这一页的核心是「双链与反链同口径」：索引重构后检索延迟下降约 40%。日程方面你还有 1 项今天截止：「整理周视图拖拽排期的边界情况清单」，建议优先处理。": "This page is about aligning linked notes with backlinks: after the index rebuild, retrieval is ~40% faster. Schedule-wise, 1 item is due today — “List edge cases of week-view drag scheduling”. Suggest handling it first.",
+"问问任何事…(Enter 发送)": "Ask anything… (Enter to send)",
+"数据 100% 本地": "100% local data",
+"无需注册登录": "No sign-up",
+"离线可用": "Works offline",
+"免费开源": "Free & open source",
+"仓库 = 账户": "Vault = Account",
+"一个文件夹就是一个知识仓库，正文是 .md 文件，换电脑 = 拷走文件夹": "A folder is a knowledge vault — notes are .md files; moving computers = copying the folder",
+"Markdown + JSON": "Markdown + JSON",
+"纯文本存储、无数据库依赖，任何编辑器都能打开你的数据": "Plain-text storage, no database — your data opens in any editor",
+"AI 本地优先": "Local-first AI",
+"支持 OpenAI 兼容 / Ollama / Anthropic，本地大模型全程离线": "OpenAI-compatible / Ollama / Anthropic — local LLMs work fully offline",
+"高频场景逐一演示 · 其余模块见底部速览": "High-frequency scenarios demoed live · quick glance for the rest below",
+"VS Code 同款内核，同款体验": "VS Code's own core, same familiar experience",
+"Monaco 内核 + 文件树，分栏实时预览；": "Monaco core + file tree, split live preview; ",
+"文件操作撤销栈": "file-op undo stack",
+"覆盖移动 / 重命名 / 新建——手滑之后，一键回到事故之前。": "covering move / rename / create — one keystroke back to before the accident.",
+"撤销文件操作": "undo file ops",
+"唤起 AI 侧栏": "open the AI sidebar",
+"新建": "new",
+"Ctrl+Z 已撤销": "Ctrl+Z undone",
+"检索延迟下降约": "retrieval latency down about ",
+"边界情况：拖拽越界时占位闪烁": "Edge case: placeholder flicker on drag overflow",
+"40%。": "40%.",
+"[[双链]] 织成你的第二大脑": "[[Linked notes]] weave your second brain",
+"空间 / 笔记本 / 章节 / 页面四级结构，反链上下文与相关性推荐；": "Spaces / notebooks / chapters / pages, backlink context and relevance suggestions; ",
+"力导向布局，可进入目录只看局部；": "force-directed graph, zoom in to any folder; ",
+"规则把私人目录从检索与图谱中整体隐藏。": " rules hide private folders from search & graph.",
+"沉浸阅读": "Immersive reading",
+"快速打开": "Quick open",
+"知识图谱 · 力导向（节点可以拖着玩）": "Knowledge graph · force-directed (drag the nodes!)",
+"双链": "Links",
+"排期靠拖，完成靠点": "Drag to schedule, click to finish",
+"周视图": "week view",
+"拖拽排期": "drag-to-schedule",
+"、边缘拉伸调时长、未完成自动延后；四象限优先级 + 截止倒计时；": ", edge-resize durations, auto-carryover of unfinished tasks; four quadrants + due countdown; ",
+"今日工作台小窗": "today workbench widget",
+"贴边吸附，日程 / 打卡 / 番茄 / 导航四合一。": "snaps to the screen edge — schedule / check-in / pomodoro / launcher in one.",
+"日程与打卡小窗": "schedule & check-in widget",
+"今日任务": "Today",
+"整理周视图排期的边界情况清单": "List edge cases of week-view drag scheduling",
+"边看边问，还会替你动手": "Ask while reading — it acts for you",
+"全局侧栏随时唤起，": "Summon the global sidebar anytime; ",
+"本地优先": "local-first",
+"模型网关（OpenAI 兼容 / Ollama / Anthropic）；自然语言驱动本地工具，≤8 轮推理、全程审计、": " model gateway (OpenAI-compatible / Ollama / Anthropic); natural language drives local tools — ≤8 reasoning turns, fully audited, ",
+"按模块权限分级": "per-module permissions",
+"；支持 MCP 外部服务器与 Skill 提示词包。": "; MCP servers & Skill prompt packs supported.",
+"设置 → AI 工具": "Settings → AI Tools",
+"配置模型": "configure models",
+"上下文：项目周报-第37周.md · 将随提问附带": "Context: weekly-report-w37.md · attached with the question",
+"总结这一页要点，再看看我今天还有什么没做完": "Summarize this page and check what's still open today",
+"核心是「双链与反链同口径」，检索延迟下降约 40%。你还有 1 项今天截止：「整理周视图排期的边界情况清单」，建议优先处理。": "It's about aligning linked notes with backlinks — retrieval is ~40% faster now. You still have 1 item due today: “List edge cases of week-view drag scheduling”. Suggest handling it first.",
+"博客 · 周月总结": "Blog · weekly/monthly recaps",
+"说说 · 相册": "Moments · photos",
+"回收站 · 软删除可恢复": "Recycle bin · soft delete",
+"设置 · 关键词搜索直达": "Settings · search-to-jump",
+"内置工具箱": "Built-in Toolbox",
+"11 个常用工具，不必再为小事装一堆软件": "11 everyday tools — stop installing an app for every little thing",
+"密码本（DPAPI 加密）": "Password vault (DPAPI)",
+"网址导航": "Bookmarks",
+"数据导出 / 整仓备份": "Export / full backup",
+"设备传输（局域网扫码互传）": "Device transfer (LAN QR)",
+"网页剪藏（浏览器扩展）": "Web clipper (extension)",
+"番茄钟": "Pomodoro",
+"习惯打卡": "Habit check-ins",
+"远程监督（微信 / 钉钉 / 企微）": "Remote accountability (WeChat / DingTalk / WeCom)",
+"PDF 工具箱（合并 / 整理 / 提取）": "PDF toolkit (merge / organize / extract)",
+"任意网页 · 一键填充": "Any web page · one-click fill",
+"Phrontis 密码本": "Phrontis Password Vault",
+"账号": "Account",
+"密码": "Password",
+"已填充 ✓": "Filled ✓",
+"登 录": "Sign in",
+"开放的内容生态：内容由插件带入，安全由沙箱把关": "An open content ecosystem: content comes from plugins, safety is enforced by the sandbox",
+"官方市场一键安装，社区仓库开放共建": "One-click install from the official market, built openly with the community",
+"应用内插件市场提供一键安装与自动更新；所有插件源码托管在 开放的 GitHub 仓库中，欢迎提交你自己的插件与知识包。": "The in-app market offers one-click install and auto-update; all plugin sources live in an open GitHub repo — your plugins and knowledge packs are welcome.",
+"三级安全审核": "Three-tier security review",
+"：S / A / B 强算分级，风险等级一目了然": ": S / A / B risk grading, levels at a glance",
+"沙箱运行时": "Sandboxed runtime",
+"：code 插件运行在 Worker 沙箱，能力经网关逐项授权，未授权调用一律拒绝并记录审计": ": code plugins run in a Worker sandbox; capabilities are granted per-item by the gateway — unauthorized calls are rejected and audited",
+"签名验签": "Signatures",
+"：支持 ed25519 签名，插件来源可验证": ": ed25519 signatures make plugin origin verifiable",
+"事务导入": "Transactional import",
+"：内容包导入单事务执行，失败自动回滚": ": content packs import in one transaction, auto-rollback on failure",
+"两类插件": "Two plugin kinds",
+"：declarative 知识包（教材 / 题库 / 速查）与 code 功能插件（主题 / 番茄预设等）": ": declarative knowledge packs (textbooks / question banks / cheat sheets) and code plugins (themes / pomodoro presets etc.)",
+"已上架精选": "Featured",
+"主题包系列": "Theme packs",
+"6 套配色主题 · 一键换装整个界面": "6 color themes · reskin the whole app in one click",
+"一键安装": "Install",
+"已安装 ✓": "Installed ✓",
+"GitHub Dark": "GitHub Dark",
+"经典暗色配色，代码人最熟悉的样子": "The classic dark palette every coder knows",
+"GitHub Light": "GitHub Light",
+"明亮清爽的日间模式": "Bright, clean daytime mode",
+"护眼米白": "Eye-care Cream",
+"低对比暖色纸感，长时间阅读不累眼": "Low-contrast warm paper tones for long reading sessions",
+"赛博朋克": "Cyberpunk",
+"霓虹紫青高饱和夜色主题": "Neon purple-and-cyan night theme",
+"手绘线条": "Hand-drawn",
+"手绘风边框与笔触，界面像笔记本": "Sketchy borders and strokes — the app looks like a notebook",
+"OpenCode 终端灰": "OpenCode Terminal Gray",
+"终端风格灰阶配色，极客向": "Terminal-style grayscale, for the geeks",
+"安全设计": "Security by Design",
+"本地优先不等于安全松懈——每一层都有明确防线": "Local-first doesn't mean lax — every layer has a clear line of defense",
+"数据本地 + 系统级加密": "Local data + OS-level encryption",
+"数据 100% 本地存储；密码本列使用 Windows DPAPI 加密，复制的密码 30 秒后自动清空剪贴板。": "100% local storage; the password vault uses Windows DPAPI, and copied passwords clear the clipboard after 30 seconds.",
+"渲染进程沙箱": "Renderer sandbox",
+"Electron 沙箱 + contextIsolation，IPC 最小暴露面，路径操作防穿越（Zip Slip 防护）。": "Electron sandbox + contextIsolation, minimal IPC surface, path-traversal protection (Zip Slip).",
+"AI 权限分级": "Tiered AI permissions",
+"API Key 系统级加密、渲染层永不可见；工具按模块禁止 / 只读 / 读写分级，未授权工具对 AI 完全不可见；MCP 外部命令双重确认。": "API keys encrypted at OS level, never visible to the renderer; tools are per-module deny / read-only / read-write — unauthorized tools are invisible to the AI; MCP external commands need double confirmation.",
+"内容渲染安全": "Content rendering safety",
+"Markdown 默认不渲染原始 HTML，无 XSS；AI 生成的 HTML 产物经自定义协议沙箱渲染，响应头 default-src 'none'。": "Markdown never renders raw HTML — no XSS; AI-generated HTML renders in a custom-protocol sandbox with default-src 'none'.",
+"现在开始使用": "Get started now",
+"免费开源，从 GitHub Releases 下载最新安装包。内置新手引导，首次启动跟着向导两分钟上手。": "Free and open source — grab the latest installer from GitHub Releases. Built-in onboarding gets you up and running in two minutes.",
+"下载最新版本": "Download latest",
+"浏览插件仓库": "Browse plugin repo",
+"系统要求：": "System requirements:",
+"Windows 10 / 11（64 位）": "Windows 10 / 11 (64-bit)",
+"· 发现问题欢迎": "· Found an issue?",
+"提交 Issue": "file an issue",
+  "色": "TH",
+  "暗色": "DK",
+  "亮色": "LT",
+  "米白": "CR",
+  "赛博": "CP",
+  "手绘": "HD",
+  "终端": "TR",
+"AI 教学": "AI Teaching",
+"一门课一个工作区，讲到出题一个闭环": "One workspace per course — from explaining to quizzing in one loop",
+"教材 / 课件入库作素材，讲解自带": "Textbooks and slides go in as sources; every explanation carries ",
+"[1] p.34": "[1] p.34",
+"编号引用可溯源；「对话 ⇄ 题目」一键切换，随堂出题、即时判分；讲义与试卷": " that you can trace. Toggle chat ⇄ quiz for in-class questions with instant grading; lecture notes and papers ",
+"自动落盘": "are saved automatically",
+"会话文件夹；": " to the session folder; ",
+"用户画像": "a learner profile",
+"持续记录薄弱点，越用越懂你。": " keeps track of weak spots — the more you use it, the better it knows you.",
+"活动栏": "Activity bar",
+"进入 AI教学": "to open AI Teaching",
+"对话 ⇄ 题目": "Chat ⇄ Quiz",
+"切换视图": "to switch views",
+"AI教学 · 计算机网络工作区": "AI Teaching · Computer Networks workspace",
+"计算机网络": "Computer Networks",
+"对话": "Chat",
+"题目": "Quiz",
+"用费曼技巧讲讲三次握手，引用教材": "Explain the three-way handshake Feynman-style, cite the textbook",
+"把握手想成两次喊话确认：「在吗？」「在，你说」——先约定规则再传正事，对应 SYN 与 SYN+ACK": "Picture it as two call-outs — \"You there?\" \"Yes, go ahead\": agree the rules before the real talk. That's SYN and SYN+ACK",
+"随堂题 · 第一次握手携带的标志位是？": "Quiz · Which flag does the first handshake carry?",
+"A. SYN": "A. SYN",
+"B. ACK": "B. ACK",
+"讲义·三次握手.md 已存入会话文件夹": " Lecture·Handshake.md saved to the session folder",
+"Phrontis · 纯本地知识日程管理": "Phrontis · local-first knowledge & scheduling",
+  "编辑器": "Editor",
+  "知识库": "Knowledge Base",
+  "日程": "Schedule",
+  "AI 侧栏": "AI Sidebar",
+  "> 按 Ctrl+J 随时唤起 AI 侧栏，\"边看边问\"。": "> Hit Ctrl+J anytime for the AI sidebar — ask while you read.",
+  "正向链接表达\"我想到了什么\"，反链回答\"谁提到了我\"。两者在知识图谱中同口径建模，检索时互为入口。": "Forward links say \"what I thought of\"; backlinks answer \"who mentioned me\". Both are modeled in the graph and serve as each other's entry points.",
+  "正向链接表达\"我想到了什么\"，反链回答\"谁提到了我\"……": "Forward links say \"what I thought of\"; backlinks answer \"who mentioned me\"…"};
+  var TITLE_EN = "Phrontis — Local-first knowledge & scheduling for Windows";
+  var TITLE_ZH = document.title;
+  var norm = function (s) { return s.replace(/\s+/g, ' ').trim() };
+  var ORIG = new WeakMap()
+
+  function apply(lang) {
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        var p = n.parentNode
+        if (!p || /^(SCRIPT|STYLE)$/.test(p.nodeName)) return NodeFilter.FILTER_REJECT
+        return NodeFilter.FILTER_ACCEPT
+      }
+    })
+    var toEN = lang === 'en'
+    var ns = []
+    while (walker.nextNode()) ns.push(walker.currentNode)
+    ns.forEach(function (n) {
+      if (!ORIG.has(n)) ORIG.set(n, n.nodeValue)
+      var zh = norm(ORIG.get(n))
+      if (toEN) {
+        var en = ZH2EN[zh]
+        if (en !== undefined) n.nodeValue = en
+      } else {
+        n.nodeValue = ORIG.get(n)
+      }
+    })
+    document.title = toEN ? TITLE_EN : TITLE_ZH
+    document.documentElement.lang = toEN ? 'en' : 'zh-CN'
+    var b = document.getElementById('langBtn')
+    if (b) b.textContent = toEN ? '中文' : 'EN'
+  }
+
+  var saved = null
+  try { saved = localStorage.getItem('kb-site-lang') } catch (e) {}
+  var lang = saved || ((navigator.language || '').indexOf('en') === 0 ? 'en' : 'zh')
+  if (lang === 'en') apply('en')
+  var btn = document.getElementById('langBtn')
+  btn.onclick = function () {
+    lang = lang === 'en' ? 'zh' : 'en'
+    try { localStorage.setItem('kb-site-lang', lang) } catch (e) {}
+    apply(lang)
+  }
+})()
+</script>
+</body>
+</html>
