@@ -33,3 +33,5 @@ outputs/
 .workbuddy-ai/
 # 临时工作区（探针/草稿/截图；tmp/smoke/ 下少数冒烟脚本已跟踪，保持跟踪）
 tmp/
+# Git Bash 崩溃转储
+*.stackdump
