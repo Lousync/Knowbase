@@ -60,6 +60,13 @@ const INPUT_SZ: Record<string, { icon: number; text: string; padY: string; place
   lg: { icon: 21, text: 'text-[15px]', padY: 'py-2.5', placeholder: '快速添加当日零碎任务...', meta: 'text-[13px]', metaIcon: 14, sectionTitle: 'text-[14px]' },
 }
 
+/** 快速添加胶囊（方案 E）：闪电住圆形 warning 底座 + 胶囊外壳，聚焦 accent 描边 + 光晕 */
+const PILL_SZ: Record<string, { pad: string; base: string; icon: number; add: string }> = {
+  sm: { pad: 'py-1 pl-1 pr-3', base: 'w-6 h-6', icon: 12, add: 'px-2.5 py-0.5 text-[11px]' },
+  md: { pad: 'py-1.5 pl-1.5 pr-4', base: 'w-7 h-7', icon: 14, add: 'px-3 py-1 text-[12px]' },
+  lg: { pad: 'py-2 pl-2 pr-5', base: 'w-8 h-8', icon: 16, add: 'px-3.5 py-1 text-[13px]' },
+}
+
 function localToday(): string {
   const n = new Date()
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
@@ -638,22 +645,30 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
           </div>
         ) : (
         <div className="flex-1 min-h-0 flex flex-col" style={paneStyle(viewLeaving)}>
-        {/* 当日任务快速添加条 */}
-        <div className={`flex items-center gap-2 px-6 ${INPUT_SZ[iconSize].padY} border-b border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0`}>
-          <Zap size={INPUT_SZ[iconSize].icon} className="text-[var(--warning)] shrink-0" />
-          <input
-            value={dailyInput}
-            onChange={e => setDailyInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAddDaily() }}
-            placeholder={INPUT_SZ[iconSize].placeholder}
-            className={`flex-1 bg-transparent ${INPUT_SZ[iconSize].text} text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]`}
-          />
-          {dailyInput && (
-            <button onClick={handleAddDaily} className={`px-2.5 py-1 ${INPUT_SZ[iconSize].text} bg-[var(--warning)] text-[var(--bg-primary)] rounded font-medium`}>
-              添加
-            </button>
-          )}
+        {/* 当日任务快速添加条（方案 E 胶囊：无框灰底 + 圆形 warning 底座；仅按日期视图提供——零碎任务当天创建当天完成） */}
+        {viewMode === 'date' && (
+        <div className="px-6 pt-4 pb-1 shrink-0">
+          <div
+            className={`flex items-center gap-2.5 rounded-full bg-[var(--bg-secondary)] ${PILL_SZ[iconSize].pad}`}
+          >
+            <span className={`flex items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] text-[var(--warning)] shrink-0 ${PILL_SZ[iconSize].base}`}>
+              <Zap size={PILL_SZ[iconSize].icon} />
+            </span>
+            <input
+              value={dailyInput}
+              onChange={e => setDailyInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddDaily() }}
+              placeholder={INPUT_SZ[iconSize].placeholder}
+              className={`flex-1 min-w-0 bg-transparent ${INPUT_SZ[iconSize].text} text-[var(--text-primary)] outline-none placeholder:text-[var(--text-disabled)]`}
+            />
+            {dailyInput && (
+              <button onClick={handleAddDaily} className={`shrink-0 rounded-full bg-[var(--warning)] text-[var(--bg-primary)] font-medium ${PILL_SZ[iconSize].add}`}>
+                添加
+              </button>
+            )}
+          </div>
         </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {/* ===== EXPIRED DAILY TASKS ===== */}
@@ -843,6 +858,7 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
         onDeleteSubtask={handleDeleteSubtask}
         onCreateSubtask={handleCreateSubtask}
         quadrantIcon={quadrantIcon} quadrantOrder={quadrantOrder} quadrantText={quadrantText}
+        allowDaily={viewMode !== 'deadline' && viewMode !== 'quadrant'}
       />
       <QuadrantChart open={quadrantOpen} todos={pendingTodos.filter(t => t.taskType !== 'daily')} tags={tags} onClose={() => setQuadrantOpen(false)} />
       <TagManageModal open={tagManageOpen} tags={tags} onClose={() => setTagManageOpen(false)} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} />

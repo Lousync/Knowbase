@@ -30,11 +30,13 @@ interface Props {
   quadrantOrder?: QuadrantOrder
   /** 是否显示象限文字（设置项 scheduleQuadrantText） */
   quadrantText?: 'show' | 'hide'
+  /** 是否允许创建/切换为「琐碎」类型——按截止 / 按象限视图关闭（零碎任务当天创建当天完成，只在按日期与日程表提供） */
+  allowDaily?: boolean
 }
 
 export function TodoEditModal({
   open, initial, tags, onSave, onClose, subtasks, onToggleSubtask, onDeleteSubtask, onCreateSubtask,
-  quadrantIcon = 'bars', quadrantOrder = 'ladder', quadrantText = 'show',
+  quadrantIcon = 'bars', quadrantOrder = 'ladder', quadrantText = 'show', allowDaily = true,
 }: Props) {
   const [form, setForm] = useState<TodoForm>(initial)
   const [timeWarning, setTimeWarning] = useState('')
@@ -178,9 +180,11 @@ export function TodoEditModal({
 
           <Field label="任务类型">
             <div className="flex gap-2">
-              <button onClick={() => setForm(f => ({ ...f, taskType: 'daily' }))}
-                className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[var(--warning)] bg-[var(--warning-bg)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
-              >⚡ 琐碎</button>
+              {allowDaily && (
+                <button onClick={() => setForm(f => ({ ...f, taskType: 'daily' }))}
+                  className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'daily' ? 'border-[var(--warning)] bg-[var(--warning-bg)] text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
+                >⚡ 零碎</button>
+              )}
               <button onClick={() => setForm(f => ({ ...f, taskType: 'plan' }))}
                 className={`flex-1 py-2 text-[13px] rounded border transition-colors ${form.taskType === 'plan' ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text-primary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--border-color)]'}`}
               >📋 计划类</button>

@@ -1,21 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Archive, ArrowLeft, ArrowRight, BellRing, Bot, BookOpen, CalendarDays, Check,
-  Database, Keyboard, MessageCircle, Moon, Network, Puzzle, ShieldCheck,
+  Database, FileText, GraduationCap, Keyboard, ListChecks, MessageCircle, Moon, Network, PenLine,
+  Puzzle, ShieldCheck,
   Sparkles, Sun, Wrench,
 } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import type { TabName } from '../../types'
 
 const MODULES = [
+  { icon: PenLine, name: '编辑器', desc: 'Markdown 正文写作 · 唯一写入方' },
   { icon: BookOpen, name: '博客 · 日志', desc: '每日写作、标签与周月总结' },
   { icon: CalendarDays, name: '任务', desc: '日程安排与四象限管理' },
   { icon: Network, name: '知识库', desc: '双链笔记、PDF 与知识网络' },
   { icon: MessageCircle, name: '说说', desc: '轻量动态与相册记录' },
+  { icon: GraduationCap, name: 'AI 教学', desc: '会话学习、视觉转写与自动出题' },
   { icon: Wrench, name: '工具箱', desc: '番茄钟、习惯打卡、数据导出等 8 个工具' },
   { icon: Bot, name: 'AI 助手', desc: '本地模型驱动，边看边问（Ctrl+J）' },
   { icon: Puzzle, name: '插件', desc: '主题 / 预设 / 知识包官方市场' },
 ]
+
+/** 场景选择步骤的候选 = 活动栏 8 个一级模块（与 ActivityBar 的 ALL_MODULES 同 id 同序） */
+const ACTIVITY_MODS = [
+  { id: 'editor', name: '编辑器', desc: '正文写作 · 唯一写入方', icon: PenLine },
+  { id: 'knowledge', name: '知识库', desc: '双链 · 图谱 · 沉浸阅读', icon: BookOpen },
+  { id: 'aiTeaching', name: 'AI 教学', desc: '会话学习 · 视觉转写 · 出题', icon: GraduationCap },
+  { id: 'schedule', name: '日程', desc: '日历 · 四象限 · 打卡', icon: CalendarDays },
+  { id: 'blog', name: '博客', desc: '每日一篇 · 周月总结', icon: FileText },
+  { id: 'moments', name: '说说', desc: '轻量动态 · 相册', icon: MessageCircle },
+  { id: 'toolbox', name: '工具箱', desc: '密码本 · 导出 · 局域网互传', icon: Wrench },
+  { id: 'plugins', name: '插件', desc: '官方市场 · 主题包', icon: Puzzle },
+]
+
+/** 活动栏精简默认态：编辑器 + 知识库 + AI教学（docs/slim-activitybar-plan.md） */
+const DEFAULT_TRIO = ['editor', 'knowledge', 'aiTeaching']
 
 const SHORTCUTS = [
   { keys: 'Ctrl N', desc: '当前模块新建（日志 / 任务 / 知识页）' },
@@ -29,14 +47,42 @@ const SHORTCUTS = [
 export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void; onSwitchTab: (tab: TabName) => void }) {
   const { s, update } = useSettings()
   const [step, setStep] = useState(0)
-  const total = 6
+  const total = 7
+
+  // 场景选择状态：默认勾选三件套；sceneTouched 区分「用户真的选过」与「只是路过」
+  const [scenePicked, setScenePicked] = useState<string[]>(DEFAULT_TRIO)
+  const sceneTouchedRef = useRef(false)
+  // 仅首启运行或用户触碰过场景才允许写 activityBarHidden——设置里重开引导浏览不能重置老用户的活动栏
+  const firstRunRef = useRef(!s.onboardingDone)
+
+  const toggleScene = (id: string) => {
+    sceneTouchedRef.current = true
+    setScenePicked(v => {
+      const next = v.includes(id) ? v.filter(x => x !== id) : [...v, id]
+      return next.length ? next : ['editor']
+    })
+  }
+
+  /** 完成/跳过统一收口：按场景选择写 activityBarHidden，再回调完成 */
+  const finish = () => {
+    if (sceneTouchedRef.current || firstRunRef.current) {
+      const picked = new Set(scenePicked.includes('editor') ? scenePicked : ['editor', ...scenePicked])
+      const hidden = ACTIVITY_MODS.map(m => m.id).filter(id => !picked.has(id))
+      update('activityBarHidden', JSON.stringify(hidden))
+      if (!picked.has(s.startupTab)) {
+        const firstVisible = ACTIVITY_MODS.find(m => picked.has(m.id))
+        if (firstVisible) onSwitchTab(firstVisible.id as TabName)
+      }
+    }
+    onComplete()
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === 'Enter') {
         e.preventDefault()
         if (step < total - 1) setStep(v => v + 1)
-        else onComplete()
+        else finish()
       } else if (e.key === 'ArrowLeft' && step > 0) {
         e.preventDefault()
         setStep(v => v - 1)
@@ -44,9 +90,10 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step, onComplete])
+    // deps 带 finish：场景选择变化会重建 finish，保证键盘路径拿到的也是最新所选
+  }, [step, finish])
 
-  const next = () => (step < total - 1 ? setStep(v => v + 1) : onComplete())
+  const next = () => (step < total - 1 ? setStep(v => v + 1) : finish())
 
   return (
     <div className="fixed inset-0 z-[90] bg-[var(--bg-primary)] flex items-center justify-center select-none">
@@ -96,6 +143,37 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
 
           {step === 2 && (
             <div>
+              <StepTitle icon={<ListChecks size={15} />} title="你的使用场景" />
+              <p className="text-[12px] text-[var(--text-muted)] leading-relaxed mb-3">
+                多选。选中的模块固定在左侧活动栏，其余随时<strong className="text-[var(--text-secondary)]">右键活动栏</strong>找回。
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {ACTIVITY_MODS.map(m => {
+                  const on = scenePicked.includes(m.id)
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleScene(m.id)}
+                      className={`flex items-center gap-2.5 p-3 rounded-lg border text-left transition-colors ${
+                        on
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                          : 'border-[var(--border-color)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      <m.icon size={16} className={`shrink-0 mt-0.5 ${on ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`} />
+                      <span className="min-w-0">
+                        <span className={`block text-[12px] font-medium ${on ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>{m.name}</span>
+                        <span className="block text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">{m.desc}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
               <StepTitle icon={<Bot size={15} />} title="AI 助手与插件" />
               <div className="space-y-2.5">
                 <InfoRow icon={<Bot size={14} />} title="AI 助手 · 边看边问"
@@ -108,7 +186,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
             </div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div>
               <StepTitle icon={<Sparkles size={15} />} title="按喜好快速设置" />
               <div className="space-y-4">
@@ -138,7 +216,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div>
               <StepTitle icon={<ShieldCheck size={15} />} title="数据与安全" />
               <div className="space-y-2.5">
@@ -150,7 +228,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div>
               <StepTitle icon={<Keyboard size={15} />} title="快捷键加速，准备出发" />
               <div className="space-y-2 mb-6">
@@ -170,7 +248,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
         <div className="flex items-center mt-10">
           {step < total - 1 ? (
             <button
-              onClick={onComplete}
+              onClick={finish}
               className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
             >
               跳过引导

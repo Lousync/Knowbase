@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText, Image as ImageIcon, Quote } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, Bot, FileText, Wrench, Plus, Trash2, BookOpen, Compass, CalendarClock, PenLine, Presentation, ChevronLeft, ChevronRight, ChevronDown, Feather, PanelLeftClose, PanelRightClose, PanelRightOpen, ArrowLeft, ArrowUp, ArrowRight, Folder, Search, User, Eye, FileOutput, Copy, RotateCcw, ScrollText, Image as ImageIcon, Quote, Info } from 'lucide-react'
 import {
   agentSessions, agentNewSession, agentMessages, agentDeleteSession,
   agentChat, agentStartScene, agentAbort, onAgentStep, llmGetUsage, getSettingRaw, agentSetSessionInstructions, llmListProviders, llmReasoningCapable, llmVisionModels,
@@ -2583,15 +2583,22 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               <div className="col-span-2 py-6 text-center text-[12px] text-[var(--text-muted)]">没有匹配「{wsSearch.trim()}」的工作区</div>
             )}
           </div>
-          {/* UI 优化条目8.2.1：画像入口从贴边小 chip 升格为显眼卡片（三层说明 + 直编入口），首次进选择页即可发现 */}
-          <div className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent)]/6 px-4 py-3.5">
+          {/* UI 优化条目8.2.1 → 10.x 帮助披露改造：说明文字默认收起，悬停卡片平滑展开（同 TaskTray 交换条模式）；ⓘ 提示悬停有说明 */}
+          <div className="group mt-4 flex items-start gap-3 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent)]/6 px-4 py-3.5">
             <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/15 text-[var(--accent)]">
               <User size={14} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-[var(--text-primary)]">学习者画像 · 三层</div>
-              <div className="mt-1 text-[11.5px] text-[var(--text-muted)] leading-relaxed">
-                <b className="text-[var(--text-secondary)]">全局</b>（跨仓库，你是谁/会什么/偏好） · <b className="text-[var(--text-secondary)]">工作区</b>（本课程目标与进度） · <b className="text-[var(--text-secondary)]">本主题</b>（当前水平）——AI 每轮自动注入，冲突时以更细颗粒层为准。
+              <div className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--text-primary)]">
+                学习者画像 · 三层
+                <Info size={12} className="shrink-0 text-[var(--text-disabled)]" />
+              </div>
+              <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 group-hover:grid-rows-[1fr]">
+                <div className="overflow-hidden">
+                  <div className="mt-1 text-[11.5px] text-[var(--text-muted)] leading-relaxed">
+                    <b className="text-[var(--text-secondary)]">全局</b>（跨仓库，你是谁/会什么/偏好） · <b className="text-[var(--text-secondary)]">工作区</b>（本课程目标与进度） · <b className="text-[var(--text-secondary)]">本主题</b>（当前水平）——AI 每轮自动注入，冲突时以更细颗粒层为准。
+                  </div>
+                </div>
               </div>
             </div>
             <button onClick={() => { void openProfile('global') }} title={`全局学习者画像 · 编辑区打开 ${aiTeachRoot}/PROFILE.md（跨工作区共享）`}
@@ -2599,15 +2606,22 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
               全局画像
             </button>
           </div>
-          {/* 全局要求（global-constraints 方案）：跨会话共同遵守的约束，与画像全局层同级同交互 */}
-          <div className="mt-3 flex items-start gap-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-4 py-3.5">
+          {/* 全局要求（global-constraints 方案）：跨会话共同遵守的约束，与画像全局层同级同交互；说明文字同款悬停展开 */}
+          <div className="group mt-3 flex items-start gap-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] px-4 py-3.5">
             <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-hover)] text-[var(--text-secondary)]">
               <ScrollText size={14} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-[var(--text-primary)]">全局要求 · 所有会话每轮遵循</div>
-              <div className="mt-1 text-[11.5px] text-[var(--text-muted)] leading-relaxed">
-                写在 <code className="rounded bg-[var(--bg-hover)] px-1">{aiTeachRoot}/CONSTRAINTS.md</code> 的个人通用要求（语言/结构/风格），跨工作区共享；冲突时优先级：用户当下消息 &gt; 会话要求 &gt; 全局要求。
+              <div className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--text-primary)]">
+                全局要求 · 所有会话每轮遵循
+                <Info size={12} className="shrink-0 text-[var(--text-disabled)]" />
+              </div>
+              <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 group-hover:grid-rows-[1fr]">
+                <div className="overflow-hidden">
+                  <div className="mt-1 text-[11.5px] text-[var(--text-muted)] leading-relaxed">
+                    写在 <code className="rounded bg-[var(--bg-hover)] px-1">{aiTeachRoot}/CONSTRAINTS.md</code> 的个人通用要求（语言/结构/风格），跨工作区共享；冲突时优先级：用户当下消息 &gt; 会话要求 &gt; 全局要求。
+                  </div>
+                </div>
               </div>
             </div>
             <button onClick={() => { void openGlobalConstraints() }} title={`编辑全局要求 · 确保并打开 ${aiTeachRoot}/CONSTRAINTS.md（首次点击按骨架创建）`}

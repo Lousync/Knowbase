@@ -1,4 +1,5 @@
 import type { ScheduleTodo } from '../../../types'
+import { Zap, Info } from 'lucide-react'
 import {
   quadrantMeta, QUADRANT_TEXT_CLASS, QuadrantIconGlyph,
   type QuadrantIcon,
@@ -79,7 +80,7 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
   }
 
   return (
-    <div data-tray-drop className="flex h-full flex-col">
+    <div data-tray-drop className="group flex h-full flex-col">
       <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {todos.map(todo => {
           const tag = todo.tag ?? null
@@ -101,11 +102,21 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
               <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-md" style={{ background: tag?.color ?? 'var(--border-color)' }} />
               <div className="flex-1 min-w-0 pl-1">
                 <div className="flex items-center gap-1.5">
-                  <span className={`inline-flex items-center shrink-0 ${colorCls}`} title={`${q.label}（紧迫度 ${q.level}/4）`}>
-                    <QuadrantIconGlyph icon={quadrantIcon} meta={q} size={Math.max(11, s.icon - 1)} />
-                    {quadrantText === 'show' && <span className={s.meta}>{q.label}</span>}
-                  </span>
-                  <span className={`${s.meta} text-[var(--text-muted)] shrink-0`}>{TYPE_LABEL[todo.taskType] ?? todo.taskType}</span>
+                  {todo.taskType === 'daily' ? (
+                    /* 零碎任务专属标注：⚡ + warning 色（当天创建当天完成） */
+                    <span className="inline-flex items-center gap-0.5 shrink-0 text-[var(--warning)] font-medium" title="零碎任务 · 当天创建当天完成">
+                      <Zap size={Math.max(11, s.icon - 2)} />
+                      <span className={s.meta}>零碎</span>
+                    </span>
+                  ) : (
+                    <>
+                      <span className={`inline-flex items-center shrink-0 ${colorCls}`} title={`${q.label}（紧迫度 ${q.level}/4）`}>
+                        <QuadrantIconGlyph icon={quadrantIcon} meta={q} size={Math.max(11, s.icon - 1)} />
+                        {quadrantText === 'show' && <span className={s.meta}>{q.label}</span>}
+                      </span>
+                      <span className={`${s.meta} text-[var(--text-muted)] shrink-0`}>{TYPE_LABEL[todo.taskType] ?? todo.taskType}</span>
+                    </>
+                  )}
                   {tag && <span className={`${s.meta} text-[var(--text-muted)] truncate`}>{tag.name}</span>}
                 </div>
                 <p className={`${s.title} font-medium text-[var(--text-primary)] mt-0.5 leading-snug truncate`}>{todo.title}</p>
@@ -114,10 +125,14 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
           )
         })}
       </div>
-      <div className="shrink-0 px-2.5 py-2 border-t border-[var(--border-color)]">
-        <p className="text-[10.5px] text-[var(--text-disabled)] leading-relaxed">
-          拖到右侧日程表即可排期<br />网格里的卡片拖回这里可取消排期
-        </p>
+      {/* 帮助文案渐进披露（方案三+）：默认仅 ⓘ 图标，悬停托盘交叉淡入完整提示 */}
+      <div className="shrink-0 relative h-7 border-t border-[var(--border-color)]">
+        <span className="absolute inset-0 flex items-center justify-center text-[var(--text-disabled)] transition-opacity duration-300 group-hover:opacity-0">
+          <Info size={13} />
+        </span>
+        <span className="absolute inset-0 flex items-center justify-center px-3 text-[10.5px] text-[var(--text-disabled)] whitespace-nowrap overflow-hidden text-ellipsis opacity-0 translate-y-[3px] transition-all duration-300 group-hover:opacity-100 group-hover:translate-y-0">
+          拖到右侧日程表即可排期；网格里的卡片拖回这里可取消排期
+        </span>
       </div>
     </div>
   )

@@ -718,3 +718,22 @@ absolute min-w-[160px] w-max max-w-[280px]   ← width: max-content，强制等�
 改动：整块删除（卡片保留 图标 + 标题 + 描述 + 启用开关）。变量仍未消失，仍完整存在于 AI 侧工具 schema 与 `skillService` 的 AI 面向描述里。
 
 **验收**：`tsc --noEmit -p tsconfig.web.json` 本轮改动文件 0 新增错误；密码本空态真机确认（首条录入 / 搜索无匹配两态均垂直居中，非空态滚动正常）。
+
+## 17. 活动栏精简：默认三件套 + 引导场景选择（2026-09-11）
+
+背景：推广向「界面精简」第一步——新用户首启活动栏从全量 8 模块收敛为**编辑器 + 知识库 + AI教学**三件套（AI教学为核心创新点保留一级入口）。方案详见 `docs/slim-activitybar-plan.md`，原型 `outputs/slim-activitybar-prototype.html`。
+
+改动点：
+
+| # | 改动 | 位置 |
+|---|---|---|
+| 1 | 引导 6→7 步：`step===2` 插入「你的使用场景」（8 个一级模块多选，默认勾选三件套），原 2~5 步顺移 | `Onboarding.tsx` |
+| 2 | 完成/跳过统一走 `finish()`：仅首启运行或用户触碰过场景才写 `activityBarHidden`（补集），`startupTab` 被隐藏时切到第一个可见模块；**设置里重开引导浏览不重置老用户活动栏**（`firstRunRef` 守卫） | 同上 |
+| 3 | 键盘路径（Enter/→ 最后一步）原直调 `onComplete()` 会绕过场景写入 → 改 `finish()`，deps 带 finish 防过期闭包 | 同上 |
+| 4 | 「核心功能一览」清单补 **编辑器、AI教学**（7→9 项，选场景前认识全部一级模块） | 同上 |
+| 5 | `ActivityBar.tsx` / `App.tsx` 零结构改动：显隐复用 `activityBarHidden`，启动 Tab 已有 hidden 回退链 | — |
+
+**关键机制**：新用户三件套由引导完成时写入 `activityBarHidden`，而非改 ActivityBar 的 fallback 默认值——避免「设置过显隐的老用户」与「从未设置过的老用户」被一刀切收敛。老用户升级：`onboardingDone` 已置位不触发引导，`activityBarHidden` 未设置保持全量，零影响。
+
+**验收**：`tsc --noEmit -p tsconfig.web.json` 本轮改动文件 0 新增错误；`npm run build` 通过。真机冒烟待做：`settings.json` 置 `onboardingDone:false`（并删 `activityBarHidden`）复现首启 → 完成/跳过均得三件套 → 右键找回；设置重开引导走完不点场景 → 活动栏不变。
+

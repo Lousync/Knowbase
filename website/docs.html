@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowbase 文档</title>
+<meta name="description" content="Knowbase Programmer Edition 使用文档：快速上手、知识库、日程、AI 助手、工具箱与插件。">
+<style>
+  :root {
+    --bg: #fafaf9; --surface: #ffffff; --border: #e7e5e4;
+    --text: #1c1917; --text-2: #57534e; --text-3: #79716b;
+    --accent: #0078d4; --accent-soft: #e8f2fb; --accent-deep: #0c447c;
+    --code-bg: #f5f5f4; --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16151a; --surface: #1e1d24; --border: #2e2c35;
+      --text: #ececf1; --text-2: #b3b1ba; --text-3: #86848e;
+      --accent: #45a3e5; --accent-soft: #12283a; --accent-deep: #a8d4f0;
+      --code-bg: #232228;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); line-height: 1.75; font-size: 15px; }
+  a { color: inherit; text-decoration: none; }
+
+  nav {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 14px; height: 58px; }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 16px; }
+  .logo-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 14px; font-weight: 700; }
+  .logo small { font-weight: 400; color: var(--text-3); font-size: 13px; }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .nav-right a { font-size: 13.5px; color: var(--text-2); }
+  .nav-right a:hover { color: var(--accent); }
+  .searchbox { position: relative; width: min(320px, 40vw); }
+  .searchbox input {
+    width: 100%; padding: 7px 12px 7px 32px; border-radius: 8px; font-size: 13.5px; font-family: inherit;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .searchbox input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+  .searchbox .mag { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-3); font-size: 13px; pointer-events: none; }
+  .results {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.13); overflow: hidden; display: none; max-height: 380px; overflow-y: auto;
+  }
+  .results.open { display: block; }
+  .results .r-item { padding: 9px 14px; cursor: pointer; border-top: 1px solid var(--border); }
+  .results .r-item:first-child { border-top: none; }
+  .results .r-item:hover { background: var(--accent-soft); }
+  .results .r-item .rt { font-size: 13.5px; font-weight: 500; }
+  .results .r-item .rc { font-size: 11px; color: var(--text-3); }
+  .results .r-empty { padding: 12px 14px; font-size: 12.5px; color: var(--text-3); }
+
+  .layout { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; gap: 36px; align-items: flex-start; }
+  aside { width: 232px; flex-shrink: 0; position: sticky; top: 58px; max-height: calc(100vh - 58px); overflow-y: auto; padding: 26px 0 40px; }
+  aside .cat { font-size: 11.5px; color: var(--text-3); letter-spacing: .06em; margin: 18px 0 6px; }
+  aside .cat:first-child { margin-top: 0; }
+  aside a.dlink { display: block; padding: 5px 10px; border-radius: 7px; font-size: 13.5px; color: var(--text-2); border-left: 2px solid transparent; }
+  aside a.dlink:hover { color: var(--text); background: var(--surface); }
+  aside a.dlink.on { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); font-weight: 500; }
+  @media (max-width: 880px) { aside { display: none; } }
+
+  main { flex: 1; min-width: 0; padding: 30px 0 80px; }
+  .crumb { font-size: 12px; color: var(--text-3); margin-bottom: 8px; }
+  .doc-title { font-size: 27px; font-weight: 600; letter-spacing: -0.4px; margin-bottom: 6px; }
+  .doc-meta { font-size: 12.5px; color: var(--text-3); margin-bottom: 26px; }
+  .toc { width: 208px; flex-shrink: 0; position: sticky; top: 58px; max-height: calc(100vh - 58px); overflow-y: auto; padding: 34px 0 40px; }
+  .toc-cap { font-size: 11.5px; color: var(--text-3); letter-spacing: .06em; margin-bottom: 8px; font-weight: 500; }
+  .toc a { display: block; font-size: 12.5px; color: var(--text-2); padding: 4px 0 4px 12px; border-left: 2px solid var(--border); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toc a.l3 { padding-left: 26px; font-size: 12px; color: var(--text-3); }
+  .toc a:hover { color: var(--text); }
+  .toc a.on { color: var(--accent); border-left-color: var(--accent); }
+  .md h2, .md h3 { scroll-margin-top: 72px; }
+  @media (max-width: 1150px) { .toc { display: none; } }
+  .cat-group .cat { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .cat-group .chev { width: 11px; height: 11px; transition: transform .2s; }
+  .cat-group:not(.open) .chev { transform: rotate(-90deg); }
+  .cat-group:not(.open) .cat-items { display: none; }
+  .cat-items { overflow: hidden; }
+
+  .md { max-width: 760px; }
+  .md h1 { font-size: 24px; font-weight: 600; margin: 30px 0 14px; }
+  .md h2 { font-size: 19px; font-weight: 600; margin: 30px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .md h3 { font-size: 16px; font-weight: 600; margin: 22px 0 8px; }
+  .md p { margin: 10px 0; color: var(--text-2); }
+  .md strong { color: var(--text); font-weight: 600; }
+  .md a { color: var(--accent); }
+  .md a:hover { text-decoration: underline; }
+  .md code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: 13px; font-family: Consolas, monospace; }
+  .md pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; }
+  .md pre code { border: none; background: none; padding: 0; font-size: 12.5px; line-height: 1.7; }
+  .md ul, .md ol { padding-left: 24px; margin: 10px 0; color: var(--text-2); }
+  .md li { margin: 4px 0; }
+  .md blockquote { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; margin: 12px 0; color: var(--text-3); }
+  .md table { border-collapse: collapse; margin: 12px 0; width: 100%; font-size: 13.5px; }
+  .md th, .md td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
+  .md th { background: var(--code-bg); font-weight: 500; }
+  .md hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+  .pager { display: flex; justify-content: space-between; gap: 14px; margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .pager a { font-size: 13px; color: var(--accent); }
+  .pager a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="index.html"><span class="logo-mark">K</span>Knowbase <small>文档</small></a>
+    <div class="nav-right">
+      <div class="searchbox">
+        <span class="mag">🔍</span>
+        <input id="searchInput" type="text" placeholder="搜索文档…（标题 / 关键词）" autocomplete="off">
+        <div class="results" id="results"></div>
+      </div>
+      <a href="index.html">← 官网</a>
+    </div>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main>
+    <div id="content"></div>
+  </main>
+  <aside class="toc" id="toc" style="display:none"></aside>
+</div>
+
+<script>
+/* ===== 文档数据（全新编写；category + weight 排序；keywords 供搜索） ===== */
+var DOCS = [
+{ slug:'install', title:'安装与首次启动', category:'入门', weight:1, icon:'📦', kw:'下载 安装包 NSIS 首次启动 引导',
+md:`## 下载安装
+
+从 [GitHub Releases](https://github.com/Lousync/Knowbase/releases) 下载最新的 \`Setup x64.exe\` 安装包，双击安装。支持自定义安装目录。
+
+系统要求：**Windows 10 / 11（64 位）**。
+
+## 首次启动
+
+1. 启动后会进入**仓库选择页**——新建一个文件夹作为你的知识仓库（它就是你的账户）。
+2. 跟着**新手引导**走一遍（约两分钟），可以在最后一步勾选你最常用的场景，活动栏只保留你需要的模块。
+3. 主题、字号、启动页都可以在引导里顺手设置，之后随时在「设置」中修改。
+
+> 数据 100% 保存在本机，无需注册任何账号。
+
+## 检查更新
+
+标题栏出现下载图标即代表有新版本，点击直接下载，完成后一键安装。` },
+
+{ slug:'vault', title:'仓库：一个文件夹就是你的账户', category:'入门', weight:2, icon:'🗄️', kw:'仓库 vault 换电脑 迁移 备份 文件夹',
+md:`## 核心概念
+
+Knowbase 没有"云端账户"——**一个文件夹就是一个仓库**：
+
+- 正文内容是 \`.md\` 文件，任何编辑器都能打开；
+- 结构化数据（任务、打卡、设置等）是仓库内 \`.knowbase/\` 目录下的 JSON 文件。
+
+## 换电脑
+
+把仓库文件夹整体拷贝到新电脑，安装 Knowbase 后在启动页选择"打开已有仓库"即可，历史数据原样归来。
+
+## 备份
+
+工具箱 → **数据导出** 可以把全部数据打包成一个 ZIP；把这个备份包拖回窗口就能完整还原。建议定期导出一份。
+
+## 多仓库
+
+可以创建多个仓库（比如"工作"与"个人"），启动页与标题栏切换器随时切换，互不干扰。` },
+
+{ slug:'editor', title:'编辑器：写作、预览与撤销', category:'编辑器', weight:1, icon:'✏️', kw:'编辑器 Monaco 分栏预览 禅模式 撤销 大纲 插图',
+md:`## 写作
+
+编辑器使用 **VS Code 同款 Monaco 内核**，左侧资源管理器管理文件树，支持分栏实时预览（\`Ctrl+P\` 面板切换）。
+
+- \`Ctrl+N\` 新建文件；\`Ctrl+S\` 保存；
+- 底部状态栏实时显示语言、编码与保存状态。
+
+## 禅模式
+
+\`Ctrl+K\` 然后 \`Z\` 进入禅模式——只留你和文字。\`Esc\` 退出。
+
+## 撤销栈
+
+文件操作（移动 / 重命名 / 新建）有独立撤销栈：
+
+- \`Ctrl+Z\` 撤销、\`Ctrl+Shift+Z\` 重做；
+- 手滑把文件拖错地方？一键回到事故之前。
+
+## 大纲与插图
+
+侧栏提供**大纲**（按标题层级跳转）与**插图**面板；直接粘贴剪贴板里的截图即可插入正文。` },
+
+{ slug:'knowledge', title:'知识库：双链、反链与图谱', category:'知识库', weight:1, icon:'🧠', kw:'知识库 双链 反链 图谱 空间 笔记本 章节 沉浸阅读 ignore',
+md:`## 四级结构
+
+知识库按 **空间 → 笔记本 → 章节 → 页面** 四级组织。页面就是仓库里的 \`.md\` 文件，在编辑器中与知识库中打开的是同一份。
+
+## 双链与反链
+
+写作时用 \`[[笔记名]]\` 引用其他笔记；被引用的笔记会自动积累**反向链接**。
+
+- 阅读页面时右侧可以看到反链上下文；
+- **知识图谱**用力导向布局展示整张网络，可进入某个目录只看局部；
+- 相关性推荐会根据内容相似度提示可能相关的笔记。
+
+## 沉浸阅读
+
+\`Ctrl+Shift+R\` 进入沉浸阅读模式，隐藏一切干扰，适合长文与复习场景。
+
+## .ignore 隐藏私人目录
+
+在仓库根放一个 \`.ignore\` 文件（gitignore 语法），命中的目录会从知识库、搜索、图谱与 AI 检索中**整体隐藏**，编辑器不受影响。
+
+\`\`\`
+私密/
+草稿/
+\`\`\`` },
+
+{ slug:'schedule', title:'日程：四象限与拖拽排期', category:'日程', weight:1, icon:'📅', kw:'日程 四象限 周视图 拖拽 排期 零碎任务 待安排 打卡',
+md:`## 四种视图
+
+顶栏可切换 **周日程 / 按日期 / 按截止 / 按象限** 四种视图，同一条任务在不同视角下管理。
+
+## 零碎任务 vs 正式任务
+
+- **零碎任务**（⚡）：当天创建当天完成，在"按日期"视图顶部的快速添加条输入回车即建；
+- **正式任务**（计划 / 截止）：支持四象限优先级、子任务、周期重复与截止倒计时。
+
+## 周日程拖拽排期
+
+周日程视图下，左侧"待安排"栏的任务直接**拖进右侧时间网格**即完成排期，拖拽卡片边缘可调整时长；拖回待安排栏则取消排期。
+
+## 今日工作台小窗
+
+\`Ctrl+Alt+S\` 呼出贴边小窗：日程、打卡、番茄钟、常用导航四合一，逾期任务置顶提醒。` },
+
+{ slug:'ai-setup', title:'AI 助手：配置你的模型', category:'AI 助手', weight:1, icon:'🤖', kw:'AI 助手 模型 Ollama 本地 OpenAI Anthropic 配置 CC Switch',
+md:`## 打开 AI 助手
+
+\`Ctrl+J\` 随时唤起全局侧栏；阅读知识库页面时，AI 会自动带上当前页面上下文——"边看边问"。
+
+## 配置模型
+
+设置 → **AI 工具** → 模型：
+
+- **本地模型**：Ollama（\`http://localhost:11434\`），全程离线；
+- **在线模型**：任何 OpenAI 兼容接口，或 Anthropic；
+- 用过 CC Switch 的话可以**一键导入**已有配置，也支持自定义请求头。
+
+## 工具调用
+
+AI 不止会聊天——它可以调用本地工具（搜索笔记、创建任务、读写文件等），最多 8 轮推理，全程留痕，可在审计面板查看每一次调用。` },
+
+{ slug:'ai-permission', title:'AI 权限：你来划线', category:'AI 助手', weight:2, icon:'🛡️', kw:'AI 权限 授权 禁止 只读 读写 审计 安全',
+md:`## 三档权限
+
+设置 → AI 工具 → **权限**，按模块给 AI 划线：
+
+| 档位 | 行为 |
+|------|------|
+| 禁止 | 工具对 AI **完全不可见**，它不会去猜 |
+| 只读 | 可以读，不能写 |
+| 读写 | 可以读取并修改该模块 |
+
+## 审计
+
+AI 的每次工具调用都有记录（工具、参数、结果），在设置中可查完整审计链路——它做了什么，一目了然。
+
+> 原则：AI 看不到你没授权的东西；你授权了什么，它才能碰什么。` },
+
+{ slug:'toolbox', title:'工具箱：密码本与数据备份', category:'工具箱', weight:1, icon:'🧰', kw:'工具箱 密码本 DPAPI 数据导出 备份 局域网传输 番茄钟',
+md:`工具箱内置 11 个常用工具，这里挑最常用的三个：
+
+## 密码本
+
+- 密码使用 **Windows DPAPI** 系统级加密存储；
+- \`Ctrl+Alt+P\` 呼出全局快速填充悬浮窗，在任意网页一键填入；
+- 复制密码后 30 秒自动清空剪贴板。
+
+## 数据导出
+
+按模块勾选导出备份包（ZIP）；**把备份包拖回窗口即可完整还原**。换电脑、重装系统的保底手段。
+
+## 设备传输
+
+局域网内扫码互传文件——手机照片传电脑、电脑文档传手机，不经过任何服务器。` },
+
+{ slug:'plugins', title:'插件：市场与安全', category:'插件', weight:1, icon:'🧩', kw:'插件 市场 主题 安全审核 沙箱 签名 知识包',
+md:`## 安装
+
+插件页 → 官方市场，一键安装，支持自动更新。主题包、番茄预设、学习空间（如 408 考研）都在这里。
+
+## 安全机制
+
+- **三级审核**：所有上架插件按 S / A / B 分级，风险一目了然；
+- **沙箱运行**：code 插件运行在 Worker 沙箱，能力经网关逐项授权，未授权调用一律拒绝并记录；
+- **签名验签**：支持 ed25519 签名，插件来源可验证。
+
+## 自己写一个
+
+所有官方插件源码在 [Knowbase-plugins](https://github.com/Lousync/Knowbase-plugins) 仓库——declarative 知识包（教材 / 题库 / 速查）只需要准备内容，不写代码。欢迎提交。` },
+
+{ slug:'shortcuts', title:'快捷键速查', category:'参考信息', weight:1, icon:'⌨️', kw:'快捷键 快速键 键盘',
+md:`## 全局
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`Ctrl+N\` | 当前模块新建 |
+| \`Ctrl+J\` | AI 助手侧栏 |
+| \`Ctrl+B\` | 展开 / 收起侧边栏 |
+| \`Ctrl+Shift+P\` | 命令面板 |
+| \`Ctrl+O\` | 快速打开文件 |
+| \`Ctrl+滚轮\` | 缩放界面 |
+
+## 编辑器
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`Ctrl+Shift+R\` | 沉浸阅读 |
+| \`Ctrl+K Z\` | 禅模式 |
+| \`Ctrl+Z\` / \`Ctrl+Shift+Z\` | 文件操作撤销 / 重做 |
+
+## 小窗与工具
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`Ctrl+Alt+S\` | 日程与打卡小窗 |
+| \`Ctrl+Alt+P\` | 密码快速填充 |
+
+> 完整列表见应用内「设置菜单 → 帮助 → 快捷键」。` },
+
+{ slug:'faq', title:'常见问题', category:'参考信息', weight:2, icon:'❓', kw:'FAQ 常见问题 数据安全 慢 丢失 恢复',
+md:`## 我的数据存在哪？
+
+全部在本机：正文是仓库里的 \`.md\` 文件，结构化数据在仓库 \`.knowbase/\` 目录的 JSON 里。没有云端，没有任何遥测上传。
+
+## 会丢数据吗？
+
+正常使用不会——写盘是原子操作。保底方案：工具箱 → 数据导出，定期打一个 ZIP 备份。
+
+## 忘了放什么权限给 AI？
+
+设置 → AI 工具 → 权限，逐模块检查；所有历史调用在审计面板可回溯。
+
+## 卸载会删我的数据吗？
+
+不会。仓库是独立的普通文件夹，卸载应用后原样保留。
+
+## 还有别的问题？
+
+到 [GitHub Issues](https://github.com/Lousync/Knowbase/issues) 提问，或在应用内「设置菜单 → 帮助 → 反馈问题」一键跳转。` },
+
+{ slug:'markdown-guide', title:'Markdown 写作指南', category:'附加文档', weight:1, icon:'📝', kw:'Markdown 语法 标题 加粗 列表 代码 表格 链接',
+md:`Knowbase 里写的一切都是 Markdown——编辑器、知识库、博客通用。常用语法速查：
+
+## 标题与强调
+
+\`\`\`markdown
+# 一级标题（文档名）
+## 二级标题（自动进入大纲）
+**加粗** *斜体* ~~删除线~~
+\`\`\`
+
+## 列表与引用
+
+\`\`\`markdown
+- 无序列表
+1. 有序列表
+> 引用块：适合放摘录与备注
+\`\`\`
+
+## 代码与链接
+
+\`\`\`markdown
+\`行内代码\`
+[链接文字](https://example.com)
+\`\`\`
+
+## 表格
+
+\`\`\`markdown
+| 名称 | 说明 |
+|------|------|
+| 双链 | [[笔记名]] |
+\`\`\`
+
+> 小技巧：编辑器里输入 \`[[\` 会提示仓库名，知识库页面会自动渲染成双链。` },
+
+{ slug:'support', title:'支持与反馈', category:'支持与条款', weight:1, icon:'💬', kw:'支持 反馈 问题 Issues 联系',
+md:`## 遇到问题了？
+
+1. **应用内反馈**：设置菜单 → 帮助 → 反馈问题，一键跳转 GitHub Issues；
+2. **提 Issue 请带上**：Knowbase 版本号（设置 → 关于可见）、复现步骤、预期与实际行为；
+3. **功能建议**同样走 Issues，标注 \`feature\` 标签即可。
+
+## 文档没覆盖到的
+
+本文档站持续补充中；更细粒度的操作说明也可以先看应用内「设置菜单 → 帮助」的对应条目——两边内容互补。` },
+
+{ slug:'privacy', title:'隐私政策', category:'支持与条款', weight:2, icon:'🔒', kw:'隐私 政策 本地 遥测 数据归属',
+md:`**最后更新：随版本发布同步**——本页是简明版，原则只有一条：**你的数据属于你，且只属于你。**
+
+## 我们不收集什么
+
+- 无账号体系，无注册信息；
+- 无遥测、无埋点、无使用数据上报；
+- 应用不做任何你未主动触发的网络请求。
+
+## 数据存在哪
+
+全部在你自己的电脑上：正文为仓库内 \`.md\` 文件，结构化数据为仓库 \`.knowbase/\` 内的 JSON。密码本经 Windows DPAPI 系统级加密。
+
+## AI 功能的边界
+
+只有当你**主动配置并使用** AI 时，请求才会发往**你自己填写**的模型服务商（本地 Ollama 则完全不出机器）。发送范围由你在权限设置中逐模块划定。
+
+## 数据归属
+
+你随时可以：整仓拷贝迁移、导出 ZIP 备份、删除仓库文件夹。删除即消失，没有云端副本。` },
+
+{ slug:'terms', title:'服务条款', category:'支持与条款', weight:3, icon:'📜', kw:'条款 许可 MIT 免责 开源',
+md:`**最后更新：随版本发布同步**
+
+## 许可
+
+Knowbase 以 **MIT 许可证**开源发布，你可以自由使用、修改、分发，详见仓库 LICENSE 文件。
+
+## 免责声明
+
+软件按"**按现状**"提供，不作任何明示或默示的担保。对因使用或无法使用本软件导致的任何数据损失，请以**定期备份**（工具箱 → 数据导出）作为第一道防线——这是本地软件的常识，也是唯一的真相源。
+
+## 第三方服务
+
+- 插件市场的内容由各自作者提供，经安全审核但不构成担保；
+- 你配置的 AI 模型服务商（在线接口）受其各自服务条款约束；
+- 以上均不属于 Knowbase 本身的一部分。
+
+## 条款变更
+
+本条款随版本发布更新；重大变更会在更新说明中标注。继续使用即视为接受最新条款。` },
+];
+
+/* ===== Markdown 渲染（轻量，覆盖本文档所需） ===== */
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+function inline(s) {
+  return s
+    .replace(/`([^`]+)`/g, function (_, c) { return '<code>' + c + '</code>' })
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+}
+function renderMD(md) {
+  var lines = esc(md).split('\n')
+  var out = [], inCode = false, code = [], list = null, hid = 0, toc = []
+  function flushList() { if (list) { out.push('<ul>' + list.join('') + '</ul>'); list = null } }
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i]
+    if (/^```/.test(l)) {
+      if (inCode) { out.push('<pre><code>' + code.join('\n') + '</code></pre>'); code = []; inCode = false }
+      else { flushList(); inCode = true }
+      continue
+    }
+    if (inCode) { code.push(l); continue }
+    var h = l.match(/^(#{1,4})\s+(.*)/)
+    if (h) {
+      flushList()
+      var lvl = h[1].length
+      var idAttr = ''
+      if (lvl === 2 || lvl === 3) {
+        hid++
+        var hidV = 'h-' + hid
+        idAttr = ' id="' + hidV + '"'
+        toc.push({ id: hidV, level: lvl, text: h[2].replace(/`/g, '').replace(/\*\*/g, '') })
+      }
+      out.push('<h' + lvl + idAttr + '>' + inline(h[2]) + '</h' + lvl + '>')
+      continue
+    }
+    if (/^\s*[-*]\s+/.test(l)) { if (list === null) list = []; list.push('<li>' + inline(l.replace(/^\s*[-*]\s+/, '')) + '</li>'); continue }
+    if (/^\s*$/.test(l)) { flushList(); continue }
+    if (/^>\s?/.test(l)) { flushList(); out.push('<blockquote>' + inline(l.replace(/^>\s?/, '')) + '</blockquote>'); continue }
+    if (/^---+$/.test(l)) { flushList(); out.push('<hr>'); continue }
+    if (/^\|/.test(l)) {
+      flushList()
+      var cells = l.split('|').filter(function (c, idx, arr) { return !(idx === 0 && arr[0] === '') && !(idx === arr.length - 1 && arr[arr.length - 1] === '') })
+      if (i + 1 < lines.length && /^\|[\s:|-]+\|$/.test(lines[i + 1])) {
+        var head = '<tr>' + cells.map(function (c) { return '<th>' + inline(c.trim()) + '</th>' }).join('') + '</tr>'
+        var rows = ''
+        i += 2
+        while (i < lines.length && /^\|/.test(lines[i])) {
+          var rc = lines[i].split('|').slice(1, -1)
+          rows += '<tr>' + rc.map(function (c) { return '<td>' + inline(c.trim()) + '</td>' }).join('') + '</tr>'
+          i++
+        }
+        i--
+        out.push('<table>' + head + rows + '</table>')
+        continue
+      }
+    }
+    flushList()
+    out.push('<p>' + inline(l) + '</p>')
+  }
+  flushList()
+  return { html: out.join('\n'), toc: toc }
+}
+
+/* ===== 侧栏与路由 ===== */
+var CATS = []
+DOCS.forEach(function (d) { if (CATS.indexOf(d.category) < 0) CATS.push(d.category) })
+
+function buildSidebar(activeSlug) {
+  var sb = document.getElementById('sidebar')
+  var activeCat = null
+  DOCS.forEach(function (d) { if (d.slug === activeSlug) activeCat = d.category })
+  var expanded = JSON.parse(sessionStorage.getItem('kb-docs-open-cats') || 'null') || CATS
+  if (typeof expanded === 'string') expanded = [expanded]
+  var html = ''
+  CATS.forEach(function (cat) {
+    var items = DOCS.filter(function (d) { return d.category === cat }).sort(function (a, b) { return a.weight - b.weight })
+    var open = expanded.indexOf(cat) >= 0
+    html += '<div class="cat-group' + (open ? ' open' : '') + '" data-cat="' + cat + '">' +
+      '<div class="cat" data-cat="' + cat + '">' + cat +
+      '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' +
+      '</div>' +
+      '<div class="cat-items">' +
+      items.map(function (d) {
+        return '<a class="dlink' + (d.slug === activeSlug ? ' on' : '') + '" href="#/' + d.slug + '">' + d.title + '</a>'
+      }).join('') +
+      '</div></div>'
+  })
+  sb.innerHTML = html
+  sb.querySelectorAll('.cat').forEach(function (head) {
+    head.onclick = function () {
+      var g = head.closest('.cat-group')
+      g.classList.toggle('open')
+      var now = []
+      sb.querySelectorAll('.cat-group.open').forEach(function (x) { now.push(x.getAttribute('data-cat')) })
+      sessionStorage.setItem('kb-docs-open-cats', JSON.stringify(now))
+    }
+  })
+}
+
+function currentSlug() {
+  var m = location.hash.match(/^#\/([a-z0-9-]+)/)
+  return (m && DOCS.some(function (d) { return d.slug === m[1] })) ? m[1] : null
+}
+
+function render() {
+  var slug = currentSlug() || DOCS[0].slug  // 无 hash 直接落第一篇，布局 = 左大纲 + 右正文
+  var box = document.getElementById('content')
+  var d = DOCS.filter(function (x) { return x.slug === slug })[0]
+  buildSidebar(slug)
+  var idx = DOCS.indexOf(d)
+  var prev = DOCS[idx - 1], next = DOCS[idx + 1]
+  var r = renderMD(d.md)
+  var tocEl = document.getElementById('toc')
+  if (r.toc.length) {
+    tocEl.style.display = 'block'
+    tocEl.innerHTML = '<div class="toc-cap">本页目录</div>' + r.toc.map(function (t) {
+      return '<a class="toc-l' + (t.level === 3 ? ' l3' : '') + '" data-tid="' + t.id + '" href="#' + t.id + '">' + t.text + '</a>'
+    }).join('')
+  } else { tocEl.style.display = 'none'; tocEl.innerHTML = '' }
+  box.innerHTML = '<div class="crumb">' + d.category + '</div>' +
+    '<div class="doc-title">' + d.icon + ' ' + d.title + '</div>' +
+    '<div class="doc-meta">Knowbase Programmer Edition</div>' +
+    '<div class="md">' + r.html + '</div>' +
+    '<div class="pager">' +
+    (prev ? '<a href="#/' + prev.slug + '">← ' + prev.title + '</a>' : '<span></span>') +
+    (next ? '<a href="#/' + next.slug + '">' + next.title + ' →</a>' : '<span></span>') +
+    '</div>'
+  box.scrollIntoView && window.scrollTo(0, 0)
+}
+
+window.addEventListener('hashchange', function () { if (location.hash.indexOf('#/') === 0) render() })
+
+var spyRAF = false
+window.addEventListener('scroll', function () {
+  if (spyRAF) return; spyRAF = true
+  requestAnimationFrame(function () {
+    spyRAF = false
+    var links = document.querySelectorAll('#toc a')
+    if (!links.length) return
+    var heads = document.querySelectorAll('.md h2[id], .md h3[id]')
+    var cur = heads.length ? heads[0].getAttribute('id') : null
+    heads.forEach(function (h) { if (h.getBoundingClientRect().top <= 92) cur = h.getAttribute('id') })
+    links.forEach(function (a) { a.classList.toggle('on', a.getAttribute('data-tid') === cur) })
+  })
+})
+render()
+
+/* ===== 搜索 ===== */
+var si = document.getElementById('searchInput'), rs = document.getElementById('results')
+si.addEventListener('input', function () {
+  var q = si.value.trim().toLowerCase()
+  if (!q) { rs.classList.remove('open'); rs.innerHTML = ''; return }
+  var hits = DOCS.map(function (d) {
+    var hay = (d.title + ' ' + d.kw + ' ' + d.md).toLowerCase()
+    var score = 0
+    if (d.title.toLowerCase().indexOf(q) >= 0) score += 10
+    if (d.kw.toLowerCase().indexOf(q) >= 0) score += 6
+    if (hay.indexOf(q) >= 0) score += 2
+    return { d: d, score: score }
+  }).filter(function (x) { return x.score > 0 }).sort(function (a, b) { return b.score - a.score }).slice(0, 8)
+  rs.innerHTML = hits.length
+    ? hits.map(function (x) {
+        return '<div class="r-item" data-slug="' + x.d.slug + '"><div class="rt">' + x.d.icon + ' ' + x.d.title + '</div><div class="rc">' + x.d.category + '</div></div>'
+      }).join('')
+    : '<div class="r-empty">没有匹配「' + esc(si.value.trim()) + '」的文档</div>'
+  rs.classList.add('open')
+})
+rs.addEventListener('click', function (e) {
+  var item = e.target.closest('.r-item')
+  if (!item) return
+  location.hash = '#/' + item.getAttribute('data-slug')
+  si.value = ''; rs.classList.remove('open')
+})
+document.addEventListener('click', function (e) { if (!e.target.closest('.searchbox')) rs.classList.remove('open') })
+</script>
+</body>
+</html>
