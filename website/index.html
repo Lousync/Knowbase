@@ -14,9 +14,9 @@
     --text: #1c1917;
     --text-2: #57534e;
     --text-3: #79716b;
-    --accent: #0078d4;
-    --accent-soft: #e8f2fb;
-    --accent-deep: #0c447c;
+    --accent: #2f2f2c;
+    --accent-soft: #f0efec;
+    --accent-deep: #161614;
     --code-bg: #f5f5f4;
     --radius: 12px;
   }
@@ -28,9 +28,9 @@
       --text: #ececf1;
       --text-2: #b3b1ba;
       --text-3: #86848e;
-      --accent: #45a3e5;
-      --accent-soft: #12283a;
-      --accent-deep: #a8d4f0;
+      --accent: #b5b5af;
+      --accent-soft: #2b2b29;
+      --accent-deep: #e6e6e1;
       --code-bg: #232228;
     }
   }
@@ -97,13 +97,13 @@
   .kbw-wrap {
     --k-bg:#ffffff; --k-sec:#f3f3f3; --k-ter:#ececec; --k-ab:#e8e8e8; --k-hover:#e8e8e8;
     --k-border:#e0e0e0; --k-text:#333333; --k-text2:#666666; --k-muted:#999999;
-    --k-accent:#0078d4; --k-selected:#d0e4f7; --k-success:#107c10; --k-warning:#8a6d15; --k-danger:#d01020;
+    --k-accent:#2f2f2c; --k-selected:#e6e5e2; --k-success:#107c10; --k-warning:#8a6d15; --k-danger:#d01020;
   }
   @media (prefers-color-scheme: dark) {
     .kbw-wrap {
       --k-bg:#1e1e1e; --k-sec:#252526; --k-ter:#2d2d2d; --k-ab:#333333; --k-hover:#2a2d2e;
       --k-border:#3c3c3c; --k-text:#cccccc; --k-text2:#969696; --k-muted:#6a6a6a;
-      --k-accent:#007acc; --k-selected:#094771; --k-success:#4ec9b0; --k-warning:#c5a332; --k-danger:#e81123;
+      --k-accent:#b5b5af; --k-selected:#3a3a38; --k-success:#4ec9b0; --k-warning:#c5a332; --k-danger:#e81123;
     }
   }
   .kbw-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
@@ -177,7 +177,7 @@
   .trow .ic { width: 13px; height: 13px; color: var(--k-muted); }
   .trow.cur { background: color-mix(in srgb, var(--k-selected) 45%, transparent); color: var(--k-text); }
   .trow.cur .ic { color: var(--k-accent); }
-  .trow .badge { font-size: 8px; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--k-info, #379ad6) 20%, transparent); color: var(--k-info, #379ad6); }
+  .trow .badge { font-size: 8px; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--k-text2) 16%, transparent); color: var(--k-text2); }
   .side-foot { margin-top: auto; border-top: 1px solid var(--k-border); padding-top: 6px; }
   .side-foot .trow { font-size: 12px; }
 
@@ -397,7 +397,11 @@
   @keyframes drift { from { transform: translate(0, 0) } to { transform: translate(7px, -8px) } }
   .pulse { transform-box: fill-box; transform-origin: center; animation: pulse 2.4s ease-out infinite; }
   @keyframes pulse { 0% { transform: scale(.55); opacity: .75 } 100% { transform: scale(2.2); opacity: 0 } }
-  .glabel { font-size: 10px; fill: var(--text-3); }
+  .glabel {
+    font-size: 10.5px; fill: var(--text-2); font-weight: 500;
+    paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+  }
+  .glabel-core { fill: var(--surface); font-size: 10px; font-weight: 600; stroke: none; letter-spacing: .3px; }
 
   /* 演示 3：日程 · 打勾完成 */
   .demo-todo { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 10px 12px; margin-bottom: 9px; font-size: 13px; color: var(--text-2); }
@@ -608,7 +612,7 @@
             <div class="v-cols">
               <div class="v-side" style="width:232px">
                 <div class="side-head">空间与笔记本</div>
-                <div class="trow cur"><svg class="ic" style="color:var(--k-info,#379ad6)"><use href="#i-layers"/></svg>程序员的空间</div>
+                <div class="trow cur"><svg class="ic" style="color:var(--k-text2)"><use href="#i-layers"/></svg>程序员的空间</div>
                 <div class="trow" style="padding-left:22px"><svg class="ic"><use href="#i-chev"/></svg><svg class="ic"><use href="#i-book"/></svg>双链笔记法</div>
                 <div class="trow cur" style="padding-left:44px">什么是双链<span class="badge">MD</span></div>
                 <div class="trow" style="padding-left:44px">反链与互引<span class="badge">MD</span></div>
@@ -1015,7 +1019,7 @@
       var t = document.createElementNS(NS, 'text')
       t.setAttribute('class', 'glabel')
       t.setAttribute('text-anchor', 'middle')
-      if (n.core) { t.setAttribute('fill', '#fff'); t.setAttribute('font-size', '9'); t.textContent = '双链' }
+      if (n.core) { t.setAttribute('class', 'glabel glabel-core'); t.textContent = '双链' }
       else { t.textContent = n.label[0] }
       gL.appendChild(t)
       n.labelEl = t
