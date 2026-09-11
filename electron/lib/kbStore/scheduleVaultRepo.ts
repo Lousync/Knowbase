@@ -32,6 +32,8 @@ export interface TodoRow {
    */
   scheduled_start: number | null
   scheduled_end: number | null
+  /** 提醒「稍后」目标时间（'YYYY-MM-DD HH:mm'）；缺省为空。本轮日程改造新增的唯一字段 */
+  snooze_until?: string | null
   created_at: string; updated_at: string
 }
 
@@ -241,9 +243,9 @@ export function vaultCreateTodo(row: TodoRow): TodoRow {
 type TodoColumn =
   | 'title' | 'description' | 'date' | 'time' | 'quadrant' | 'task_type'
   | 'tag_id' | 'status' | 'end_criteria' | 'parent_id'
-  | 'scheduled_start' | 'scheduled_end'
+  | 'scheduled_start' | 'scheduled_end' | 'snooze_until'
 
-const TODO_COLUMNS: TodoColumn[] = ['title', 'description', 'date', 'time', 'quadrant', 'task_type', 'tag_id', 'status', 'end_criteria', 'parent_id', 'scheduled_start', 'scheduled_end']
+const TODO_COLUMNS: TodoColumn[] = ['title', 'description', 'date', 'time', 'quadrant', 'task_type', 'tag_id', 'status', 'end_criteria', 'parent_id', 'scheduled_start', 'scheduled_end', 'snooze_until']
 
 function camelToSnake(s: string): string {
   return s.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase())

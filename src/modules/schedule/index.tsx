@@ -5,11 +5,12 @@ import { registerAssistantContext } from '../../lib/assistantContext'
 import {
   getScheduleTodos, getScheduleDates, getScheduleMonthTodos, getScheduleDeadlineCounts,
   createScheduleTodo, updateScheduleTodo, deleteScheduleTodo, getScheduleTags, getScheduleSubtasks,
-  getScheduleUnscheduledTodos,
+  getScheduleUnscheduledTodos, getScheduleWeekTodos,
   createScheduleTag, deleteScheduleTag, getSetting, setSetting
 } from '../../lib/ipc'
 import { CalendarView } from './views/CalendarView'
 import type { ViewMode } from './types'
+import { mondayOfWeek, dayFromMonday, toDateStr } from './timetable'
 import { ViewSwitcher } from './components/ViewSwitcher'
 import { TaskTray } from './components/TaskTray'
 import { TimetableView } from './views/TimetableView'
@@ -76,6 +77,18 @@ function localToday(): string {
 export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWidths = {} as Record<string, number>, onSnapCloseSidebar, onSnapOpenSidebar }: { isActive?: boolean; sidebarOpen?: boolean; sidebarWidths?: Record<string, number>; onSnapCloseSidebar?: () => void; onSnapOpenSidebar?: () => void }) {
   const now = new Date()
   const today = localToday()
+
+  // 周偏移：左栏「周任务」清单与右侧网格共用，翻页时两侧同步（须先于 weekMon 计算声明）
+  const [weekOffset, setWeekOffset] = useState(0)
+  /** 左栏双态：待办任务（未排期）/ 周任务（本周，含已完成） */
+  const [trayMode, setTrayMode] = useState<'unscheduled' | 'week'>('unscheduled')
+  /** 周任务清单原始数据（关联标签在渲染层再做，避免 tags 变动时重拉取） */
+  const [weekTasks, setWeekTasks] = useState<ScheduleTodo[]>([])
+
+  // 本周（自然周，与网格 mondayOf 同源）起止：左栏「周任务」清单与网格共用 weekOffset 翻页
+  const weekMon = useMemo(() => mondayOfWeek(today, weekOffset), [today, weekOffset])
+  const weekStart = toDateStr(weekMon)
+  const weekEnd = toDateStr(dayFromMonday(weekMon, 6))
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [selectedDate, setSelectedDate] = useState(today)
@@ -192,6 +205,15 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     } catch (e) { console.error(e) }
   }
 
+  /** 左栏「周任务」清单：本周（自然周）全部任务，含已完成。复用 vaultTodosForWeek（已按周取数） */
+  async function refreshWeekTasks() {
+    try {
+      const list = await getScheduleWeekTodos(weekStart, weekEnd)
+      // 只留自然周区间内的任务（排除「延后候选」），含已完成
+      setWeekTasks(list.filter(t => t.date >= weekStart && t.date <= weekEnd))
+    } catch (e) { console.error(e) }
+  }
+
   async function refreshAll() { await Promise.all([refreshDotDates(), refreshMonthTodos(), refreshUnscheduled()]) }
 
   const loadTags = useCallback(async () => {
@@ -217,7 +239,14 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
   }, [])
 
   // 监听跨窗口数据变更 — 日程打卡小窗内的增删改/勾选实时同步到本模块
-  useDataChanged('schedule', () => { refreshAllRef.current(); loadTagsRef.current() })
+  const trayModeRef = useRef(trayMode)
+  useEffect(() => { trayModeRef.current = trayMode }, [trayMode])
+  const refreshWeekRef = useRef(refreshWeekTasks)
+  useEffect(() => { refreshWeekRef.current = refreshWeekTasks }, [refreshWeekTasks])
+  useDataChanged('schedule', () => { refreshAllRef.current(); loadTagsRef.current(); if (trayModeRef.current === 'week') void refreshWeekRef.current() })
+
+  // 周任务清单跟随 trayMode / weekOffset（翻页看历史周）拉取
+  useEffect(() => { if (trayMode === 'week') void refreshWeekTasks() }, [trayMode, weekStart, weekEnd, refreshWeekTasks])
 
   // 激活重读（2026-09-10）：本模块保活（切 Tab 不卸载），而主进程侧的写操作（AI 工具等）
   // 即便已有广播兜底，切回时也主动重取一次，确保界面与磁盘一致。
@@ -427,6 +456,14 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
     })),
     [unscheduled, tags])
 
+  /** 周任务清单（关联标签；含已完成，删除线由 TaskTray 渲染） */
+  const weekTasksWithTag = useMemo(() =>
+    weekTasks.map(t => ({
+      ...t,
+      tag: t.tagId ? tags.find(tg => tg.id === t.tagId) ?? null : null,
+    })),
+    [weekTasks, tags])
+
   // Today's date string
   const todayDateStr = localToday()
 
@@ -594,22 +631,39 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
         <div className="h-full flex flex-col" style={paneStyle(viewLeaving)}>
           {/* 头部：与编辑器「资源管理器」同款紧凑标题行 */}
           <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
-            <CalendarDays size={12} />
-            {shownMode === 'week' ? '待安排' : '日程'}
-            {shownMode === 'week' && unscheduled.length > 0 && (
-              <span className="ml-auto rounded-full bg-[var(--bg-tertiary)] px-1.5 leading-[15px] text-[10.5px] font-semibold text-[var(--text-secondary)]">
-                {unscheduled.length}
-              </span>
+            {shownMode === 'week' ? (
+              <>
+                <CalendarDays size={12} className="shrink-0" />
+                <div className="flex items-center rounded-md bg-[var(--bg-secondary)] p-0.5 text-[10.5px]">
+                  <button
+                    onClick={() => setTrayMode('unscheduled')}
+                    className={`rounded px-1.5 py-0.5 transition-colors ${trayMode === 'unscheduled' ? 'bg-[var(--bg-primary)] font-semibold text-[var(--accent)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                  >待办任务</button>
+                  <button
+                    onClick={() => setTrayMode('week')}
+                    className={`rounded px-1.5 py-0.5 transition-colors ${trayMode === 'week' ? 'bg-[var(--bg-primary)] font-semibold text-[var(--accent)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                  >周任务</button>
+                </div>
+                <span className="ml-auto rounded-full bg-[var(--bg-tertiary)] px-1.5 leading-[15px] text-[10.5px] font-semibold text-[var(--text-secondary)]">
+                  {trayMode === 'week' ? weekTasks.length : unscheduled.length}
+                </span>
+              </>
+            ) : (
+              <>
+                <CalendarDays size={12} />
+                <span>日程</span>
+              </>
             )}
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
             {shownMode === 'week' ? (
               <TaskTray
-                todos={unscheduledWithTag}
+                todos={trayMode === 'week' ? weekTasksWithTag : unscheduledWithTag}
                 iconSize={iconSize}
                 quadrantIcon={quadrantIcon}
                 quadrantText={quadrantText}
                 onOpen={openEdit}
+                emptyHint={trayMode === 'week' ? <>本周暂无任务<br />在右侧网格排期或勾选完成</> : undefined}
               />
             ) : (
               <div className="h-full overflow-y-auto">
@@ -637,6 +691,8 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
               quadrantIcon={quadrantIcon}
               quadrantText={quadrantText}
               refreshSignal={weekRefresh}
+              weekOffset={weekOffset}
+              setWeekOffset={setWeekOffset}
               onOpenTodo={openEdit}
               onToggleDone={handleToggleDone}
               onRequestCreate={(dateStr, start, end) => openCreate({ date: dateStr, start, end })}

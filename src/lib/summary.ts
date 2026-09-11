@@ -108,3 +108,37 @@ export function getSummaryWindow(
 
   return null
 }
+
+/**
+ * 扫描未来，找出「下一次」命中总结的窗口（用于推算下期任务的截止时刻）。
+ * 前置约定：必须走 getSummaryWindow（周总结日可配置 + 月总结三模式），不能写死「下周日」。
+ */
+export function getNextSummaryWindow(
+  dateStr: string, weeklyDay: number, monthlyMode: MonthlyMode, monthlyFixedDay: number,
+): PeriodWindow | null {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!y || !m || !d) return null
+  // 从明天起向前扫（最多 400 天，覆盖任何月总结周期）
+  for (let i = 1; i <= 400; i++) {
+    const cur = fmt(new Date(y, m - 1, d + i))
+    const w = getSummaryWindow(cur, weeklyDay, monthlyMode, monthlyFixedDay)
+    if (w) return w
+  }
+  return null
+}
+
+export function addDaysStr(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return fmt(new Date(y, m - 1, d + n))
+}
+
+/**
+ * 自然周下一个周一（与 timetable.mondayOf 同源）：date 当周周一 + 7 天。
+ * 用于「周总结里加的下周任务」落在下一个自然周，与网格列对齐（避免总结日非周日时错位）。
+ */
+export function nextMondayStr(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const dow = (date.getDay() + 6) % 7 // 周一 = 0
+  return fmt(new Date(y, m - 1, d - dow + 7))
+}

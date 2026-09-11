@@ -278,6 +278,11 @@ export interface ScheduleTodo {
    */
   scheduledStart: number | null
   scheduledEnd: number | null
+  /**
+   * 提醒「稍后」（snooze）：在此时间之前不再提醒该任务，ISO 字符串（'YYYY-MM-DD HH:mm'）。
+   * 缺省 / null = 未打盹。本轮日程改造新增的唯一字段。
+   */
+  snoozeUntil?: string | null
   createdAt: string; updatedAt: string
   tag?: ScheduleTag | null
   subtasks?: ScheduleTodo[]
@@ -294,6 +299,8 @@ export interface UpdateScheduleTodoDTO {
   quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string | null
   status?: string; endCriteria?: string; parentId?: string | null
   scheduledStart?: number | null; scheduledEnd?: number | null
+  /** 提醒「稍后」目标时间；传 null 表示清除打盹 */
+  snoozeUntil?: string | null
 }
 
 // knowledge
@@ -1278,8 +1285,6 @@ export interface ElectronAPI {
   quizMigrateStatus: () => Promise<QuizMigrateStatus>
   quizMigrateExport: () => Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }>
   quizMigrateDropPluginData: () => Promise<{ ok: boolean; error?: string }>
-  quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }) => Promise<{ ok: boolean; error?: string }>
-  quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => Promise<{ ok: boolean; favorite: boolean }>
   // fill popup
   isFillPopup: boolean
   isDayPanel: boolean

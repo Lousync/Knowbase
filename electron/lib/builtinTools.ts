@@ -552,7 +552,11 @@ export function registerBuiltinTools(): void {
         date: { type: 'string', description: 'YYYY-MM-DD, 默认今天' },
         title: { type: 'string', description: '待办内容' },
         quadrant: { type: 'number', description: '0紧急重要/1重要不紧急/2紧急不重要/3不重要, 默认1' },
-        time: { type: 'string', description: 'HH:mm 可选' },
+        taskType: { type: 'string', enum: ['plan', 'deadline', 'daily'], description: "任务类型：plan 计划 / deadline 截止类 / daily 零碎当天完成，默认 plan" },
+        time: { type: 'string', description: "截止时刻，完整格式 'YYYY-MM-DD HH:mm'（deadline 类才带）；仅当文本里识别出明确时间承诺才传，否则不传、不编造" },
+        tagId: { type: 'string', description: '标签 ID（来自 schedule:getTags 或列表结果），可选' },
+        scheduledStart: { type: 'number', description: '排期起点（当天分钟数 0-1439，如 09:00=540），配合 date 与 scheduledEnd 落格；可选' },
+        scheduledEnd: { type: 'number', description: '排期终点（当天分钟数），可选' },
       },
       required: ['title'],
     },
@@ -567,16 +571,28 @@ export function registerBuiltinTools(): void {
     if (!title) throw new Error('待办内容不能为空')
     const date = /^\d{4}-\d{2}-\d{2}$/.test(str(args.date)) ? str(args.date) : todayLocal()
     const quadrant = clamp(Math.floor(num(args.quadrant, 1)), 0, 3)
-    const time = /^\d{1,2}:\d{2}$/.test(str(args.time)) ? str(args.time) : null
+    const taskType = (['plan', 'deadline', 'daily'] as const).includes(str(args.taskType) as 'plan' | 'deadline' | 'daily')
+      ? (str(args.taskType) as 'plan' | 'deadline' | 'daily')
+      : 'plan'
+    // 修正真 bug：旧校验 /^\d{1,2}:\d{2}$/ 只认 HH:mm，但 ScheduleTodo.time 实际是 'YYYY-MM-DD HH:mm'，
+    // 放开 AI 写 DDL 会立刻产出畸形数据（各处取得时分用的是 slice(11,13)/slice(14,16)）。
+    const rawTime = str(args.time).trim()
+    const time = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}$/.test(rawTime) ? rawTime.replace('T', ' ') : null
+    // 截止时刻只在 deadline 类带；其他类型即便误传也丢弃，避免脏数据
+    const finalTime = taskType === 'deadline' ? time : null
+    const tagId = str(args.tagId).trim() ? str(args.tagId).trim() : null
+    const scheduledStart = typeof args.scheduledStart === 'number' && Number.isFinite(args.scheduledStart) ? args.scheduledStart : null
+    const scheduledEnd = typeof args.scheduledEnd === 'number' && Number.isFinite(args.scheduledEnd) ? args.scheduledEnd : null
     const id = randomUUID()
     // 写 .knowbase/modules/schedule/todos.json（默认值同表列：plan/pending/sort 0）
     const now = new Date().toISOString()
     vaultCreateTodo({
-      id, title, description: '', date, time, quadrant,
-      task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
+      id, title, description: '', date, time: finalTime, quadrant,
+      task_type: taskType, tag_id: tagId, status: 'pending', sort_order: 0,
       end_criteria: '', parent_id: null,
-      // AI 建的任务默认不排期，落进「待安排」栏等着被拖进日程表
-      scheduled_start: null, scheduled_end: null,
+      // AI 建的任务默认不排期（除非显式传 scheduledStart/End），落进「待安排」栏等着被拖进日程表
+      scheduled_start: scheduledStart, scheduled_end: scheduledEnd,
+      snooze_until: null,
       created_at: now, updated_at: now,
     })
     // 主进程写盘后必须主动广播：日程模块是保活的（切 Tab 不重载），

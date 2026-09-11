@@ -137,14 +137,14 @@ function computeTargetPos(m: PanelMode): { x: number; y: number; width: number }
   // floating
   const w = DEFAULT_W
   // 停靠/贴顶时期存下的位置（y≈工作区顶缘）直接复用，会让漂浮态「一开窗就贴在最上面」，
-  // 且轻微拖动即触发自动停靠 → 判为残留，改回主窗口右侧偏移，给出独立子窗口观感
+  // 且轻微拖动即触发自动停靠 → 判为残留，改回工作区右下角
   const dockResidue = typeof saved.y === 'number' && saved.y - wa.y <= TOP_EDGE_DIRTY
   const x = !dockResidue && typeof saved.x === 'number'
     ? saved.x
-    : (mb ? Math.min(mb.x + mb.width + 12, wa.x + wa.width - w) : wa.x + wa.width - w - 80)
+    : (wa.x + wa.width - w - 24)
   const y = !dockResidue && typeof saved.y === 'number'
     ? saved.y
-    : (mb ? mb.y + 36 : wa.y + 60)
+    : (wa.y + wa.height - DEFAULT_H - 24)
   return { x, y, width: w }
 }
 
@@ -209,9 +209,12 @@ function applyContentSize(scrollW: number, scrollH: number): void {
     const minH = 60
     const maxH = wa.height - 80
     const targetH = Math.max(minH, Math.min(scrollH, maxH))
+    // 工作区右下角锚定：内容长高时窗口向上生长，底部始终贴住工作区下缘
+    const anchorY = wa.y + wa.height - targetH - 24
+    const cur = popout.getBounds()
     if (!firstSizeSet) {
       // 首次：直接贴合内容尺寸并显示（避免开窗先默认高度再缩的闪烁）
-      popout.setSize(w, targetH)
+      popout.setBounds({ x: cur.x, y: anchorY, width: w, height: targetH })
       lastAppliedH = targetH
       lastAppliedW = w
       firstSizeSet = true
@@ -221,7 +224,7 @@ function applyContentSize(scrollW: number, scrollH: number): void {
     }
     if (targetH > lastAppliedH || Math.abs(w - lastAppliedW) > 1) {
       // 内容变高 / 宽度变了 → 跟上；内容变少不缩（保留用户拉大的空间）
-      popout.setSize(w, targetH)
+      popout.setBounds({ x: cur.x, y: anchorY, width: w, height: targetH })
       lastAppliedH = targetH
       lastAppliedW = w
       scheduleSaveBounds()

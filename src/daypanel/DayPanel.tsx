@@ -20,8 +20,20 @@ import { isPlannedOn, currentStreak, buildRecordIndex } from '../modules/toolbox
 import { HabitPanel } from './panel/HabitPanel'
 import { PomodoroPanel, PomodoroPopoutPanel } from './panel/PomodoroPanel'
 import { NavPanel } from './panel/NavPanel'
+import { ReminderBar, type ReminderItem } from './panel/ReminderBar'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/** 'YYYY-MM-DD HH:mm' → 本地时间戳（各处理序与 ScheduleTodo.time 一致，空格视为本地时间） */
+function parseLocalTime(s: string): number {
+  return new Date(s.replace(' ', 'T')).getTime()
+}
+/** 距 now 的 +n 分钟，格式化为 'YYYY-MM-DD HH:mm'（与 ScheduleTodo.time / snoozeUntil 同口径） */
+function addMinutesLocal(n: number): string {
+  const d = new Date(Date.now() + n * 60 * 1000)
+  const p = (x: number) => String(x).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 /** 「今日工作台」四 Tab：日程 / 打卡 / 番茄 / 导航（嵌入式在表头下方，脱离态在底部） */
 const DAY_TABS = [
@@ -150,6 +162,17 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   const pendingCount = topTodos.filter(t => t.status === 'pending').length
   const doneCount = topTodos.filter(t => t.status === 'done').length
 
+  /** 已逾期的 DDL（角标口径）：deadline 类、带 time、未完成、且未处于打盹期内 */
+  const overdueDdls = useMemo<ReminderItem[]>(() => {
+    const now = Date.now()
+    return [...overdue, ...todos]
+      .filter(t => t.taskType === 'deadline' && t.time && t.status === 'pending'
+        && parseLocalTime(t.time) < now
+        && (!t.snoozeUntil || parseLocalTime(t.snoozeUntil) < now))
+      .sort((a, b) => parseLocalTime(a.time!) - parseLocalTime(b.time!))
+      .map(t => ({ id: t.id, title: t.title, time: t.time! }))
+  }, [overdue, todos])
+
   const parsed = useMemo(() => parseQuickDate(quick, todayDate), [quick, todayDate])
   // 任务栏快速添加固定为今日琐碎任务：日期强制今天，时间可用解析结果或手动填
   const finalTime = manualTime !== null ? manualTime : parsed.time
@@ -187,6 +210,16 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
       void load()
     }
   }, [todayStr, load])
+
+  /** 提醒「稍后」：打盹 1 小时（写 snoozeUntil，打盹期内不再提醒该任务） */
+  const snooze = useCallback(async (id: string) => {
+    try {
+      await updateScheduleTodo(id, { snoozeUntil: addMinutesLocal(60) })
+      notifyDataChanged('schedule')
+    } catch (e) {
+      console.error('[DayPanel] snooze 失败', e)
+    }
+  }, [])
 
   const removeTodo = useCallback(async (t: ScheduleTodo) => {
     if (!window.confirm(`删除任务「${t.title}」？`)) return
@@ -271,8 +304,8 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
     >
       <t.icon size={14} strokeWidth={1.8} />
       {t.label}
-      {t.id === 'task' && overdue.length > 0 && (
-        <span className="absolute right-[26%] top-1 h-1.5 w-1.5 rounded-full bg-[var(--danger)]" title={`${overdue.length} 个逾期`} />
+      {t.id === 'task' && overdueDdls.length > 0 && (
+        <span className="absolute right-[26%] top-1 h-1.5 w-1.5 rounded-full bg-[var(--danger)]" title={`${overdueDdls.length} 个逾期截止`} />
       )}
     </button>
   ))
@@ -405,7 +438,7 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
             boxShadow: '0 3px 12px rgb(0 0 0 / 0.18)',
           }}
         />
-        <div className="absolute inset-x-5 top-0 h-[3px] rounded-b bg-[var(--accent)]/70" />
+        <div className={`absolute inset-x-5 top-0 h-[3px] rounded-b ${overdueDdls.length > 0 ? 'bg-[var(--danger)] animate-pulse' : 'bg-[var(--accent)]/70'}`} />
         {pendingCount > 0 && (
           <div
             className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
@@ -421,7 +454,7 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
   if (isWidget) {
     return (
       <div
-        className="flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-2xl border border-[var(--border-color)] p-3 text-[var(--text-primary)]"
+        className={`flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-2xl border p-3 text-[var(--text-primary)] ${overdueDdls.length > 0 ? 'border-[var(--danger)]' : 'border-[var(--border-color)]'}`}
         style={{
           backgroundColor: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
           backdropFilter: 'blur(12px)',
@@ -434,7 +467,14 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
           <span className="text-[11px] font-medium">
             {todayDate.getMonth() + 1}月{todayDate.getDate()}日 {WEEKDAY_LABELS[todayDate.getDay()]}
           </span>
-          <span className="text-[10px] text-[var(--text-muted)]">{widgetInteractive ? '可操作' : '划过激活'}</span>
+          <span className="flex items-center gap-1.5">
+            {overdueDdls.length > 0 && (
+              <span className="rounded-full bg-[var(--danger)] px-1.5 leading-[15px] text-[10px] font-semibold text-white" title={`${overdueDdls.length} 个逾期截止`}>
+                {overdueDdls.length}
+              </span>
+            )}
+            <span className="text-[10px] text-[var(--text-muted)]">{widgetInteractive ? '可操作' : '划过激活'}</span>
+          </span>
         </div>
         <div className="flex items-baseline gap-1 text-[11px]">
           <span className="text-[var(--text-muted)]">今日待办</span>
@@ -607,6 +647,9 @@ export function DayPanel({ mode, panelMode = 'floating', collapsed = false, widg
           : <PomodoroPopoutPanel status={pomodoroStatus} onOpenInMain={() => openInMain('toolbox')} />)}
         {tab === 'nav' && <NavPanel />}
       </div>
+
+      {/* 逾期截止提醒条：贴内容之下、Tab 栏之上，四个 Tab 下都可见，不与内容滚动冲突 */}
+      <ReminderBar items={overdueDdls} onSnooze={snooze} />
 
       {/* 嵌入式全局番茄条：仅运行中显示（暂停/结束即消失），任意 Tab 可见，点击直达番茄 Tab */}
       {mode === 'embedded' && ps.visible && ps.running && (

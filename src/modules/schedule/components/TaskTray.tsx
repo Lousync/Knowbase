@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { ScheduleTodo } from '../../../types'
 import { Zap, Info } from 'lucide-react'
 import {
@@ -22,6 +23,8 @@ interface Props {
   quadrantIcon: QuadrantIcon
   quadrantText: 'show' | 'hide'
   onOpen: (todo: ScheduleTodo) => void
+  /** 空态文案（周任务清单与待安排栏文案不同） */
+  emptyHint?: ReactNode
 }
 
 const TYPE_LABEL: Record<string, string> = { plan: '计划', daily: '当日', deadline: '截止' }
@@ -32,12 +35,13 @@ const SZ = {
   lg: { title: 'text-[13.5px]', meta: 'text-[11px]', icon: 16, pad: 'px-3 py-2.5', gap: 'mb-2' },
 }
 
-export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }: Props) {
+export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen, emptyHint }: Props) {
   const s = SZ[iconSize]
 
   /** 按下后位移超过阈值才算起拖（否则是一次点击 → 打开编辑） */
   function handleCardPointerDown(todo: ScheduleTodo, e: React.PointerEvent) {
     if (e.button !== 0) return
+    if (todo.status === 'done') return
     const sx = e.clientX
     const sy = e.clientY
     let started = false
@@ -72,7 +76,7 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
       <div data-tray-drop className="flex h-full flex-col">
         <div className="flex-1 flex items-center justify-center px-4">
           <p className="text-[11.5px] text-[var(--text-disabled)] text-center leading-relaxed">
-            全部任务都已排期<br />把网格里的卡片拖回来可取消排期
+            {emptyHint ?? <>全部任务都已排期<br />把网格里的卡片拖回来可取消排期</>}
           </p>
         </div>
       </div>
@@ -83,6 +87,7 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
     <div data-tray-drop className="group flex h-full flex-col">
       <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {todos.map(todo => {
+          const done = todo.status === 'done'
           const tag = todo.tag ?? null
           const q = quadrantMeta(todo.quadrant)
           const colorCls = QUADRANT_TEXT_CLASS[todo.quadrant] ?? 'text-[var(--text-muted)]'
@@ -95,8 +100,8 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
                 if (Date.now() - dragGuard.lastEnd < 250) return
                 onOpen(todo)
               }}
-              className={`kb-item-in group relative flex items-center gap-2 ${s.pad} ${s.gap} bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md cursor-grab active:cursor-grabbing hover:border-[var(--accent)] transition-colors`}
-              title="拖到右侧日程表即可排期"
+              className={`kb-item-in group relative flex items-center gap-2 ${s.pad} ${s.gap} bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md ${done ? 'opacity-60' : 'cursor-grab active:cursor-grabbing hover:border-[var(--accent)]'} transition-colors`}
+              title={done ? '已完成（周任务清单含已完成）' : '拖到右侧日程表即可排期'}
             >
               {/* 标签色条 */}
               <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-md" style={{ background: tag?.color ?? 'var(--border-color)' }} />
@@ -119,7 +124,7 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
                   )}
                   {tag && <span className={`${s.meta} text-[var(--text-muted)] truncate`}>{tag.name}</span>}
                 </div>
-                <p className={`${s.title} font-medium text-[var(--text-primary)] mt-0.5 leading-snug truncate`}>{todo.title}</p>
+                <p className={`${s.title} font-medium ${done ? 'text-[var(--text-muted)] line-through' : 'text-[var(--text-primary)]'} mt-0.5 leading-snug truncate`}>{todo.title}</p>
               </div>
             </div>
           )

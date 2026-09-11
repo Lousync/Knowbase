@@ -39,6 +39,9 @@ interface Props {
   quadrantText: 'show' | 'hide'
   /** 外部数据变更信号（待安排栏增删、跨窗口同步等）→ 重新拉取本周 */
   refreshSignal: number
+  /** 周偏移（与左栏「周任务」清单共用，翻页时两侧同步） */
+  weekOffset: number
+  setWeekOffset: React.Dispatch<React.SetStateAction<number>>
   onOpenTodo: (todo: ScheduleTodo) => void
   onToggleDone: (todo: ScheduleTodo) => void
   /** 空白处拖框新建：交给上层打开编辑弹窗（预填日期与时段） */
@@ -60,6 +63,7 @@ function snapshotOf(todo: ScheduleTodo): DragTodoSnapshot {
 
 export function TimetableView({
   isActive, tags, iconSize, quadrantIcon, quadrantText, refreshSignal,
+  weekOffset, setWeekOffset,
   onOpenTodo, onToggleDone, onRequestCreate, onUnschedule, onChanged,
 }: Props) {
   const today = localToday()
@@ -79,7 +83,6 @@ export function TimetableView({
   const dayEndMin = endHour * 60
   const totalH = (endHour - startHour) * pxPerHour
 
-  const [weekOffset, setWeekOffset] = useState(0)
   const [rows, setRows] = useState<ScheduleTodo[]>([])
   const [rangeOpen, setRangeOpen] = useState(false)
   const [drop, setDrop] = useState<{ day: number; start: number; duration: number } | null>(null)
@@ -202,6 +205,15 @@ export function TimetableView({
     const mins = inWeek.reduce((a, t) => a + ((t.scheduledEnd ?? 0) - (t.scheduledStart ?? 0)), 0)
     return { count: inWeek.length, hours: (mins / 60).toFixed(1).replace(/\.0$/, '') }
   }, [scheduled, weekStart, weekEnd])
+
+  /**
+   * 本周全部未完成任务里「带截止时间」的（与排期解耦）：红线数据源。
+   * 未排期的本周 DDL 任务也在这里（之前被 scheduled 过滤掉，导致「先看线后排期」完全反了）。
+   */
+  const weekDdl = useMemo(
+    () => rows.filter(t => t.status === 'pending' && !!t.time),
+    [rows],
+  )
 
   // ---- 提示浮标 ----
   const showHint = useCallback((x: number, y: number, text: string) => {
@@ -572,7 +584,7 @@ export function TimetableView({
             const ordinary = dayAll.filter(t =>
               (t.scheduledEnd ?? 0) > dayStartMin && (t.scheduledStart ?? 0) < dayEndMin)
             const laid = layoutDay(ordinary)
-            const dues = dueOfDay(dayAll.filter(t => t.status === 'pending'), ds)
+            const dues = dueOfDay(weekDdl, ds)
             const ghosts = isToday ? deferredForToday : []
             const isDropTarget = drop?.day === dayIdx
 
@@ -595,13 +607,13 @@ export function TimetableView({
                   </div>
                 ))}
 
-                {/* 截止红线 */}
-                {dues.map((min, i) => (
-                  <div key={`due${i}`} className="absolute left-0 right-0 z-[4] pointer-events-none"
-                    style={{ top: (min - dayStartMin) * pxPerMin }}>
+                {/* 截止红线（标注归属任务） */}
+                {dues.map((d, i) => (
+                  <div key={`due${d.id}`} className="absolute left-0 right-0 z-[4] pointer-events-none"
+                    style={{ top: (d.min - dayStartMin) * pxPerMin }}>
                     <div className="border-t border-dashed border-[var(--danger)]" />
-                    <span className="absolute right-1 -top-2 px-1 leading-[14px] rounded-[3px] text-[9.5px] font-semibold text-white bg-[var(--danger)]">
-                      截止 {fmtMin(min)}
+                    <span className="absolute left-1 -top-2 max-w-[calc(100%-8px)] truncate px-1 leading-[14px] rounded-[3px] text-[9.5px] font-semibold text-white bg-[var(--danger)]" title={`${d.title} · 截止 ${fmtMin(d.min)}`}>
+                      截止 {fmtMin(d.min)} · {d.title}
                     </span>
                   </div>
                 ))}
