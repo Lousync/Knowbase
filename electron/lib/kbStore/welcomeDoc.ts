@@ -29,6 +29,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>欢迎 · Phrontis</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
 <script>
 (function () {
   var root = document.documentElement;
@@ -36,7 +37,6 @@ export function buildWelcomeDocContent(now = new Date()): string {
      只决定明暗是刻意的——它在文档解析前就执行，用来避免首帧闪错色板。 */
   var t = null;
   try { var q = new URLSearchParams(location.search).get('theme'); if (q === 'light' || q === 'dark') t = q; } catch (e) {}
-  if (!t) { try { var s = localStorage.getItem('kb-welcome-theme'); if (s === 'light' || s === 'dark') t = s; } catch (e) {} }
   if (!t) { try { t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch (e) { t = 'light'; } }
   try { root.setAttribute('data-theme', t); } catch (e) {}
 
@@ -116,7 +116,8 @@ export function buildWelcomeDocContent(now = new Date()): string {
     border-bottom:1px solid var(--line);
     display:flex; align-items:center; gap:18px; padding:0 22px;
   }
-  .nav-brand { font-size:13px; font-weight:600; letter-spacing:-.01em; }
+  .nav-brand { font-size:13px; font-weight:600; letter-spacing:-.01em; display:inline-flex; align-items:center; gap:6px; }
+  .brand-ico { width:16px; height:16px; border-radius:4px; vertical-align:-3px; margin-right:6px; }
   .nav-links { display:flex; gap:4px; margin-left:auto; }
   .nav-links a {
     font:600 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -132,8 +133,6 @@ export function buildWelcomeDocContent(now = new Date()): string {
   }
   .icon-btn:hover { color:var(--ink); border-color:var(--line-2); }
   .icon-btn svg { width:14px; height:14px; }
-  html[data-theme="dark"] .icon-sun { display:none; }
-  html:not([data-theme="dark"]) .icon-moon { display:none; }
   .progress {
     position:fixed; top:0; left:0; height:2px; width:100%; z-index:70;
     background:var(--accent); transform:scaleX(0); transform-origin:0 50%;
@@ -599,19 +598,11 @@ export function buildWelcomeDocContent(now = new Date()): string {
 <div class="progress" id="prog"></div>
 
 <nav class="nav">
-  <span class="nav-brand">Phrontis · 欢迎</span>
+  <span class="nav-brand"><img class="brand-ico" alt="" src="data:image/png;base64,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">Phrontis · 欢迎</span>
   <div class="nav-links">
     <a href="#laws">01</a><a href="#loop">02</a><a href="#ai">03</a>
     <a href="#mods">04</a><a href="#notes">05</a><a href="#keys">06</a>
   </div>
-  <button class="icon-btn" id="themeBtn" title="切换深浅色">
-    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-      <circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>
-    </svg>
-    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-      <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/>
-    </svg>
-  </button>
 </nav>
 
 <div class="wrap">
@@ -636,7 +627,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
     <div class="laws">
       <div class="law"><span class="law-i">Ⅰ</span><div>
         <b>仓库就是一个普通文件夹</b>
-        <p>所有内容都是文件夹里的文件，用记事本、VS Code、Obsidian 都能直接打开——没有私有格式锁定，数据永远是你的。</p>
+        <p>所有内容都是文件夹里的文件，用任何编辑器都能直接打开——没有私有格式锁定，数据永远是你的。</p>
       </div></div>
       <div class="law"><span class="law-i">Ⅱ</span><div>
         <b>编辑器负责写，知识库负责读</b>
@@ -708,27 +699,10 @@ export function buildWelcomeDocContent(now = new Date()): string {
         <div class="pane" data-pane="graph">
           <div class="m-graph">
             <svg viewBox="0 0 300 200" id="graph">
-              <g class="g-links">
-                <path class="g-link" d="M150 100 L232 52"/>
-                <path class="g-link" d="M150 100 L258 118"/>
-                <path class="g-link" d="M150 100 L74 152"/>
-                <path class="g-link" d="M150 100 L188 166"/>
-                <path class="g-link" d="M258 118 L188 166"/>
-                <path class="g-link" d="M232 52 L258 118"/>
-              </g>
-              <g>
-                <circle class="g-node" cx="150" cy="100" r="21" style="animation-delay:.05s"/>
-                <text class="g-label" x="150" y="86" style="animation-delay:.35s">第一篇</text>
-                <circle class="g-node" cx="232" cy="52" r="14" style="animation-delay:.25s"/>
-                <text class="g-label" x="232" y="80" style="animation-delay:.5s">归档</text>
-                <circle class="g-node" cx="258" cy="118" r="14" style="animation-delay:.45s"/>
-                <text class="g-label" x="258" y="146" style="animation-delay:.65s">双链</text>
-                <circle class="g-node" cx="74" cy="152" r="12" style="animation-delay:.6s"/>
-                <text class="g-label" x="74" y="176" style="animation-delay:.8s">标签</text>
-                <circle class="g-node" cx="188" cy="166" r="12" style="animation-delay:.75s"/>
-                <text class="g-label" x="188" y="190" style="animation-delay:.9s">图谱</text>
-              </g>
-            </svg>
+              <g class="g-links" id="gLinks"></g>
+                <g class="g-nodes" id="gNodes"></g>
+                <g class="g-labels" id="gLabels"></g>
+              </svg>
           </div>
         </div>
       </div>
@@ -892,7 +866,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
       <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4.5" width="14" height="12" rx="2"/><path d="M3 8.5h14M7 3v3M13 3v3"/></svg></span><div><b>日程 · 打卡</b><span>日历视图与四象限待办，习惯打卡到点提醒</span></div></div>
       <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 5.5h13v8h-7l-3.5 3v-3h-2.5z"/></svg></span><div><b>说说</b><span>带心情与图片的碎片记录，构成你的时间线</span></div></div>
       <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="6" width="14" height="10" rx="2"/><path d="M7 6V4.5h6V6M3 10h14"/></svg></span><div><b>工具箱</b><span>番茄钟、网址导航、密码本、局域网互传</span></div></div>
-      <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10 3l1.7 4.3L16 9l-4.3 1.7L10 15l-1.7-4.3L4 9l4.3-1.7z"/></svg></span><div><b>AI 助手 · AI 教学</b><span>边看边问的侧栏，和用你资料讲课的工作台</span></div></div>
+      <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10 3l1.7 4.3L16 9l-4.3 1.7L10 15l-1.7-4.3L4 9l4.3-1.7z"/></svg></span><div><b>AI 侧栏 · AI 教学</b><span>边看边问的侧栏，和用你资料讲课的工作台</span></div></div>
       <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><path d="M14 11v6M11 14h6"/></svg></span><div><b>插件</b><span>官方市场：主题、预设、社区技能与知识包，安全分级</span></div></div>
       <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M8.2 8.2A1.9 1.9 0 0 1 11.8 9c0 1.3-1.8 1.4-1.8 2.6"/><circle cx="10" cy="14.4" r=".7" fill="currentColor"/></svg></span><div><b>帮助</b><span>每个功能的完整手册，右下角一键反馈</span></div></div>
       <div class="mod"><span class="ic-wrap"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 6h12M6.5 6V4.5h7V6M5.5 6l.8 10h7.4l.8-10"/></svg></span><div><b>回收站 · 导出</b><span>删除可还原；工具箱内一键 ZIP 备份全部数据</span></div></div>
@@ -922,7 +896,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
   <footer>
     <p>想更细致地了解每一步，应用内 <strong>帮助 →《快速上手》</strong> 是这份导览的加长版。</p>
     <p>这份文件属于你：改写它、删掉它、把它留成一年后的回忆，都可以。</p>
-    <div class="sig">KNOWBASE · VAULT ${year} · LOCAL FIRST, ALWAYS</div>
+    <div class="sig">PHRONTIS · VAULT ${year} · LOCAL FIRST, ALWAYS</div>
   </footer>
 
 </div>
@@ -946,20 +920,6 @@ export function buildWelcomeDocContent(now = new Date()): string {
   var $ = function (s) { return document.querySelector(s); };
   var $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
-  /* ---------- 主题 ---------- */
-  var root = document.documentElement;
-  /* 与宿主 WelcomeHtmlView 的 VAR_MAP 对应：这些键可能已被宿主写成行内自定义属性。
-     行内声明优先级高于 :root / html[data-theme]，手动切换前必须先摘掉，
-     否则 data-theme 变了、底色却还是宿主那套（表现为按钮"失灵"）。
-     摘掉后回到页面自带的明暗色板 = 「手动指定」暂时压过「跟随软件」；重开页面又回到跟随。 */
-  var HOST_VARS = ['--bg', '--surface', '--surface-2', '--ink', '--ink-2', '--ink-3',
-    '--accent', '--accent-ink', '--ok', '--amber', '--amber-line', '--nav', '--accent-soft', '--ok-soft', '--amber-soft'];
-  $('#themeBtn').addEventListener('click', function () {
-    for (var i = 0; i < HOST_VARS.length; i++) { try { root.style.removeProperty(HOST_VARS[i]); } catch (e) {} }
-    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try { localStorage.setItem('kb-welcome-theme', next); } catch (e) {}
-  });
 
   /* ---------- 阅读进度 ---------- */
   var bar = $('#prog');
@@ -1049,10 +1009,102 @@ export function buildWelcomeDocContent(now = new Date()): string {
         caret.style.display = '';
         typeThenWrap(typeBox, TXT_2, TXT_2_HTML, 26);
       } },
-    { view: 'graph', cap: '⑤ 打开图谱——你的知识网络，开始生长。', run: function () {
+    { view: 'graph', cap: '⑤ 打开图谱——节点可以拖着玩，知识网络开始生长。', run: function () {
         graph.classList.remove('play'); void graph.offsetWidth; graph.classList.add('play');
       } }
   ];
+
+  /* ---------- 图谱：力导向 + 可拖拽（节点可以拖着玩） ---------- */
+  var NS = 'http://www.w3.org/2000/svg';
+  var gSvg = $('#graph'), gLinks = $('#gLinks'), gNodesG = $('#gNodes'), gLabelsG = $('#gLabels');
+  var GW = 300, GH = 200;
+  var gNodes = [
+    { x: 150, y: 100, r: 21, home: [150, 100], vx: 0, vy: 0, label: '第一篇', core: true, d: .05 },
+    { x: 232, y: 52,  r: 14, home: [232, 52],  vx: 0, vy: 0, label: '归档', d: .25 },
+    { x: 258, y: 118, r: 14, home: [258, 118], vx: 0, vy: 0, label: '双链', d: .45 },
+    { x: 74,  y: 152, r: 12, home: [74, 152],  vx: 0, vy: 0, label: '标签', d: .6 },
+    { x: 188, y: 166, r: 12, home: [188, 166], vx: 0, vy: 0, label: '图谱', d: .75 }
+  ];
+  var gEdges = [[0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [2, 4]];
+  var gLinkEls = gEdges.map(function () {
+    var l = document.createElementNS(NS, 'path');
+    l.setAttribute('class', 'g-link'); l.style.animationDelay = '.15s';
+    gLinks.appendChild(l); return l;
+  });
+  gNodes.forEach(function (n) {
+    var c = document.createElementNS(NS, 'circle');
+    c.setAttribute('class', 'g-node'); c.setAttribute('r', n.r);
+    c.style.animationDelay = n.d + 's';
+    if (n.core) c.style.strokeWidth = '2';
+    c.style.cursor = 'grab';
+    gNodesG.appendChild(c); n.el = c;
+    var t = document.createElementNS(NS, 'text');
+    t.setAttribute('class', 'g-label');
+    t.style.animationDelay = (n.d + .3) + 's';
+    t.textContent = n.label;
+    gLabelsG.appendChild(t); n.tEl = t;
+  });
+  var gDrag = null, gRunning = false;
+  var gReduced = false; try { gReduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  function gPt(e) {
+    var r = gSvg.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * GW, y: (e.clientY - r.top) / r.height * GH };
+  }
+  gSvg.addEventListener('pointerdown', function (e) {
+    var p = gPt(e), best = null, bd = 1e9;
+    gNodes.forEach(function (n) {
+      var d = Math.hypot(n.x - p.x, n.y - p.y);
+      if (d < n.r + 8 && d < bd) { bd = d; best = n; }
+    });
+    if (!best) return;
+    if (playing) setPlaying(false);
+    gDrag = best; best.vx = 0; best.vy = 0;
+    try { gSvg.setPointerCapture(e.pointerId); } catch (x) {}
+    gSvg.style.cursor = 'grabbing';
+    gStart();
+    e.preventDefault();
+  });
+  gSvg.addEventListener('pointermove', function (e) {
+    if (!gDrag) return;
+    var p = gPt(e); gDrag.x = p.x; gDrag.y = p.y; gDrag.vx = 0; gDrag.vy = 0; gStart();
+  });
+  function gUp() { gDrag = null; gSvg.style.cursor = 'default'; }
+  gSvg.addEventListener('pointerup', gUp);
+  gSvg.addEventListener('pointercancel', gUp);
+  function gStart() { if (!gRunning) { gRunning = true; requestAnimationFrame(gFrame); } }
+  function gFrame(t) {
+    var i, n;
+    for (i = 0; i < gNodes.length; i++) {
+      n = gNodes[i];
+      if (n === gDrag) continue;
+      n.vx += (n.home[0] - n.x) * .004 + Math.sin((t || 0) / 900 + i * 1.7) * .012;
+      n.vy += (n.home[1] - n.y) * .004 + Math.cos((t || 0) / 1100 + i * 2.3) * .010;
+    }
+    gEdges.forEach(function (e) {
+      var a = gNodes[e[0]], b = gNodes[e[1]];
+      var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+      var rest = Math.hypot(a.home[0] - b.home[0], a.home[1] - b.home[1]);
+      var f = (d - rest) * .015, fx = dx / d * f, fy = dy / d * f;
+      a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+    });
+    for (i = 0; i < gNodes.length; i++) {
+      n = gNodes[i];
+      if (n === gDrag) { n.vx = 0; n.vy = 0; }
+      else { n.vx *= .90; n.vy *= .90; n.x += n.vx; n.y += n.vy; }
+      n.x = Math.max(14, Math.min(GW - 14, n.x));
+      n.y = Math.max(12, Math.min(GH - 12, n.y));
+      n.el.setAttribute('cx', n.x); n.el.setAttribute('cy', n.y);
+      n.tEl.setAttribute('x', n.x);
+      n.tEl.setAttribute('y', n.core ? n.y + 3 : n.y + n.r + 11);
+    }
+    gEdges.forEach(function (e, k) {
+      var a = gNodes[e[0]], b = gNodes[e[1]];
+      gLinkEls[k].setAttribute('d', 'M' + a.x + ' ' + a.y + ' L' + b.x + ' ' + b.y);
+    });
+    if (!gReduced || gDrag) requestAnimationFrame(gFrame);
+    else gRunning = false;
+  }
+  gStart();
 
   var idx = 0, playing = false, stepTimer = null;
 
