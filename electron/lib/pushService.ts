@@ -264,7 +264,7 @@ export async function deliverLog(id: number): Promise<{ ok: boolean; error?: str
 export async function testPush(cfg: SuperviseConfig): Promise<{ ok: boolean; error?: string }> {
   try {
     const req = adaptPush(
-      { title: 'Knowbase 测试消息', contentMd: '这是一条测试消息，收到说明远程监督推送配置成功 ✅' },
+      { title: 'Phrontis 测试消息', contentMd: '这是一条测试消息，收到说明远程监督推送配置成功 ✅' },
       cfg
     )
     await postOnce(req.url, req.body, req.contentType)
@@ -313,7 +313,7 @@ export async function notifyCheckin(habitId: string, date: string): Promise<void
       `- 日期：${date}`,
       streak > 1 ? `- 连续打卡：${streak} 天` : '',
       '',
-      `> 来自 Knowbase 远程监督`,
+      `> 来自 Phrontis 远程监督`,
     ].filter(Boolean).join('\n')
     const id = insertLog('instant', habitId, title, content)
     if (isInQuietHours(cfg)) {
@@ -345,7 +345,7 @@ async function buildDailySummary(date: string): Promise<PushPayload> {
       `**${date} 打卡情况：${count}/${habits.length} 完成**`,
       ...(lines.length > 0 ? lines : ['- （暂无习惯）']),
       '',
-      `> 来自 Knowbase 远程监督`,
+      `> 来自 Phrontis 远程监督`,
     ].join('\n'),
   }
 }

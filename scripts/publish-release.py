@@ -21,7 +21,7 @@ import re
 import subprocess
 import sys
 
-REPO = 'Lousync/Knowbase'
+REPO = 'Lousync/Phrontis'
 
 
 def run(cmd, **kw):

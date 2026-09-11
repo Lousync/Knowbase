@@ -1020,7 +1020,7 @@ export function PluginsModule() {
         </div>
 
         <div className="px-3 py-2 border-t border-[var(--border-color)] shrink-0">
-          <span className="text-[10px] text-[var(--text-disabled)]">插件来自 GitHub · Lousync/Knowbase-plugins</span>
+          <span className="text-[10px] text-[var(--text-disabled)]">插件来自 GitHub · Lousync/Phrontis-plugins</span>
         </div>
       </div>
 

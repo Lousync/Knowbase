@@ -5,7 +5,7 @@ import { loadHelpDocs, type HelpDoc } from './docsLoader'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { openExternal } from '../../lib/ipc'
 
-const ISSUES_URL = 'https://github.com/Lousync/Knowbase/issues'
+const ISSUES_URL = 'https://github.com/Lousync/Phrontis/issues'
 
 // Module-level target for cross-component navigation (toast "查看详情" etc.)
 let pendingDocId: string | null = null

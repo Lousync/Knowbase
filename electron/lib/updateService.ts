@@ -13,7 +13,7 @@ import { pipeline } from 'stream/promises'
  *       失效自动回退直连;安装:运行下载好的安装包。
  */
 
-const REPO = 'Lousync/Knowbase'
+const REPO = 'Lousync/Phrontis'
 const API_LATEST = `https://api.github.com/repos/${REPO}/releases/latest`
 const RELEASES_PAGE = `https://github.com/${REPO}/releases`
 

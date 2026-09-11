@@ -22,7 +22,7 @@ export function renderPage(hostname: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Knowbase 设备传输</title>
+<title>Phrontis 设备传输</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #1f2329; padding: 14px; min-height: 100vh; }

@@ -28,7 +28,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>欢迎 · Knowbase</title>
+<title>欢迎 · Phrontis</title>
 <script>
 (function () {
   var root = document.documentElement;
@@ -599,7 +599,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
 <div class="progress" id="prog"></div>
 
 <nav class="nav">
-  <span class="nav-brand">Knowbase · 欢迎</span>
+  <span class="nav-brand">Phrontis · 欢迎</span>
   <div class="nav-links">
     <a href="#laws">01</a><a href="#loop">02</a><a href="#ai">03</a>
     <a href="#mods">04</a><a href="#notes">05</a><a href="#keys">06</a>
@@ -617,10 +617,10 @@ export function buildWelcomeDocContent(now = new Date()): string {
 <div class="wrap">
 
   <header class="hero">
-    <div class="kicker">KNOWBASE · 本地优先的个人知识系统</div>
+    <div class="kicker">PHRONTIS · 本地优先的个人知识系统</div>
     <h1>欢迎来到<br><em>你自己的仓库</em></h1>
     <p class="lede">
-      这是 Knowbase 为你生成的第一份文件，读完大约 3 分钟。它和一篇普通笔记没有任何区别——
+      这是 Phrontis 为你生成的第一份文件，读完大约 3 分钟。它和一篇普通笔记没有任何区别——
       你可以改写它、删掉它，应用的一切功能都不会受影响。
     </p>
     <div class="meta">
@@ -1016,7 +1016,7 @@ export function buildWelcomeDocContent(now = new Date()): string {
       treeNew = $('#treeNew'), kbNew = $('#kbNew'), kbPill = $('#kbPill'),
       kbCount = $('#kbCount'), typeBox = $('#typeBox'), caret = $('#caret'), graph = $('#graph');
 
-  var TXT_1 = '今天搞懂了 Knowbase：仓库只是一个文件夹，写东西在编辑器，读东西在知识库。';
+  var TXT_1 = '今天搞懂了 Phrontis：仓库只是一个文件夹，写东西在编辑器，读东西在知识库。';
   var TXT_2 = '再补一句：见 [[我的第一篇笔记]]，两根线就连上了。';
   var TXT_2_HTML = '再补一句：见 <span class="link">[[我的第一篇笔记]]</span>，两根线就连上了。';
 

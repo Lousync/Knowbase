@@ -115,7 +115,7 @@ export function Onboarding({ onComplete, onSwitchTab }: { onComplete: () => void
               <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mx-auto mb-5">
                 <Sparkles size={32} className="text-[var(--accent)]" />
               </div>
-              <h1 className="text-[22px] font-semibold text-[var(--text-primary)] mb-2">欢迎使用 Knowbase</h1>
+              <h1 className="text-[22px] font-semibold text-[var(--text-primary)] mb-2">欢迎使用 Phrontis</h1>
               <p className="text-[13px] text-[var(--text-muted)] leading-relaxed max-w-[380px] mx-auto">
                 一款<strong className="text-[var(--text-secondary)]">本地优先</strong>的个人知识管理应用——
                 数据全部保存在你自己的电脑上，无需注册、没有云端。

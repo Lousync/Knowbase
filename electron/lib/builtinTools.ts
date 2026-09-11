@@ -643,13 +643,13 @@ export function registerBuiltinTools(): void {
     return { source, count: results.length, results }
   })
 
-  // 14. builtin.help.search —— Knowbase 官方手册检索（跨模块通用，不设 module）
+  // 14. builtin.help.search —— Phrontis 官方手册检索（跨模块通用，不设 module）
   //     背景：帮助文档原先只在渲染层 bundle 里，AI 完全读不到 → 答不了「知识库为什么看不到我的文件」。
   //     迁到 resources/help 后由本工具按需检索（见 docs/ai-learn-center-design.md §7.5）。
   registerTool({
     name: 'builtin.help.search',
-    title: '检索 Knowbase 使用手册',
-    description: '检索本软件（Knowbase）的官方使用手册。当用户询问「这个软件怎么用 / 某功能在哪 / 为什么某个行为不符合预期 / 怎么备份 / 权限怎么设 / 快捷键是什么」这类关于软件自身的问题时，先调用本工具查手册再回答，不要凭猜测描述软件行为。也可用 id 参数直接读取某一篇全文',
+    title: '检索 Phrontis 使用手册',
+    description: '检索本软件（Phrontis）的官方使用手册。当用户询问「这个软件怎么用 / 某功能在哪 / 为什么某个行为不符合预期 / 怎么备份 / 权限怎么设 / 快捷键是什么」这类关于软件自身的问题时，先调用本工具查手册再回答，不要凭猜测描述软件行为。也可用 id 参数直接读取某一篇全文',
     inputSchema: {
       type: 'object',
       properties: {

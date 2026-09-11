@@ -208,7 +208,7 @@ function createTray(): void {
     }
     if (process.platform === 'win32') img = img.resize({ width: 16, height: 16 })
     tray = new Tray(img)
-    tray.setToolTip('Knowbase · 日程打卡')
+    tray.setToolTip('Phrontis · 日程打卡')
     const rebuildMenu = () => {
       tray?.setContextMenu(Menu.buildFromTemplate([
         { label: '显示主窗口', click: showMainWindow },
@@ -219,7 +219,7 @@ function createTray(): void {
           { label: '桌面小组件', type: 'radio', checked: getPanelMode() === 'desktop-widget', click: () => setPanelMode('desktop-widget') },
         ]},
         { type: 'separator' },
-        { label: '退出 Knowbase', click: () => { isQuitting = true; app.quit() } },
+        { label: '退出 Phrontis', click: () => { isQuitting = true; app.quit() } },
       ]))
     }
     rebuildMenu()
@@ -241,7 +241,7 @@ function createWindow(): void {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: 'Knowbase',
+    title: 'Phrontis',
     frame: false,                          // 无边框 → 自定义标题栏
     titleBarStyle: 'hidden',              // macOS 隐藏原生标题栏
     transparent: true,                     // 透明底 → 根容器 18px 自绘圆角（最大化时渲染层自动切直角）
@@ -263,7 +263,7 @@ function createWindow(): void {
     event.preventDefault()
   })
 
-  console.log('[Boot] Knowbase main ready - net-v2 -', app.getVersion())
+  console.log('[Boot] Phrontis main ready - net-v2 -', app.getVersion())
 
   // 开发模式：F12 切换 DevTools（默认菜单已禁用）
   mainWindow.webContents.on('before-input-event', (_event, input) => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-发布错题本插件到插件市场（Lousync/Knowbase-plugins）。
+发布错题本插件到插件市场（Lousync/Phrontis-plugins）。
 流程：质量门(manifest/zip 一致性/防重复) → 生成 registry.json + CHANGELOG → git data API 链原子提交 → 验证 sha256。
 用法：python scripts/publish-quizbook.py --zip samples/quizbook-0.2.0.zip --version 0.2.0 --name "错题本（插件版）" --desc "..." [--changelog "..."]
 """
@@ -15,7 +15,7 @@ import sys
 import tempfile
 import zipfile
 
-REPO = 'Lousync/Knowbase-plugins'
+REPO = 'Lousync/Phrontis-plugins'
 BRANCH = 'main'
 PLUGIN_ID = 'knowbase.quizbook'
 TODAY = '2026-08-30'

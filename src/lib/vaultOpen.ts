@@ -24,7 +24,7 @@ export async function openVaultWithGuide(): Promise<OpenedVault | null> {
   if ('notVault' in res) {
     const ok = await showGlobalConfirm({
       title: '该文件夹不是仓库',
-      message: `「${res.name}」内没有 .knowbase 数据目录，还不是 Knowbase 仓库。\n要把它初始化为仓库吗？`,
+      message: `「${res.name}」内没有 .knowbase 数据目录，还不是 Phrontis 仓库。\n要把它初始化为仓库吗？`,
       confirmLabel: '初始化为仓库',
       cancelLabel: '取消',
       variant: 'default',

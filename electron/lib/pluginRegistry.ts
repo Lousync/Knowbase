@@ -37,10 +37,10 @@ function userGhMirror(): string | null {
 
 // registry 拉取顺序:ghproxy 节点(实时性好,jsDelivr CDN 缓存可达 24h 会给陈旧列表) → raw → jsDelivr
 const REGISTRY_MIRRORS = [
-  `${DEFAULT_PLUGIN_MIRROR}/https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json`,
-  'https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json',
-  'https://cdn.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
-  'https://fastly.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
+  `${DEFAULT_PLUGIN_MIRROR}/https://raw.githubusercontent.com/Lousync/Phrontis-plugins/main/registry.json`,
+  'https://raw.githubusercontent.com/Lousync/Phrontis-plugins/main/registry.json',
+  'https://cdn.jsdelivr.net/gh/Lousync/Phrontis-plugins@main/registry.json',
+  'https://fastly.jsdelivr.net/gh/Lousync/Phrontis-plugins@main/registry.json',
 ]
 // 下载镜像:raw 失败时自动改走 jsDelivr 的 GitHub 镜像(国内可达性好)
 const TRUSTED_HOSTS = new Set([
@@ -529,7 +529,7 @@ async function fetchRegistryRaw(): Promise<any> {
   let lastErr: unknown = null
   for (const url of REGISTRY_MIRRORS) {
     try {
-      const res = await fetchWithTimeout(url, { Accept: 'application/vnd.github+json', 'User-Agent': 'Knowbase-App' })
+      const res = await fetchWithTimeout(url, { Accept: 'application/vnd.github+json', 'User-Agent': 'Phrontis-App' })
       if (!res.ok) { lastErr = new Error(`${new URL(url).hostname} 返回 ${res.status}`); continue }
       const data = await res.json()
       if (!data || !Array.isArray(data.plugins)) throw new Error('registry.json 格式非法')
@@ -721,7 +721,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
         if (round > 0) await new Promise(r => setTimeout(r, round === 1 ? 2000 : 6000))
         for (const u of mirrorCandidates(url)) {
           try {
-            buf = await downloadZipStreaming(u, { 'User-Agent': 'Knowbase-App' }, (r, t) => {
+            buf = await downloadZipStreaming(u, { 'User-Agent': 'Phrontis-App' }, (r, t) => {
               try { push(r, t, new URL(u).hostname) } catch { /* ignore */ }
             })
             usedHost = new URL(u).hostname
