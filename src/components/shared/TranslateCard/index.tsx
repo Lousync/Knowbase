@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages, Star, Volume2 } from 'lucide-react'
+import { X, Copy, Check, Loader2, Sparkles, BookOpen, Languages, Volume2 } from 'lucide-react'
 import { showToast } from '../../../lib/toast'
 import { speak } from '../../../lib/tts'
-import { copyText, dictLookup, translateInvoke, wordbookAdd, wordbookCheck } from '../../../lib/ipc'
-import { useSettings } from '../../../lib/SettingsContext'
+import { copyText, dictLookup, translateInvoke } from '../../../lib/ipc'
 import type { DictLookupResult, TranslateMode } from '../../../lib/translateTypes'
 import { MarkdownPreview } from '../MarkdownPreview'
 
@@ -37,7 +36,6 @@ function isSingleWord(text: string): boolean {
 
 export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
   const mode: TranslateMode = isSingleWord(text) ? 'word' : 'sentence'
-  const { s } = useSettings()
   const [dict, setDict] = useState<DictLookupResult | null>(null)
   const [aiMd, setAiMd] = useState<string>('')
   const [aiModel, setAiModel] = useState<string>('')
@@ -46,28 +44,7 @@ export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
   const [aiStarted, setAiStarted] = useState(mode === 'sentence') // 句子模式挂载即翻译
   const [cached, setCached] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [starred, setStarred] = useState(false)
   const reqSeqRef = useRef(0)
-
-  // 单词模式：同步生词本收藏状态
-  useEffect(() => {
-    if (mode !== 'word') return
-    wordbookCheck(text.trim().toLowerCase())
-      .then(r => setStarred(r.inBook))
-      .catch(() => { /* ignore */ })
-  }, [mode, text])
-
-  /** 收藏进生词本（仅单词模式） */
-  const handleStar = async () => {
-    const w = (dict?.found ? dict.entry!.word : text).trim().toLowerCase()
-    try {
-      const r = await wordbookAdd(w)
-      if (r.ok) {
-        setStarred(true)
-        showToast({ type: 'info', message: r.already ? `「${w}」已在生词本` : `已加入生词本：${w}` })
-      } else showToast({ type: 'error', message: r.error ?? '收藏失败' })
-    } catch { showToast({ type: 'error', message: '收藏失败' }) }
-  }
 
   // 单词模式：立即查离线词典
   useEffect(() => {
@@ -168,9 +145,6 @@ export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
   const entry = dict?.found ? dict.entry : undefined
   const examTags = entry?.tags.filter(t => t === 'cet4' || t === 'cet6' || t === 'ky') ?? []
   const otherTags = entry?.tags.filter(t => !(t === 'cet4' || t === 'cet6' || t === 'ky')) ?? []
-  // 该词属于正在学的词书 → 强化归属感提示
-  const activeBook = s.wordbookActiveBook
-  const inActiveBook = !!activeBook && (examTags as string[]).includes(activeBook)
 
   return (
     <div
@@ -184,14 +158,6 @@ export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
         {mode === 'word' ? <BookOpen size={12} className="text-[var(--accent)]" /> : <Languages size={12} className="text-[var(--accent)]" />}
         <span className="text-[11px] font-medium text-[var(--text-secondary)]">{mode === 'word' ? '词典' : '翻译'}</span>
         {cached && <span className="text-[10px] text-[var(--text-disabled)]">已缓存</span>}
-        {mode === 'word' && (
-          <button onClick={() => void handleStar()} title={starred ? '已加入生词本' : '加入生词本'}
-            className={`p-1 rounded transition-colors ${starred
-              ? 'text-amber-400'
-              : 'text-[var(--text-muted)] hover:text-amber-400 hover:bg-[var(--bg-hover)]'}`}>
-            <Star size={11} className={starred ? 'fill-current' : ''} />
-          </button>
-        )}
         <button onClick={handleCopy} title="复制结果"
           className="ml-auto p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
           {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -229,11 +195,6 @@ export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
               )}
             </div>
 
-            {inActiveBook && (
-              <p className="mt-1 text-[10px] text-[var(--accent)]">
-                这个词在你正在学的{TAG_LABELS[activeBook] ?? activeBook}词书里，收藏后会在每日队列中出现
-              </p>
-            )}
             {entry && (
               <>
                 {/* 考纲与词频徽章 */}

@@ -4,7 +4,6 @@ import { vaultHabitRecordAddIfAbsent, vaultHabitsAll, vaultHabitLinksAll } from 
 import { vaultTodosAll } from './kbStore/scheduleVaultRepo'
 import { vaultGetEntryById } from './kbStore/blogVaultRepo'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
-import { vaultWordbookDaily } from './kbStore/wordbookVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 
 /**
@@ -20,9 +19,9 @@ import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
  * 全部指标反查走 vault 数据源（sql.js 路径已移除）。
  */
 
-export type LinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge' | 'wordbook'
+export type LinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge'
 
-const SOURCE_WHITELIST: LinkSource[] = ['blog', 'pomodoro', 'schedule', 'knowledge', 'wordbook']
+const SOURCE_WHITELIST: LinkSource[] = ['blog', 'pomodoro', 'schedule', 'knowledge']
 
 /** 业务模块保存行为后上报；date 为行为发生的业务日期（本地 YYYY-MM-DD），非系统当天 */
 export interface Activity {
@@ -76,11 +75,6 @@ function computeMetric(a: Activity): number | null {
     // 知识库：当天新建的页面数（created_at 为 UTC ISO 串，转本地日期再比）
     case 'knowledge':
       return getKnowledgeIndex().pages.filter((p) => localDay(p.createdAt) === a.date).length
-    // 单词本：当天完成学习的词数（新学+复习）
-    case 'wordbook': {
-      const row = vaultWordbookDaily().find((r) => r.date === a.date)
-      return (row?.new_words ?? 0) + (row?.reviewed ?? 0)
-    }
     default:
       return null
   }

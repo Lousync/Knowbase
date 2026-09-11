@@ -1,11 +1,9 @@
 // ===== 共享类型 =====
 
 import type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult } from '../lib/translateTypes'
-import type { WordbookBook, WordFeedback, WordbookStatus, QuestionType, WordbookItemDto, WordbookExchangeDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto, BookWordRowDto, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto } from '../lib/wordbookTypes'
 import type { GraphIndexData, GraphViewConfig } from '../lib/graphTypes'
 
 export type { DictLookupResult, DictStatus, DictWordEntry, DictExchange, TranslateMode, TranslateInvokeRequest, TranslateInvokeResult }
-export type { WordbookBook, WordFeedback, WordbookStatus, QuestionType, WordbookItemDto, WordbookExchangeDto, WordbookEntryDto, WordbookTodayDto, WordbookStatsDto, BookWordRowDto, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto }
 
 export interface Entry {
   id: string; title: string; contentMd: string; contentHtml: string
@@ -153,15 +151,10 @@ export interface MomentsPost {
   createdAt: string
   updatedAt: string
 }
-// weight tracker
-export interface WeightRecord { id: string; weight: number; date: string; series: string; note: string; createdAt: string }
-export interface CreateWeightDTO { weight: number; date: string; series?: string; note?: string }
-export interface UpdateWeightDTO { weight?: number; date?: string; series?: string; note?: string }
-
 // ---- 打卡模块 ----
 export type HabitRuleType = 'daily' | 'weekdays' | 'flexible'
 /** 自动打卡来源（跨模块联动），指标现值由主进程从各源表按业务日期反查 */
-export type HabitLinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge' | 'wordbook'
+export type HabitLinkSource = 'blog' | 'pomodoro' | 'schedule' | 'knowledge'
 export interface HabitLink {
   source: HabitLinkSource
   /** 达标阈值：博客=字数，其余=当天累计次数 */
@@ -1219,12 +1212,6 @@ export interface ElectronAPI {
   vaultBackupExportToZip: (zipPath: string) => Promise<{ ok: boolean; fileCount: number; zipPath: string }>
   vaultBackupPickArchive: () => Promise<string | null>
   vaultBackupRestoreArchive: (archivePath: string) => Promise<{ ok: boolean; target?: string; written?: number; message?: string }>
-  // weight tracker
-  getWeightRecords: () => Promise<WeightRecord[]>
-  getWeightSeries: () => Promise<string[]>
-  createWeightRecord: (d: CreateWeightDTO) => Promise<WeightRecord>
-  updateWeightRecord: (id: string, d: UpdateWeightDTO) => Promise<WeightRecord>
-  deleteWeightRecord: (id: string) => Promise<void>
   // checkin
   habitGetAll: () => Promise<{ habits: Habit[]; records: HabitRecord[] }>
   createHabit: (d: CreateHabitDTO) => Promise<Habit>
@@ -1363,33 +1350,10 @@ export interface ElectronAPI {
   dictLookup: (word: string) => Promise<DictLookupResult>
   dictStatus: () => Promise<DictStatus>
   translateInvoke: (req: TranslateInvokeRequest) => Promise<TranslateInvokeResult>
-  // 单词本
-  wordbookAdd: (word: string) => Promise<{ ok: boolean; already?: boolean; error?: string }>
-  wordbookRemove: (word: string) => Promise<{ ok: boolean }>
-  wordbookSetMastered: (word: string, mastered: boolean) => Promise<{ ok: boolean }>
-  wordbookList: (status?: string) => Promise<WordbookEntryDto[]>
-  wordbookGetToday: () => Promise<WordbookTodayDto>
-  wordbookAnswer: (word: string, feedback: WordFeedback) => Promise<{ ok: boolean; error?: string }>
-  wordbookSetBook: (book: string) => Promise<{ ok: boolean }>
-  wordbookStats: () => Promise<WordbookStatsDto>
-  wordbookCheck: (word: string) => Promise<{ inBook: boolean; status?: WordbookStatus }>
   // 番茄钟状态跨窗口同步（主进程权威快照，所有 BrowserWindow 共享）
   pomodoroUpdateState: (snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => void
   pomodoroGetState: () => Promise<{ visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }>
   onPomodoroState: (cb: (snapshot: { visible: boolean; display: string; running: boolean; phase: string; done: boolean; expanded: boolean; progress: number }) => void) => () => void
-  wordbookMarkKnown: (word: string) => Promise<{ ok: boolean }>
-  wordbookBookWords: (book: string, query: string, offset: number, limit: number, orderBy?: string) => Promise<BookWordsResultDto>
-  wordbookRootClusters: () => Promise<RootClusterDto[]>
-  wordbookSynonymClusters: () => Promise<SynonymClusterDto[]>
-  wordbookRelations: (word: string) => Promise<{ roots: RootClusterDto[]; synonyms: WordRelationRowDto[] }>
-  wordbookGroupsList: () => Promise<WordbookGroupDto[]>
-  wordbookGroupsCreate: (name: string) => Promise<{ ok: boolean; id?: string; error?: string }>
-  wordbookGroupsRename: (id: string, name: string) => Promise<{ ok: boolean; error?: string }>
-  wordbookGroupsDelete: (id: string) => Promise<{ ok: boolean }>
-  wordbookGroupsAddWord: (id: string, word: string) => Promise<{ ok: boolean; error?: string }>
-  wordbookGroupsRemoveWord: (id: string, word: string) => Promise<{ ok: boolean }>
-  wordbookGroupsWords: (id: string) => Promise<string[]>
-  wordbookCustomQueue: (label: string, words: string[]) => Promise<WordbookCustomQueueDto>
   // PDF 工具箱
   pdfMerge: (files: Array<{ name: string; data: Uint8Array }>) => Promise<PdfOpResult>
   pdfOrganize: (payload: { data: Uint8Array; pages: number[]; rotations?: Record<string, number> }) => Promise<PdfOpResult>

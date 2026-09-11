@@ -1,6 +1,6 @@
 /**
  * 图谱数据契约（web 侧单源类型）。
- * electron 侧 `electron/lib/kbStore/graphIndex.ts` 反向 import 本文件（wordbookTypes 先例）。
+ * electron 侧 `electron/lib/kbStore/graphIndex.ts` 反向 import 本文件（共享类型反向 import 先例）。
  * 结构对应 `.knowbase/cache/graph.json`（schemaVersion 1），字段勿单独改动——两端一致。
  */
 

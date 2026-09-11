@@ -25,7 +25,6 @@ import { registerMomentsHandlers } from '../database/repositories/momentsRepo'
 import { registerAttachmentHandlers, getAttachmentFilePath } from '../database/repositories/attachmentRepo'
 import { registerVaultBackupHandlers } from '../database/repositories/vaultBackupRepo'
 import { registerRepoConfigHandlers } from '../database/repositories/repoConfigRepo'
-import { registerWeightHandlers } from '../database/repositories/weightRepo'
 import { registerCheckinHandlers } from '../database/repositories/checkinRepo'
 import { registerBookmarkHandlers } from '../database/repositories/bookmarkRepo'
 import { registerSuperviseHandlers } from '../database/repositories/superviseRepo'
@@ -51,7 +50,6 @@ import { registerAiTeachingWorkspaceHandlers } from '../lib/aiTeachingWorkspaces
 import { registerAiTeachingSourceHandlers } from '../lib/aiTeachingSources'
 import { registerAiTeachingProfileHandlers } from '../lib/aiTeachingProfile'
 import { registerTranslateHandlers } from '../lib/translateService'
-import { registerWordbookHandlers } from '../lib/wordbookService'
 import { registerPdfHandlers } from '../lib/pdfService'
 import { registerDocsReadHandlers } from '../lib/docsIpc'
 import { registerLanShareHandlers } from '../lib/lanShare'
@@ -814,7 +812,6 @@ app.whenReady().then(async () => {
   registerMomentsHandlers()
   registerAttachmentHandlers()
   registerVaultBackupHandlers()
-  registerWeightHandlers()
   registerCheckinHandlers()
   registerBookmarkHandlers()
   registerSuperviseHandlers()
@@ -872,8 +869,6 @@ app.whenReady().then(async () => {
     registerAiTeachingProfileHandlers((key) => settingsCache[key])
     // 划词翻译:离线词典 + LLM 翻译/AI 精讲
     registerTranslateHandlers()
-    // 单词本:生词本 + 每日队列 SRS + 词书
-    registerWordbookHandlers({ getSettingValue: (key) => settingsCache[key], setSettingValue })
     // PDF 工具箱:合并/页面重组/导出
     registerPdfHandlers()
     // 文档读取（界面阅读 PPT 等）

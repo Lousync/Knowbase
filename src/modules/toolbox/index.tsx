@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
-import { Shield, TrendingDown, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, GraduationCap, FileText, Wifi, Wrench, ArrowLeft, Scissors, Eye } from 'lucide-react'
+import { Shield, Timer, CalendarCheck2, Globe, BellRing, Puzzle, Archive, FileText, Wifi, Wrench, ArrowLeft, Scissors, Eye } from 'lucide-react'
 import { PasswordVault } from './components/PasswordVault'
-import { WeightTracker } from './components/WeightTracker'
 import { HabitTracker } from './components/habit-tracker'
-import { WordbookModule } from './components/wordbook'
 // PdfToolkit 内联 pdfjs（~800KB）：不进首屏，打开该工具时才加载
 // （toolbox 模块本身是静态引入的，切换零延迟；只有这一件含大依赖的工具按需）
 const PdfToolkit = lazy(() => import('./components/pdf-toolkit').then((m) => ({ default: m.PdfToolkit })))
@@ -28,12 +26,6 @@ interface ToolDefinition {
 }
 
 const DATA_TOOLS: ToolDefinition[] = [
-  {
-    id: 'weight-tracker',
-    name: '体重追踪',
-    icon: <TrendingDown size={20} strokeWidth={1.5} />,
-    available: true,
-  },
   {
     id: 'password-vault',
     name: '密码本',
@@ -83,12 +75,6 @@ const PRODUCTIVITY_TOOLS: ToolDefinition[] = [
     id: 'remote-supervise',
     name: '远程监督',
     icon: <BellRing size={20} strokeWidth={1.5} />,
-    available: true,
-  },
-  {
-    id: 'wordbook',
-    name: '单词本',
-    icon: <GraduationCap size={20} strokeWidth={1.5} />,
     available: true,
   },
   {
@@ -205,16 +191,12 @@ export function ToolboxModule({ homeSignal = 0 }: ToolboxModuleProps) {
 
   const renderTool = () => {
     switch (activeTool) {
-      case 'weight-tracker':
-        return <WeightTracker onBack={() => setActiveTool(null)} />
       case 'password-vault':
         return <PasswordVault onBack={() => setActiveTool(null)} />
       case 'habit-tracker':
         return <HabitTracker onBack={() => setActiveTool(null)} />
       case 'remote-supervise':
         return <RemoteSupervise onBack={() => setActiveTool(null)} />
-      case 'wordbook':
-        return <WordbookModule onBack={() => setActiveTool(null)} />
       case 'pdf-toolkit':
         return (
           <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)]">正在加载 PDF 工具…</div>}>

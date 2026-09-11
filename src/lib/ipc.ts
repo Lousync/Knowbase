@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentSessionSource, AgentStoredMessage, AgentTraceStep, AgentStreamEvent, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, WordFeedback, WordbookEntryDto, WordbookStatsDto, WordbookTodayDto, WordbookStatus, BookWordsResultDto, RootClusterDto, SynonymClusterDto, WordRelationRowDto, WordbookGroupDto, WordbookCustomQueueDto, PdfOpResult, PdfExportResult, AiTeachSourceInput, CreatePasswordEntryDTO, UpdatePasswordEntryDTO } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentSessionSource, AgentStoredMessage, AgentTraceStep, AgentStreamEvent, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, PdfOpResult, PdfExportResult, AiTeachSourceInput, CreatePasswordEntryDTO, UpdatePasswordEntryDTO } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -331,12 +331,6 @@ export async function copyImageUrlToClipboard(url: string): Promise<boolean> {
   return false
 }
 export const importBackupPackage = (srcPath: string) => a().importBackupPackage(srcPath)
-// ===== Weight Tracker =====
-export const getWeightRecords = () => a().getWeightRecords()
-export const getWeightSeries = () => a().getWeightSeries()
-export const createWeightRecord = (d: { weight: number; date: string; series?: string; note?: string }) => a().createWeightRecord(d)
-export const updateWeightRecord = (id: string, d: { weight?: number; date?: string; series?: string; note?: string }) => a().updateWeightRecord(id, d)
-export const deleteWeightRecord = (id: string) => a().deleteWeightRecord(id)
 
 // ===== Checkin =====
 export const habitGetAll = () => a().habitGetAll()
@@ -455,30 +449,6 @@ export const llmGetUsage = (): Promise<LlmUsageInfo> => a().llmGetUsage()
 export const dictLookup = (word: string): Promise<DictLookupResult> => a().dictLookup(word)
 export const dictStatus = (): Promise<DictStatus> => a().dictStatus()
 export const translateInvoke = (req: TranslateInvokeRequest): Promise<TranslateInvokeResult> => a().translateInvoke(req)
-
-// ===== 单词本 =====
-export const wordbookAdd = (word: string): Promise<{ ok: boolean; already?: boolean; error?: string }> => a().wordbookAdd(word)
-export const wordbookRemove = (word: string): Promise<{ ok: boolean }> => a().wordbookRemove(word)
-export const wordbookSetMastered = (word: string, mastered: boolean): Promise<{ ok: boolean }> => a().wordbookSetMastered(word, mastered)
-export const wordbookList = (status?: string): Promise<WordbookEntryDto[]> => a().wordbookList(status)
-export const wordbookGetToday = (): Promise<WordbookTodayDto> => a().wordbookGetToday()
-export const wordbookAnswer = (word: string, feedback: WordFeedback): Promise<{ ok: boolean; error?: string }> => a().wordbookAnswer(word, feedback)
-export const wordbookSetBook = (book: string): Promise<{ ok: boolean }> => a().wordbookSetBook(book)
-export const wordbookStats = (): Promise<WordbookStatsDto> => a().wordbookStats()
-export const wordbookCheck = (word: string): Promise<{ inBook: boolean; status?: WordbookStatus }> => a().wordbookCheck(word)
-export const wordbookMarkKnown = (word: string): Promise<{ ok: boolean }> => a().wordbookMarkKnown(word)
-export const wordbookBookWords = (book: string, query: string, offset: number, limit: number, orderBy?: string): Promise<BookWordsResultDto> => a().wordbookBookWords(book, query, offset, limit, orderBy)
-export const wordbookRootClusters = (): Promise<RootClusterDto[]> => a().wordbookRootClusters()
-export const wordbookSynonymClusters = (): Promise<SynonymClusterDto[]> => a().wordbookSynonymClusters()
-export const wordbookRelations = (word: string): Promise<{ roots: RootClusterDto[]; synonyms: WordRelationRowDto[] }> => a().wordbookRelations(word)
-export const wordbookGroupsList = (): Promise<WordbookGroupDto[]> => a().wordbookGroupsList()
-export const wordbookGroupsCreate = (name: string): Promise<{ ok: boolean; id?: string; error?: string }> => a().wordbookGroupsCreate(name)
-export const wordbookGroupsRename = (id: string, name: string): Promise<{ ok: boolean; error?: string }> => a().wordbookGroupsRename(id, name)
-export const wordbookGroupsDelete = (id: string): Promise<{ ok: boolean }> => a().wordbookGroupsDelete(id)
-export const wordbookGroupsAddWord = (id: string, word: string): Promise<{ ok: boolean; error?: string }> => a().wordbookGroupsAddWord(id, word)
-export const wordbookGroupsRemoveWord = (id: string, word: string): Promise<{ ok: boolean }> => a().wordbookGroupsRemoveWord(id, word)
-export const wordbookGroupsWords = (id: string): Promise<string[]> => a().wordbookGroupsWords(id)
-export const wordbookCustomQueue = (label: string, words: string[]): Promise<WordbookCustomQueueDto> => a().wordbookCustomQueue(label, words)
 
 // ===== PDF 工具箱 =====
 export const pdfMerge = (files: Array<{ name: string; data: Uint8Array }>): Promise<PdfOpResult> => a().pdfMerge(files)

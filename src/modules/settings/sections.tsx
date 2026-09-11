@@ -69,7 +69,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'security',   label: '安全与隐私', icon: <ShieldCheck size={16} />,   keywords: ['安全', '隐私', '删除确认', '插件安全', '签名', '密钥'] },
   { id: 'aiTools',    label: 'AI 工具',   icon: <Bot size={16} />,            keywords: ['AI', '工具', 'agent', '智能体', 'ai', '助手', '模型', 'mcp', 'skill'] },
   { id: 'shortcuts',  label: '快捷键',    icon: <Keyboard size={16} />,       keywords: ['快捷键', 'shortcut', '键盘', 'keyboard', '按键'] },
-  { id: 'modules',    label: '模块设置',  icon: <Boxes size={16} />,          keywords: ['模块', '博客', 'blog', '日程', '提醒', '打卡', '导出', '单词本', '词书', '错题', '高级', 'AI教学'] },
+  { id: 'modules',    label: '模块设置',  icon: <Boxes size={16} />,          keywords: ['模块', '博客', 'blog', '日程', '提醒', '打卡', '导出', '错题', '高级', 'AI教学'] },
   { id: 'about',      label: '关于',      icon: <Info size={16} />,           keywords: ['关于', '更新', '版本', '升级', '镜像', '引导', 'about', 'update'] },
 ]
 

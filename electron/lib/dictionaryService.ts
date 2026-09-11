@@ -14,15 +14,10 @@ import type { DictExchange, DictLookupResult, DictStatus, DictWordEntry } from '
 // [phonetic, translation, definition, tag, collins, oxford, bnc, frq, exchange]
 type RawEntry = [string, string, string, string, number, number, number, number, string]
 
-interface RootInfo { m: string; c: string; o: string; words: string[] }
-
 interface DictData {
   v: number
   words: Record<string, RawEntry>
   lemma: Record<string, string>
-  roots?: Record<string, RootInfo>
-  wordRoots?: Record<string, string[]>
-  synonyms?: Record<string, string[]>
 }
 
 let data: DictData | null = null
@@ -147,116 +142,3 @@ export function getDictionaryStatus(): DictStatus {
   return { available: count > 0, wordCount: count }
 }
 
-// ===== 词书词表（按 ECDICT 考纲标签派生，供单词本模块使用） =====
-
-export type BookId = 'cet4' | 'cet6' | 'ky'
-
-const BOOK_IDS: BookId[] = ['cet4', 'cet6', 'ky']
-
-export function isBookId(v: string): v is BookId {
-  return (BOOK_IDS as string[]).includes(v)
-}
-
-interface BookWord { word: string; frq: number }
-
-const bookCache = new Map<BookId, BookWord[]>()
-
-/** 词书词表：按使用词频升序（高频在前），惰性构建并缓存 */
-export function getBookWords(book: BookId): BookWord[] {
-  const cached = bookCache.get(book)
-  if (cached) return cached
-  const d = ensureLoaded()
-  const list: BookWord[] = []
-  for (const [word, raw] of Object.entries(d.words)) {
-    if ((raw[3] || '').split(/\s+/).includes(book)) {
-      list.push({ word, frq: Number(raw[7]) || 999999 })
-    }
-  }
-  list.sort((a, b) => a.frq - b.frq)
-  bookCache.set(book, list)
-  return list
-}
-
-/** 取翻译首行（选项展示用）；未收录返回空串 */
-export function getPrimaryTranslation(word: string): string {
-  const raw = ensureLoaded().words[word.toLowerCase()]
-  if (!raw) return ''
-  return (raw[1] || '').split('\n')[0].trim()
-}
-
-/** 选项文本对齐处理：剥领域标签前缀、截到统一长度，避免答案靠格式泄露 */
-export function formatOptionLine(line: string): string {
-  let s = line.replace(/^\[[^\]]*\]\s*/, '')   // "[计] 查询" → "查询"
-  // 逗号切分，保留词性前缀与第一个释义，总长不超过 14 字
-  const posMatch = /^([a-z]+\.\s*)/.exec(s)
-  const pos = posMatch ? posMatch[1] : ''
-  let body = s.slice(pos.length)
-  const seg = body.split(/[,，;；]/)[0].trim()
-  if (seg.length >= 4) body = seg
-  if (pos + body !== s && body.length > 14) body = body.slice(0, 14)
-  return (pos + body).trim()
-}
-
-/** 为答案词挑 n 个干扰项释义（同词书优先，格式化后互不相同） */
-export function pickDistractors(answer: string, book: BookId | null, n: number): string[] {
-  const d = ensureLoaded()
-  const answerLine = formatOptionLine(getPrimaryTranslation(answer))
-  const pool: string[] = book ? getBookWords(book).map(w => w.word) : Object.keys(d.words)
-  const out: string[] = []
-  const seen = new Set([answerLine])
-  const start = Math.floor(Math.random() * pool.length)
-  for (let i = 0; i < pool.length && out.length < n; i++) {
-    const w = pool[(start + i) % pool.length]
-    if (w === answer.toLowerCase()) continue
-    const line = formatOptionLine(getPrimaryTranslation(w))
-    if (!line || line.length < 2 || seen.has(line)) continue
-    seen.add(line)
-    out.push(line)
-  }
-  return out
-}
-
-/** 为 cloze 题挑 n 个拼写干扰词（同词书、长度相近） */
-export function pickWordDistractors(answer: string, book: BookId | null, n: number): string[] {
-  const d = ensureLoaded()
-  const target = answer.toLowerCase()
-  const pool = (book ? getBookWords(book).map(w => w.word) : Object.keys(d.words))
-    .filter(w => Math.abs(w.length - target.length) <= 2 && w !== target)
-  const out: string[] = []
-  const seen = new Set([target])
-  const start = Math.floor(Math.random() * Math.max(1, pool.length))
-  for (let i = 0; i < pool.length && out.length < n; i++) {
-    const w = pool[(start + i) % pool.length]
-    if (seen.has(w)) continue
-    seen.add(w)
-    out.push(w)
-  }
-  return out
-}
-
-// ===== 词根（同根词体系，数据来自 ECDICT wordroot） =====
-
-export interface RootCluster {
-  root: string
-  meaning: string
-  wordClass: string
-  origin: string
-  words: string[]
-}
-
-/** 一个词的词根列表（可能为空） */
-export function getWordRoots(word: string): string[] {
-  return ensureLoaded().wordRoots?.[word.trim().toLowerCase()] ?? []
-}
-
-/** 词根详情与同根词 */
-export function getRootCluster(root: string): RootCluster | null {
-  const info = ensureLoaded().roots?.[root]
-  if (!info) return null
-  return { root, meaning: info.m, wordClass: info.c, origin: info.o, words: info.words }
-}
-
-/** 一个词的近义词（同在词典内的，最多 6 个；可能为空） */
-export function getSynonyms(word: string): string[] {
-  return ensureLoaded().synonyms?.[word.trim().toLowerCase()] ?? []
-}
