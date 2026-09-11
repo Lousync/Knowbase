@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, CornerDownLeft, FolderOpen, Plus, Sparkles } from 'lucide-react'
+import { ArrowLeft, CornerDownLeft, FolderOpen, Plus } from 'lucide-react'
 import { getAppVersion, openDirDialog, workspaceCreateVault, workspaceGetCurrent, workspaceGetRecent, workspaceOpenById } from '../../lib/ipc'
 import { openVaultWithGuide } from '../../lib/vaultOpen'
 import { showToast } from '../../lib/toast'
+import appIcon from '../../assets/app-icon.png'
 import type { WorkspaceRecent } from '../../types'
 
 type VaultResult = { rootId: string; name: string; path: string; error?: string } | null
@@ -111,10 +112,13 @@ export function VaultPicker({ onDone, startup = false }: { onDone: (created?: bo
       <div className="w-full max-w-[620px] mx-6 -mt-8 max-h-[calc(100vh-64px)] overflow-y-auto">
         {/* 品牌区（Obsidian 式：图标 + 名称 + 版本） */}
         <div className="text-center mb-9">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mx-auto mb-4">
-            <Sparkles size={30} className="text-[var(--accent)]" />
-          </div>
-          <h1 className="text-[24px] font-semibold text-[var(--text-primary)]">Knowbase</h1>
+          <img
+            src={appIcon}
+            alt="Phrontis"
+            draggable={false}
+            className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-sm"
+          />
+          <h1 className="text-[24px] font-semibold text-[var(--text-primary)]">Phrontis</h1>
           {version && <p className="text-[12px] text-[var(--text-muted)] mt-1">版本 {version}</p>}
         </div>
 
@@ -180,7 +184,7 @@ export function VaultPicker({ onDone, startup = false }: { onDone: (created?: bo
               <VaultRow
                 icon={<FolderOpen size={15} />}
                 title="打开本地仓库"
-                desc="将一个本地文件夹作为仓库在 Knowbase 中打开。"
+                desc="将一个本地文件夹作为仓库在 Phrontis 中打开。"
                 actionLabel="打开"
                 secondary
                 onAction={() => void openExisting()}
