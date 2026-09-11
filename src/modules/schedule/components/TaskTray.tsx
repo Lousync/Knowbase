@@ -95,7 +95,7 @@ export function TaskTray({ todos, iconSize, quadrantIcon, quadrantText, onOpen }
                 if (Date.now() - dragGuard.lastEnd < 250) return
                 onOpen(todo)
               }}
-              className={`group relative flex items-center gap-2 ${s.pad} ${s.gap} bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md cursor-grab active:cursor-grabbing hover:border-[var(--accent)] transition-colors`}
+              className={`kb-item-in group relative flex items-center gap-2 ${s.pad} ${s.gap} bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md cursor-grab active:cursor-grabbing hover:border-[var(--accent)] transition-colors`}
               title="拖到右侧日程表即可排期"
             >
               {/* 标签色条 */}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePresence } from '../../lib/usePresence'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -26,6 +27,8 @@ export function ConfirmDialog({
   onCancel
 }: ConfirmDialogProps) {
   const [skipChecked, setSkipChecked] = useState(false)
+  // 退场：open 降沿后延迟卸载，让遮罩淡出 / 面板缩回能播完（reduced-motion 下立即卸载）
+  const { mounted, closing } = usePresence(open, 170)
 
   // Escape key closes dialog
   useEffect(() => {
@@ -41,12 +44,15 @@ export function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onCancel])
 
-  if (!open) return null
+  if (!mounted) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${closing ? 'kb-overlay-out' : 'kb-overlay'}`}
+      onClick={onCancel}
+    >
       <div
-        className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[420px] shadow-2xl"
+        className={`bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[420px] shadow-2xl ${closing ? 'kb-modal-out' : 'kb-modal-in'}`}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

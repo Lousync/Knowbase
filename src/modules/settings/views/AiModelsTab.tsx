@@ -3,6 +3,7 @@ import { Bot, Gauge, Plus, Trash2, RefreshCw, Loader2, Star, Pencil, Import } fr
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import { SettingSwitch } from '../../../components/shared/SettingSwitch'
+import { Collapsible } from '../../../components/shared/Collapsible'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
   llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel, llmTestModel,
@@ -134,7 +135,8 @@ export function AiModelsTab() {
           </div>
         </div>
 
-        {editing && <ProviderForm onDone={async () => { setEditing(false); await refresh() }} />}
+        {/* 新增服务商表单展开动效（docs/ui-animation-plan.md C 类） */}
+        <Collapsible open={editing} innerClassName="">{() => <ProviderForm onDone={async () => { setEditing(false); await refresh() }} />}</Collapsible>
 
       {ccsOpen && (
         <CcSwitchImportModal
@@ -263,7 +265,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
           <Trash2 size={11} />
         </button>
       </div>
-      {editing && <ProviderForm initial={p} onDone={async () => { setEditing(false); await onChanged() }} />}
+      <Collapsible open={editing} innerClassName="">{() => <ProviderForm initial={p} onDone={async () => { setEditing(false); await onChanged() }} />}</Collapsible>
       {testResult && (
         <p className={`text-[11px] mt-1.5 ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
           {testResult.ok ? `✓ 连接成功（${testResult.latencyMs}ms，${testResult.models?.length ?? 0} 个模型）` : `✗ ${testResult.error}`}
@@ -392,7 +394,7 @@ function CcSwitchImportModal({ onClose, onImported }: { onClose: () => void; onI
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={onClose}>
       <div className="w-[520px] max-h-[80vh] overflow-y-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl"
         onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-4 pb-3 border-b border-[var(--border-color)]">

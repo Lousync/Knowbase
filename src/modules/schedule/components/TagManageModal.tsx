@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ScheduleTag } from '../../../types'
 import { isSummaryTagName } from '../../../lib/summary'
 import { X, Plus, Trash2, Lock } from 'lucide-react'
+import { usePresence } from '../../../lib/usePresence'
 
 interface Props {
   open: boolean
@@ -17,8 +18,10 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
   const [name, setName] = useState('')
   const [color, setColor] = useState(TAG_COLORS[0])
   const [deleting, setDeleting] = useState<string | null>(null)
+  // 进出场动效（docs/ui-animation-plan.md B 类）：关闭时延迟卸载以播完退场
+  const { mounted, closing } = usePresence(open, 180)
 
-  if (!open) return null
+  if (!mounted) return null
 
   async function handleCreate() {
     if (!name.trim()) return
@@ -33,9 +36,9 @@ export function TagManageModal({ open, tags, onClose, onCreateTag, onDeleteTag }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${closing ? 'kb-overlay-out' : 'kb-overlay'}`} onClick={onClose}>
       <div
-        className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[420px] shadow-2xl"
+        className={`bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[420px] shadow-2xl ${closing ? 'kb-modal-out' : 'kb-modal-in'}`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">

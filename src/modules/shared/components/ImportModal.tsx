@@ -234,7 +234,7 @@ export function ImportModal({ onClose, initialBackupPath }: Props) {
   }, [initialBackupPath])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-[440px] max-h-[560px] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)] shrink-0">

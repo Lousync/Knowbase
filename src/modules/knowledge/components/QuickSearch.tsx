@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Folder, BookOpen, Layers, Sparkles } from 'lucide-react'
+import { Search, Folder, BookOpen, Layers, Sparkles, ChevronRight } from 'lucide-react'
+import { Collapsible } from '../../../components/shared/Collapsible'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -301,7 +302,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
       {portalReady && portalRoot.current && createPortal(searchBar, portalRoot.current)}
 
       {open && query.trim() && (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center" style={{ pointerEvents: 'none' }}
+        <div className="fixed inset-0 z-[80] flex items-start justify-center kb-pop-layer" style={{ pointerEvents: 'none' }}
           onClick={() => { setOpen(false); setQuery(''); setExpandedTagId(null) }}
         >
           <div
@@ -360,13 +361,17 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
                         ) : null
                       })()}
                       {item.kind === 'tag' && item.tagPages && item.tagPages.length > 0 && (
-                        <span className="text-[10px] text-[var(--text-muted)] shrink-0 mt-0.5">{expandedTagId === item.id ? '▾' : '▸'}</span>
+                        <span className="shrink-0 mt-0.5 flex items-center">
+                          <ChevronRight size={11} className={`kb-chevron text-[var(--text-muted)] ${expandedTagId === item.id ? 'rotate-90' : ''}`} />
+                        </span>
                       )}
                     </button>
 
-                    {item.kind === 'tag' && expandedTagId === item.id && item.tagPages && item.tagPages.length > 0 && (
+                    {/* 标签结果展开动效（docs/ui-animation-plan.md C 类） */}
+                    {item.kind === 'tag' && item.tagPages && item.tagPages.length > 0 && (
+                      <Collapsible open={expandedTagId === item.id} innerClassName="">{() => (
                       <div className="border-t border-[var(--border-color)]">
-                        {item.tagPages.map(p => (
+                        {(item.tagPages ?? []).map(p => (
                           <button key={p.id} onClick={() => handleSelectTagPage(p.id)}
                             className="w-full flex items-center gap-2.5 pl-10 pr-4 h-8 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors text-left"
                           >
@@ -376,6 +381,7 @@ export function QuickSearch({ pages, categories, tags, onOpenPage, onLocateCateg
                           </button>
                         ))}
                       </div>
+                      )}</Collapsible>
                     )}
                   </div>
                 ))

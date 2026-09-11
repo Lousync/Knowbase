@@ -353,7 +353,7 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
               title={r.isFavorite ? '取消收藏' : '收藏'}
               className={`shrink-0 p-1 rounded hover:bg-[var(--bg-hover)] ${r.isFavorite ? 'text-[var(--warning)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
             >
-              <Star size={14} fill={r.isFavorite ? 'currentColor' : 'none'} />
+              <Star key={r.isFavorite ? 'on' : 'off'} size={14} className="kb-micro-pop" fill={r.isFavorite ? 'currentColor' : 'none'} />
             </button>
             <button
               onClick={() => void removeRecord(r)}
@@ -518,7 +518,7 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
   }
 
   return (
-    <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="错题本与收藏">
+    <div className="kb-view-fade absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="错题本与收藏">
       {/* 顶栏 */}
       <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <span className="text-[13px] font-medium text-[var(--text-primary)]">错题本 / 收藏</span>

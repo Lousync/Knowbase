@@ -527,3 +527,147 @@ input:focus, textarea:focus, select:focus {
   .kb-task-exit { transform: none; transition-duration: 140ms !important; }
 }
 
+/* ============================================================================
+   全局动效基建（docs/ui-animation-plan.md §二）
+   —— 所有「页面变化点」共用的一套令牌与工具类。
+   硬约束：只动 transform / opacity（.kb-collapse 的 grid-rows 是唯一例外，
+   实测 6000 行子树每次布局 0.15ms，见计划文档 §五）；
+   禁止给列表项 / 卡片 / 弹层加常驻 will-change。
+   ============================================================================ */
+
+:root {
+  --ease-kb: cubic-bezier(0.22, 0.68, 0.32, 1);        /* 标准：快出缓停无回弹 */
+  --ease-kb-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* 反馈：微回弹（同 kb-task-pop） */
+  --dur-micro: 140ms;  /* hover / 菜单项 / 状态色变 */
+  --dur-std: 220ms;    /* 树展开 / 列表进出 / 抽屉 */
+  --dur-large: 300ms;  /* 视图切换 / 弹层 / 全屏模式 */
+  --dur-view: 260ms;   /* Tab 与大区切换 */
+}
+
+/* --- A 顶层视图切换：淡入 + 上移 8px --- */
+@keyframes kb-view-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.kb-view-in { animation: kb-view-in var(--dur-view) var(--ease-kb) both; }
+/* 仅淡入（重内容面板：Monaco / PDF canvas / 插件 iframe 不做位移，
+   避免整棵子树被提升为合成层重新栅格化） */
+@keyframes kb-view-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.kb-view-fade { animation: kb-view-fade var(--dur-std) var(--ease-kb) both; }
+
+/* --- B 弹层：遮罩 + 面板 --- */
+@keyframes kb-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kb-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+.kb-overlay { animation: kb-overlay-in var(--dur-std) var(--ease-kb) both; }
+.kb-overlay-out { animation: kb-overlay-out calc(var(--dur-std) * 0.72) var(--ease-kb) both; }
+
+@keyframes kb-modal-in {
+  from { opacity: 0; transform: scale(0.97) translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes kb-modal-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: scale(0.98) translateY(6px); }
+}
+.kb-modal-in { animation: kb-modal-in calc(var(--dur-large) * 0.93) var(--ease-kb) both; }
+.kb-modal-out { animation: kb-modal-out calc(var(--dur-std) * 0.72) var(--ease-kb) both; }
+/* 遮罩的首个子元素（= 面板）自动跟着动：调用方只需在遮罩上挂 .kb-overlay / .kb-overlay-out，
+   不必逐处给面板加类（全仓库 30+ 处弹层共用这一条）。 */
+.kb-overlay > :first-child { animation: kb-modal-in calc(var(--dur-large) * 0.93) var(--ease-kb) both; }
+.kb-overlay-out > :first-child { animation: kb-modal-out calc(var(--dur-std) * 0.72) var(--ease-kb) both; }
+
+/* --- B 菜单 / 下拉 / popover：缩放 + 下移（transform-origin 由调用方按锚点给） --- */
+@keyframes kb-pop-in {
+  from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.kb-pop { animation: kb-pop-in calc(var(--dur-micro) + 20ms) var(--ease-kb) both; }
+/* 菜单层（满屏透明点击层 + 首个子元素是菜单面板）：只加一个类即可让面板进场。
+   菜单只做进场不做退场——菜单项点完立即切界面，退场动画只会拖慢操作。 */
+.kb-pop-layer > :first-child { animation: kb-pop-in calc(var(--dur-micro) + 20ms) var(--ease-kb) both; }
+
+/* --- B Toast：右上滑入 / 退出反向 --- */
+@keyframes kb-toast-in {
+  from { opacity: 0; transform: translateX(18px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.kb-toast-in { animation: kb-toast-in calc(var(--dur-std) + 20ms) var(--ease-kb) both; }
+.kb-toast-out { animation: kb-toast-in calc(var(--dur-std) * 0.82) var(--ease-kb) reverse both; }
+
+/* --- C 展开收起：grid-template-rows 高度动画 + 箭头旋转 ---
+   用法（与 moments 相册一致的既有范式）：
+     <div className={'kb-collapse' + (open ? ' open' : '')}><div><div>…内容…</div></div></div>
+   箭头：给 lucide chevron 加 .kb-chevron，目标角度仍由既有 rotate-90 类给出，
+   过渡同时监听 transform 与 rotate（Tailwind v4 的 rotate-* 写的是 rotate 属性）。 */
+.kb-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-std) var(--ease-kb);
+}
+.kb-collapse.open { grid-template-rows: 1fr; }
+/* 折叠中的子树：overflow 裁切 + 延迟到动画结束再 visibility:hidden
+   （hidden 的元素不进 tab 顺序、对读屏不可见——只用 overflow 裁切会让收起后的
+   按钮/输入行仍可被 Tab 聚焦） */
+.kb-collapse > * {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0s linear var(--dur-std);
+}
+.kb-collapse.open > * { visibility: visible; transition-delay: 0s; }
+.kb-chevron {
+  transition: transform var(--dur-std) var(--ease-kb), rotate var(--dur-std) var(--ease-kb);
+}
+
+/* --- D 列表增删 --- */
+@keyframes kb-item-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+/* 注意用 backwards 而非 both：both 会在动画结束后**长期保留** transform/opacity 声明，
+   而 CSS 动画优先级高于内联样式 → 会压掉拖拽时写的 style.transform / style.opacity
+   （FileTree / NotebookList 的行拖拽就靠内联 opacity 做反馈）。backwards 只填充动画开始前，
+   结束后回归元素自身样式，视觉结果相同但不会长期占用这两个属性。 */
+.kb-item-in { animation: kb-item-in var(--dur-std) var(--ease-kb) backwards; }
+.kb-item-out {
+  opacity: 0;
+  transform: translateX(26px) scale(0.98);
+  transition: opacity calc(var(--dur-std) * 0.82) var(--ease-kb),
+              transform calc(var(--dur-std) * 0.82) var(--ease-kb);
+  pointer-events: none;
+}
+
+/* --- E 状态反馈：微回弹 --- */
+@keyframes kb-micro-pop {
+  0%   { transform: scale(1); }
+  38%  { transform: scale(0.82); }
+  70%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.kb-micro-pop { animation: 180ms kb-micro-pop var(--ease-kb-spring); }
+
+/* --- F 主题切换：View Transition 交叉淡化 ---
+   落码不用通配 `*` 过渡（实测 4290 节点下单帧 133ms，见计划文档 §五）。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-std);
+  animation-timing-function: var(--ease-kb);
+}
+
+/* --- 统一 reduced-motion 兜底 --- */
+@media (prefers-reduced-motion: reduce) {
+  .kb-view-in, .kb-view-fade, .kb-overlay, .kb-overlay-out,
+  .kb-modal-in, .kb-modal-out, .kb-pop, .kb-toast-in, .kb-toast-out,
+  .kb-item-in, .kb-micro-pop,
+  .kb-overlay > :first-child, .kb-overlay-out > :first-child,
+  .kb-pop-layer > :first-child { animation: none; }
+  .kb-collapse { transition: none; }
+  .kb-collapse > * { transition: none; }
+  .kb-chevron { transition: none; }
+  .kb-item-out { transition-duration: 1ms; transform: none; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 1ms; }
+}
+

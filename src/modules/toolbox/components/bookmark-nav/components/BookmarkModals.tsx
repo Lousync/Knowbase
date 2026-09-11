@@ -52,7 +52,7 @@ export function BookmarkEditModal({ mode, bookmark, categories, defaultCategoryI
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={onClose}>
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[440px] shadow-2xl"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
@@ -160,7 +160,7 @@ export function CategoryEditModal({ mode, category, onClose, onSaved }: Category
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={onClose}>
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[360px] shadow-2xl"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">

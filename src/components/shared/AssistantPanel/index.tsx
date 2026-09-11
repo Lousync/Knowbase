@@ -613,7 +613,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                           {sessions.map(sess => (
                             <div key={sess.id}
                               onClick={() => { void loadSession(sess.id) }}
-                              className={`group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors ${
+                              className={`kb-item-in group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer text-[12px] transition-colors ${
                                 activeId === sess.id ? 'bg-[var(--bg-selected)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                               }`}>
                               <span className="min-w-0 flex-1">

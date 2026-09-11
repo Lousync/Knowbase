@@ -3,6 +3,7 @@ import { Check, Folder, FolderOpen, BookOpen, Layers, ChevronRight, ChevronDown,
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { DeleteWipe } from '../../../components/shared/DeleteWipe'
+import { Collapsible } from '../../../components/shared/Collapsible'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -462,7 +463,10 @@ export function NotebookList({
                 onClick={handleChevronClick}
               >
                 {canExpand ? (
-                  isExpanded ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />
+                  <ChevronRight
+                    size={12}
+                    className={`kb-chevron text-[var(--text-muted)] ${isExpanded ? 'rotate-90' : ''}`}
+                  />
                 ) : (
                   <span className="w-[12px]" />
                 )}
@@ -486,8 +490,11 @@ export function NotebookList({
             </div>
           )}
         </div>
-        {isExpanded && canExpand && (
-          <div>
+        {/* 展开/收起：<Collapsible> 用函数子节点 —— 收起状态不挂载子树（保持原有的懒渲染语义），
+            展开/收起两个方向都有高度过渡；见 docs/ui-animation-plan.md C 类 */}
+        {canExpand && (
+          <Collapsible open={isExpanded} innerClassName="">
+            {() => (<>
             {/* Pages directly under this category */}
             {categoryPages.map(p => (
               <div key={p.id}
@@ -544,7 +551,8 @@ export function NotebookList({
             ))}
             {/* Sub-categories */}
             {children.map(ch => renderCategory(ch, depth + 1, nbId))}
-          </div>
+            </>)}
+          </Collapsible>
         )}
       </div>
     )
@@ -852,13 +860,14 @@ export function NotebookList({
           <button onClick={() => setStarredOpen(v => !v)}
             className="w-full flex items-center gap-1.5 px-1 py-0.5 rounded transition-colors text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
             <span className="shrink-0 w-3.5 flex items-center justify-center">
-              {starredOpen ? <ChevronDown size={13} className="text-[var(--text-muted)]" /> : <ChevronRight size={13} className="text-[var(--text-muted)]" />}
+              <ChevronRight size={13} className={`kb-chevron text-[var(--text-muted)] ${starredOpen ? 'rotate-90' : ''}`} />
             </span>
             <Star size={13} className="shrink-0 text-[var(--warning)]" fill="currentColor" />
             <span className="flex-1 text-left">收藏</span>
             <span className="text-[10px] text-[var(--text-muted)] shrink-0">{starredPages.length}</span>
           </button>
-          {starredOpen && (
+          {/* 收藏分组折叠（docs/ui-animation-plan.md C 类）：Collapsible 保持「收起不挂载子树」的懒语义 */}
+          <Collapsible open={starredOpen} innerClassName="">{() => (
             <div className="ml-5 border-l border-[var(--border-color)]">
               {starredPages.map(p => (
                 <div key={p.id} onClick={() => onOpenPage(p.id)}
@@ -890,13 +899,13 @@ export function NotebookList({
                 </div>
               ))}
             </div>
-          )}
+          )}</Collapsible>
         </div>
       )}
 
       {/* Right-click context menu */}
       {contextMenu && (
-        <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
+        <div className="fixed inset-0 z-[60] kb-pop-layer" onClick={() => setContextMenu(null)}>
           <div
             className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[170px]"
             ref={contextMenuRef}

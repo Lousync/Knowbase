@@ -146,11 +146,14 @@ export function TranslateCard({ rect, text, onClose }: TranslateCardProps) {
   const examTags = entry?.tags.filter(t => t === 'cet4' || t === 'cet6' || t === 'ky') ?? []
   const otherTags = entry?.tags.filter(t => !(t === 'cet4' || t === 'cet6' || t === 'ky')) ?? []
 
+  // 划词浮钮进出场（E 类）：卡片本就靠内联 opacity + transition 做显隐，
+  // 因此不能挂 .kb-pop（both 填充会长期压制内联 opacity=0 导致关不掉）——
+  // 改走同一套 transition，补一个 scale 让「出现/消失」有方向感，origin 对准锚点
   return (
     <div
       ref={cardRef}
       data-translate-card
-      className="fixed z-50 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl flex flex-col overflow-hidden transition-opacity"
+      className={`fixed z-50 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl flex flex-col overflow-hidden origin-top-left transition-[opacity,scale] ${place ? '' : 'scale-95'}`}
       style={{ left: place?.left ?? -9999, top: place?.top ?? -9999, width: CARD_W, maxHeight: 'min(70vh, 560px)', opacity: place ? 1 : 0 }}
     >
       {/* 头部 */}

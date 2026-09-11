@@ -143,7 +143,7 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, on
   const rightList = useMemo(() => records.filter(r => r.correct), [records])
 
   return (
-    <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="刷题模式">
+    <div className="kb-view-fade absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="刷题模式">
       {/* 顶栏 */}
       <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <button
@@ -260,7 +260,7 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, on
                     favMap[quiz.no] ? 'text-[#f5b301]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                   }`}
                 >
-                  <Star size={17} fill={favMap[quiz.no] ? 'currentColor' : 'none'} />
+                  <Star key={favMap[quiz.no] ? 'on' : 'off'} size={17} className="kb-micro-pop" fill={favMap[quiz.no] ? 'currentColor' : 'none'} />
                 </button>
               )}
             </div>

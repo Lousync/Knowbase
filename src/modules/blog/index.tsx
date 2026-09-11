@@ -312,6 +312,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       )}
 
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* 视图切换淡入（key=view 触发重挂载 → 动画重播；列表/编辑器/详情三态共用一套） */}
+        <div key={view} className="kb-view-in flex min-h-0 flex-1 flex-col">
         {view === 'list' && (
           <>
             {/* Month switcher + tag filter bar */}
@@ -418,6 +420,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
             onToggleOutline={handleToggleOutline}
           />
         )}
+        </div>
       </main>
       </div>
     </div>
@@ -464,7 +467,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
                 </button>
               )}
               <button onClick={handleToggleStar} className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors" title={entry.isStarred ? '取消收藏' : '收藏'}>
-                <Star size={16} className={entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'} />
+                <Star key={entry.isStarred ? 'on' : 'off'} size={16} className={`kb-micro-pop ${entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'}`} />
               </button>
               <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
               <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded">删除</button>

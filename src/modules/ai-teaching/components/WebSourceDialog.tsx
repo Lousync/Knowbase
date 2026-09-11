@@ -72,7 +72,7 @@ export function WebSourceDialog({ sessionId, entry, onClose, onDone }: Props) {
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
   return (
-    <div className="fixed inset-0 z-[130] bg-black/45 flex items-center justify-center" onClick={phase === 'crawling' ? undefined : onClose}>
+    <div className="fixed inset-0 z-[130] bg-black/45 flex items-center justify-center kb-overlay" onClick={phase === 'crawling' ? undefined : onClose}>
       <div className="w-[560px] max-h-[78vh] flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* 头 */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-color)] shrink-0">

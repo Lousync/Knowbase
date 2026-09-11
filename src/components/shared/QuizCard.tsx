@@ -139,7 +139,7 @@ export function QuizCard({ quiz, index, onAnswered, pageId, pageTitle }: Props) 
               fav ? 'text-[#f5b301]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
-            <Star size={15} fill={fav ? 'currentColor' : 'none'} />
+            <Star key={fav ? 'on' : 'off'} size={15} className="kb-micro-pop" fill={fav ? 'currentColor' : 'none'} />
           </button>
         )}
         {answered && (

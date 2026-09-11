@@ -503,7 +503,7 @@ export function PluginsModule() {
     const { entry, level, isUpdate, newContributions, newCapabilities, granted } = consent
     const dataTargets = (entry.contributions || []).filter(k => DATA_TARGETS[k])
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55" onMouseDown={e => { if (e.target === e.currentTarget) setConsent(null) }}>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 kb-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setConsent(null) }}>
         <div className="w-[440px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--border-color)]">
             <div className="flex items-center gap-2 mb-1">
@@ -971,8 +971,8 @@ export function PluginsModule() {
           </div>
         )}
 
-        {/* 列表 */}
-        <div className="flex-1 overflow-y-auto">
+        {/* 列表（tab 切换重放进场，见 docs/ui-animation-plan.md A 类） */}
+        <div key={tab} className="kb-view-in flex-1 overflow-y-auto">
           {tab === 'installed' ? (
             <div>
               {/* 错题本官方推荐行式条目（未安装时显示，与其他已安装插件同款样式 + 右侧一键安装按钮） */}
@@ -1040,7 +1040,7 @@ export function PluginsModule() {
 
       {/* 内容型插件导入确认(A 级知情授权) */}
       {kpConfirm && selected?.kind === 'installed' && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55" onMouseDown={e => { if (e.target === e.currentTarget) setKpConfirm(null) }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 kb-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setKpConfirm(null) }}>
           <div className="w-[440px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-[var(--border-color)]">
               <div className="flex items-center gap-2 mb-1">

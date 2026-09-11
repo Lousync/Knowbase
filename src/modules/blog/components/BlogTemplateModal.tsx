@@ -4,6 +4,7 @@ import type { BlogTemplate } from '../../../types'
 import { listBlogTemplates, deleteBlogTemplate } from '../../../lib/ipc'
 import { getPluginBlogTemplates, type PluginBlogTemplate } from '../../../lib/pluginService'
 import { navigateToSettingsSection } from '../../settings'
+import { usePresence } from '../../../lib/usePresence'
 
 interface Props {
   open: boolean
@@ -23,14 +24,16 @@ export function BlogTemplateModal({ open, onClose, onApply }: Props) {
     void getPluginBlogTemplates().then(setPluginTpls).catch(() => setPluginTpls([]))
   }, [open])
 
-  if (!open) return null
+  // 进出场动效（B 类）：遮罩带 backdrop-blur → 按 §五 约束不做遮罩淡入，只动面板
+  const { mounted, closing } = usePresence(open, 180)
+  if (!mounted) return null
 
   return (
     <div
       className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-md max-h-[80%] flex flex-col rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden">
+      <div className={`${closing ? 'kb-modal-out' : 'kb-modal-in'} w-full max-w-md max-h-[80%] flex flex-col rounded-2xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] overflow-hidden`}>
         <div className="px-5 h-[52px] shrink-0 flex items-center justify-between border-b border-[var(--border-color)]">
           <span className="text-[14px] font-semibold text-[var(--text-primary)]">套用博客模板</span>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]" title="关闭">

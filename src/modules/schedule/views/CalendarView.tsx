@@ -82,8 +82,8 @@ export function CalendarView({ year, month, selectedDate, dotDates, deadlineCoun
         ))}
       </div>
 
-      {/* days grid */}
-      <div className="grid grid-cols-7 px-1">
+      {/* days grid（切月重播：仅 opacity，避免网格位移干扰日期定位，见 docs/ui-animation-plan.md E 类） */}
+      <div key={`${year}-${month}`} className="kb-view-fade grid grid-cols-7 px-1">
         {weeks.flat().map((day, i) => {
           if (day === null) return <div key={`e${i}`} className="aspect-square" />
 

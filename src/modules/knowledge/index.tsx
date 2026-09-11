@@ -1243,8 +1243,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full flex-col bg-[var(--bg-primary)]">
         {readingMode ? (
-          /* ===== 沉浸阅读：只保留正文 ===== */
-          <div className="flex-1 min-w-0 relative">
+          /* ===== 沉浸阅读：只保留正文（进场淡入；可能含 iframe/PDF，故只做透明度、不做位移） ===== */
+          <div className="kb-view-fade flex-1 min-w-0 relative">
             {/* 顶部悬停退出区（平时隐形） */}
             <div
               className="absolute top-0 inset-x-0 h-9 z-40 group/rtop cursor-pointer"
@@ -1336,7 +1336,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             rightActions={<div id="editor-toolbar-slot" className="flex items-center gap-0.5" />}
           />
         )}
-        <div className="flex min-h-0 flex-1">
+        <div className="kb-view-fade flex min-h-0 flex-1">
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={!graphMode && panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
@@ -1374,7 +1374,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
             {/* 空间列表层：无大纲入口，直接显示文件树；空间内可切换大纲 */}
             {selectedSpaceId && showOutline ? (
-              <div className="flex-1 min-h-0">
+              <div className="kb-view-in flex-1 min-h-0">
                 <OutlinePanel
                   pageTitle={activePageForOutline?.title ?? ''}
                   headings={outlineHeadings}

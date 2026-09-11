@@ -10,15 +10,41 @@ export const THEME_OPTIONS = [
   { id: 'light', label: '浅色' },
 ] as const
 
-/** Apply a theme class to <html> — clears any previous theme-* class, adds the new one.
+/**
+ * Apply a theme class to <html> — clears any previous theme-* class, adds the new one.
  *  Call this whenever the user switches themes. New themes only need a new THEME_OPTIONS entry
- *  and a matching `html.theme-<id>` CSS block. */
+ *  and a matching `html.theme-<id>` CSS block.
+ *
+ *  动效（docs/ui-animation-plan.md §五 F 类）：
+ *  主题切换的视觉是「整屏换色」，用通配选择器做过渡会让每帧对全文档做样式重算 + 颜色插值
+ *  （实测 4290 节点下单帧 133ms、界面冻结），故改用 View Transition —— 截两张快照做交叉淡化，
+ *  逐节点成本为零（实测与瞬时切换帧分布一致），过渡时长/缓动在 index.css 的
+ *  ::view-transition-old/new(root) 里统一配置。
+ *  首次应用主题（页面上还没有 theme-* 类）不启用过渡，避免首屏白白淡入一次。
+ */
 export function applyThemeClass(themeId: string): void {
-  document.documentElement.className = document.documentElement.className
-    .split(/\s+/)
-    .filter(c => !c.startsWith('theme-'))
-    .join(' ')
-  document.documentElement.classList.add(`theme-${themeId}`)
+  const root = document.documentElement
+  const apply = (): void => {
+    root.className = root.className
+      .split(/\s+/)
+      .filter(c => !c.startsWith('theme-'))
+      .join(' ')
+    root.classList.add(`theme-${themeId}`)
+  }
+
+  const hasTheme = /(^|\s)theme-/.test(root.className)
+  const reduce = typeof window !== 'undefined' && !!window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  if (hasTheme && !reduce && typeof document.startViewTransition === 'function') {
+    try {
+      document.startViewTransition(apply)
+      return
+    } catch {
+      // 快照失败（如文档不可见）时退回瞬时切换
+    }
+  }
+  apply()
 }
 
 export const FONT_OPTIONS = [

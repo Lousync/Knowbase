@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
+import { prefersReducedMotion } from '../../lib/usePresence'
 
 /**
  * 命令面板 / 快速切换器共用悬浮层（R1-W2，docs/rework-workbench-design.md §3）
@@ -28,8 +29,15 @@ interface Props {
 export function CommandPalette({ placeholder, items, loading = false, emptyHint, footer, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [idx, setIdx] = useState(0)
+  // 关闭先播退场（遮罩淡出 + 面板缩回），再通知父组件卸载
+  const [closing, setClosing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+
+  const closeSoon = useCallback(() => {
+    setClosing(true)
+    setTimeout(() => onClose(), prefersReducedMotion() ? 0 : 150)
+  }, [onClose])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -53,12 +61,14 @@ export function CommandPalette({ placeholder, items, loading = false, emptyHint,
   }, [idx, filtered.length])
 
   const pick = (it: PaletteItem) => {
-    onClose()
+    // 动作立即执行，视觉上继续播退场
+    setClosing(true)
+    setTimeout(() => onClose(), prefersReducedMotion() ? 0 : 150)
     it.run()
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { e.preventDefault(); onClose(); return }
+    if (e.key === 'Escape') { e.preventDefault(); closeSoon(); return }
     if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(i => Math.min(i + 1, filtered.length - 1)); return }
     if (e.key === 'ArrowUp') { e.preventDefault(); setIdx(i => Math.max(i - 1, 0)); return }
     if (e.key === 'Enter') {
@@ -72,11 +82,11 @@ export function CommandPalette({ placeholder, items, loading = false, emptyHint,
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-start justify-center pt-[13vh] bg-black/25"
-      onMouseDown={onClose}
+      className={`fixed inset-0 z-[80] flex items-start justify-center pt-[13vh] bg-black/25 ${closing ? 'kb-overlay-out' : 'kb-overlay'}`}
+      onMouseDown={closeSoon}
     >
       <div
-        className="w-[560px] max-w-[88vw] flex flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_18px_50px_rgba(0,0,0,0.35)]"
+        className={`w-[560px] max-w-[88vw] flex flex-col overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_18px_50px_rgba(0,0,0,0.35)] ${closing ? 'kb-modal-out' : 'kb-modal-in'}`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* 输入行 */}

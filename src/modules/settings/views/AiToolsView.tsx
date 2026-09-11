@@ -419,7 +419,7 @@ function AddServerWizard({ onClose, onSaved }: { onClose: () => void; onSaved: (
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={onClose}>
       <div className="w-[520px] max-h-[85vh] overflow-y-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl"
         onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-4 pb-3 border-b border-[var(--border-color)] flex items-center justify-between">

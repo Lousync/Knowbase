@@ -647,8 +647,12 @@ export default function App() {
     if (on) mountedTabs.current.add(name)
     if (!on && !mountedTabs.current.has(name)) return null
     // Suspense 不产生 DOM 节点，容器布局与改前一致；fallback 只在该模块 chunk 首次拉取期间出现。
+    // 切 Tab 动效（docs/ui-animation-plan.md A 类）：display:none → 显示时浏览器会重新起播 CSS 动画，
+    // 所以同一个 kb-view-fade 类在每次切换时自动重放，无需卸载重建（保活语义不变）。
+    // 这里用**纯淡入**而非 kb-view-in：模块容器内含 Monaco / PDF canvas / 插件 iframe，
+    // 位移动画会把整棵子树提升为合成层重新栅格化（见计划文档 §五 风险表）。
     return (
-      <div key={name} className="flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>
+      <div key={name} className="kb-view-fade flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>
         <Suspense fallback={<ModuleLoadingFallback />}>{renderModuleContent(name, on)}</Suspense>
       </div>
     )
@@ -741,7 +745,7 @@ export default function App() {
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
                       title="AI 助手 (Ctrl+J)"
-                      className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
+                      className="kb-pop absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
                     >
                       <Sparkles size={19} />
                     </button>

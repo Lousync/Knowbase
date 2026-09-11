@@ -736,7 +736,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 {!isWelcomeHtml && !isArchiveFile && (
                   <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                    <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? 'currentColor' : 'none'} />
+                    <Star key={page.isStarred ? 'on' : 'off'} size={13} className={`kb-micro-pop ${page.isStarred ? 'text-[var(--warning)]' : ''}`} fill={page.isStarred ? 'currentColor' : 'none'} />
                     {page.isStarred ? '取消收藏' : '收藏页面'}
                   </button>
                 )}
@@ -1017,7 +1017,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* Wiki disambiguation picker */}
       {wikiPicker && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50" onClick={() => setWikiPicker(null)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 kb-overlay" onClick={() => setWikiPicker(null)}>
           <div
             className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl flex flex-col"
             style={{ width: '420px', maxHeight: '400px' }}
@@ -1188,7 +1188,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* 手动关联选择器 */}
       {linkPickerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-24" onClick={() => setLinkPickerOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-24 kb-overlay" onClick={() => setLinkPickerOpen(false)}>
           <div className="w-[380px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">

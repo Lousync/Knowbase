@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
+import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
+import { Collapsible } from '../../../components/shared/Collapsible'
 import type { DirCache, TreeNode, CreateIntent } from '../types'
 import { getFileIcon } from '../../../lib/fileIcons'
 import ignoreRuleSvg from '../../../assets/ignore.svg?raw'
@@ -131,17 +132,20 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             onContextMenu={(e) => onContextMenu(e, dirNode)}
             title={relPath}
           >
-            {isOpen ? <ChevronDown size={12} className="shrink-0 text-[var(--text-muted)]" /> : <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />}
+            <ChevronRight
+              size={12}
+              className={`kb-chevron shrink-0 text-[var(--text-muted)] ${isOpen ? 'rotate-90' : ''}`}
+            />
             {isOpen ? <FolderOpen size={14} className="shrink-0 text-[var(--text-muted)]" /> : <Folder size={14} className="shrink-0 text-[var(--text-muted)]" />}
             <span className="truncate text-[12.5px] text-[var(--text-primary)]">{dirNode.name}</span>
           </div>
         )}
-        {isOpen && (() => {
+        {(() => {
           // 软件生成项分组（仅根层）：命中名单的条目移到底部「软件文件」折叠节（VS Code 时间线式）
           const softSet = depth === 0 && softNames?.length ? new Set(softNames) : null
           const main = softSet ? entries.filter((e) => !softSet.has(e.name)) : entries
           const softItems = softSet ? entries.filter((e) => softSet.has(e.name)) : []
-          return (
+          const children = (
             <>
               {main.map((e) => {
                 // 双态模型：已归档知识页在编辑器中隐藏（目录骨架/草稿/代码文件保留）
@@ -169,16 +173,32 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                     style={{ paddingLeft: 6 }}
                     title="软件生成的目录与文件（AI教学 产物、.ignore 过滤规则等）"
                   >
-                    {softOpen ? <ChevronDown size={12} className="shrink-0 text-[var(--text-muted)]" /> : <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />}
+                    <ChevronRight
+                      size={12}
+                      className={`kb-chevron shrink-0 text-[var(--text-muted)] ${softOpen ? 'rotate-90' : ''}`}
+                    />
                     <span className="truncate text-[12px] text-[var(--text-muted)]">软件文件</span>
                     <span className="ml-auto shrink-0 pr-1 text-[10px] text-[var(--text-muted)]">{softItems.length}</span>
                   </div>
-                  {softOpen && softItems.map((e) =>
-                    e.type === 'dir' ? renderDir(e.relPath, 1) : renderFileRow(e, 1)
-                  )}
+                  <div className={`kb-collapse ${softOpen ? 'open' : ''}`}>
+                    <div className="flex flex-col">
+                      {softItems.map((e) =>
+                        e.type === 'dir' ? renderDir(e.relPath, 1) : renderFileRow(e, 1)
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>
+          )
+          // 根层（depth 0）保持直接子节点渲染：其父是 flex 列且依赖 mt-auto 把「软件文件」压到底，
+          // 加包裹层会换掉 flex 上下文；子目录统一走 <Collapsible>（收起时不挂载子树，
+          // 展开/收起两个方向都有高度过渡，docs/ui-animation-plan.md C 类）。
+          if (depth === 0) return isOpen ? children : null
+          return (
+            <Collapsible open={isOpen} innerClassName="">
+              {() => children}
+            </Collapsible>
           )
         })()}
       </div>

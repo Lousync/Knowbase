@@ -40,16 +40,17 @@ export function EntryCard({ entry, onClick, onToggleStar, size = 'm' }: EntryCar
   return (
     <article
       onClick={onClick}
-      className={`group flex items-center justify-between ${sz.px} ${sz.py} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md cursor-pointer hover:border-[var(--accent)] transition-all`}
+      className={`kb-item-in group flex items-center justify-between ${sz.px} ${sz.py} bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-md cursor-pointer hover:border-[var(--accent)] transition-all`}
     >
       <div className={`flex items-center ${sz.gap} min-w-0`}>
         {/* Star */}
         <button
           onClick={e => { e.stopPropagation(); onToggleStar(entry.id) }}
-          className="shrink-0 p-0.5 hover:scale-110 transition-transform"
+          className="shrink-0 p-0.5 hover:scale-110 transition-[transform,scale]"
           title={entry.isStarred ? '取消收藏' : '收藏'}
         >
-          <Star size={14} className={entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'} />
+          {/* key 随收藏态变化 → 图标重挂载，micro-pop 每次切换都重播（E 类状态反馈） */}
+          <Star key={entry.isStarred ? 'on' : 'off'} size={14} className={`kb-micro-pop ${entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'}`} />
         </button>
 
         {/* Date */}

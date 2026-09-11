@@ -308,7 +308,7 @@ export function RecycleBinModule({ isActive = true }: { isActive?: boolean }) {
               const isCategory = item.module === 'knowledge_category'
 
               return (
-                <div key={item.id} className="border-b border-[var(--border-color)]">
+                <div key={item.id} className="kb-item-in border-b border-[var(--border-color)]">
                   {/* Item row */}
                   <div className="flex items-center justify-between px-3 py-2 hover:bg-[var(--bg-hover)] transition-colors">
                     <div className="min-w-0 flex-1 flex items-center gap-3">

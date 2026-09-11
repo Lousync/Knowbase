@@ -16,6 +16,7 @@ import { TimetableView } from './views/TimetableView'
 import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
+import { Collapsible } from '../../components/shared/Collapsible'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
@@ -821,11 +822,12 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
                   className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors"
                   title={showDone ? '收起已完成' : '展开已完成'}
                 >
-                  <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`transition-transform ${showDone ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={INPUT_SZ[iconSize].metaIcon + 4} className={`kb-chevron ${showDone ? 'rotate-180' : ''}`} />
                 </button>
               </span>
             </div>
-            {showDone && (
+            {/* 已完成折叠（docs/ui-animation-plan.md C 类） */}
+            <Collapsible open={showDone} innerClassName="">{() => (
               <div className="px-6 py-3 max-h-[260px] overflow-y-auto space-y-3">
                 {doneByDate.map(([date, items]) => (
                   <div key={date}>
@@ -842,7 +844,7 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
                   </div>
                 ))}
               </div>
-            )}
+            )}</Collapsible>
           </div>
         )}
         </div>

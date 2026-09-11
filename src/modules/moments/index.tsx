@@ -993,7 +993,9 @@ export function MomentsModule() {
       </div>
 
       <div className="px-5 pb-24">
-        <div className="max-w-4xl mx-auto space-y-5">
+        {/* 视图切换动效（docs/ui-animation-plan.md A 类）：key 随 视图模式/相册选择 变化重放进场，
+            用纯 transform+opacity，不给图片墙做常驻 will-change */}
+        <div key={`${viewMode}:${selectedAlbumId ?? ''}`} className="kb-view-in max-w-4xl mx-auto space-y-5">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-[12px] text-[var(--text-muted)] gap-2">
               <RefreshCw size={14} className="animate-spin" />
@@ -1220,12 +1222,13 @@ export function MomentsModule() {
       )}
 
       {editorOpen && (
+        /* 遮罩带 backdrop-blur → 按 §五 约束不做遮罩淡入（blur 层每帧重采样成本高），只动面板 */
         <div
           className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) closeEditor() }}
           onPaste={handleEditorPaste}
         >
-          <div className="w-full max-w-2xl max-h-[88%] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+          <div className="kb-modal-in w-full max-w-2xl max-h-[88%] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
             <div className="px-4 h-11 shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border-color)]">
               <button
                 onClick={() => closeEditor()}
@@ -1374,7 +1377,7 @@ export function MomentsModule() {
           className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) setDetailPostId(null) }}
         >
-          <div className="w-full max-w-3xl max-h-[92%] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+          <div className="kb-modal-in w-full max-w-3xl max-h-[92%] flex flex-col rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
             <div className="px-5 py-4 flex items-start justify-between gap-3 border-b border-[var(--border-color)]">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] overflow-hidden flex items-center justify-center shrink-0">
@@ -1453,7 +1456,7 @@ export function MomentsModule() {
           className="absolute inset-0 z-[60] bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) setAlbumModal(null) }}
         >
-          <div className="w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+          <div className="kb-modal-in w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
             <div className="px-4 h-11 flex items-center justify-between border-b border-[var(--border-color)]">
               <span className="text-[13px] font-medium text-[var(--text-primary)]">
                 {albumModal.mode === 'rename' ? '重命名相册' : albumModal.mode === 'pick' ? '加入相册' : '新建相册'}
@@ -1565,7 +1568,7 @@ export function MomentsModule() {
           className="absolute inset-0 z-[60] bg-black/55 backdrop-blur-[3px] flex items-center justify-center p-5"
           onMouseDown={e => { if (e.target === e.currentTarget) void cancelAlbumPhotoConfirm() }}
         >
-          <div className="w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
+          <div className="kb-modal-in w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] shadow-[0_2px_12px_rgba(0,0,0,0.12)] overflow-hidden">
             <div className="px-4 h-11 flex items-center justify-between border-b border-[var(--border-color)]">
               <span className="text-[13px] font-medium text-[var(--text-primary)]">添加照片到相册</span>
               <button onClick={() => void cancelAlbumPhotoConfirm()} className="p-1 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title="关闭">
@@ -1636,7 +1639,7 @@ export function MomentsModule() {
           <img
             src={lightbox.images[lightbox.index]}
             alt="图片预览"
-            className="max-w-[88%] max-h-[88%] object-contain rounded-lg shadow-2xl"
+            className="kb-modal-in max-w-[88%] max-h-[88%] object-contain rounded-lg shadow-2xl"
           />
 
           {lightbox.images.length > 1 && (
