@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Knowbase 文档</title>
-<meta name="description" content="Knowbase Programmer Edition 使用文档：快速上手、知识库、日程、AI 助手、工具箱与插件。">
+<link rel="icon" type="image/png" href="assets/icon.png">
+<title>Phrontis 文档</title>
+<meta name="description" content="Phrontis 使用文档：快速上手、知识库、日程、AI 助手、工具箱与插件。">
 <style>
   :root {
     --bg: #fafaf9; --surface: #ffffff; --border: #e7e5e4;
@@ -112,7 +113,7 @@
 
 <nav>
   <div class="nav-inner">
-    <a class="logo" href="index.html"><span class="logo-mark">K</span>Knowbase <small>文档</small></a>
+    <a class="logo" href="index.html"><img src="assets/icon.png" alt="" style="width:26px;height:26px;border-radius:7px;display:block">Phrontis <small>文档</small></a>
     <div class="nav-right">
       <div class="searchbox">
         <span class="mag">🔍</span>
@@ -157,14 +158,14 @@ md:`## 下载安装
 { slug:'vault', title:'仓库：一个文件夹就是你的账户', category:'入门', weight:2, icon:'🗄️', kw:'仓库 vault 换电脑 迁移 备份 文件夹',
 md:`## 核心概念
 
-Knowbase 没有"云端账户"——**一个文件夹就是一个仓库**：
+Phrontis 没有"云端账户"——**一个文件夹就是一个仓库**：
 
 - 正文内容是 \`.md\` 文件，任何编辑器都能打开；
 - 结构化数据（任务、打卡、设置等）是仓库内 \`.knowbase/\` 目录下的 JSON 文件。
 
 ## 换电脑
 
-把仓库文件夹整体拷贝到新电脑，安装 Knowbase 后在启动页选择"打开已有仓库"即可，历史数据原样归来。
+把仓库文件夹整体拷贝到新电脑，安装 Phrontis 后在启动页选择"打开已有仓库"即可，历史数据原样归来。
 
 ## 备份
 
@@ -358,7 +359,7 @@ md:`## 我的数据存在哪？
 到 [GitHub Issues](https://github.com/Lousync/Knowbase/issues) 提问，或在应用内「设置菜单 → 帮助 → 反馈问题」一键跳转。` },
 
 { slug:'markdown-guide', title:'Markdown 写作指南', category:'附加文档', weight:1, icon:'📝', kw:'Markdown 语法 标题 加粗 列表 代码 表格 链接',
-md:`Knowbase 里写的一切都是 Markdown——编辑器、知识库、博客通用。常用语法速查：
+md:`Phrontis 里写的一切都是 Markdown——编辑器、知识库、博客通用。常用语法速查：
 
 ## 标题与强调
 
@@ -397,7 +398,7 @@ md:`Knowbase 里写的一切都是 Markdown——编辑器、知识库、博客�
 md:`## 遇到问题了？
 
 1. **应用内反馈**：设置菜单 → 帮助 → 反馈问题，一键跳转 GitHub Issues；
-2. **提 Issue 请带上**：Knowbase 版本号（设置 → 关于可见）、复现步骤、预期与实际行为；
+2. **提 Issue 请带上**：Phrontis 版本号（设置 → 关于可见）、复现步骤、预期与实际行为；
 3. **功能建议**同样走 Issues，标注 \`feature\` 标签即可。
 
 ## 文档没覆盖到的
@@ -430,7 +431,7 @@ md:`**最后更新：随版本发布同步**
 
 ## 许可
 
-Knowbase 以 **MIT 许可证**开源发布，你可以自由使用、修改、分发，详见仓库 LICENSE 文件。
+Phrontis 以 **MIT 许可证**开源发布，你可以自由使用、修改、分发，详见仓库 LICENSE 文件。
 
 ## 免责声明
 
@@ -440,7 +441,7 @@ Knowbase 以 **MIT 许可证**开源发布，你可以自由使用、修改、�
 
 - 插件市场的内容由各自作者提供，经安全审核但不构成担保；
 - 你配置的 AI 模型服务商（在线接口）受其各自服务条款约束；
-- 以上均不属于 Knowbase 本身的一部分。
+- 以上均不属于 Phrontis 本身的一部分。
 
 ## 条款变更
 
@@ -567,7 +568,7 @@ function render() {
   } else { tocEl.style.display = 'none'; tocEl.innerHTML = '' }
   box.innerHTML = '<div class="crumb">' + d.category + '</div>' +
     '<div class="doc-title">' + d.icon + ' ' + d.title + '</div>' +
-    '<div class="doc-meta">Knowbase Programmer Edition</div>' +
+    '<div class="doc-meta">Phrontis</div>' +
     '<div class="md">' + r.html + '</div>' +
     '<div class="pager">' +
     (prev ? '<a href="#/' + prev.slug + '">← ' + prev.title + '</a>' : '<span></span>') +
