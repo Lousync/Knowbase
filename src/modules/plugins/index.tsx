@@ -14,6 +14,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { showToast } from '../../lib/toast'
 import { startBackgroundPluginInstall } from '../../lib/pluginDownloadBus'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
+import { PluginSettingsForm } from './PluginSettingsForm'
 import type { PluginSummary, PluginRegistryEntry, PluginAuditEntry, PluginRiskLevel } from '../../types'
 
 /**
@@ -53,6 +54,8 @@ const CAPABILITY_LABELS: Record<string, string> = {
   knowledge: '知识库访问与重刷',
   navigation: '导航跳转',
   files: '本地文件读取',
+  'vault:read': '知识库检索(只读)',
+  'vault:write': '仓库文件写入',
 }
 
 const CAPABILITY_DESCS: Record<string, string> = {
@@ -62,6 +65,8 @@ const CAPABILITY_DESCS: Record<string, string> = {
   knowledge: '允许插件打开宿主刷题器等知识功能(判题写入插件自己的数据表)',
   navigation: '允许插件请求跳转到指定页面',
   files: '允许插件弹系统对话框挑文件并读取其内容(每次经你手动确认,不会静默访问磁盘)',
+  'vault:read': '允许插件检索与读取知识库笔记的元数据(标题/标签/属性/链接/搜索,只读,不能修改任何内容)',
+  'vault:write': '允许插件写入或删除仓库内的普通 .md/.txt 文件(受插件声明目录范围与保护区规则约束,不涉及 .knowbase 内部数据)',
 }
 
 const DATA_TARGETS: Record<string, string> = {
@@ -700,6 +705,9 @@ export function PluginsModule() {
             </>
           )}
 
+          {/* 声明式设置（plugin-phase1-design C5）：schema 驱动表单，值落插件私有 kb.store */}
+          {p.enabled && !p.broken && <PluginSettingsForm pluginId={p.id} />}
+
           <SectionTitle>提供的内容</SectionTitle>
           <div className="space-y-2 mb-8">
             {p.broken ? (
@@ -893,7 +901,7 @@ export function PluginsModule() {
           )}
         </div>
 
-        {/* C 级白名单（与列表分离，避免突兀） */}
+        {/* C 级白名单（错题本插件版退役后保留通用 C 级开关） */}
         {tab === 'installed' && (
           <div className="px-3 py-1.5 flex flex-col gap-1 text-[10px] text-[var(--text-muted)] border-b border-[var(--border-color)]/60">
             <label className="flex items-center gap-1 cursor-pointer select-none">

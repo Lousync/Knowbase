@@ -410,6 +410,13 @@ export interface KnowledgeBacklinkItem {
   updatedAt: string
   excerpt: string
 }
+/** 相似笔记条目（编辑器右栏「相关笔记」，A3-3；via=命中方式 keyword/semantic/hybrid） */
+export interface SimilarPageHit {
+  pageId: string; title: string; path: string
+  excerpt: string
+  via: 'keyword' | 'semantic' | 'hybrid'
+  score: number
+}
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' | 'space' }
 export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' | 'space' }
@@ -510,6 +517,40 @@ export interface PluginViewContribution {
   mode: string
   icon?: string
   granted: string[]
+}
+
+/** 插件命令（plugin-phase1-design C3；plugin:listCommands 行结构） */
+export interface PluginCommandInfo {
+  pluginId: string
+  name: string
+  /** 插件内命令 id；全局名 = `<pluginId>.<id>` */
+  id: string
+  title: string
+  desc?: string
+  /** 插件首个 view 的槽位（ui 插件才有）：宿主执行时切模块并激活该视图 */
+  viewSlot?: string
+  type: 'declarative' | 'ui' | 'code'
+}
+
+/** 插件声明式设置项（plugin-phase1-design C5；contributes.settings 条目） */
+export interface PluginSettingItem {
+  key: string
+  label: string
+  type: 'boolean' | 'number' | 'string' | 'select'
+  default?: unknown
+  /** select 专供：{value,label} 或字符串数组 */
+  options?: Array<Record<string, unknown> | string>
+  desc?: string
+}
+
+/** 插件 fenced-code 渲染器（plugin-phase1-design C6；plugin:listRenderers 行结构） */
+export interface PluginRendererInfo {
+  pluginId: string
+  name: string
+  lang: string
+  entry: string
+  height?: number
+  title?: string
 }
 
 export interface PluginSummary {
@@ -679,6 +720,8 @@ export interface LlmProviderInfo {
   hasKey: boolean
   models: string[]
   headers?: Record<string, string>
+  /** 嵌入模型名（空串=未配置；知识语义检索用） */
+  embeddingModel: string
   isDefault: boolean
 }
 
@@ -694,6 +737,8 @@ export interface LlmProviderDraft {
   enabled?: boolean
   /** 自定义请求头（opencode 等网关要求 x-opencode-session 之类路由头时在此配置） */
   headers?: Record<string, string>
+  /** 嵌入模型名（知识语义索引用）；不配 = 该供应商不参与嵌入 */
+  embeddingModel?: string
 }
 
 export interface LlmTestResultInfo {
@@ -719,6 +764,17 @@ export interface LlmUsageInfo {
   visionMonthTokens?: number
   /** 视觉转写月度页数 */
   visionPages?: number
+}
+
+/** 本月用量细分（网关补强：审计聚合，按供应商/模型） */
+export interface LlmUsageBreakdownEntry {
+  providerId: string
+  provider: string
+  model: string
+  calls: number
+  tokens: number
+  promptTokens: number
+  completionTokens: number
 }
 
 // ===== CC Switch 一键导入 =====
@@ -914,6 +970,20 @@ export interface AgentChatResult {
   changes?: AgentChange[]
   /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（上下文构成摘要；其它来源无此字段） */
   injection?: AiTeachInjectionStats
+  /** 触达轮数/token 预算上限：本次回答来自强制总结轮（渲染层可提示） */
+  hitCap?: boolean
+  /** 本次请求前自动压缩了历史（会话压缩 §6.1；渲染层据此 toast 告知） */
+  compressed?: { covered: number; digestChars: number }
+}
+
+/** 会话压缩结果（agent:compressSession；AgentCompressResult 的渲染层镜像） */
+export interface AgentCompressResult {
+  ok: boolean
+  skipped?: 'nothing-to-compress'
+  covered?: number
+  digestChars?: number
+  slices?: number
+  error?: string
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -1094,6 +1164,7 @@ export interface ElectronAPI {
   searchKnowledgePages: (q: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinks: (pageId: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinkContext: (pageId: string) => Promise<KnowledgeBacklinkItem[]>
+  getKnowledgeSimilarPages: (pageId: string) => Promise<{ hits: SimilarPageHit[]; semantic?: { enabled: boolean; reason?: string } }>
   getKnowledgeManualLinks: (pageId: string) => Promise<KnowledgePage[]>
   addKnowledgeManualLink: (pageId: string, targetId: string) => Promise<{ ok: boolean }>
   removeKnowledgeManualLink: (a: string, b: string) => Promise<{ ok: boolean }>
@@ -1109,11 +1180,17 @@ export interface ElectronAPI {
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
   reorderKnowledgePage: (id: string, targetIndex: number) => Promise<void>
   moveKnowledgeCategory: (id: string, direction: 'up' | 'down') => Promise<void>
+  duplicateKnowledgePage: (data: { pageId: string; targetCategoryId?: string | null }) => Promise<unknown>
+  duplicateKnowledgeCategory: (data: { categoryId: string; targetParentId?: string | null }) => Promise<unknown>
   // import
   showImportOpenDialog: () => Promise<string[]>
   readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>
   importPdf: (base64: string, fileName: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   importPdfFile: (filePath: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importBinary: (base64: string, fileName: string, fileType: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importBinaryFile: (filePath: string, fileType: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  showFolderDialog: () => Promise<string[] | null>
+  importFolder: (folderPath: string, parentCategoryId: string | null) => Promise<{ error?: string; name?: string; fileCount?: number; folderCount?: number } | null>
   openExternal: (filePath: string) => Promise<void>
   getAppVersion: () => Promise<string>
   checkForUpdate: () => Promise<{ ok: boolean; hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; notes: string; asset: { name: string; url: string; size: number } | null; message?: string }>
@@ -1141,6 +1218,12 @@ export interface ElectronAPI {
   pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
   pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
   pluginListViews: (slot?: string) => Promise<PluginViewContribution[]>
+  pluginListCommands: () => Promise<PluginCommandInfo[]>
+  pluginListRenderers: () => Promise<PluginRendererInfo[]>
+  pluginGetSettingsSchema: (id: string) => Promise<{ schema: PluginSettingItem[] }>
+  pluginGetSettingValues: (id: string) => Promise<{ values: Record<string, unknown> }>
+  pluginSetSettingValue: (id: string, key: string, value: unknown) => Promise<{ ok: boolean; error?: string }>
+  onPluginEvent: (cb: (p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => void) => () => void
   pluginDataQuery: (pluginId: string, table: string, opts?: { where?: Array<{ column: string; op?: string; value: unknown }>; orderBy?: string; desc?: boolean; limit?: number }) => Promise<Record<string, unknown>[]>
   pluginDataInsert: (pluginId: string, table: string, row: Record<string, unknown>) => Promise<{ ok: boolean; id?: string; error?: string }>
   pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>
@@ -1431,6 +1514,7 @@ export interface ElectronAPI {
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
   llmTestModel: (providerId: string, model: string) => Promise<LlmModelTestResultInfo>
   llmGetUsage: () => Promise<LlmUsageInfo>
+  llmUsageBreakdown: () => Promise<{ month: string; entries: LlmUsageBreakdownEntry[] }>
   // 划词翻译 / 离线词典
   dictLookup: (word: string) => Promise<DictLookupResult>
   dictStatus: () => Promise<DictStatus>
@@ -1449,7 +1533,9 @@ export interface ElectronAPI {
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentStartScene: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string; source?: string; modelId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
-  agentDeleteMessage: (messageId: string) => Promise<boolean>
+  agentDeleteMessage: (sessionId: string, messageId: string) => Promise<boolean>
+  /** 会话压缩（/compress 指令 + 自动预检共用）：折叠检查点后旧轮为纪要并推进检查点 */
+  agentCompressSession: (req: { sessionId: string; modelId?: string; providerId?: string; effort?: string }) => Promise<AgentCompressResult>
   agentAbort: (chatId: string) => Promise<boolean>
   /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
   onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void

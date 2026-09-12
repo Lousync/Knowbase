@@ -1,5 +1,5 @@
 import { Loader2, Check } from 'lucide-react'
-import type { ExportMarkdownProgress } from '../../../types'
+import type { ExportMarkdownProgress } from '../../../../types'
 
 interface ProgressPanelProps {
   progress: ExportMarkdownProgress | null

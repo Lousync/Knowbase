@@ -30,7 +30,10 @@ import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
-import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent, getReleaseNotesState } from './lib/ipc'
+import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent, getReleaseNotesState, pluginListCommands, onPluginInstalledChanged } from './lib/ipc'
+import { requestPluginViewActivation, dispatchCodePluginAction } from './lib/pluginCommandBus'
+import { showToast } from './lib/toast'
+import type { PluginCommandInfo } from './types'
 /* 模块引入方式（2026-09-10 二次修正：回退到静态 import）
    曾把 12 个模块改成 React.lazy 做代码分割——首屏从 13.3MB 降到 3.37MB，但代价是
    「每次打开应用后，进入一个尚未访问过的模块都要现取 chunk」：生产下数十 ms，
@@ -169,6 +172,14 @@ export default function App() {
   const [palette, setPalette] = useState<null | 'command' | 'file'>(null)
   const [fileItems, setFileItems] = useState<PaletteItem[]>([])
   const [fileLoading, setFileLoading] = useState(false)
+  // 插件命令（plugin-phase1-design C3）：命令面板聚合 + 执行分发（切模块激活视图 / 推常驻 Worker）
+  const [pluginCommands, setPluginCommands] = useState<PluginCommandInfo[]>([])
+  useEffect(() => {
+    const load = () => { void pluginListCommands().then(setPluginCommands).catch(() => null) }
+    load()
+    const off = onPluginInstalledChanged(load)
+    return off
+  }, [])
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
   // 工具箱「回主页」信号（单调递增）：已在工具箱时点击活动栏图标 → +1，工具箱模块据此退出当前工具。
@@ -250,6 +261,31 @@ export default function App() {
     setSidebarOpen(true)
     setPalette(null)
   }, [])
+
+  /** 插件命令执行分发（plugin-phase1-design C3）：有视图 → 切模块激活；code 插件 → 推常驻 Worker */
+  const SLOT_MODULE: Record<string, TabName> = { knowledge: 'knowledge', editor: 'editor', blog: 'blog', schedule: 'schedule', aiTeach: 'aiTeaching' }
+  const runPluginCommand = useCallback((c: PluginCommandInfo) => {
+    if (c.viewSlot) {
+      const mod = SLOT_MODULE[c.viewSlot.split('.')[0]]
+      if (mod) {
+        openTab(mod)
+        // 模块可能刚首挂：稍候广播激活（PluginSlotEntry 同时消费暂存请求，双保险）
+        const slot = c.viewSlot
+        window.setTimeout(() => requestPluginViewActivation(c.pluginId, slot), 80)
+        return
+      }
+    }
+    if (c.type === 'code') {
+      if (!dispatchCodePluginAction(c.pluginId, 'command', { commandId: c.id })) {
+        showToast({ type: 'info', message: `插件「${c.name}」后台未运行，无法执行命令` })
+      }
+      setPalette(null)
+      return
+    }
+    showToast({ type: 'info', message: '该插件没有可打开的视图' })
+    setPalette(null)
+  }, [openTab])
+
   const buildCommandItems = (): PaletteItem[] => {
     const tabs: Array<{ id: TabName; label: string; hint?: string }> = [
       { id: 'editor', label: '打开 编辑器', hint: 'Vault 文件' },
@@ -284,6 +320,16 @@ export default function App() {
     MODULE_TABS.filter((m) => m.id !== activeTab).forEach((m) => {
       items.push({ id: `split-${m.id}`, label: `分屏：在副栏打开 ${m.label}`, group: '分屏', run: () => { setSecondaryTab(m.id); setPalette(null) } })
     })
+    // 插件命令（plugin-phase1-design C3）：hint = 插件名，与内置命令并列
+    for (const c of pluginCommands) {
+      items.push({
+        id: `plugin-cmd-${c.pluginId}.${c.id}`,
+        label: c.title,
+        hint: c.name,
+        group: '插件命令',
+        run: () => runPluginCommand(c),
+      })
+    }
     return items
   }
 

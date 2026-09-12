@@ -1,6 +1,6 @@
 export interface ToastMessage {
   id: string
-  type: 'error' | 'warning' | 'info'
+  type: 'error' | 'warning' | 'info' | 'success'
   message: string
   detail?: string   // help section id: 'shortcuts' | 'editor' | etc.
   duration?: number // ms, default 5000

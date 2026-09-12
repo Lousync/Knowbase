@@ -6,6 +6,7 @@ import {
   aiToolsList, aiToolsGetRecentAudit,
   mcpListServers, mcpAddServer, mcpRemoveServer, mcpToggleServer, mcpRefreshTools, mcpTestConnection,
   aiToolsListSkills, aiToolsCopySkillPrompt, aiToolsInstallSkill, aiToolsInstallSkillFromFile, aiToolsUninstallSkill, aiToolsToggleSkill,
+  llmListProviders,
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
 import { SettingSwitch } from '../../../components/shared/SettingSwitch'
@@ -131,10 +132,23 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
   onUsageChange: (u: AiToolUsage) => void
   monthlyLimit: number
 }) {
-  const { update } = useSettings()
+  const { s, update } = useSettings()
   const [tools, setTools] = useState<AgentToolInfo[]>([])
   const [recentAudit, setRecentAudit] = useState<AuditEntryInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const agentMaxRounds = s.agentMaxRounds ?? 16
+  const agentRunTokenBudget = s.agentRunTokenBudget ?? 500000
+  const agentContextBudgetTokens = s.agentContextBudgetTokens ?? 24000
+  const agentCompressionEnabled = s.agentCompressionEnabled !== false
+  const agentCompressAtPercent = s.agentCompressAtPercent ?? 80
+  const agentCompressModelId = s.agentCompressModelId ?? ''
+  // 压缩专用模型下拉：全部供应商的全部模型（'' = 跟随当前会话模型）
+  const [compressModelOptions, setCompressModelOptions] = useState<Array<{ value: string; label: string }>>([])
+  useEffect(() => {
+    void llmListProviders().then(({ providers }) => {
+      setCompressModelOptions(providers.flatMap(p => (p.models ?? []).map(m => ({ value: `${p.id}:${m}`, label: `${p.name} / ${m}` }))))
+    }).catch(() => setCompressModelOptions([]))
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -178,6 +192,84 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
             <div className="h-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
           </div>
         )}
+      </div>
+
+      {/* Agent 循环预算（轮数 / token 预算 / 上下文裁剪；Agent 第 0+2 层） */}
+      <div data-setting-anchor="aiTools.agentLoop">
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">Agent 循环</h2>
+        <p className="text-[12px] text-[var(--text-muted)] mb-4">
+          控制单次请求的推理预算：轮数或累计 token 触顶后自动总结收场（不丢弃已获取的信息）。互相独立的工具调用会并发执行以减少轮数消耗。
+        </p>
+        <div className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md space-y-2.5">
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">最大推理轮数</span>
+            <input
+              type="number"
+              min={2}
+              max={64}
+              value={String(agentMaxRounds)}
+              onChange={e => { void update('agentMaxRounds', Math.min(64, Math.max(2, Math.floor(Number(e.target.value) || 16)))) }}
+              className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">单次 token 预算</span>
+            <input
+              type="number"
+              min={0}
+              step={50000}
+              value={String(agentRunTokenBudget)}
+              onChange={e => { void update('agentRunTokenBudget', Math.max(0, Math.floor(Number(e.target.value) || 0))) }}
+              className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">历史上下文预算</span>
+            <input
+              type="number"
+              min={0}
+              step={2000}
+              value={String(agentContextBudgetTokens)}
+              onChange={e => { void update('agentContextBudgetTokens', Math.max(0, Math.floor(Number(e.target.value) || 0))) }}
+              className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">自动压缩触发线</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={50}
+                max={100}
+                step={5}
+                value={String(agentCompressAtPercent)}
+                onChange={e => { void update('agentCompressAtPercent', Math.min(100, Math.max(50, Math.floor(Number(e.target.value) || 80)))) }}
+                className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+              />
+              <span className="text-[12px] text-[var(--text-muted)]">%</span>
+            </div>
+          </label>
+          <div className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">历史自动压缩</span>
+            <SettingSwitch checked={agentCompressionEnabled} onChange={v => { void update('agentCompressionEnabled', v) }} aria-label="历史自动压缩" />
+          </div>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)] shrink-0">压缩专用模型</span>
+            <select
+              value={agentCompressModelId}
+              onChange={e => { void update('agentCompressModelId', e.target.value) }}
+              className="w-44 px-2 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] truncate"
+            >
+              <option value="">跟随当前会话模型</option>
+              {compressModelOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            历史上下文预算控制带进模型的历史消息量，0 表示不裁剪（不推荐：长会话费用会快速上涨）。
+            开启自动压缩后，上下文达到触发线（历史预算的百分比）时先把较早的对话折叠为持久化纪要再发送（代替直接丢弃）；
+           也可随时在聊天框输入 /compress 手动压缩。
+          </p>
+        </div>
       </div>
 
       {/* 内置工具只读列表（popover 悬浮：展开覆盖下方内容，不推挤） */}

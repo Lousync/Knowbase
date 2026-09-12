@@ -32,6 +32,8 @@
   /* 边框 / 分割 */
   --border-color: #3c3c3c;
   --warning-bg: #2a2a1e;
+  /* 树形缩进层级参考线（编辑器/知识库/AI教学 左栏多层树，treeGuides.ts 消费） */
+  --tree-guide: color-mix(in srgb, var(--border-color) 60%, transparent);
 
   /* 字体 */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;

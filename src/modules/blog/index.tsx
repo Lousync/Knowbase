@@ -4,6 +4,7 @@ import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags, workspaceGetCurrent } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
+import { PluginSlotEntry } from '../../components/shared/PluginSlotEntry'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
@@ -299,6 +300,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               allTags={allTags}
             />
           </div>
+          <PluginSlotEntry slot="blog.sidebar" />
         </div>
       </ResizablePanel>
 
@@ -393,7 +395,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail'); if (entry.date !== today) setLiveContent(entry.contentMd || '') }}
               onToggleStar={handleToggleStar}
               onNewEntry={handleTodayEntry}
-              cardSize={s.blogCardSize}
+              cardSize={(['s', 'm', 'l'] as const).includes(s.blogCardSize as 's' | 'm' | 'l') ? s.blogCardSize as 's' | 'm' | 'l' : 'm'}
             />
           </>
         )}

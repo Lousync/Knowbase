@@ -47,6 +47,9 @@ import { registerMcpHandlers, restoreMcpConnections } from '../lib/mcpService'
 import { registerSkillHandlers } from '../lib/skillService'
 import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
+import { registerAgentCompressHandlers } from '../lib/agentCompress'
+import { registerSemanticIndexHandlers } from '../lib/kbStore/semanticIndex'
+import { registerKnowledgeSearchHandlers } from '../lib/knowledgeSearch'
 import { registerAiTeachingFolderHandlers, migrateRootDir as migrateAiTeachRootDir } from '../lib/aiTeachingFolders'
 import { registerAiTeachingWorkspaceHandlers } from '../lib/aiTeachingWorkspaces'
 import { registerAiTeachingSourceHandlers } from '../lib/aiTeachingSources'
@@ -664,17 +667,37 @@ app.whenReady().then(async () => {
         pluginDebugLog(`403 out-of-bounds - resolved=${resolved}`)
         return new Response('Forbidden', { status: 403 })
       }
-      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+      // 内置插件只读兜底（plugin-phase1-design C1）：内置插件首启才播种进插件根目录，
+      // 播种前（含启动尾部自检）按插件根查找必然 404——这里按序回落 builtin-plugins 目录，
+      // 消解启动时序依赖。逐候选做同样的越界校验，只读不写。
+      let file: string | null = existsSync(resolved) && statSync(resolved).isFile() ? resolved : null
+      if (!file) {
+        const builtinCandidates = app.isPackaged
+          ? [join(process.resourcesPath, 'builtin-plugins')]
+          : [
+              join(app.getAppPath(), 'resources', 'builtin-plugins'),
+              resolve(app.getAppPath(), '../..', 'resources', 'builtin-plugins'),
+              join(process.cwd(), 'resources', 'builtin-plugins'),
+            ]
+        for (const builtinDir of builtinCandidates) {
+          if (!existsSync(builtinDir)) continue
+          const bResolved = resolve(join(builtinDir, id), rel)
+          const bRoot = join(builtinDir, id)
+          if (!bResolved.startsWith(bRoot.endsWith(sep) ? bRoot : bRoot + sep)) continue
+          if (existsSync(bResolved) && statSync(bResolved).isFile()) { file = bResolved; break }
+        }
+      }
+      if (!file) {
         pluginDebugLog(`404 not found - resolved=${resolved}`)
         return new Response('Not Found', { status: 404 })
       }
-      const ext = (resolved.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+      const ext = (file.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
       const mimeMap: Record<string, string> = {
         html: 'text/html', js: 'text/javascript', mjs: 'text/javascript', css: 'text/css',
         json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
         jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', woff2: 'font/woff2', woff: 'font/woff',
       }
-      return new Response(Readable.toWeb(createReadStream(resolved)) as unknown as BodyInit, {
+      return new Response(Readable.toWeb(createReadStream(file)) as unknown as BodyInit, {
         headers: {
           'Content-Type': mimeMap[ext] || 'application/octet-stream',
           'Cache-Control': 'no-cache',
@@ -866,6 +889,12 @@ app.whenReady().then(async () => {
     }
     registerLlmHandlers({ getSettingValue, setSettingValue })
     registerAgentHandlers()
+    // 会话压缩（conversation-compaction-design）：agent:compressSession（/compress 指令 + 自动预检共用）
+    registerAgentCompressHandlers()
+    // 知识语义索引（knowledge-index-design）：设置页状态卡 + 手动重建
+    registerSemanticIndexHandlers()
+    // 相似笔记（编辑器右栏）检索 handler
+    registerKnowledgeSearchHandlers()
     // AI教学 P1：会话 ⇄ 文件夹绑定（aiTeach:* IPC，总纲 §二）
     registerAiTeachingFolderHandlers((key) => settingsCache[key])
     // AI教学 P5：工作区两层（元数据 .knowbase/modules/aiTeaching/workspaces.json，§3.2-6/3-6）

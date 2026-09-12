@@ -2,6 +2,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { recordActivity } from '../../lib/habitLinkService'
+import { emitPluginEvent } from '../../lib/pluginEvents'
 import {
   vaultListEntries, vaultGetEntryById, vaultCreateEntry, vaultUpdateEntry,
   vaultDeleteEntry, vaultSearchEntries,
@@ -38,6 +39,7 @@ export function registerEntryHandlers(): void {
     const e = vaultCreateEntry({ title: data.title, contentMd: data.contentMd, date: data.date, tags: data.tags, states: data.states })
     // 字数联动打卡：去库化源表不在 sqlite，指标由上报方直接给出
     recordActivity({ source: 'blog', date: e.date, refId: e.id, value: e.wordCount }, event.sender)
+    emitPluginEvent('blog:postSaved', { postId: e.id, title: e.title })
     return e
   })
 
@@ -51,7 +53,9 @@ export function registerEntryHandlers(): void {
     tags?: string[]
     states?: string
   }) => {
-    return vaultUpdateEntry(id, data).entry
+    const r = vaultUpdateEntry(id, data)
+    emitPluginEvent('blog:postSaved', { postId: r.entry.id, title: r.entry.title })
+    return r.entry
   })
 
   // 删除博文（软删除 → 回收站）

@@ -9,7 +9,8 @@ import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, t
 import { getCurrentVault } from './kbStore/vaultContext'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
-import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { searchKnowledge } from './knowledgeSearch'
 import { searchHelp } from './helpService'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
@@ -162,12 +163,12 @@ function ruleSummary(ruleType: string, ruleDays: number[], weeklyTarget: number)
 
 const VAULT_DOT_DIR = '.knowbase'
 const VAULT_MODULES_DIR = 'modules'
-const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
+export const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
 const MAX_VAULT_SEARCH_FILE = 1024 * 1024 // search 只扫 ≤1MB 文本
 const MAX_VAULT_SEARCH_FILES = 400
-const MAX_VAULT_LIST_ENTRIES = 200
+export const MAX_VAULT_LIST_ENTRIES = 200
 
-function vaultRootPath(): string {
+export function vaultRootPath(): string {
   const cur = getCurrentVault()
   if (!cur || !cur.rootPath) throw new Error('当前没有打开的仓库：请先在应用中打开知识仓库')
   return cur.rootPath
@@ -191,7 +192,7 @@ function isModulesJson(parts: string[]): boolean {
 }
 
 /** 子路径是否 AI 允许（目录枚举用）：点目录一律拒，.knowbase 仅 modules 子树放行 */
-function childAiAllowed(root: string, childAbs: string): boolean {
+export function childAiAllowed(root: string, childAbs: string): boolean {
   const parts = vaultRelParts(root, childAbs)
   if (parts.length === 0) return false
   const first = parts[0]
@@ -203,7 +204,7 @@ function childAiAllowed(root: string, childAbs: string): boolean {
 }
 
 /** 读白名单：.md/.txt（可见区任意处）+ .json（仅 .knowbase/modules） */
-function isAiReadableFile(root: string, abs: string): boolean {
+export function isAiReadableFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (!childAiAllowed(root, abs)) return false
@@ -234,7 +235,7 @@ function walkAiFiles(root: string, dirAbs: string, out: string[], budget: { coun
 }
 
 /** 写白名单（B2）：普通可见区 .md/.txt；.knowbase 全面禁写（modules/*.json 只读、cache/config 等本就不可见） */
-function isAiWritableFile(root: string, abs: string): boolean {
+export function isAiWritableFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (parts[0].startsWith('.')) return false // 含 .knowbase：任何写操作都拒
@@ -243,7 +244,7 @@ function isAiWritableFile(root: string, abs: string): boolean {
 }
 
 /** 文档白名单（docs.read-text）：普通可见区 .pdf/.pptx（.knowbase 内部暂不开放） */
-function isAiDocFile(root: string, abs: string): boolean {
+export function isAiDocFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (parts[0].startsWith('.')) return false
@@ -252,7 +253,7 @@ function isAiDocFile(root: string, abs: string): boolean {
 }
 
 /** 写前守卫：writable 判定 + 大小 + mtime 冲突（expectedMtimeMs 来自 vault.read 基线） */
-function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
+export function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
   if (!isAiWritableFile(root, abs)) {
     throw new Error('该位置不可写：AI 仅可新建/修改仓库内普通 .md/.txt 文件（.knowbase 内部数据只读保护）')
   }
@@ -285,36 +286,40 @@ function broadcastExternalWrite(relPath: string, mtimeMs?: number): void {
 const SEARCH_LIMIT_SCHEMA = {
   type: 'object',
   properties: {
-    query: { type: 'string', description: '关键词, 空格分隔为 AND' },
+    query: { type: 'string', description: '检索词，空格分词（自然语言问句亦可，语义检索可用时按含义召回）' },
     limit: { type: 'number', description: '上限, 默认8' },
+    mode: { type: 'string', enum: ['auto', 'keyword', 'semantic'], description: '检索方式：auto=可用则混合（默认）/ keyword=仅关键词 / semantic=仅语义' },
   },
   required: ['query'],
 } satisfies ToolJsonSchema
 
 export function registerBuiltinTools(): void {
 
-  // 1. builtin.knowledge.search —— 关键词搜索知识库页面
+  // 1. builtin.knowledge.search —— 知识库混合检索（关键词 + 语义，knowledge-index-design §9）
   registerTool({
     name: 'builtin.knowledge.search',
     title: '搜索知识库页面',
-    description: '关键词搜索知识库页面, 返回 id/标题/摘录',
+    description: '搜索知识库页面，返回 id/标题/摘录/相关度。配好嵌入模型后支持语义检索（问句/换述也能命中），结果 via 字段标注命中方式',
     inputSchema: SEARCH_LIMIT_SCHEMA,
     source: 'builtin',
     enabled: true,
     readOnly: true,
     module: 'knowledge',
-  }, args => {
+  }, async args => {
     const q = str(args.query).trim()
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 50)
-    const terms = q.split(/\s+/).filter(Boolean)
-    if (terms.length === 0) return []
-    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）
+    const mode = args.mode === 'keyword' || args.mode === 'semantic' ? args.mode : 'auto'
+    if (!q) return []
+    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）；未配嵌入模型时 auto 自动降级纯关键词
     try {
-      return vaultSearchKnowledgePages(q).slice(0, limit).map(r => ({
-        id: r.id,
-        title: r.title,
-        excerpt: r.excerpt || r.title,
-        updatedAt: r.updatedAt,
+      const r = await searchKnowledge({ query: q, topK: limit, mode })
+      return r.hits.map(h => ({
+        id: h.pageId,
+        title: h.title,
+        excerpt: h.excerpt || h.title,
+        updatedAt: h.updatedAt,
+        score: h.score,
+        via: h.via,
       }))
     } catch (err) {
       throw new Error(`知识库搜索失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)

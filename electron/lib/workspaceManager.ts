@@ -4,8 +4,9 @@ import { basename, join, relative, resolve, sep, extname, dirname } from 'path'
 import { randomUUID } from 'crypto'
 import { setCurrentVault, ensureKbRoot, readCurrentVaultId, getCurrentVault, ATTACHMENTS_DIR, readRecentVaults, forgetRecentVault, markRecentDeleted, clearRecentDeleted, setVaultMetaName } from './kbStore/vaultContext'
 import { writeWelcomeDocOnce, importWelcomeDoc, getWelcomeDocState, WELCOME_DOC_FILENAME } from './kbStore/welcomeDoc'
-import { invalidateKnowledgeIndex } from './kbStore/knowledgeIndex'
+import { invalidateKnowledgeIndex, getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { invalidateGraphIndex } from './kbStore/graphIndex'
+import { emitPluginEvent } from './pluginEvents'
 import { IGNORE_FILE_NAME } from './kbStore/ignoreFile'
 import { parseMarkdown, serializeMarkdown } from './kbStore/mdStore'
 import { addArchiveEntry, removeArchiveEntry, renameArchiveEntries, readManifest, relPosixOf } from './kbStore/archivedFilesRepo'
@@ -536,6 +537,21 @@ export function invalidateIndexIfCurrentVault(rootId: string): void {
   invalidateGraphIndex()
 }
 
+/** 保存的 .md 命中知识页 → 发 knowledge:pageSaved（plugin-phase1-design C4）。
+ *  索引只有 byId 映射，这里 O(n) 路径扫描——保存是低频用户动作，可接受。 */
+function emitKnowledgePageSaved(relPath: string): void {
+  try {
+    const norm = relPath.replace(/\\/g, '/')
+    const byId = getKnowledgeIndex().byId
+    for (const entry of Object.values(byId)) {
+      if (entry.path.replace(/\\/g, '/') === norm) {
+        emitPluginEvent('knowledge:pageSaved', { pageId: entry.id, title: entry.title })
+        return
+      }
+    }
+  } catch { /* 索引未就绪等忽略 */ }
+}
+
 /** 知识索引敏感文件：知识页 .md 与过滤规则 .ignore（docs/ignore-filter-design.md）。
  *  .ignore 规则一变，知识索引的可见集（列表/搜索/图谱/AI 检索）整体变化，必须与 .md 同等失效。 */
 function isKnowledgeIndexSensitive(relPath: string): boolean {
@@ -796,7 +812,10 @@ export function registerWorkspaceHandlers(getSetting?: (key: string) => unknown)
         return { ok: false, conflict: true, diskMtimeMs: chk.diskMtimeMs, diskSize: chk.diskSize, missing: chk.missing === true }
       }
       writeWorkspaceFile(abs, content)
-      if (isKnowledgeIndexSensitive(relPath)) invalidateIndexIfCurrentVault(rootId)
+      if (isKnowledgeIndexSensitive(relPath)) {
+        invalidateIndexIfCurrentVault(rootId)
+        if (relPath.toLowerCase().endsWith('.md')) emitKnowledgePageSaved(relPath)
+      }
       const st = statSync(abs)
       return { ok: true, mtimeMs: st.mtimeMs, size: st.size }
     } catch (e) {

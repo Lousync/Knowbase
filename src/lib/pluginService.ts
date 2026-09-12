@@ -1,5 +1,5 @@
 import { pluginListInstalled, pluginGetContribution } from './ipc'
-import type { PluginSummary } from '../types'
+import type { PluginRiskLevel, PluginSummary } from '../types'
 
 /**
  * 插件贡献内容读取服务(渲染层)。
@@ -12,15 +12,15 @@ export interface PluginTheme { id: string; name: string; pluginName: string }
 export interface PluginPomodoroPreset { label: string; work: number; break: number; pluginName: string }
 export interface PluginHelpDoc { id: string; title: string; category: string; icon: string; md: string }
 
-async function getEnabledContributions(key: string): Promise<{ pluginId: string; pluginName: string; data: unknown }[]> {
+async function getEnabledContributions<T = unknown>(key: string): Promise<{ pluginId: string; pluginName: string; data: T }[]> {
   let installed: PluginSummary[] = []
   try { installed = await pluginListInstalled() } catch { return [] }
-  const out: { pluginId: string; pluginName: string; data: unknown }[] = []
+  const out: { pluginId: string; pluginName: string; data: T }[] = []
   for (const p of installed) {
     if (!p.enabled || p.broken || !p.contributions.includes(key)) continue
     try {
       const r = await pluginGetContribution(p.id, key)
-      if (r.ok && r.data !== undefined) out.push({ pluginId: p.id, pluginName: p.name, data: r.data })
+      if (r.ok && r.data !== undefined) out.push({ pluginId: p.id, pluginName: p.name, data: r.data as T })
     } catch { /* 单个插件失败跳过 */ }
   }
   return out
@@ -108,7 +108,7 @@ export async function getPluginPomodoroPresets(): Promise<PluginPomodoroPreset[]
 
 // ---------- 工具卡片(UI 插件) ----------
 
-export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string; icon?: string; riskLevel: 'S' | 'A' | 'B'; grantedCapabilities: string[] }
+export interface PluginTool { pluginId: string; toolId: string; name: string; entry: string; icon?: string; riskLevel: PluginRiskLevel; grantedCapabilities: string[] }
 
 export async function getPluginTools(): Promise<PluginTool[]> {
   let installed: PluginSummary[] = []

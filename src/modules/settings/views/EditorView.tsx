@@ -63,6 +63,19 @@ export function EditorView() {
             <SettingSwitch checked={s.markdownDim} onChange={(v) => update('markdownDim', v)} />
           </label>
         </div>
+        <div data-setting-anchor="editor.treeGuides" className="mt-4 max-w-md">
+          <SettingSelect
+            title="侧栏层级参考线"
+            description="编辑器 / 知识库 / AI教学 左栏多层树的层级竖线，辅助辨认嵌套归属"
+            value={(s.sidebarTreeGuides as string) ?? 'line'}
+            onChange={(v) => update('sidebarTreeGuides', v)}
+            options={[
+              { id: 'line', label: '实线', isDefault: true },
+              { id: 'dashed', label: '虚线' },
+              { id: 'none', label: '关闭' },
+            ]}
+          />
+        </div>
         <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
           编辑 .md 时光标所在行之外的格式标记（**、#、链接、[[双链]] 等）会淡化显示，
           被包裹的内容以加粗/斜体/链接色呈现——写作时更接近阅读效果。

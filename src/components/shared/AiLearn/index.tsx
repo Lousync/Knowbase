@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import {
   Sparkles, X, Plus, Trash2, Send, Check, ChevronLeft, ChevronRight, Minimize2,
-  FileText, Wrench, BookOpen, MessageSquare, HelpCircle, Settings2, Loader2,
+  FileText, Wrench, BookOpen, MessageSquare, HelpCircle, Settings2, Loader2, Quote,
 } from 'lucide-react'
 import { MarkdownPreview } from '../MarkdownPreview'
 import { MessageList, type UiMessage } from '../AssistantPanel/MessageList'
@@ -9,7 +9,7 @@ import type { StreamDraft } from '../AssistantPanel/useAgentStream'
 import { loadHelpDocs, type HelpDoc } from '../../../modules/help/docsLoader'
 import { LESSONS, LESSON_TOTAL, getLesson, type Lesson } from './lessons'
 import type { LearnProgressApi } from './useLearnProgress'
-import type { AgentChange, AgentContextInfo, AgentSessionInfo, AgentTraceStep, TabName } from '../../../types'
+import type { AgentChange, AgentSessionInfo, AgentTraceStep, TabName } from '../../../types'
 
 /**
  * AI 学堂 · 全屏外壳
@@ -38,7 +38,8 @@ export interface ChatBridge {
   lastChanges: AgentChange[] | null
   sessions: AgentSessionInfo[]
   activeId: string | null
-  selCtx: AgentContextInfo | null
+  /** 划词引用（会话引用形式）：随消息以可见引用块发出 */
+  selQuotes: string[]
   editing: { id: string; draft: string } | null
   setEditing: (v: { id: string; draft: string } | null) => void
   copiedIdx: number | null
@@ -463,10 +464,11 @@ export function AiLearnShell({ tab, onTabChange, onCollapse, onClose, active, pr
     <div className="flex-1 overflow-y-auto p-3.5">
       <div className="mb-4">
         <div className="mb-1.5 text-[10.5px] tracking-wide text-[var(--text-disabled)]">当前附带上下文</div>
-        {chat.selCtx ? (
-          <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-0.5 text-[10.5px]">
-            <FileText size={10} className="text-[var(--accent)]" />
-            <b className="truncate font-medium text-[var(--text-primary)]">{chat.selCtx.label}</b>
+        {chat.selQuotes.length > 0 ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] px-2.5 py-1 text-[10.5px] text-[var(--text-secondary)]">
+            <Quote size={10} className="text-[var(--accent)]" />
+            <b className="font-medium text-[var(--text-primary)]">{chat.selQuotes.length} 条对话引用</b>
+            <span className="text-[var(--text-disabled)]">·发送时并入消息</span>
           </span>
         ) : (
           <span className="text-[11.5px] text-[var(--text-disabled)]">未附带页面（提问时按当前所在界面自动判断）</span>

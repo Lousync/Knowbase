@@ -47,7 +47,7 @@ export function MarkdownEditor({ entryId, showLineNumbers, zoom = 1, onSave, onC
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false)
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
   const [unsavedAction, setUnsavedAction] = useState<(() => void) | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const entryIdRef = useRef(entryId)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
