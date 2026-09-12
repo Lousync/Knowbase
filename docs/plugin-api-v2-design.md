@@ -600,6 +600,8 @@ PluginFrame 同时支持 v1/v2 报文一个版本周期；`v` 字段缺省即 v1
 
 阶段依赖关系：P0 → P1 → P2 → {P3, P4} → P5 → P6；P7 依赖去库化 P5 阶段完成。
 
+> **落地状态（2026-09-12，feature/ai-plugin-upgrade）**：P0 ✅（Gateway+token 会话）/ P1 ✅（kb.store.*）/ **P2 ✅（kb.vault.* 六方法：getInfo/list/read/stat 走 vault:read、write/trash 走 vault:write；manifest.vaultScope 写路径强制收敛；安全 helper 复用 builtin.vault 同款，防规则漂移）**。P3-P7 待做。真机验收统一安排。
+
 ### 10.1 与 v3（R7）分期映射（2026-09-03）
 
 v3 放开执行是**叠加在这张 P0-P7 表之上**，不是替代：

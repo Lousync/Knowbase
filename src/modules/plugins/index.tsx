@@ -54,6 +54,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   navigation: '导航跳转',
   files: '本地文件读取',
   'vault:read': '知识库检索(只读)',
+  'vault:write': '仓库文件写入',
 }
 
 const CAPABILITY_DESCS: Record<string, string> = {
@@ -64,6 +65,7 @@ const CAPABILITY_DESCS: Record<string, string> = {
   navigation: '允许插件请求跳转到指定页面',
   files: '允许插件弹系统对话框挑文件并读取其内容(每次经你手动确认,不会静默访问磁盘)',
   'vault:read': '允许插件检索与读取知识库笔记的元数据(标题/标签/属性/链接/搜索,只读,不能修改任何内容)',
+  'vault:write': '允许插件写入或删除仓库内的普通 .md/.txt 文件(受插件声明目录范围与保护区规则约束,不涉及 .knowbase 内部数据)',
 }
 
 const DATA_TARGETS: Record<string, string> = {

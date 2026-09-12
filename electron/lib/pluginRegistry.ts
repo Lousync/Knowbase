@@ -1,7 +1,7 @@
 // R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
 import { app, ipcMain, net, dialog, BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync } from 'fs'
-import { join, resolve, sep, extname, basename } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync, lstatSync } from 'fs'
+import { join, resolve, sep, extname, basename, dirname } from 'path'
 import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
@@ -11,6 +11,11 @@ import { searchKnowledge } from './knowledgeSearch'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultGetBacklinks } from './kbStore/knowledgeVaultRepo'
 import { evaluateFrontmatterQuery } from './kbStore/frontmatterQuery'
+import { enforceVaultScope } from './kbStore/vaultScope'
+import { resolveSafe, writeWorkspaceFile, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
+import { getCurrentVault } from './kbStore/vaultContext'
+// kb.vault.* 复用 builtin.vault.* 同一套经审计的安全 helper（不另写规则，防两套规则漂移）
+import { vaultRootPath, childAiAllowed, isAiReadableFile, isAiWritableFile, assertAiWritable, MAX_VAULT_FILE, MAX_VAULT_LIST_ENTRIES } from './builtinTools'
 import { verifyPluginSignature, buildKeyring } from './pluginSigning'
 import { getPackState, importPack } from './knowledgePackImporter'
 import { appendAudit, readAuditRaw, clearAudit } from './pluginAudit'
@@ -74,7 +79,7 @@ const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'k
 // 内容级贡献键(仅含这些为 S 级)
 const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons', 'deleteFx']
 // UI 插件能力白名单:theme/clipboard 为一期放行;data/knowledge/navigation 为 C 级模块插件(需显式授权)
-const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files', 'vault:read']
+const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files', 'vault:read', 'vault:write']
 
 export interface PluginManifest {
   id: string
@@ -248,6 +253,18 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
     if (!opts?.legacy) return { error: 'UI 插件必须声明 capabilities(可为空数组 = 零能力)' }
     raw.capabilities = ['theme', 'clipboard']
   }
+  if (raw.vaultScope !== undefined) {
+    // P2 kb.vault.*：写路径收敛前缀（plugin-api-v2-design §5.2 ADR-7）
+    if (raw.type !== 'ui' && raw.type !== 'code') return { error: 'vaultScope 仅可执行插件(type: ui / code)可声明' }
+    if (!Array.isArray(raw.vaultScope) || raw.vaultScope.length > 8) return { error: 'vaultScope 必须是数组(最多 8 项)' }
+    for (const s of raw.vaultScope) {
+      if (typeof s !== 'string' || !s.trim()) return { error: 'vaultScope 项需为非空字符串' }
+      const norm = s.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+      if (!norm || norm.split('/').includes('..') || !/^[\w\u4e00-\u9fa5][\w\u4e00-\u9fa5 .\-/]*$/.test(norm)) {
+        return { error: `vaultScope 项非法（需为仓库内相对目录前缀，禁止越界）: ${s}` }
+      }
+    }
+  }
   if (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 300)) return { error: 'description 过长' }
   if (raw.author !== undefined && (typeof raw.author !== 'string' || raw.author.length > 50)) return { error: 'author 过长' }
   if (raw.contributes !== undefined) {
@@ -400,7 +417,8 @@ function computeRiskLevel(m: PluginManifest): RiskLevel {
     const keys = Object.keys(m.contributes || {})
     // 声明自有数据表并申请 data / knowledge / navigation 能力 = 模块级插件
     // vault:read = 读知识库元数据/检索（kb.metadata.*），只读但暴露全部笔记内容面 → 同 C 级
-    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files') || caps.includes('vault:read')) return 'C'
+    // vault:write = 写仓库文件（kb.vault.*，可改用户笔记）→ C 级
+    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files') || caps.includes('vault:read') || caps.includes('vault:write')) return 'C'
     return 'B'
   }
   const keys = Object.keys(m.contributes || {})
@@ -1114,12 +1132,18 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
   // 渲染层 PluginFrame 不再做 grantedRef.includes 判断；一切 v2 请求经 host:rpc 在此裁决。
   // 复用函数内已定义的 assertDataAccess / readIndex / readManifestAt（同一作用域）。
   const gateway = createGateway({
-    sessionState(pluginId: string): { enabled: boolean; capabilities: string[] } | null {
+    sessionState(pluginId: string): { enabled: boolean; capabilities: string[]; vaultScope?: string[] } | null {
       if (typeof pluginId !== 'string' || !ID_RE.test(pluginId)) return null
       const idx = readIndex()
       const entry = idx[pluginId]
       if (!entry) return null
-      return { enabled: entry.enabled, capabilities: entry.grantedCapabilities ?? [] }
+      // vaultScope 存 manifest（写路径收敛前缀）；读取失败按「未声明=全库可写」回退
+      let vaultScope: string[] | undefined
+      try {
+        const m = readManifestAt(join(getPluginsRoot(), pluginId))
+        if (!('error' in m) && Array.isArray(m.manifest.vaultScope)) vaultScope = m.manifest.vaultScope
+      } catch { /* 未声明 */ }
+      return { enabled: entry.enabled, capabilities: entry.grantedCapabilities ?? [], vaultScope }
     },
     audit: (pluginId, action, detail) => auditWrite(pluginId, action, detail),
     methods: {
@@ -1348,6 +1372,123 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
           // 复用知识库反链面板同一份 GraphIndex 解析（R2/R4），不新写链接解析
           const backlinks = vaultGetBacklinks(pageId).map((v) => ({ pageId: v.id, title: v.title, path: v.path }))
           return { backlinks, total: backlinks.length }
+        },
+      },
+
+      // ---- kb.vault.* 仓库文件只读/受控写（P2，plugin-api-v2-design §5.2）----
+      // 安全链：resolveSafe（拒越界/盘符/符号链接逐段校验）→ 保护区规则（assertAiWritable 等
+      // builtin.vault.* 同款 helper）→ 写/删额外过 manifest.vaultScope 前缀收敛（ADR-7：读全库、写限域）。
+      'kb.vault.getInfo': {
+        capability: 'vault:read',
+        run: () => {
+          const cur = getCurrentVault()
+          if (!cur?.rootPath) throw Object.assign(new Error('仓库未打开'), { code: 'EHOST' })
+          // 红线：永不返回 rootPath（插件永不接触绝对路径）
+          return { rootId: cur.rootId, name: cur.name ?? '' }
+        },
+      },
+      'kb.vault.list': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel || '.')
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel || '.'}`), { code: 'EPATH' })
+          let isDir = false
+          try { isDir = statSync(abs).isDirectory() } catch { throw Object.assign(new Error(`路径不存在: ${rel || '.'}`), { code: 'ENOTFOUND' }) }
+          if (!isDir) throw Object.assign(new Error('kb.vault.list 只接受目录（读文件用 kb.vault.read）'), { code: 'EPARAM' })
+          const entries: Array<{ name: string; type: 'dir' | 'file'; size?: number }> = []
+          for (const name of readdirSync(abs)) {
+            if (entries.length >= MAX_VAULT_LIST_ENTRIES) break
+            const full = join(abs, name)
+            if (!childAiAllowed(root, full)) continue
+            let st: ReturnType<typeof lstatSync>
+            try { st = lstatSync(full) } catch { continue }
+            if (st.isSymbolicLink()) continue
+            if (st.isDirectory()) entries.push({ name, type: 'dir' })
+            else if (st.isFile() && isAiReadableFile(root, full)) entries.push({ name, type: 'file', size: st.size })
+          }
+          entries.sort((a, b) => a.type !== b.type ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name, 'zh-Hans-CN'))
+          return { path: rel || '.', total: entries.length, entries }
+        },
+      },
+      'kb.vault.read': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          if (!rel) throw Object.assign(new Error('path 缺失'), { code: 'EPARAM' })
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          let st: ReturnType<typeof statSync>
+          try { st = statSync(abs) } catch { throw Object.assign(new Error(`文件不存在: ${rel}`), { code: 'ENOTFOUND' }) }
+          if (!st.isFile()) throw Object.assign(new Error('仅支持文件（列目录用 kb.vault.list）'), { code: 'EPARAM' })
+          if (st.size > MAX_VAULT_FILE) throw Object.assign(new Error(`文件过大（${st.size} 字节 > 10MB），拒绝读取`), { code: 'ELIMIT' })
+          if (!isAiReadableFile(root, abs)) throw Object.assign(new Error('该文件类型不可读（仅 .md/.txt 与 .knowbase/modules/*.json）'), { code: 'EPARAM' })
+          return { path: rel, content: readFileSync(abs, 'utf-8'), size: st.size, mtimeMs: st.mtimeMs }
+        },
+      },
+      'kb.vault.stat': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          if (!rel) throw Object.assign(new Error('path 缺失'), { code: 'EPARAM' })
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          let st: ReturnType<typeof lstatSync>
+          try { st = lstatSync(abs) } catch { throw Object.assign(new Error(`路径不存在: ${rel}`), { code: 'ENOTFOUND' }) }
+          if (st.isSymbolicLink()) throw Object.assign(new Error('拒绝符号链接'), { code: 'EPATH' })
+          return {
+            path: rel,
+            type: st.isDirectory() ? 'dir' : st.isFile() ? 'file' : 'other',
+            ...(st.isFile() ? { size: st.size } : {}),
+            mtimeMs: st.mtimeMs,
+          }
+        },
+      },
+      'kb.vault.write': {
+        capability: 'vault:write',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown; content?: unknown; expectedMtimeMs?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          const content = typeof p.content === 'string' ? p.content : null
+          if (!rel || content === null) throw Object.assign(new Error('path / content 缺失'), { code: 'EPARAM' })
+          if (content.length > 2_000_000) throw Object.assign(new Error('内容过大（>2MB），拒绝写入'), { code: 'ELIMIT' })
+          if (content.includes('\u0000')) throw Object.assign(new Error('内容含 NUL 字符，拒绝写入'), { code: 'EPARAM' })
+          enforceVaultScope(rel, ctx.vaultScope)
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          let existing = false
+          try { existing = statSync(abs).isFile() } catch { /* 新建 */ }
+          assertAiWritable(root, abs, existing && typeof p.expectedMtimeMs === 'number' ? p.expectedMtimeMs : null)
+          if (!existing) mkdirSync(dirname(abs), { recursive: true })
+          writeWorkspaceFile(abs, content)
+          if (rel.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
+          const st = statSync(abs)
+          return { ok: true, path: rel, created: !existing, size: st.size, mtimeMs: st.mtimeMs }
+        },
+      },
+      'kb.vault.trash': {
+        capability: 'vault:write',
+        run: async (ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          if (!rel) throw Object.assign(new Error('path 缺失'), { code: 'EPARAM' })
+          enforceVaultScope(rel, ctx.vaultScope)
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          if (!isAiWritableFile(root, abs)) throw Object.assign(new Error('仅可移入回收站普通区 .md/.txt 文件（.knowbase 内部数据禁动）'), { code: 'EPARAM' })
+          if (!statSync(abs).isFile()) throw Object.assign(new Error('kb.vault.trash 仅支持文件'), { code: 'EPARAM' })
+          const rootId = getCurrentVault()?.rootId
+          if (!rootId) throw Object.assign(new Error('仓库上下文未就绪'), { code: 'EHOST' })
+          await trashWorkspacePath(rootId, rel)
+          return { ok: true, trashed: rel }
         },
       },
     },

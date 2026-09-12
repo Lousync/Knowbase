@@ -155,12 +155,12 @@ function ruleSummary(ruleType: string, ruleDays: number[], weeklyTarget: number)
 
 const VAULT_DOT_DIR = '.knowbase'
 const VAULT_MODULES_DIR = 'modules'
-const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
+export const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
 const MAX_VAULT_SEARCH_FILE = 1024 * 1024 // search 只扫 ≤1MB 文本
 const MAX_VAULT_SEARCH_FILES = 400
-const MAX_VAULT_LIST_ENTRIES = 200
+export const MAX_VAULT_LIST_ENTRIES = 200
 
-function vaultRootPath(): string {
+export function vaultRootPath(): string {
   const cur = getCurrentVault()
   if (!cur || !cur.rootPath) throw new Error('当前没有打开的仓库：请先在应用中打开知识仓库')
   return cur.rootPath
@@ -184,7 +184,7 @@ function isModulesJson(parts: string[]): boolean {
 }
 
 /** 子路径是否 AI 允许（目录枚举用）：点目录一律拒，.knowbase 仅 modules 子树放行 */
-function childAiAllowed(root: string, childAbs: string): boolean {
+export function childAiAllowed(root: string, childAbs: string): boolean {
   const parts = vaultRelParts(root, childAbs)
   if (parts.length === 0) return false
   const first = parts[0]
@@ -196,7 +196,7 @@ function childAiAllowed(root: string, childAbs: string): boolean {
 }
 
 /** 读白名单：.md/.txt（可见区任意处）+ .json（仅 .knowbase/modules） */
-function isAiReadableFile(root: string, abs: string): boolean {
+export function isAiReadableFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (!childAiAllowed(root, abs)) return false
@@ -227,7 +227,7 @@ function walkAiFiles(root: string, dirAbs: string, out: string[], budget: { coun
 }
 
 /** 写白名单（B2）：普通可见区 .md/.txt；.knowbase 全面禁写（modules/*.json 只读、cache/config 等本就不可见） */
-function isAiWritableFile(root: string, abs: string): boolean {
+export function isAiWritableFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (parts[0].startsWith('.')) return false // 含 .knowbase：任何写操作都拒
@@ -236,7 +236,7 @@ function isAiWritableFile(root: string, abs: string): boolean {
 }
 
 /** 文档白名单（docs.read-text）：普通可见区 .pdf/.pptx（.knowbase 内部暂不开放） */
-function isAiDocFile(root: string, abs: string): boolean {
+export function isAiDocFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (parts[0].startsWith('.')) return false
@@ -245,7 +245,7 @@ function isAiDocFile(root: string, abs: string): boolean {
 }
 
 /** 写前守卫：writable 判定 + 大小 + mtime 冲突（expectedMtimeMs 来自 vault.read 基线） */
-function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
+export function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
   if (!isAiWritableFile(root, abs)) {
     throw new Error('该位置不可写：AI 仅可新建/修改仓库内普通 .md/.txt 文件（.knowbase 内部数据只读保护）')
   }
