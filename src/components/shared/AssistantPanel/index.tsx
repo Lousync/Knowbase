@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, X, Menu, Plus, Trash2, Wrench, FileText, Check, ArrowUpRight, Maximize2,
-  Languages, Loader2, Bot,
+  Languages, Loader2, Bot, Quote,
 } from 'lucide-react'
 import { AiLearnShell, type AiLearnTab, type ChatBridge } from '../AiLearn'
 import { useLearnProgress, learnStepContext } from '../AiLearn/useLearnProgress'
 import { getLesson } from '../AiLearn/lessons'
 import { useSettings } from '../../../lib/SettingsContext'
-import { getAssistantContext, getSelectionAskHost, selectionContext } from '../../../lib/assistantContext'
+import { getAssistantContext, getSelectionAskHost } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
 import { TranslateCard } from '../TranslateCard'
 import { MessageList, fmtTime, type UiMessage } from './MessageList'
@@ -92,7 +92,10 @@ export function AssistantPanel({ shellLeft = 68 }: { shellLeft?: number }) {
   const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null)
   /** 选中文本即问：浮动按钮状态与一次性选中上下文 */
   const [selFloat, setSelFloat] = useState<{ x: number; y: number; rect: SelRect; text: string } | null>(null)
-  const [selCtx, setSelCtx] = useState<AgentContextInfo | null>(null)
+  /** 划词引用（会话引用形式）：「问 AI」收进输入区上方引用胶囊（多条可累积），随消息以可见引用块发出 */
+  const [selQuotes, setSelQuotes] = useState<string[]>([])
+  const [selQuotesOpen, setSelQuotesOpen] = useState(false)
+  const selQuotesRef = useRef<string[]>([])
   /** 划词翻译卡片（与「问 AI」浮钮共用选区检测） */
   const [transFloat, setTransFloat] = useState<{ rect: SelRect; text: string } | null>(null)
   /** 会话抽屉卸载兜底定时器（closeDrawer 240ms 后触发） */
@@ -344,7 +347,13 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
         if (host.accept()) { host.ask(text); return }
       } catch { /* 宿主异常 → 回退侧边栏，不阻断用户 */ }
     }
-    setSelCtx(selectionContext(text))
+    // 会话引用形式：收进侧栏输入区上方引用胶囊（多条可累积），随消息以可见引用块发出
+    setSelQuotes(prev => {
+      const next = prev.includes(text) ? prev : [...prev, text].slice(-5)
+      selQuotesRef.current = next
+      return next
+    })
+    setSelQuotesOpen(true)
     openPanel()
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [openPanel])
@@ -357,8 +366,14 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
   }, [])
 
   const send = useCallback(async (override?: string) => {
-    const text = (override ?? input).trim()
-    if (!text) return
+    // 划词引用（会话引用形式）：以可见的 markdown 引用块并入消息正文，随发随清（单条截断 600 字防刷屏）
+    const qs = [...selQuotesRef.current]
+    if (qs.length > 0) { selQuotesRef.current = []; setSelQuotes([]); setSelQuotesOpen(false) }
+    const body = (override ?? input).trim()
+    if (!body && qs.length === 0) return
+    const text = qs.length > 0
+      ? qs.map((q, i) => `> 【引用 ${i + 1}】${q.replace(/\s+/g, ' ').trim().slice(0, 600)}${q.replace(/\s+/g, ' ').trim().length > 600 ? '…' : ''}`).join('\n') + (body ? `\n\n${body}` : '')
+      : body
     // 排队请求不静默丢弃：明确告知正在回复中（可点停止）
     if (pending) {
       showToastSafe('正在回复上一条消息，请等待完成或点击「停止」', 'info')
@@ -371,9 +386,10 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       sid = sRow.id
       setActiveId(sid)
     }
-    // 上下文优先级：本次选中的片段 > 帮助页正在读的手册 > 学堂当前步骤（仅全屏时） > 当前所在界面
+    // 上下文优先级：帮助页正在读的手册 > 学堂当前步骤（仅全屏时） > 当前所在界面
+    // （划词引用已改为可见引用块并入消息正文，不再占用上下文位）
     const learnCtx = full ? learnStepContext(getLesson(learn.last)) : null
-    const ctx = selCtx ?? helpCtxRef.current ?? learnCtx ?? getAssistantContext()
+    const ctx = helpCtxRef.current ?? learnCtx ?? getAssistantContext()
     setMessages(prev => [...prev, { role: 'user', content: text, createdAt: nowLocal() }])
     setInput('')
     setPending(true)
@@ -391,7 +407,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       }
       if (r.ok && r.reply !== undefined) {
         setLastChanges(r.changes && r.changes.length > 0 ? r.changes : null)
-        if (selCtx) setSelCtx(null) // 选中上下文一次性消费
+        if (selQuotesRef.current.length > 0) { selQuotesRef.current = []; setSelQuotes([]); setSelQuotesOpen(false) } // 引用一次性消费（正常已在上方清空，兜底）
       } else if (r.code === 'ABORTED') {
         showToast({ type: 'info', message: '已停止生成' })
       } else {
@@ -404,7 +420,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       setPending(false)
       void refreshSessions()
     }
-  }, [input, pending, activeId, refreshSessions, selCtx, refreshMessages, full, learn.last])
+  }, [input, pending, activeId, refreshSessions, refreshMessages, full, learn.last])
 
   /** 重新生成最后一条回复（末条为助手消息时可用） */
   const runRegenerate = useCallback(async () => {
@@ -486,7 +502,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
 
   /** 会话桥接：把侧栏这套状态与方法原样交给全屏学堂 —— 两边是同一份会话，扩张不丢上下文 */
   const chatBridge: ChatBridge = {
-    messages, pending, liveSteps, draft, lastChanges, sessions, activeId, selCtx,
+    messages, pending, liveSteps, draft, lastChanges, sessions, activeId, selQuotes,
     editing, setEditing, copiedIdx, setCopiedIdx,
     send: text => { void send(text) },
     newSession: () => { void newSession() },
@@ -700,20 +716,46 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
                     </div>
                   )}
 
-                  {/* 上下文徽章（选中文本优先，可清除） */}
-                  {(selCtx || ctx) && (
-                    <div className="px-3 pb-1 shrink-0">
-                      <span className="inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-md bg-[var(--bg-selected)] border border-[var(--border-color)] text-[11px] text-[var(--text-secondary)]">
-                        <FileText size={10} className="shrink-0 text-[var(--accent)]" />
-                        <span className="truncate">{(selCtx ?? ctx)!.label}</span>
-                        <span className="text-[var(--text-disabled)]">·将随提问附带</span>
-                        {selCtx && (
-                          <button onClick={() => setSelCtx(null)} title="移除选中上下文"
-                            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-                            <X size={10} />
-                          </button>
-                        )}
-                      </span>
+                  {/* 引用胶囊（会话引用形式）+ 上下文徽章（帮助页/学堂/当前界面，将随提问附带） */}
+                  {(selQuotes.length > 0 || ctx) && (
+                    <div className="px-3 pb-1 shrink-0 space-y-1">
+                      {selQuotes.length > 0 && (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => setSelQuotesOpen(o => !o)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                              title="点击查看/管理引用片段">
+                              <Quote size={10} className="text-[var(--accent)]" />
+                              <span>{selQuotes.length} 条对话引用</span>
+                            </button>
+                            <button onClick={() => { selQuotesRef.current = []; setSelQuotes([]); setSelQuotesOpen(false) }} title="移除全部引用"
+                              className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                              <X size={10} />
+                            </button>
+                          </div>
+                          {selQuotesOpen && (
+                            <div className="space-y-1">
+                              {selQuotes.map((q, i) => (
+                                <div key={`${i}-${q.slice(0, 16)}`} className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                                  <Quote size={10} className="mt-[3px] shrink-0 text-[var(--accent)]" />
+                                  <span className="flex-1 min-w-0 text-[11px] leading-[1.5] text-[var(--text-secondary)] line-clamp-3">【引用 {i + 1}】{q}</span>
+                                  <button onClick={() => setSelQuotes(prev => { const next = prev.filter((_, j) => j !== i); selQuotesRef.current = next; return next })} title="移除此引用"
+                                    className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {ctx && (
+                        <span className="inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-md bg-[var(--bg-selected)] border border-[var(--border-color)] text-[11px] text-[var(--text-secondary)]">
+                          <FileText size={10} className="shrink-0 text-[var(--accent)]" />
+                          <span className="truncate">{ctx.label}</span>
+                          <span className="text-[var(--text-disabled)]">·将随提问附带</span>
+                        </span>
+                      )}
                     </div>
                   )}
 
