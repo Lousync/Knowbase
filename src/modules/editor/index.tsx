@@ -19,6 +19,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
 import { shouldExitZen } from '../../lib/zenMode'
 import { FileTree } from './components/FileTree'
+import { FolderFocusButton } from '../../components/shared/FolderFocusButton'
 import { type MonacoPaneHandle } from './components/MonacoPane'
 // monaco 主包 8.3MB —— 绝不能进首屏。宿主组件单独 lazy（使用处见下方 Suspense）：
 // 代价只是「本次运行第一次打开编辑器」多一瞬加载，而不是每次切模块都等。
@@ -1017,6 +1018,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
               <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
                 <FileText size={12} />
                 资源管理器
+                <FolderFocusButton
+                  className="ml-auto"
+                  on={!!zenSettings.editorFolderFocus}
+                  onToggle={() => zenUpdate('editorFolderFocus', !zenSettings.editorFolderFocus)}
+                />
                 <button
                   onClick={(e) => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -1024,7 +1030,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                   }}
                   title="新建（文件 / 文件夹 / 知识页）"
                   aria-expanded={createMenu !== null}
-                  className={`ml-auto p-1 rounded-md transition-colors ${
+                  className={`p-1 rounded-md transition-colors ${
                     createMenu
                       ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
@@ -1038,6 +1044,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                 softNames={softNames}
                 expanded={expanded}
                 activePath={activePath}
+                focusOn={!!zenSettings.editorFolderFocus}
+                onFocusLocate={(rel, isDir) => {
+                  zenUpdate('editorFolderFocus', false)
+                  if (isDir) setExpanded((prev) => new Set(prev).add(rel))
+                  else void openFile({ name: rel.split('/').pop() || rel, type: 'file', size: 0, mtime: 0, relPath: rel })
+                }}
                 onToggleDir={(p) => void toggleDir(p)}
                 onOpenFile={(n) => void openFile(n)}
                 onMove={(src, dst) => void moveNode(src, dst)}

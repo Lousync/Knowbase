@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
-import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon, ArrowUp } from 'lucide-react'
+import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon, ArrowUp, Pin, PinOff } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { WelcomeHtmlView } from './components/WelcomeHtmlView'
@@ -37,6 +37,7 @@ import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePane
 import { PluginFrame } from '../../components/shared/PluginFrame'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
+import { FolderFocusButton } from '../../components/shared/FolderFocusButton'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { useSettings } from '../../lib/SettingsContext'
@@ -77,7 +78,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const [pluginViews, setPluginViews] = useState<PluginViewContribution[]>([])
   const [activePluginView, setActivePluginView] = useState<PluginViewContribution | null>(null)
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
-  const { s: settings } = useSettings()
+  const { s: settings, update: updateSettings } = useSettings()
   /** 数据形态 = vault：知识库为只读导航，一切写收口到编辑器模块（后端也已白名单拒绝，这里给前端护栏+明确提示） */
   const vaultReadonly = true // R6 D9 后恒 vault：知识库只读导航，写收口编辑器（sqlite 读源已退役）
   const writeBlocked = (action: string): boolean => {
@@ -98,13 +99,29 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** 工作区标题下「移出当前目录」drop 区激活态（拖页面到此返回上一级/零散） */
   const [ejectOn, setEjectOn] = useState(false)
 
-  // ---- 预览标签页（VS Code 风格） ----
+  // ---- 预览/固定标签（VS Code 风格）：dirty=编辑中（关闭需确认，视同固定） ----
   const [dirtyPageIds, setDirtyPageIds] = useState<Set<string>>(new Set())
   const dirtyPageIdsRef = useRef(dirtyPageIds)
   useEffect(() => { dirtyPageIdsRef.current = dirtyPageIds }, [dirtyPageIds])
 
+  // ---- 固定标签：浏览只占一个「预览槽」，显式固定（双击/图钉/右键）才累积，永不被浏览替换 ----
+  const [pinnedPageIds, setPinnedPageIds] = useState<Set<string>>(new Set())
+  const pinnedPageIdsRef = useRef(pinnedPageIds)
+  useEffect(() => { pinnedPageIdsRef.current = pinnedPageIds }, [pinnedPageIds])
+
   // ---- 未保存关闭确认 ----
   const [unsavedClosePageId, setUnsavedClosePageId] = useState<string | null>(null)
+
+  // ---- 页签右键菜单（固定/关闭族） ----
+  const [tabCtx, setTabCtx] = useState<{ x: number; y: number; pageId: string } | null>(null)
+  const handleTabContextMenu = useCallback((e: React.MouseEvent, pageId: string) => {
+    // 粗夹取：菜单约 170×140，避免贴屏幕右/下缘溢出
+    setTabCtx({
+      x: Math.min(e.clientX, window.innerWidth - 180),
+      y: Math.min(e.clientY, window.innerHeight - 150),
+      pageId,
+    })
+  }, [])
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
@@ -529,13 +546,15 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       return
     }
 
-    // VS Code-style preview: if current tab is not dirty, replace it (single preview slot)
+    // 预览/钉住双态（VS Code 模型）：只替换「当前预览槽」（非固定、非编辑中）。
+    // 固定标签永不被替换；必须原位替换而非整栏重置，否则钉住的标签会被清掉
     const dirty = dirtyPageIdsRef.current
-    const replaceCurrent = activeId && !dirty.has(activeId)
+    const pinned = pinnedPageIdsRef.current
+    const replaceCurrent = activeId && !dirty.has(activeId) && !pinned.has(activeId)
 
     if (replaceCurrent) {
-      // Replace the non-dirty preview tab
-      setOpenPageIds([pageId])
+      // Replace the preview tab in place (pinned/dirty neighbors stay)
+      setOpenPageIds(prev => prev.map(id => (id === activeId ? pageId : id)))
       setOpenPageInfos(prev => {
         const next = { ...prev }
         delete next[activeId]
@@ -543,7 +562,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         return next
       })
     } else {
-      // Append as a new tab (dirty tab stays, or explicitly opened)
+      // Append as a new tab (pinned/dirty tabs stay, or explicitly opened)
       setOpenPageIds(prev => [...prev, pageId])
     }
 
@@ -568,6 +587,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     setOpenPageIds(nextIds)
     setOpenPageInfos(prev => { const next = { ...prev }; delete next[pageId]; return next })
     setDirtyPageIds(prev => { const next = new Set(prev); next.delete(pageId); return next })
+    setPinnedPageIds(prev => { const next = new Set(prev); next.delete(pageId); return next })
     if (activePageIdRef.current === pageId) {
       if (nextIds.length === 0) {
         setActivePageId(null)
@@ -575,6 +595,47 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         setShowOutline(false)
       }
       else { const newIdx = Math.min(idx, nextIds.length - 1); setActivePageId(nextIds[newIdx]) }
+    }
+  }, [])
+
+  /** 固定/取消固定：双击标签、图钉按钮、右键菜单共用 */
+  const handleTogglePin = useCallback((pageId: string) => {
+    setPinnedPageIds(prev => {
+      const next = new Set(prev)
+      if (next.has(pageId)) next.delete(pageId)
+      else next.add(pageId)
+      return next
+    })
+  }, [])
+
+  /** 关闭其他：保留目标标签；编辑中（dirty）的标签需走未保存确认，这里直接跳过 */
+  const handleCloseOthers = useCallback((pageId: string) => {
+    const dirty = dirtyPageIdsRef.current
+    const keep = openPageIdsRef.current.filter(id => id === pageId || dirty.has(id))
+    setOpenPageIds(keep)
+    setOpenPageInfos(prev => {
+      const next: Record<string, PageInfo> = {}
+      for (const id of keep) if (prev[id]) next[id] = prev[id]
+      return next
+    })
+    setPinnedPageIds(prev => new Set([...prev].filter(id => keep.includes(id))))
+    setActivePageId(pageId)
+  }, [])
+
+  /** 全部关闭：编辑中（dirty）的标签保留（关闭它们要走未保存确认） */
+  const handleCloseAll = useCallback(() => {
+    const dirty = dirtyPageIdsRef.current
+    const keep = openPageIdsRef.current.filter(id => dirty.has(id))
+    setOpenPageIds(keep)
+    setOpenPageInfos(prev => {
+      const next: Record<string, PageInfo> = {}
+      for (const id of keep) if (prev[id]) next[id] = prev[id]
+      return next
+    })
+    setPinnedPageIds(prev => new Set([...prev].filter(id => keep.includes(id))))
+    if (!keep.includes(activePageIdRef.current ?? '')) {
+      if (keep.length === 0) { setActivePageId(null); setShowOutline(false) }
+      else setActivePageId(keep[keep.length - 1])
     }
   }, [])
 
@@ -1333,9 +1394,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             activePageId={activePageId}
             openPageInfos={openPageInfos}
             dirtyPageIds={dirtyPageIds}
+            pinnedPageIds={pinnedPageIds}
             onSelectTab={handleOpenPage}
             onCloseTab={handleCloseTab}
             onReorder={handleReorderTabs}
+            onTogglePin={handleTogglePin}
+            onTabContextMenu={handleTabContextMenu}
             rightActions={<div id="editor-toolbar-slot" className="flex items-center gap-0.5" />}
           />
         )}
@@ -1346,6 +1410,12 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             {/* 空间沉浸视图顶部：返回栏（仅空间内显示）；目录拖到本栏=移出空间（移到根级中转） */}
             {selectedSpaceId && selectedSpace && (
               <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={handleRenameNotebook}
+                extraAction={
+                  <FolderFocusButton
+                    on={!!settings.knowledgeFolderFocus}
+                    onToggle={() => updateSettings('knowledgeFolderFocus', !settings.knowledgeFolderFocus)}
+                  />
+                }
                 onMoveOut={(id) => { void handleMoveCategory(id, null) }} />
             )}
 
@@ -1372,6 +1442,11 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
                 <BookMarked size={12} />
                 知识库
+                <FolderFocusButton
+                  className="ml-auto"
+                  on={!!settings.knowledgeFolderFocus}
+                  onToggle={() => updateSettings('knowledgeFolderFocus', !settings.knowledgeFolderFocus)}
+                />
               </div>
             )}
 
@@ -1450,6 +1525,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onSortPage={handleSortPage}
                       locatePageId={locatePageId}
                       locateCategoryId={locateCategoryId}
+                      focusOn={!!settings.knowledgeFolderFocus}
+                      onExitFocus={() => updateSettings('knowledgeFolderFocus', false)}
                       // vault（仓库文件）模式：移动由拖拽承担，复制副本暂不支持 → 隐藏复制/剪切/粘贴，避免点到报错
                       onCopy={vaultReadonly ? undefined : handleCopy}
                       onCut={vaultReadonly ? undefined : handleCut}
@@ -1597,6 +1674,36 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         </>
         )}
       </div>
+
+      {/* 页签右键菜单：固定/取消固定 + 关闭族 */}
+      {tabCtx && (
+        <div className="fixed inset-0 z-[70] kb-pop-layer" onClick={() => setTabCtx(null)} onContextMenu={(e) => { e.preventDefault(); setTabCtx(null) }}>
+          <div
+            className="absolute min-w-[160px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
+            style={{ left: tabCtx.x, top: tabCtx.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => { const pid = tabCtx.pageId; setTabCtx(null); handleTogglePin(pid) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              {pinnedPageIds.has(tabCtx.pageId) ? <PinOff size={13} className="text-[var(--text-muted)]" /> : <Pin size={13} className="text-[var(--text-muted)]" />}
+              {pinnedPageIds.has(tabCtx.pageId) ? '取消固定' : '固定标签'}
+            </button>
+            <div className="mx-2 my-0.5 border-t border-[var(--border-color)]" />
+            <button onClick={() => { const pid = tabCtx.pageId; setTabCtx(null); handleCloseTab(pid) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />关闭
+            </button>
+            <button onClick={() => { const pid = tabCtx.pageId; setTabCtx(null); handleCloseOthers(pid) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />关闭其他
+            </button>
+            <button onClick={() => { setTabCtx(null); handleCloseAll() }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />全部关闭
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Unsaved changes confirm dialog */}
       <ConfirmDialog

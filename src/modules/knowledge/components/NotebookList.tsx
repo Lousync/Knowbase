@@ -6,6 +6,7 @@ import { DeleteWipe } from '../../../components/shared/DeleteWipe'
 import { Collapsible } from '../../../components/shared/Collapsible'
 import { TreeGuideLine } from '../../../components/shared/treeGuides'
 import { getSetting, setSetting } from '../../../lib/ipc'
+import { useSettings } from '../../../lib/SettingsContext'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
 import { isEditingInput } from '../../../lib/shortcuts'
@@ -55,6 +56,10 @@ interface Props {
   onCopyPath?: (type: 'category' | 'page', id: string, mode: 'abs' | 'rel') => void
   clipboard?: { action: 'copy' | 'cut'; items: { type: 'category' | 'page'; id: string }[] } | null
   cutItemIds?: Set<string>
+  /** 目录聚焦：开启后只显示当前页面所在目录链 + 同级页，其余骨架化/隐藏（样式 folderFocusStyle） */
+  focusOn?: boolean
+  /** 点击骨架条 = 退出聚焦并定位 */
+  onExitFocus?: () => void
 }
 
 /** 目录排序权重（提到模块级：供下方 useMemo 派生索引复用，避免每次渲染新建对象） */
@@ -70,6 +75,7 @@ export function NotebookList({
   onCopy, onCut, onPaste, onExportPage, onDeletePage, onRenamePage, onCopyPath, clipboard, cutItemIds,
   deletingMap,
   spaceId = null, onSelectSpace,
+  focusOn, onExitFocus,
 }: Props) {
   const isSpaceView = !!spaceId
   /** 删除动画中（animating 渲染动画 / done 直接隐藏） */
@@ -119,6 +125,36 @@ export function NotebookList({
   const rootCats = isSpaceView
     ? (childrenByParent.get(spaceId || '') ?? [])
     : (childrenByParent.get('') ?? [])
+
+  // ---- 目录聚焦（2026-09-12）：只保留「当前页面的祖先目录链 + 同级页」实名，其余骨架化/隐藏 ----
+  const { s: focusSettings } = useSettings()
+  const focusHide = (focusSettings.folderFocusStyle ?? 'skeleton') === 'hidden'
+  const focusActive = !!focusOn && !!activePageId
+  const activePageCatId = focusActive ? allPages.find(p => p.id === activePageId)?.categoryId ?? null : null
+  const chainCatIds = useMemo(() => {
+    const set = new Set<string>()
+    if (!focusActive || !activePageCatId) return set
+    const seen = new Set<string>()
+    let currentId: string | null = activePageCatId
+    while (currentId && !seen.has(currentId)) {
+      seen.add(currentId); set.add(currentId)
+      currentId = categories.find(c => c.id === currentId)?.parentId ?? null
+    }
+    return set
+  }, [focusActive, activePageCatId, categories])
+  const skelWidth = (id: string) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return 42 + (h % 48) }
+  const pageKeep = (p: KnowledgePage) => !focusActive || p.categoryId === activePageCatId
+  /** 骨架条：占位 + 悬停显原名；点击 = 退出聚焦并定位 */
+  const skelRow = (key: string, name: string, depth: number, icon: React.ReactNode, onClick: () => void) => (
+    <div key={key} onClick={onClick} title={`${name}（点击退出聚焦并定位）`}
+      className="group flex items-center gap-1 py-[3px] rounded-md cursor-pointer select-none hover:bg-[var(--bg-hover)]"
+      style={{ paddingLeft: `${depth * 12 + 6}px`, paddingRight: '4px' }}>
+      <span className="w-[12px] shrink-0" />
+      <span className="opacity-25 shrink-0 inline-flex">{icon}</span>
+      <span className="h-[10px] rounded-[5px] bg-[var(--bg-tertiary)] shrink-0 group-hover:hidden" style={{ width: skelWidth(key) }} />
+      <span className="hidden group-hover:block truncate text-[12.5px] text-[var(--text-muted)]">{name}</span>
+    </div>
+  )
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   /** 行内新建学习空间命名（空白菜单入口 → 树末尾输入行，Enter/失焦提交） */
@@ -368,7 +404,7 @@ export function NotebookList({
 
   // ---- render a tree node (recursive) ----
   function renderCategory(cat: KnowledgeCategory, depth: number, notebookAncestorId: string | null = null) {
-    const isExpanded = expanded.has(cat.id)
+    const isExpanded = expanded.has(cat.id) || (focusActive && chainCatIds.has(cat.id))
     const isSelected = selectedCategoryId === cat.id || focusChapterId === cat.id
     const children = childrenByParent.get(cat.id) ?? []
     const hasChildren = children.length > 0
@@ -382,6 +418,19 @@ export function NotebookList({
     const canExpand = isSpace ? false : notebookAncestorId ? false : (isNotebook ? hasChildren : (hasChildren || hasPages))
     // Pass notebook ancestor to children
     const nbId = isNotebook ? cat.id : notebookAncestorId
+
+    // 目录聚焦：链外分类骨架化/隐藏；链上分类已在 isExpanded 强制展开
+    if (focusActive && !chainCatIds.has(cat.id)) {
+      if (focusHide) return null
+      const icon = isSpace ? <Layers size={14} className="text-[var(--info)]" />
+        : isNotebook ? <BookOpen size={14} className="text-[var(--text-muted)]" />
+        : <Folder size={14} className="text-[var(--text-muted)]" />
+      return skelRow(cat.id, cat.name, depth, icon, () => {
+        onExitFocus?.()
+        if (cat.categoryType === 'space') onSelectSpace?.(cat.id)
+        else setExpanded(prev => new Set(prev).add(cat.id))
+      })
+    }
 
     // Row click: space opens immersive view; notebook opens chapter sidebar,
     // chapter under notebook opens focus view, folder toggles expand
@@ -453,7 +502,7 @@ export function NotebookList({
                 : isSelected ? 'bg-[var(--bg-selected)]/40'
                 : dragOverId === cat.id ? 'bg-[var(--accent)]/10 outline outline-2 outline-[var(--accent)] outline-offset-[-2px]'
                 : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-              }`}
+              }${focusActive && cat.id === activePageCatId ? ' ring-1 ring-inset ring-[var(--accent)]/40' : ''}`}
               style={{
                 paddingLeft: `${depth * 12 + 6}px`, paddingRight: '4px',
                 ...(cutItemIds?.has(cat.id) ? { opacity: 0.45 } : {})
@@ -501,7 +550,12 @@ export function NotebookList({
               <div className="relative">
                 <TreeGuideLine level={depth} />
                 {/* Pages directly under this category */}
-                {categoryPages.map(p => (
+                {categoryPages.map(p => {
+                  if (!pageKeep(p)) {
+                    if (focusHide) return null
+                    return skelRow(p.id, p.title || '无标题', depth + 1, <FileIcon ext={p.fileType || ''} size={14} />, () => { onExitFocus?.(); onOpenPage(p.id) })
+                  }
+                  return (
               <div key={p.id}
                 data-page-id={p.id}
                 draggable
@@ -526,7 +580,7 @@ export function NotebookList({
                 className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
                   deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                  : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                  : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)] ring-1 ring-inset ring-[var(--accent)]/40' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
                 style={{
                   paddingLeft: `${(depth + 1) * 12 + 6}px`, paddingRight: '4px',
@@ -553,7 +607,8 @@ export function NotebookList({
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
                 {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
-            ))}
+            )
+            })}
             {/* Sub-categories */}
             {children.map(ch => renderCategory(ch, depth + 1, nbId))}
               </div>
@@ -743,7 +798,12 @@ export function NotebookList({
               data-loose-area="true"
               className="mx-1 rounded transition-colors"
             >
-              {spacePages.map(p => (
+              {spacePages.map(p => {
+                if (!pageKeep(p)) {
+                  if (focusHide) return null
+                  return skelRow(p.id, p.title || '无标题', 1, <FileIcon ext={p.fileType || ''} size={14} />, () => { onExitFocus?.(); onOpenPage(p.id) })
+                }
+                return (
                 <div key={p.id}
                   data-page-id={p.id}
                   draggable
@@ -763,7 +823,7 @@ export function NotebookList({
                   className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
                     deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                    : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                    : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)] ring-1 ring-inset ring-[var(--accent)]/40' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                   }`}
                   style={{
                     paddingLeft: '18px', paddingRight: '4px',
@@ -789,7 +849,8 @@ export function NotebookList({
                   {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
-              ))}
+              )
+              })}
             </div>
           )
         })()}
@@ -800,7 +861,12 @@ export function NotebookList({
             data-loose-area="true"
             className="mx-1 rounded transition-colors"
           >
-            {loosePages.map(p => (
+            {loosePages.map(p => {
+              if (!pageKeep(p)) {
+                if (focusHide) return null
+                return skelRow(p.id, p.title || '无标题', 1, <FileIcon ext={p.fileType || ''} size={14} />, () => { onExitFocus?.(); onOpenPage(p.id) })
+              }
+              return (
               <div key={p.id}
                 data-page-id={p.id}
                 draggable
@@ -821,7 +887,7 @@ export function NotebookList({
                 className={`flex items-center gap-1 py-[3px] cursor-pointer group rounded-md transition-colors ${
                   deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                  : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                  : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)] ring-1 ring-inset ring-[var(--accent)]/40' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
                 style={{
                   paddingLeft: '18px', paddingRight: '4px',
@@ -847,7 +913,8 @@ export function NotebookList({
                 {p.isStarred && <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />}
                 {deletingState(p.id) === 'animating' && <DeleteWipe />}
               </div>
-            ))}
+            )
+            })}
           </div>
         )}
 
@@ -861,7 +928,7 @@ export function NotebookList({
       </div>
 
       {/* ===== Starred ===== */}
-      {starredPages.length > 0 && (
+      {!focusActive && starredPages.length > 0 && (
         <div className="border-t border-[var(--border-color)] pt-0.5 pb-0.5 px-2">
           <button onClick={() => setStarredOpen(v => !v)}
             className="w-full flex items-center gap-1.5 px-1 py-0.5 rounded transition-colors text-[12px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
@@ -884,7 +951,7 @@ export function NotebookList({
                   className={`group flex items-center gap-1 px-1 ml-2 py-[3px] cursor-pointer rounded-md transition-colors ${
                     deletingState(p.id) === 'animating' ? 'kb-deleting'
                   : deletingState(p.id) === 'done' ? 'kb-deleting kb-done'
-                    : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                    : activePageId === p.id ? 'bg-[var(--bg-selected)]/40 text-[var(--text-primary)] ring-1 ring-inset ring-[var(--accent)]/40' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                   }`}>
                   <Star size={11} className="shrink-0 text-[var(--warning)]" fill="currentColor" />
                   {editingPageId === p.id ? (

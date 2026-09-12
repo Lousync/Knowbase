@@ -8,6 +8,8 @@ interface Props {
   onRename?: (id: string, name: string) => void
   /** 2026-09-07：目录拖到空间头 = 移出学习空间（移到仓库根级作中转，可再拖入其它空间） */
   onMoveOut?: (categoryId: string) => void
+  /** 右侧扩展动作槽（目录聚焦开关等），停靠行尾 */
+  extraAction?: React.ReactNode
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * 拖出手势：拖动空间内的笔记本/文件夹到本栏时整栏高亮并提示「松开移出学习空间」，
  * 松开即把该目录移到仓库根级（dataTransfer 类型 application/x-kb-category，由 NotebookList dragStart 写入）。
  */
-export function SpacePanel({ space, onCollapse, onRename, onMoveOut }: Props) {
+export function SpacePanel({ space, onCollapse, onRename, onMoveOut, extraAction }: Props) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(space.name)
   const [dragOver, setDragOver] = useState(false)
@@ -83,6 +85,10 @@ export function SpacePanel({ space, onCollapse, onRename, onMoveOut }: Props) {
             </button>
           )}
         </>
+      )}
+      {/* 右侧扩展动作（目录聚焦开关等）；拖出提示出现时让位隐藏 */}
+      {extraAction && !dragOver && (
+        <div className="ml-auto flex items-center shrink-0">{extraAction}</div>
       )}
       {/* 拖出提示：拖动目录悬停本栏时浮现 */}
       {dragOver && (
