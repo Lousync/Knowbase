@@ -462,7 +462,7 @@ export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, c
 /** 场景/模板启动：不落任何用户消息，用虚拟首轮触发（聊天区第一条即 AI 回复） */
 export const agentStartScene = (sessionId: string, chatId?: string, source?: string, modelId?: string): Promise<AgentChatResult> => a().agentStartScene({ sessionId, chatId, source, modelId })
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
-export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
+export const agentDeleteMessage = (sessionId: string, messageId: string): Promise<boolean> => a().agentDeleteMessage(sessionId, messageId)
 export const agentAbort = (chatId: string): Promise<boolean> => a().agentAbort(chatId)
 /** 保存/清除会话级全局要求（仅该会话后续轮次生效，空串=清除） */
 export const agentSetSessionInstructions = (id: string, instructions: string): Promise<{ ok: boolean; error?: string }> => a().agentSetSessionInstructions(id, instructions)

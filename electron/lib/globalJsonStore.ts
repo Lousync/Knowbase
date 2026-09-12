@@ -10,7 +10,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkS
  * 仅限主进程使用（依赖 electron app）。
  */
 
-function globalDataDir(): string {
+/** 数据根注入点：agentMessageStore 等按文件分片的存储沿用同一目录 */
+export function globalDataDir(): string {
   const dir = join(app.getPath('userData'), 'data')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir

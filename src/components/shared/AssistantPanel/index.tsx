@@ -456,7 +456,7 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     const sid = activeId
     if (!sid) return
-    await agentDeleteMessage(messageId)
+    await agentDeleteMessage(sid, messageId)
     await refreshMessages(sid)
   }, [activeId, refreshMessages])
 

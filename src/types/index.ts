@@ -1364,7 +1364,7 @@ export interface ElectronAPI {
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentStartScene: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string; source?: string; modelId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
-  agentDeleteMessage: (messageId: string) => Promise<boolean>
+  agentDeleteMessage: (sessionId: string, messageId: string) => Promise<boolean>
   agentAbort: (chatId: string) => Promise<boolean>
   /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
   onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void

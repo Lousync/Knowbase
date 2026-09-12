@@ -1,14 +1,26 @@
 import { randomUUID } from 'crypto'
-import { globalReadJson, globalWriteJson } from './globalJsonStore'
+import { globalReadJson, globalWriteJson, globalDataDir } from './globalJsonStore'
+import {
+  appendMessage, deleteMessageById, deleteMessagesAfterId, deleteMessagesFile,
+  getMessagesPage, migrateLegacyMessages, readMessages, updateMessageContent as storeUpdateMessageContent,
+  type AgentMessageRow,
+} from './agentMessageStore'
 
-/** R6 去库化（D9）：AI 会话 = userData/data/agent-*.json（sql.js 已移除）
- *  会话 + 消息两级（迁移 046），删除会话级联清消息。
- *  两文件：agent-sessions.json / agent-messages.json，行结构与原表列名（snake_case）一致；
- *  数组顺序即原 rowid 顺序（只 push / filter，不重排存储数组），用于平局排序与「删某条之后」语义。
+export type { AgentMessageRow }
+
+/**
+ * R6 去库化（D9）：AI 会话 = userData/data/*.json（sql.js 已移除）。
+ * 会话索引 = agent-sessions.json（小文件，全量重写可接受，保持不变）；
+ * 消息 = agent-messages/<sessionId>.jsonl 按会话分文件追加写（v2，agentMessageStore），
+ * 替代 v1 的 agent-messages.json 全量双文件（每条消息 O(全部历史) 重写，已迁移）。
+ * 删除会话级联清消息文件；首次消息操作触发 legacy 一次性迁移。
+ *
+ * 会话 + 消息两级（迁移 046）；
+ * 行结构与原表列名（snake_case）一致；会话数组顺序即原 rowid 顺序（只 push / filter，
+ * 不重排存储数组），用于平局排序；消息文件行序 = 会话内插入序（v1 rowid 等价物）。
  */
 
 const SESSIONS_FILE = 'agent-sessions.json'
-const MESSAGES_FILE = 'agent-messages.json'
 
 /**
  * 会话来源：用于把「通用 AI 助手」（侧栏 / AI 学堂）与「AI 教学」的会话列表互相隔离。
@@ -27,15 +39,6 @@ export interface AgentSessionRow {
   updated_at: string
 }
 
-export interface AgentMessageRow {
-  id: string
-  session_id: string
-  role: 'user' | 'assistant'
-  content: string
-  trace_json: string | null
-  created_at: string
-}
-
 /** 等价 datetime('now','localtime')：本地时间 "YYYY-MM-DD HH:MM:SS" */
 function nowLocal(): string {
   const d = new Date()
@@ -47,8 +50,19 @@ function readSessions(): AgentSessionRow[] {
   return globalReadJson<AgentSessionRow[]>(SESSIONS_FILE, [])
 }
 
-function readMessages(): AgentMessageRow[] {
-  return globalReadJson<AgentMessageRow[]>(MESSAGES_FILE, [])
+/** legacy 全量文件 → 分文件，进程内一次性（失败不置位，下次消息操作重试） */
+let legacyMigrated = false
+function ensureMigrated(): void {
+  if (legacyMigrated) return
+  try {
+    const r = migrateLegacyMessages(globalDataDir())
+    if (r) {
+      console.log(`[AgentSessions] 旧版全量消息已迁移：${r.sessions} 会话 / ${r.messages} 条 → agent-messages/*.jsonl（原文件留存为 agent-messages.migrated.json）`)
+    }
+    legacyMigrated = true
+  } catch (err) {
+    console.error('[AgentSessions] 旧版消息迁移失败（原文件保留，下次操作重试；本次按 v2 读取）', err)
+  }
 }
 
 export function createAgentSession(title = '新会话', source: AgentSessionSource = 'assistant'): AgentSessionRow {
@@ -132,10 +146,9 @@ export function getAgentSession(id: string): AgentSessionRow | undefined {
 }
 
 export function deleteAgentSession(id: string): void {
-  // 显式先删子消息（不依赖原 SQL 外键级联）
-  const messages = readMessages()
-  const keptMessages = messages.filter((m) => m.session_id !== id)
-  if (keptMessages.length !== messages.length) globalWriteJson(MESSAGES_FILE, keptMessages)
+  // 显式先删子消息（不依赖原 SQL 外键级联；v2 = 删整个会话消息文件）
+  ensureMigrated()
+  deleteMessagesFile(globalDataDir(), id)
   const sessions = readSessions()
   const keptSessions = sessions.filter((s) => s.id !== id)
   if (keptSessions.length !== sessions.length) globalWriteJson(SESSIONS_FILE, keptSessions)
@@ -145,10 +158,10 @@ export function sessionExists(id: string): boolean {
   return readSessions().some((s) => s.id === id)
 }
 
-/** 追加消息并刷新会话活跃时间 */
+/** 追加消息并刷新会话活跃时间（消息落盘 = 单行 append，O(本条消息)） */
 export function appendAgentMessage(sessionId: string, role: 'user' | 'assistant', content: string, trace?: unknown): void {
-  const messages = readMessages()
-  messages.push({
+  ensureMigrated()
+  appendMessage(globalDataDir(), {
     id: randomUUID(),
     session_id: sessionId,
     role,
@@ -156,7 +169,6 @@ export function appendAgentMessage(sessionId: string, role: 'user' | 'assistant'
     trace_json: trace ? JSON.stringify(trace) : null,
     created_at: nowLocal(),
   })
-  globalWriteJson(MESSAGES_FILE, messages)
   const sessions = readSessions()
   const row = sessions.find((s) => s.id === sessionId)
   if (row) {
@@ -177,40 +189,28 @@ export function ensureSessionTitle(sessionId: string, firstUserMessage: string):
 
 export function getAgentMessages(sessionId: string): AgentMessageRow[] {
   // 原 SQL：WHERE session_id = ? ORDER BY created_at ASC, rowid ASC LIMIT 500（取最早 500 条）
-  return readMessages()
-    .map((m, i) => ({ m, i }))
-    .filter((x) => x.m.session_id === sessionId)
-    .sort((a, b) => {
-      if (a.m.created_at !== b.m.created_at) return a.m.created_at < b.m.created_at ? -1 : 1
-      return a.i - b.i
-    })
-    .slice(0, 500)
-    .map((x) => x.m)
+  ensureMigrated()
+  return getMessagesPage(globalDataDir(), sessionId)
 }
 
-export function getMessageById(id: string): AgentMessageRow | null {
-  return readMessages().find((m) => m.id === id) ?? null
+export function getMessageById(sessionId: string, id: string): AgentMessageRow | null {
+  ensureMigrated()
+  return readMessages(globalDataDir(), sessionId).find((m) => m.id === id) ?? null
 }
 
 /** 编辑消息内容（仅用于用户消息改写后重推） */
-export function updateMessageContent(id: string, content: string): void {
-  const messages = readMessages()
-  const row = messages.find((m) => m.id === id)
-  if (!row) return
-  row.content = content
-  row.trace_json = null
-  globalWriteJson(MESSAGES_FILE, messages)
+export function updateMessageContent(sessionId: string, id: string, content: string): void {
+  ensureMigrated()
+  storeUpdateMessageContent(globalDataDir(), sessionId, id, content)
 }
 
-export function deleteMessage(id: string): void {
-  globalWriteJson(MESSAGES_FILE, readMessages().filter((m) => m.id !== id))
+export function deleteMessage(sessionId: string, id: string): void {
+  ensureMigrated()
+  deleteMessageById(globalDataDir(), sessionId, id)
 }
 
 /** 删除某条消息之后的所有消息（重新生成/编辑重推时清掉旧回复） */
 export function deleteMessagesAfter(sessionId: string, messageId: string): void {
-  // 数组下标即原 rowid：删除同会话中下标大于该消息的消息
-  const messages = readMessages()
-  const idx = messages.findIndex((m) => m.id === messageId)
-  if (idx === -1) return
-  globalWriteJson(MESSAGES_FILE, messages.filter((m, i) => !(m.session_id === sessionId && i > idx)))
+  ensureMigrated()
+  deleteMessagesAfterId(globalDataDir(), sessionId, messageId)
 }

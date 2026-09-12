@@ -657,10 +657,10 @@ async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, 
   const content = String(req?.message ?? '').trim()
   if (!content) return { ok: false, error: '内容不能为空', trace }
   if (!sessionId || !sessionExists(sessionId)) return { ok: false, error: '会话不存在', trace }
-  const msg = getMessageById(String(req.messageId ?? ''))
+  const msg = getMessageById(sessionId, String(req.messageId ?? ''))
   if (!msg || msg.session_id !== sessionId) return { ok: false, sessionId, error: '消息不存在', trace }
   if (msg.role !== 'user') return { ok: false, sessionId, error: '只能编辑用户消息', trace }
-  updateMessageContent(msg.id, content)
+  updateMessageContent(sessionId, msg.id, content)
   deleteMessagesAfter(sessionId, msg.id)
   return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
@@ -699,8 +699,10 @@ export function registerAgentHandlers(): void {
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentStartScene(req, signal)))
   ipcMain.handle('agent:editMessage', (e, req: AgentChatRequest & { messageId: string }) =>
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentEditAndRegen(req, signal)))
-  ipcMain.handle('agent:deleteMessage', (_e, messageId: string) => {
-    deleteMessage(String(messageId ?? ''))
+  ipcMain.handle('agent:deleteMessage', (_e, payload: { sessionId?: unknown; messageId?: unknown }) => {
+    // v2 存储按会话分文件：删除需定位会话文件，渲染层随消息一并传 sessionId
+    const p = (payload ?? {}) as { sessionId?: unknown; messageId?: unknown }
+    deleteMessage(String(p.sessionId ?? ''), String(p.messageId ?? ''))
     return true
   })
   ipcMain.handle('agent:abort', (_e, chatId: string) => {
