@@ -393,7 +393,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail'); if (entry.date !== today) setLiveContent(entry.contentMd || '') }}
               onToggleStar={handleToggleStar}
               onNewEntry={handleTodayEntry}
-              cardSize={s.blogCardSize}
+              cardSize={(['s', 'm', 'l'] as const).includes(s.blogCardSize as 's' | 'm' | 'l') ? s.blogCardSize as 's' | 'm' | 'l' : 'm'}
             />
           </>
         )}

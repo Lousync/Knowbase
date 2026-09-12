@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, AlertCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, Info, ExternalLink, CheckCircle2 } from 'lucide-react'
 import type { ToastMessage } from '../../lib/toast'
 import { navigateToHelp } from '../../modules/help'
 import { prefersReducedMotion } from '../../lib/usePresence'
@@ -112,9 +112,9 @@ export function Toast() {
 }
 
 function ToastItem({ toast: t, closing = false, onDismiss }: { toast: ActiveToast; closing?: boolean; onDismiss: (id: string) => void }) {
-  const Icon = t.type === 'error' ? AlertCircle : t.type === 'warning' ? AlertTriangle : Info
-  const iconColor = t.type === 'error' ? 'text-[#f14c4c]' : t.type === 'warning' ? 'text-[#cca700]' : 'text-[var(--accent)]'
-  const borderColor = t.type === 'error' ? 'border-[#f14c4c]' : t.type === 'warning' ? 'border-[#cca700]' : 'border-[var(--accent)]'
+  const Icon = t.type === 'error' ? AlertCircle : t.type === 'warning' ? AlertTriangle : t.type === 'success' ? CheckCircle2 : Info
+  const iconColor = t.type === 'error' ? 'text-[#f14c4c]' : t.type === 'warning' ? 'text-[#cca700]' : t.type === 'success' ? 'text-emerald-400' : 'text-[var(--accent)]'
+  const borderColor = t.type === 'error' ? 'border-[#f14c4c]' : t.type === 'warning' ? 'border-[#cca700]' : t.type === 'success' ? 'border-emerald-400' : 'border-[var(--accent)]'
 
   const handleDetail = () => {
     if (t.detail) {

@@ -359,7 +359,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleImportFolder = async () => {
     try {
-      const paths: string[] = await showFolderDialog()
+      const paths = await showFolderDialog()
       if (!paths || paths.length === 0) return
       const catId = selectedChapterId || null
       for (const folderPath of paths) {

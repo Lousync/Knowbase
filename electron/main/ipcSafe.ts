@@ -27,7 +27,7 @@ const origOn = ipcMain.on.bind(ipcMain)
     ipcMain.removeHandler(channel)
   }
   seenHandle.add(channel)
-  origHandle(channel, listener)
+  return origHandle(channel, listener)
 }
 
 ;(ipcMain as unknown as { on: typeof ipcMain.on }).on = (channel, listener) => {
@@ -36,5 +36,5 @@ const origOn = ipcMain.on.bind(ipcMain)
     ipcMain.removeAllListeners(channel)
   }
   seenOn.add(channel)
-  origOn(channel, listener)
+  return origOn(channel, listener)
 }

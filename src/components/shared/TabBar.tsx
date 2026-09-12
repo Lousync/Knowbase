@@ -1,7 +1,9 @@
-import type { TabName } from '../../types'
 import { FileText, Calendar, BookOpen, Download, Wrench } from 'lucide-react'
 
-const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
+/** 本组件是博客模块的旧版页签（未被应用侧 TabName 覆盖，「导出」非全局 tab） */
+type BlogTabName = 'blog' | 'schedule' | 'knowledge' | 'toolbox' | 'export'
+
+const tabs: { id: BlogTabName; label: string; icon: React.ReactNode }[] = [
   { id: 'blog', label: '博客', icon: <FileText size={15} /> },
   { id: 'schedule', label: '日程', icon: <Calendar size={15} /> },
   { id: 'knowledge', label: '知识库', icon: <BookOpen size={15} /> },
@@ -10,8 +12,8 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
 ]
 
 interface TabBarProps {
-  activeTab: TabName
-  onChange: (tab: TabName) => void
+  activeTab: BlogTabName
+  onChange: (tab: BlogTabName) => void
 }
 
 export function TabBar({ activeTab, onChange }: TabBarProps) {

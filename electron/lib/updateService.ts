@@ -241,7 +241,7 @@ async function verifyInstaller(dest: string, expectedSize: number | undefined, a
       const hash = createHash('sha512')
       const buf = await new Promise<Buffer>((res, rej) => {
         const s = require('fs').createReadStream(dest)
-        s.on('data', c => hash.update(c))
+        s.on('data', (c: Buffer) => hash.update(c))
         s.on('end', () => res(hash.digest()))
         s.on('error', rej)
       })
