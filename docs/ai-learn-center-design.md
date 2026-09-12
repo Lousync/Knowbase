@@ -1,7 +1,9 @@
 # AI 学堂 · 实现方案（ai-learn-center）
 
 - 日期：2026-09-10
-- 状态：**方案稿，待拍板后实施**
+- 状态：**部分已落码，主体待拍板**（2026-09-12 按代码现况校正）
+  - ✅ §7.3 / §7.5 帮助文档体系已落码：帮助文档迁至项目根 `resources/help/`（23 篇），主进程 `electron/lib/helpService.ts` 只读检索 + `electron/lib/builtinTools.ts` 的 help 工具已上线，渲染层与主进程读同一份
+  - ⏳ AI 学堂中心界面（学习路径 / 进度 / 底栏）未实施，仍是方案稿 → 本文档留在主仓库，不归档
 - 关联：`docs/prototypes/ai-learn-center.html`（已确认原型）、`docs/onboarding-rework-design.md`、`docs/ai-teaching-module-rework.md`
 - 类型：UI/UX + 主进程能力新增（含帮助文档体系重构）
 
