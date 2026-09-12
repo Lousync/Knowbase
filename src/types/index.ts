@@ -602,6 +602,8 @@ export interface LlmProviderInfo {
   hasKey: boolean
   models: string[]
   headers?: Record<string, string>
+  /** 嵌入模型名（空串=未配置；知识语义检索用） */
+  embeddingModel: string
   isDefault: boolean
 }
 
@@ -617,6 +619,8 @@ export interface LlmProviderDraft {
   enabled?: boolean
   /** 自定义请求头（opencode 等网关要求 x-opencode-session 之类路由头时在此配置） */
   headers?: Record<string, string>
+  /** 嵌入模型名（知识语义索引用）；不配 = 该供应商不参与嵌入 */
+  embeddingModel?: string
 }
 
 export interface LlmTestResultInfo {
@@ -1028,11 +1032,17 @@ export interface ElectronAPI {
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
   reorderKnowledgePage: (id: string, targetIndex: number) => Promise<void>
   moveKnowledgeCategory: (id: string, direction: 'up' | 'down') => Promise<void>
+  duplicateKnowledgePage: (data: { pageId: string; targetCategoryId?: string | null }) => Promise<unknown>
+  duplicateKnowledgeCategory: (data: { categoryId: string; targetParentId?: string | null }) => Promise<unknown>
   // import
   showImportOpenDialog: () => Promise<string[]>
   readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>
   importPdf: (base64: string, fileName: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   importPdfFile: (filePath: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importBinary: (base64: string, fileName: string, fileType: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importBinaryFile: (filePath: string, fileType: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  showFolderDialog: () => Promise<string[] | null>
+  importFolder: (folderPath: string, parentCategoryId: string | null) => Promise<{ error?: string; name?: string; fileCount?: number; folderCount?: number } | null>
   openExternal: (filePath: string) => Promise<void>
   getAppVersion: () => Promise<string>
   checkForUpdate: () => Promise<{ ok: boolean; hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; notes: string; asset: { name: string; url: string; size: number } | null; message?: string }>

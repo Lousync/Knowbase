@@ -28,6 +28,8 @@ export interface ProviderConfig {
   /** 自定义请求头（明文存设置，勿放 API Key 类敏感值——密钥走 apiKey 字段走 DPAPI）。
    *  2026-09-08：opencode 等网关要求 x-opencode-session 之类的会话/路由头，按服务商在设置里配 */
   headers?: Record<string, string>
+  /** 嵌入模型名（知识语义索引用，knowledge-index-design §6）；不配 = 该供应商不参与嵌入 */
+  embeddingModel?: string
 }
 
 interface ChatMessage {
@@ -232,6 +234,9 @@ interface Adapter {
   /** 流式对话：逐块回调归一化事件，返回值与非流式 chat 同构（上层逻辑无需分叉）。
    *  未实现时 invokeLlmStream 自动回退为「一次返回全部 content」——功能不受损，仅失去过程感。 */
   chatStream?(p: ProviderConfig, req: ChatRequest, onEvent: (e: LlmStreamEvent) => void): Promise<ChatResult>
+  /** 文本嵌入（语义索引用）：texts 与返回向量按序一一对应。
+   *  未实现（如 anthropic）= 该供应商类型不支持嵌入，resolveEmbedProvider 自动跳过。 */
+  embed?(p: ProviderConfig, texts: string[], model: string): Promise<number[][]>
 }
 
 async function httpJson(url: string, init: { method: string; headers: Record<string, string>; body?: string }, externalSignal?: AbortSignal): Promise<{ status: number; json: any }> {
@@ -439,6 +444,18 @@ const openAiCompatibleAdapter: Adapter = {
       sa.dispose()
     }
   },
+  async embed(p, texts, model) {
+    // OpenAI 兼容 /embeddings：input 数组一次批；返回 data[].embedding 与入参按序对应
+    const { status, json } = await httpJson(`${p.baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: authHeaders(p),
+      body: JSON.stringify({ model, input: texts }),
+    })
+    if (status !== 200 || !json) throw new Error(friendlyHttpError(status, json))
+    const vectors = (json?.data ?? []).map((d: any) => d?.embedding).filter((v: unknown) => Array.isArray(v))
+    if (vectors.length !== texts.length) throw new Error(`嵌入返回数不符（请求 ${texts.length}，返回 ${vectors.length}）`)
+    return vectors as number[][]
+  },
 }
 
 function ollamaBase(p: ProviderConfig): string {
@@ -571,6 +588,21 @@ const ollamaAdapter: Adapter = {
     } finally {
       sa.dispose()
     }
+  },
+  async embed(p, texts, model) {
+    // Ollama /api/embeddings 逐条（本地无批接口兼容性顾虑；新 /api/batch-embed 未普及时保持简单）
+    const out: number[][] = []
+    for (const text of texts) {
+      const { status, json } = await httpJson(`${ollamaBase(p)}/api/embeddings`, {
+        method: 'POST',
+        headers: {},
+        body: JSON.stringify({ model, prompt: text }),
+      })
+      if (status !== 200 || !json) throw new Error(`HTTP ${status}（Ollama 服务未启动或嵌入模型未拉取？）`)
+      if (!Array.isArray(json?.embedding)) throw new Error('Ollama 嵌入返回格式异常')
+      out.push(json.embedding as number[])
+    }
+    return out
   },
 }
 
@@ -752,6 +784,42 @@ function getAdapter(type: ProviderType): Adapter {
   const a = adapters[type]
   if (!a) throw new Error(`不支持的供应商类型: ${type}`)
   return a
+}
+
+// ===== 嵌入通道（knowledge-index-design §6）=====
+
+/** 取第一个「已启用 + 配了 embeddingModel + 适配器支持嵌入」的供应商；无则 null（语义层降级） */
+export function resolveEmbedProvider(): { provider: ProviderConfig; model: string } | null {
+  for (const p of getProviders()) {
+    if (!p.enabled || !p.embeddingModel?.trim()) continue
+    if (!getAdapter(p.type).embed) continue
+    return { provider: p, model: p.embeddingModel.trim() }
+  }
+  return null
+}
+
+export type LlmEmbedResult =
+  | { ok: true; vectors: number[][]; model: string; providerName: string }
+  | { ok: false; error: string }
+
+/** 批量嵌入入口（语义索引管线用）：批 ≤64，失败直接上抛错误信息由调用方降级 */
+export async function llmEmbed(texts: string[]): Promise<LlmEmbedResult> {
+  const resolved = resolveEmbedProvider()
+  if (!resolved) return { ok: false, error: '未配置嵌入模型（设置 → 模型 → 供应商的 embeddingModel）' }
+  const adapter = getAdapter(resolved.provider.type).embed
+  if (!adapter) return { ok: false, error: '该供应商类型不支持嵌入' }
+  const vectors: number[][] = []
+  try {
+    for (let i = 0; i < texts.length; i += 64) {
+      const batch = texts.slice(i, i + 64)
+      vectors.push(...await adapter(resolved.provider, batch, resolved.model))
+    }
+  } catch (err) {
+    appendAudit(resolved.provider.id, 'llm.embed', { ok: false, count: texts.length })
+    return { ok: false, error: String((err as Error)?.message || err) }
+  }
+  appendAudit(resolved.provider.id, 'llm.embed', { ok: true, count: texts.length })
+  return { ok: true, vectors, model: resolved.model, providerName: resolved.provider.name }
 }
 
 // ===== invoke 主流程 =====
@@ -941,6 +1009,7 @@ function sanitizeInfo(p: ProviderConfig, defaultChatModel: string) {
     hasKey: !!p.apiKeyEncrypted,
     models: p.models,
     headers: p.headers ?? {},
+    embeddingModel: p.embeddingModel ?? '',
     isDefault: defaultChatModel.startsWith(`${p.id}:`),
   }
 }
@@ -949,6 +1018,7 @@ function sanitizeInfo(p: ProviderConfig, defaultChatModel: string) {
 function saveProviderDraft(draft: {
   id?: string; name: string; type: ProviderType; baseUrl: string; apiKey?: string; enabled?: boolean
   headers?: Record<string, string>
+  embeddingModel?: string
 }): { ok: boolean; id?: string; error?: string } {
   if (!draft || typeof draft.name !== 'string' || !draft.name.trim()) return { ok: false, error: '名称不能为空' }
   if (!['openai-compatible', 'ollama', 'anthropic'].includes(draft.type)) return { ok: false, error: '不支持的类型' }
@@ -973,6 +1043,7 @@ function saveProviderDraft(draft: {
   p.type = draft.type
   p.baseUrl = urlCheck.url
   p.headers = headers
+  p.embeddingModel = typeof draft.embeddingModel === 'string' && draft.embeddingModel.trim() ? draft.embeddingModel.trim() : undefined
   if (typeof draft.apiKey === 'string' && draft.apiKey.length > 0) {
     p.apiKeyEncrypted = encryptSecret(draft.apiKey) // 明文只在此瞬间存在，随即加密
   }

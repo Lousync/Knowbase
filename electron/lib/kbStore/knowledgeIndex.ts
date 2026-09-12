@@ -7,6 +7,7 @@ import { parseMarkdown } from './mdStore'
 import { WELCOME_DOC_FILENAME } from './welcomeDoc'
 import { findCoveringDirEntry, gcArchiveEntries, isArchivedByManifest, readManifest, type ArchivedManifest } from './archivedFilesRepo'
 import { getVaultIgnore, isDirIgnored, getVaultIgnoreState, auditIgnoreRules, type VaultIgnoreResult, type VaultIgnoreState } from './ignoreFile'
+import { clearSemanticsMemo } from './semanticStore'
 import type { Ignore } from 'ignore'
 
 /**
@@ -759,6 +760,8 @@ export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
 export function invalidateKnowledgeIndex(): void {
   clearIndexMemo()
   clearTextMemo()
+  // 语义向量不删（嵌入成本高）：只清 memo，下次 ensureSemanticIndex 按页 diff 增量（knowledge-index-design §7）
+  clearSemanticsMemo()
   if (!getCurrentVault()) return
   deleteFile('cache', 'knowledge-index.json')
   deleteFile('cache', KNOWLEDGE_TEXT_KEY)

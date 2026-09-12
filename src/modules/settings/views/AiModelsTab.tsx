@@ -227,7 +227,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
       </div>
       <p className="text-[11px] text-[var(--text-muted)] mt-1 truncate font-mono">{p.baseUrl}</p>
       <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-        {p.models.length > 0 ? `${p.models.length} 个模型` : '未拉取模型'} · {p.hasKey ? '已配置 Key' : '无 Key'}
+        {p.models.length > 0 ? `${p.models.length} 个模型` : '未拉取模型'} · {p.hasKey ? '已配置 Key' : '无 Key'}{p.embeddingModel ? ` · 语义:${p.embeddingModel}` : ''}
       </p>
       <div className="flex items-center gap-1 mt-1.5">
         <input value={manualModel} onChange={e => setManualModel(e.target.value)}
@@ -280,6 +280,7 @@ function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initia
   const [type, setType] = useState<LlmProviderType>(initial?.type ?? 'openai-compatible')
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? '')
   const [apiKey, setApiKey] = useState('')
+  const [embeddingModel, setEmbeddingModel] = useState(initial?.embeddingModel ?? '')
   const [headersText, setHeadersText] = useState(initial?.headers && Object.keys(initial.headers).length ? JSON.stringify(initial.headers, null, 2) : '')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -307,6 +308,10 @@ function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initia
         <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
           className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono outline-none focus:border-[var(--accent)]" />
       </Row>
+      <Row label="嵌入模型（可选——知识语义检索用，如 text-embedding-3-small / bge-m3 / embedding-3）">
+        <input value={embeddingModel} onChange={e => setEmbeddingModel(e.target.value)}
+          className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono outline-none focus:border-[var(--accent)]" />
+      </Row>
       <Row label="自定义请求头（JSON，可选——opencode 等网关要求的路由头在此填，如 {&quot;x-opencode-session&quot;:&quot;knowbase&quot;}）">
         <textarea value={headersText} onChange={e => setHeadersText(e.target.value)} rows={2}
           placeholder='{"x-opencode-session": "knowbase"}'
@@ -328,7 +333,7 @@ function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initia
             } catch { showToast({ type: 'error', message: '自定义请求头不是合法的 JSON 对象（{"头名":"值"}）' }); return }
           }
           setSaving(true)
-          try { const r = await llmSaveProvider({ id: initial?.id, name, type, baseUrl, apiKey: apiKey || undefined, headers }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
+          try { const r = await llmSaveProvider({ id: initial?.id, name, type, baseUrl, apiKey: apiKey || undefined, headers, embeddingModel: embeddingModel.trim() || undefined }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
         }}
           className="px-3 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
           保存

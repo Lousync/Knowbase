@@ -9,7 +9,8 @@ import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, t
 import { getCurrentVault } from './kbStore/vaultContext'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
-import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { searchKnowledge } from './knowledgeSearch'
 import { searchHelp } from './helpService'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
@@ -277,36 +278,40 @@ function broadcastExternalWrite(relPath: string, mtimeMs?: number): void {
 const SEARCH_LIMIT_SCHEMA = {
   type: 'object',
   properties: {
-    query: { type: 'string', description: '关键词, 空格分隔为 AND' },
+    query: { type: 'string', description: '检索词，空格分词（自然语言问句亦可，语义检索可用时按含义召回）' },
     limit: { type: 'number', description: '上限, 默认8' },
+    mode: { type: 'string', enum: ['auto', 'keyword', 'semantic'], description: '检索方式：auto=可用则混合（默认）/ keyword=仅关键词 / semantic=仅语义' },
   },
   required: ['query'],
 } satisfies ToolJsonSchema
 
 export function registerBuiltinTools(): void {
 
-  // 1. builtin.knowledge.search —— 关键词搜索知识库页面
+  // 1. builtin.knowledge.search —— 知识库混合检索（关键词 + 语义，knowledge-index-design §9）
   registerTool({
     name: 'builtin.knowledge.search',
     title: '搜索知识库页面',
-    description: '关键词搜索知识库页面, 返回 id/标题/摘录',
+    description: '搜索知识库页面，返回 id/标题/摘录/相关度。配好嵌入模型后支持语义检索（问句/换述也能命中），结果 via 字段标注命中方式',
     inputSchema: SEARCH_LIMIT_SCHEMA,
     source: 'builtin',
     enabled: true,
     readOnly: true,
     module: 'knowledge',
-  }, args => {
+  }, async args => {
     const q = str(args.query).trim()
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 50)
-    const terms = q.split(/\s+/).filter(Boolean)
-    if (terms.length === 0) return []
-    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）
+    const mode = args.mode === 'keyword' || args.mode === 'semantic' ? args.mode : 'auto'
+    if (!q) return []
+    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）；未配嵌入模型时 auto 自动降级纯关键词
     try {
-      return vaultSearchKnowledgePages(q).slice(0, limit).map(r => ({
-        id: r.id,
-        title: r.title,
-        excerpt: r.excerpt || r.title,
-        updatedAt: r.updatedAt,
+      const r = await searchKnowledge({ query: q, topK: limit, mode })
+      return r.hits.map(h => ({
+        id: h.pageId,
+        title: h.title,
+        excerpt: h.excerpt || h.title,
+        updatedAt: h.updatedAt,
+        score: h.score,
+        via: h.via,
       }))
     } catch (err) {
       throw new Error(`知识库搜索失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
