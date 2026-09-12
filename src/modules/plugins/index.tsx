@@ -53,6 +53,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   knowledge: '知识库访问与重刷',
   navigation: '导航跳转',
   files: '本地文件读取',
+  'vault:read': '知识库检索(只读)',
 }
 
 const CAPABILITY_DESCS: Record<string, string> = {
@@ -62,6 +63,7 @@ const CAPABILITY_DESCS: Record<string, string> = {
   knowledge: '允许插件打开宿主刷题器等知识功能(判题写入插件自己的数据表)',
   navigation: '允许插件请求跳转到指定页面',
   files: '允许插件弹系统对话框挑文件并读取其内容(每次经你手动确认,不会静默访问磁盘)',
+  'vault:read': '允许插件检索与读取知识库笔记的元数据(标题/标签/属性/链接/搜索,只读,不能修改任何内容)',
 }
 
 const DATA_TARGETS: Record<string, string> = {

@@ -111,11 +111,11 @@ searchKnowledge({
 
 ## 10. 分期路线
 
-| 期 | 内容 | 验收 |
-|---|---|---|
-| A1 | chunker + 向量库读写 + `llmService.embed` + 构建/增量管线 | 冒烟：离线构建全库；改一页重建仅重算该页块；无 embedding 配置时全链路降级不报错 |
-| A2 | `searchKnowledge` 门面 + AI 工具接线 + 设置页 embedding 配置 | 真机：语义问句命中关键词搜不到的页；混合评分排序稳定 |
-| A3 | 相似笔记 UI + `kb.metadata.*` 插件方法 + frontmatter 泛查询 | 插件冒烟走 Gateway 全链路 |
+| 期 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| A1 | chunker + 向量库读写 + `llmService.embed` + 构建/增量管线 | 冒烟：离线构建全库；改一页重建仅重算该页块；无 embedding 配置时全链路降级不报错 | ✅ a0bff04（chunker 14 断言 / 向量库 22 断言） |
+| A2 | `searchKnowledge` 门面 + AI 工具接线 + 设置页 embedding 配置 | 真机：语义问句命中关键词搜不到的页；混合评分排序稳定 | ✅ a0bff04（真机验收待用户配 embeddingModel） |
+| A3 | 相似笔记 UI + `kb.metadata.*` 插件方法 + frontmatter 泛查询 | 插件冒烟走 Gateway 全链路 | ✅ 本提交（求值器 23 断言 / Gateway 源码级 13 断言；真机全链路待验） |
 
 ## 11. 决策记录（ADR）
 
@@ -127,6 +127,9 @@ searchKnowledge({
 | ADR-4 | chunkKey 含 contentHash 即缓存 | 独立嵌入缓存表 | 一个键同时解决「变了没」和「算过没」，无额外状态 |
 | ADR-5 | 挂 `invalidateKnowledgeIndex()` 现有钩子 | 新建 fs watcher | 写路径失效语义已验证（10+ 调用点）；watcher 是 kb.vault.watch 的职责，不重复建设 |
 | ADR-6 | 向量库落 `<vault>/.knowbase/semantics/` | userData 全局 | 备份=拷仓库；多仓库隔离；对齐 cache 现状 |
+| ADR-7（A3） | 新增独立能力 `vault:read`，不复用 `knowledge` | 复用 knowledge | `knowledge` 现语义是"刷题器等宿主知识功能"，混用会稀释安装页授权语义；`vault:read` 精确表达"只读检索"，且 P2 `kb.vault.*` 直接沿用；风险归 C 级（暴露全部笔记元数据），默认策略已放行 C |
+| ADR-8（A3） | frontmatter 查询白名单文法（==/!=/>/>=/</<= + &&/\|\|，无括号无函数） | JSON 过滤条件 / 正则 | 表达式可直接写在插件 manifest 与 AI 工具入参里，人可读可手写；不执行代码对齐 §5.4 when 约定 |
+| ADR-9（A3） | 索引条目只存 frontmatter 标量快照（键≤32/值≤200 字符） | 存原始 frontmatter 文本 | 防超大 frontmatter 撑爆索引缓存；泛查询只需标量比较 |
 
 ## 12. 待定问题（需拍板）
 

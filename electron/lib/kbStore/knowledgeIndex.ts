@@ -60,6 +60,11 @@ export interface KnowledgePageIndexEntry {
   /** 正文 [[出链]] 标题集合（R2：反链面板据此反查，不必全文扫） */
   outgoingTitles: string[]
   /**
+   * frontmatter 标量键值快照（A3-1 泛查询用 knowledge-index-design §2/§9）：
+   * 仅收 string/number/boolean，键≤32、字符串值≤200 字符；tags/id/title 等结构化字段不重复收
+   */
+  frontmatter: Record<string, string | number | boolean>
+  /**
    * 条目种类（docs/vault-archive-all-files-design.md §5）：
    * doc = md/欢迎页（有正文，全功能：正文搜索/双链/quiz）；file = 清单归档的非 md 文件
    * （元信息卡或 html 沙箱渲染；不进图谱/AI 检索/quiz，不参与正文索引）。undefined = 旧缓存，按 doc 处理
@@ -82,7 +87,7 @@ export function extractWikiOutlinks(md: string): string[] {
 }
 
 export interface KnowledgeIndex {
-  schemaVersion: 4
+  schemaVersion: 5
   generatedAt: string
   source: 'vault'
   categories: KnowledgeCategoryIndexEntry[]
@@ -95,6 +100,19 @@ export interface KnowledgeIndex {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
+}
+
+/** frontmatter → 索引快照：仅标量、键≤32、值≤200 字符（防超大 frontmatter 撑爆索引缓存） */
+function sanitizeFrontmatterForIndex(raw: Record<string, unknown>): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {}
+  const keys = Object.keys(raw ?? {}).filter((k) => k && k.length <= 64)
+  for (const k of keys.slice(0, 32)) {
+    const v = raw[k]
+    if (typeof v === 'string') { if (v && v.length <= 200) out[k] = v }
+    else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v
+    else if (typeof v === 'boolean') out[k] = v
+  }
+  return out
 }
 
 function asStringArray(value: unknown): string[] {
@@ -431,7 +449,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   const warnings: string[] = []
   if (!current) {
     return {
-      schemaVersion: 4,
+      schemaVersion: 5,
       generatedAt: new Date().toISOString(),
       source: 'vault',
       categories: [],
@@ -599,6 +617,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
         outgoingTitles: rel === WELCOME_DOC_FILENAME ? [] : extractWikiOutlinks(doc.body),
         entryKind,
         sizeBytes: stat.size,
+        frontmatter: sanitizeFrontmatterForIndex(doc.frontmatter),
       }
       pages.push(entry)
       byId[id] = entry
@@ -625,7 +644,7 @@ export function rebuildKnowledgeIndex(): KnowledgeIndex {
   })
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     generatedAt: new Date().toISOString(),
     source: 'vault',
     categories: visibleCategories.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hans')),
@@ -738,7 +757,7 @@ export function getKnowledgeIndex(forceRebuild = false): KnowledgeIndex {
     const cached = readJson<KnowledgeIndex | null>('cache', 'knowledge-index.json', null)
     if (
       cached &&
-      cached.schemaVersion === 4 &&
+      cached.schemaVersion === 5 &&
       cached.source === 'vault' &&
       Array.isArray(cached.pages) &&
       cached.byId &&

@@ -78,6 +78,7 @@ const api = {
   searchKnowledgePages: (q: string) => ipcRenderer.invoke('knowledge:searchPages', q),
   getKnowledgeBacklinks: (pageId: string) => ipcRenderer.invoke('knowledge:getBacklinks', pageId),
   getKnowledgeBacklinkContext: (pageId: string) => ipcRenderer.invoke('knowledge:getBacklinkContext', pageId),
+  getKnowledgeSimilarPages: (pageId: string) => ipcRenderer.invoke('knowledge:similarPages', pageId),
   getKnowledgeManualLinks: (pageId: string) => ipcRenderer.invoke('knowledge:getManualLinks', pageId),
   addKnowledgeManualLink: (pageId: string, targetId: string) => ipcRenderer.invoke('knowledge:addManualLink', pageId, targetId),
   removeKnowledgeManualLink: (a: string, b: string) => ipcRenderer.invoke('knowledge:removeManualLink', a, b),

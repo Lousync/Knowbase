@@ -7,6 +7,10 @@ import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { createGateway } from './pluginHostGateway'
 import { pluginStoreGet, pluginStoreSet, pluginStoreDelete, pluginStoreHas, pluginStoreUsage } from './kbStore/pluginStore'
+import { searchKnowledge } from './knowledgeSearch'
+import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
+import { vaultGetBacklinks } from './kbStore/knowledgeVaultRepo'
+import { evaluateFrontmatterQuery } from './kbStore/frontmatterQuery'
 import { verifyPluginSignature, buildKeyring } from './pluginSigning'
 import { getPackState, importPack } from './knowledgePackImporter'
 import { appendAudit, readAuditRaw, clearAudit } from './pluginAudit'
@@ -70,7 +74,7 @@ const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'k
 // 内容级贡献键(仅含这些为 S 级)
 const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons', 'deleteFx']
 // UI 插件能力白名单:theme/clipboard 为一期放行;data/knowledge/navigation 为 C 级模块插件(需显式授权)
-const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files']
+const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files', 'vault:read']
 
 export interface PluginManifest {
   id: string
@@ -395,7 +399,8 @@ function computeRiskLevel(m: PluginManifest): RiskLevel {
     const caps = Array.isArray(m.capabilities) ? m.capabilities : []
     const keys = Object.keys(m.contributes || {})
     // 声明自有数据表并申请 data / knowledge / navigation 能力 = 模块级插件
-    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files')) return 'C'
+    // vault:read = 读知识库元数据/检索（kb.metadata.*），只读但暴露全部笔记内容面 → 同 C 级
+    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files') || caps.includes('vault:read')) return 'C'
     return 'B'
   }
   const keys = Object.keys(m.contributes || {})
@@ -1261,6 +1266,89 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       'kb.store.usage': {
         capability: '',
         run: (ctx) => pluginStoreUsage(ctx.pluginId),
+      },
+
+      // ---- kb.metadata.* 知识库元数据只读面（knowledge-index-design §9 / plugin-api-v2-design §5.3）----
+      // capability 统一 vault:read（只读，但暴露全部笔记元数据与检索结果 → C 级授权）。
+      // 范围与知识库 UI 搜索同口径：草稿页不出（status !== 'draft'），二进制归档文件除外。
+      'kb.metadata.search': {
+        capability: 'vault:read',
+        run: async (_ctx, params) => {
+          const p = (params ?? {}) as { query?: unknown; topK?: unknown; mode?: unknown }
+          const q = typeof p.query === 'string' ? p.query.trim() : ''
+          if (!q) throw Object.assign(new Error('query 缺失'), { code: 'EPARAM' })
+          const topK = Math.min(Math.max(Math.floor(Number(p.topK) || 8), 1), 30)
+          const mode = p.mode === 'keyword' || p.mode === 'semantic' ? p.mode : 'auto'
+          const r = await searchKnowledge({ query: q, topK, mode })
+          return { hits: r.hits, semantic: r.semantic }
+        },
+      },
+      'kb.metadata.get': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { pageId?: unknown; path?: unknown }
+          const idx = getKnowledgeIndex()
+          let entry = null
+          if (typeof p.pageId === 'string' && p.pageId) {
+            entry = idx.byId[p.pageId] ?? null
+          } else if (typeof p.path === 'string' && p.path) {
+            // 只做字符串匹配（不触盘），路径归一化后与索引条目比对——无越界面
+            const norm = p.path.replace(/\\/g, '/').replace(/^\/+/, '')
+            entry = idx.pages.find((x) => x.path === norm) ?? null
+          } else {
+            throw Object.assign(new Error('pageId 或 path 缺失'), { code: 'EPARAM' })
+          }
+          if (!entry || entry.entryKind === 'file') throw Object.assign(new Error('页面不存在'), { code: 'ENOTFOUND' })
+          return {
+            pageId: entry.id, path: entry.path, title: entry.title, tags: entry.tags,
+            status: entry.status, createdAt: entry.createdAt, updatedAt: entry.updatedAt,
+            frontmatter: entry.frontmatter, outgoingTitles: entry.outgoingTitles,
+          }
+        },
+      },
+      'kb.metadata.query': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { tag?: unknown; folder?: unknown; frontmatter?: unknown; limit?: unknown }
+          const idx = getKnowledgeIndex()
+          const tag = typeof p.tag === 'string' ? p.tag.trim().toLowerCase() : ''
+          const folder = typeof p.folder === 'string' ? p.folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : ''
+          const expr = typeof p.frontmatter === 'string' ? p.frontmatter.trim() : ''
+          if (!tag && !folder && !expr) throw Object.assign(new Error('tag / folder / frontmatter 至少给一个'), { code: 'EPARAM' })
+          const limit = Math.min(Math.max(Math.floor(Number(p.limit) || 50), 1), 200)
+          const results: Array<{ pageId: string; path: string; title: string; tags: string[]; updatedAt: string }> = []
+          for (const e of idx.pages) {
+            if (e.status === 'draft' || e.entryKind === 'file') continue
+            if (tag && !e.tags.some((t) => t.toLowerCase().includes(tag))) continue
+            if (folder && !e.path.startsWith(folder + '/')) continue
+            if (expr) {
+              try {
+                if (!evaluateFrontmatterQuery(expr, e.frontmatter)) continue
+              } catch (err) {
+                throw Object.assign(new Error(String((err as Error).message)), { code: 'EPARAM' })
+              }
+            }
+            results.push({ pageId: e.id, path: e.path, title: e.title, tags: e.tags, updatedAt: e.updatedAt })
+            if (results.length >= limit) break
+          }
+          return { results, total: results.length }
+        },
+      },
+      'kb.metadata.backlinks': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { pageId?: unknown; path?: unknown }
+          const idx = getKnowledgeIndex()
+          let pageId = typeof p.pageId === 'string' ? p.pageId : ''
+          if (!pageId && typeof p.path === 'string' && p.path) {
+            const norm = p.path.replace(/\\/g, '/').replace(/^\/+/, '')
+            pageId = idx.pages.find((x) => x.path === norm)?.id ?? ''
+          }
+          if (!pageId || !idx.byId[pageId]) throw Object.assign(new Error('页面不存在'), { code: 'ENOTFOUND' })
+          // 复用知识库反链面板同一份 GraphIndex 解析（R2/R4），不新写链接解析
+          const backlinks = vaultGetBacklinks(pageId).map((v) => ({ pageId: v.id, title: v.title, path: v.path }))
+          return { backlinks, total: backlinks.length }
+        },
       },
     },
   })

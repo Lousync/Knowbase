@@ -333,6 +333,13 @@ export interface KnowledgeBacklinkItem {
   updatedAt: string
   excerpt: string
 }
+/** 相似笔记条目（编辑器右栏「相关笔记」，A3-3；via=命中方式 keyword/semantic/hybrid） */
+export interface SimilarPageHit {
+  pageId: string; title: string; path: string
+  excerpt: string
+  via: 'keyword' | 'semantic' | 'hybrid'
+  score: number
+}
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' | 'space' }
 export interface UpdateKnowledgeCategoryDTO { name?: string; parentId?: string | null; sortOrder?: number; categoryType?: 'notebook' | 'folder' | 'space' }
@@ -1017,6 +1024,7 @@ export interface ElectronAPI {
   searchKnowledgePages: (q: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinks: (pageId: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinkContext: (pageId: string) => Promise<KnowledgeBacklinkItem[]>
+  getKnowledgeSimilarPages: (pageId: string) => Promise<{ hits: SimilarPageHit[]; semantic?: { enabled: boolean; reason?: string } }>
   getKnowledgeManualLinks: (pageId: string) => Promise<KnowledgePage[]>
   addKnowledgeManualLink: (pageId: string, targetId: string) => Promise<{ ok: boolean }>
   removeKnowledgeManualLink: (a: string, b: string) => Promise<{ ok: boolean }>

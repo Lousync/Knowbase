@@ -99,6 +99,7 @@ export const deleteKnowledgePage = async (id: string) => { const r = await a().d
 export const searchKnowledgePages = (q: string) => a().searchKnowledgePages(q)
 export const getKnowledgeBacklinks = (pageId: string) => a().getKnowledgeBacklinks(pageId)
 export const getKnowledgeBacklinkContext = (pageId: string) => a().getKnowledgeBacklinkContext(pageId)
+export const getKnowledgeSimilarPages = (pageId: string) => a().getKnowledgeSimilarPages(pageId)
 export const getKnowledgeManualLinks = (pageId: string) => a().getKnowledgeManualLinks(pageId)
 export const addKnowledgeManualLink = (pageId: string, targetId: string) => a().addKnowledgeManualLink(pageId, targetId)
 export const removeKnowledgeManualLink = (pageIdA: string, pageIdB: string) => a().removeKnowledgeManualLink(pageIdA, pageIdB)

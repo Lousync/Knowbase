@@ -46,6 +46,7 @@ import { registerSkillHandlers } from '../lib/skillService'
 import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
 import { registerSemanticIndexHandlers } from '../lib/kbStore/semanticIndex'
+import { registerKnowledgeSearchHandlers } from '../lib/knowledgeSearch'
 import { registerAiTeachingFolderHandlers, migrateRootDir as migrateAiTeachRootDir } from '../lib/aiTeachingFolders'
 import { registerAiTeachingWorkspaceHandlers } from '../lib/aiTeachingWorkspaces'
 import { registerAiTeachingSourceHandlers } from '../lib/aiTeachingSources'
@@ -862,6 +863,8 @@ app.whenReady().then(async () => {
     registerAgentHandlers()
     // 知识语义索引（knowledge-index-design）：设置页状态卡 + 手动重建
     registerSemanticIndexHandlers()
+    // 相似笔记（编辑器右栏）检索 handler
+    registerKnowledgeSearchHandlers()
     // AI教学 P1：会话 ⇄ 文件夹绑定（aiTeach:* IPC，总纲 §二）
     registerAiTeachingFolderHandlers((key) => settingsCache[key])
     // AI教学 P5：工作区两层（元数据 .knowbase/modules/aiTeaching/workspaces.json，§3.2-6/3-6）

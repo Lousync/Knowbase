@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { ipcMain } from 'electron'
 import { getVaultKbRoot } from './kbStore/vaultContext'
 import { getKnowledgeIndex, getKnowledgeTextIndex, type KnowledgePageIndexEntry } from './kbStore/knowledgeIndex'
 import { chunkPageText } from './kbStore/semanticChunker'
@@ -147,4 +148,42 @@ export async function searchKnowledge(opts: {
   }
 
   return { hits, semantic: { enabled: semanticEnabled, reason: semanticReason } }
+}
+
+// ===== 相似笔记 IPC（A3-3：编辑器右栏「相关笔记」数据源）=====
+
+/** 相似笔记条目（渲染层展示用精简 DTO） */
+export interface SimilarPageHit {
+  pageId: string
+  title: string
+  path: string
+  excerpt: string
+  via: 'keyword' | 'semantic' | 'hybrid'
+  score: number
+}
+
+export function registerKnowledgeSearchHandlers(): void {
+  ipcMain.handle('knowledge:similarPages', async (_e, pageId: unknown) => {
+    const idx = getKnowledgeIndex()
+    const page = typeof pageId === 'string' ? idx.byId[pageId] : null
+    if (!page || page.entryKind === 'file') return { hits: [] as SimilarPageHit[] }
+    // 查询向量 = 标题 + 正文前 500 字（标题给主题，正文给内容特征）
+    const body = (getKnowledgeTextIndex()[page.id] ?? '').replace(/\s+/g, ' ').slice(0, 500)
+    const r = await searchKnowledge({
+      query: `${page.title} ${body}`.trim(),
+      topK: 6,
+      filters: { excludePageIds: [page.id] },
+    })
+    return {
+      hits: r.hits.map<SimilarPageHit>((h) => ({
+        pageId: h.pageId,
+        title: h.title,
+        path: h.path,
+        excerpt: h.excerpt.slice(0, 120),
+        via: h.via,
+        score: h.score,
+      })),
+      semantic: r.semantic,
+    }
+  })
 }
