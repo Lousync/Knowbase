@@ -11,6 +11,8 @@ Thumbs.db
 .env*
 *.log
 .claude/
+# 个人项目偏好（官方约定应加入 .gitignore）；项目规则本体见 AGENTS.md
+CLAUDE.local.md
 .agents/
 .trae/
 .workbuddy/
