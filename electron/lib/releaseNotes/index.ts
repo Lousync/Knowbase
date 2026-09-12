@@ -3,7 +3,7 @@
  *
  * 三层数据：
  *   ① 完整条目清单 `./data.ts`（由 CHANGELOG.md 生成，随应用发布）
- *   ② 手写亮点    `./highlights.ts`（发版前人工维护，志岩审核）
+ *   ② 手写亮点    `./highlights.ts`（发版前人工维护与审核）
  *   ③ 阅读记录    `<仓库>/.knowbase/modules/release-notes/index.json`（本文件负责读写）
  *
  * 为什么③落在仓库里而不是全局设置：仓库 = 账户（本仓既有口径），

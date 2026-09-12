@@ -54,7 +54,7 @@ export function renderPage(hostname: string): string {
 <div class="card">
   <div class="head">
     <div>
-      <div class="title">已连接到志岩的电脑</div>
+      <div class="title">已连接到电脑</div>
       <div class="sub">${escapeHtml(hostname)}</div>
     </div>
     <span class="pill" id="timer">连接中…</span>
