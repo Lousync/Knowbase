@@ -655,6 +655,17 @@ export interface LlmUsageInfo {
   visionPages?: number
 }
 
+/** 本月用量细分（网关补强：审计聚合，按供应商/模型） */
+export interface LlmUsageBreakdownEntry {
+  providerId: string
+  provider: string
+  model: string
+  calls: number
+  tokens: number
+  promptTokens: number
+  completionTokens: number
+}
+
 // ===== CC Switch 一键导入 =====
 
 export interface CcSwitchItem {
@@ -1364,6 +1375,7 @@ export interface ElectronAPI {
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
   llmTestModel: (providerId: string, model: string) => Promise<LlmModelTestResultInfo>
   llmGetUsage: () => Promise<LlmUsageInfo>
+  llmUsageBreakdown: () => Promise<{ month: string; entries: LlmUsageBreakdownEntry[] }>
   // 划词翻译 / 离线词典
   dictLookup: (word: string) => Promise<DictLookupResult>
   dictStatus: () => Promise<DictStatus>

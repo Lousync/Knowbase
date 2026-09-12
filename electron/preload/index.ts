@@ -187,6 +187,7 @@ const api = {
   llmVisionModels: () => ipcRenderer.invoke('llm:visionModels'),
   llmTestModel: (providerId: string, model: string) => ipcRenderer.invoke('llm:testModel', { providerId, model }),
   llmGetUsage: () => ipcRenderer.invoke('llm:getUsage'),
+  llmUsageBreakdown: () => ipcRenderer.invoke('llm:usageBreakdown'),
   llmReasoningCapable: (model: string) => ipcRenderer.invoke('llm:reasoningCapable', model),
   // 划词翻译 / 离线词典
   dictLookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),

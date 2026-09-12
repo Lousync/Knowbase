@@ -1,6 +1,6 @@
 import { ipcMain, net } from 'electron'
 import { randomUUID } from 'crypto'
-import { appendAudit, countMonthLlmTokens, countMonthVisionTokens, countMonthVisionPages } from './pluginAudit'
+import { appendAudit, countMonthLlmTokens, countMonthVisionTokens, countMonthVisionPages, summarizeMonthLlmUsage } from './pluginAudit'
 import { encryptSecret, decryptSecret } from './secretBox'
 import { scanCcSwitch, importCcSwitchIds, bindCcSwitchSaver } from './ccSwitchImport'
 
@@ -645,7 +645,11 @@ function buildAnthropicBody(req: ChatRequest, stream: boolean): Record<string, u
     max_tokens: req.maxTokens,
     messages: turns,
     ...(stream ? { stream: true } : {}),
-    ...(systemParts.length > 0 ? { system: systemParts.join('\n\n') } : {}),
+    // prompt cache（网关补强）：system 段以 content block 形式标 cache_control ephemeral——
+    // 长系统提示 + 多轮场景命中率最高，费用显著下降；不支持的网关会忽略该字段（不影响正确性）
+    ...(systemParts.length > 0 ? {
+      system: [{ type: 'text', text: systemParts.join('\n\n'), cache_control: { type: 'ephemeral' } }],
+    } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
@@ -844,6 +848,8 @@ export type LlmInvokeResponse = {
   tokens: number
   promptTokens: number
   completionTokens: number
+  /** 故障转移：本次实际应答的供应商 ≠ 默认供应商时，记录被接管的默认供应商名（网关补强） */
+  fallbackFrom?: string
 } | {
   ok: false
   error: string
@@ -883,24 +889,26 @@ function streamEnabled(): boolean {
   return depsRef?.getSettingValue('aiStreamEnabled') !== false
 }
 
-async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
-  const t = resolveLlmTarget(req)
-  if (!t.ok) return { ok: false, error: t.error, code: t.code }
+/** 供应商级错误（网络/超时/限频/上游 5xx）→ 触发故障转移；参数/鉴权类错误换供应商也没用 */
+function isProviderLevelError(error: string): boolean {
+  return /timeout|timed?\s*out|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|网络|HTTP 5\d\d|HTTP 429|限频/i.test(error)
+}
 
-  const adapter = getAdapter(t.provider.type)
+async function llmInvokeOnce(provider: ProviderConfig, model: string, req: LlmInvokeRequest, maxTokens: number): Promise<LlmInvokeResponse> {
+  const adapter = getAdapter(provider.type)
   const started = Date.now()
   try {
-    const r = await adapter.chat(t.provider, {
-      model: t.model,
+    const r = await adapter.chat(provider, {
+      model,
       messages: req.messages,
       tools: req.tools,
-      maxTokens: t.maxTokens,
+      maxTokens,
       effort: req.effort,
       signal: req.signal,
     })
-    appendAudit(t.provider.id, 'llm.invoke', {
-      provider: t.provider.name,
-      model: t.model,
+    appendAudit(provider.id, 'llm.invoke', {
+      provider: provider.name,
+      model,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
@@ -912,21 +920,39 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       content: r.content,
       toolCalls: r.toolCalls,
       assistantMessage: r.assistantMessage,
-      model: t.model,
+      model,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
     }
   } catch (err) {
-    appendAudit(t.provider.id, 'llm.invoke', {
-      provider: t.provider.name,
-      model: t.model,
+    appendAudit(provider.id, 'llm.invoke', {
+      provider: provider.name,
+      model,
       durationMs: Date.now() - started,
       ok: false,
       error: String((err as Error)?.message ?? err).slice(0, 300),
     })
     return { ok: false, error: String((err as Error)?.message ?? err) }
   }
+}
+
+async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
+  const t = resolveLlmTarget(req)
+  if (!t.ok) return { ok: false, error: t.error, code: t.code }
+
+  const r = await llmInvokeOnce(t.provider, t.model, req, t.maxTokens)
+  if (r.ok) return r
+  // 故障转移（网关补强）：仅「默认模型路径」（用户未钉死供应商/模型）且供应商级错误时，
+  // 换一个可用供应商重试一次。流式路径不做（中途切换会造成内容拼接错乱）。
+  if (req.providerId || req.modelId) return r
+  if (!isProviderLevelError(r.error)) return r
+  const fallback = getProviders().find(p => p.enabled && p.id !== t.provider.id && p.models.length > 0)
+  if (!fallback) return r
+  const r2 = await llmInvokeOnce(fallback, fallback.models[0], req, t.maxTokens)
+  if (!r2.ok) return r // 仍返回原始错误（fallback 失败细节已在审计）
+  appendAudit(fallback.id, 'llm.fallback', { from: t.provider.name, to: fallback.name })
+  return { ...r2, fallbackFrom: t.provider.name }
 }
 
 /**
@@ -1190,6 +1216,8 @@ export function registerLlmHandlers(deps: {
     visionMonthTokens: countMonthVisionTokens(),
     visionPages: countMonthVisionPages(),
   }))
+  // 用量细分（网关补强）：本月按供应商/模型聚合（审计数据源，只读）
+  ipcMain.handle('llm:usageBreakdown', () => summarizeMonthLlmUsage())
 }
 
 /** 供 agentService 复用（不经 IPC） */

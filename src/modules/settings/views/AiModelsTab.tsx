@@ -7,9 +7,9 @@ import { Collapsible } from '../../../components/shared/Collapsible'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
   llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel, llmTestModel,
-  llmCcSwitchList, llmCcSwitchImport, openExternal,
+  llmCcSwitchList, llmCcSwitchImport, openExternal, llmUsageBreakdown,
 } from '../../../lib/ipc'
-import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, CcSwitchItem } from '../../../types'
+import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, CcSwitchItem, LlmUsageBreakdownEntry } from '../../../types'
 import { prettyModelName, isOpenCodeFree } from '../../../lib/modelNames'
 
 /** 免费=用户手动标记 ∪ id 含 free（上游不提供该元数据，双轨启发式） */
@@ -37,6 +37,7 @@ export function AiModelsTab() {
   const [providers, setProviders] = useState<LlmProviderInfo[]>([])
   const [defaultModel, setDefaultModel] = useState('')
   const [usage, setUsage] = useState({ monthTokens: 0 })
+  const [breakdown, setBreakdown] = useState<{ month: string; entries: LlmUsageBreakdownEntry[] }>({ month: '', entries: [] })
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [ccsOpen, setCcsOpen] = useState(false)
@@ -62,10 +63,11 @@ export function AiModelsTab() {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const [r, u] = await Promise.all([llmListProviders(), llmGetUsage()])
+      const [r, u, b] = await Promise.all([llmListProviders(), llmGetUsage(), llmUsageBreakdown()])
       setProviders(r.providers)
       setDefaultModel(r.defaultChatModel)
       setUsage(u)
+      setBreakdown(b)
     } finally {
       setLoading(false)
     }
@@ -94,6 +96,19 @@ export function AiModelsTab() {
                 className="w-28 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] text-right outline-none focus:border-[var(--accent)]" />
             </label>
           </div>
+          {breakdown.entries.length > 0 && (
+            <div className="mt-3 pt-2.5 border-t border-[var(--border-color)]">
+              <p className="text-[11px] text-[var(--text-muted)] mb-1.5">按供应商/模型细分（{breakdown.month}）</p>
+              <div className="space-y-1">
+                {breakdown.entries.slice(0, 8).map(e => (
+                  <div key={`${e.providerId}-${e.model}`} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="truncate text-[var(--text-secondary)]" title={`${e.provider} · ${e.model}`}>{e.provider} · {prettyModelName(e.model)}</span>
+                    <span className="shrink-0 tabular-nums text-[var(--text-muted)]">{e.calls} 次 · {e.tokens.toLocaleString()} tok</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
