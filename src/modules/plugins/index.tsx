@@ -14,6 +14,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { showToast } from '../../lib/toast'
 import { startBackgroundPluginInstall } from '../../lib/pluginDownloadBus'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
+import { PluginSettingsForm } from './PluginSettingsForm'
 import type { PluginSummary, PluginRegistryEntry, PluginAuditEntry, PluginRiskLevel } from '../../types'
 
 /**
@@ -729,6 +730,9 @@ export function PluginsModule() {
               </div>
             </>
           )}
+
+          {/* 声明式设置（plugin-phase1-design C5）：schema 驱动表单，值落插件私有 kb.store */}
+          {p.enabled && !p.broken && <PluginSettingsForm pluginId={p.id} />}
 
           <SectionTitle>提供的内容</SectionTitle>
           <div className="space-y-2 mb-8">

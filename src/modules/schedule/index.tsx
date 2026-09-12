@@ -17,6 +17,7 @@ import { TodoItem } from './components/TodoItem'
 import { TodoEditModal } from './components/TodoEditModal'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { Collapsible } from '../../components/shared/Collapsible'
+import { PluginSlotEntry } from '../../components/shared/PluginSlotEntry'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { QuadrantChart } from './components/QuadrantChart'
@@ -623,6 +624,7 @@ export function ScheduleModule({ isActive = true, sidebarOpen = true, sidebarWid
               </div>
             )}
           </div>
+          <PluginSlotEntry slot="schedule.sidebar" />
         </div>
       </ResizablePanel>
 

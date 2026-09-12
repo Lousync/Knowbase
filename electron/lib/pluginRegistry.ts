@@ -7,6 +7,7 @@ import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { createGateway } from './pluginHostGateway'
 import { pluginStoreGet, pluginStoreSet, pluginStoreDelete, pluginStoreHas, pluginStoreUsage } from './kbStore/pluginStore'
+import { subscribePluginEvents, unsubscribePluginEvents, unsubscribeAllPluginEvents } from './pluginEvents'
 import { searchKnowledge } from './knowledgeSearch'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
 import { vaultGetBacklinks } from './kbStore/knowledgeVaultRepo'
@@ -66,7 +67,7 @@ const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 /** code 插件入口：单文件 .js/.mjs（Worker 加载）；拒绝目录/嵌套，防路径穿越 */
 const CODE_ENTRY_RE = /^[\w][\w.-]{0,64}\.(js|mjs)$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx', 'tables', 'views']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx', 'tables', 'views', 'commands', 'settings', 'renderers']
 /** Skill 变量名规则（提示词 {{var}} 占位符） */
 const SKILL_VAR_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,30}$/
 /** Skill 声明依赖的工具名（命名空间规则与 ToolRegistry 一致，一期仅展示不校验执行权） */
@@ -295,6 +296,53 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
           if (typeof v.slot !== 'string' || !/^[a-z][a-z0-9.]{0,40}$/.test(v.slot)) return { error: 'views: slot 非法(如 knowledge.sidebar)' }
           if (typeof v.title !== 'string' || !v.title.trim() || v.title.length > 20) return { error: 'views: title 缺失或过长(≤20)' }
           if (v.mode !== undefined && !['fullscreen', 'panel'].includes(v.mode as string)) return { error: 'views: mode 仅支持 fullscreen / panel' }
+        }
+      }
+      if (key === 'commands') {
+        // plugin-phase1-design C3：三类插件均可声明；全局名 = <pluginId>.<id>，执行只触发已授权能力
+        const arr = (raw.contributes as Record<string, unknown>).commands
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 32) return { error: 'commands 需为 1-32 个命令的数组' }
+        const cids = new Set<string>()
+        for (const c of arr as Record<string, unknown>[]) {
+          if (!c || typeof c !== 'object') return { error: 'commands: 命令条目非法' }
+          if (typeof c.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(c.id)) return { error: 'commands: id 非法（小写字母/数字/连字符开头，≤40）' }
+          if (cids.has(c.id)) return { error: `commands: 重复的命令 id ${c.id}` }
+          cids.add(c.id)
+          if (typeof c.title !== 'string' || !c.title.trim() || c.title.length > 30) return { error: 'commands: title 缺失或过长(≤30)' }
+          if (c.desc !== undefined && (typeof c.desc !== 'string' || c.desc.length > 80)) return { error: 'commands: desc 需为 ≤80 字符的字符串' }
+        }
+      }
+      if (key === 'settings') {
+        // plugin-phase1-design C5：声明式设置 schema（宿主自动渲染表单，值落 kb.store settings.*）
+        const arr = (raw.contributes as Record<string, unknown>).settings
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 16) return { error: 'settings 需为 1-16 个设置项的数组' }
+        const skeys = new Set<string>()
+        for (const it of arr as Record<string, unknown>[]) {
+          if (!it || typeof it !== 'object') return { error: 'settings: 设置条目非法' }
+          if (typeof it.key !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(it.key)) return { error: 'settings: key 非法（小写字母/数字/连字符，≤40）' }
+          if (skeys.has(it.key)) return { error: `settings: 重复的 key ${it.key}` }
+          skeys.add(it.key)
+          if (typeof it.label !== 'string' || !it.label.trim() || it.label.length > 30) return { error: 'settings: label 缺失或过长(≤30)' }
+          if (!['boolean', 'number', 'string', 'select'].includes(it.type as string)) return { error: 'settings: type 仅支持 boolean / number / string / select' }
+          if (it.type === 'select' && (!Array.isArray(it.options) || it.options.length === 0 || it.options.length > 12)) return { error: 'settings: select 需为 1-12 个 options' }
+          if (it.desc !== undefined && (typeof it.desc !== 'string' || it.desc.length > 80)) return { error: 'settings: desc 需为 ≤80 字符的字符串' }
+        }
+      }
+      if (key === 'renderers') {
+        // plugin-phase1-design C6：自定义 fenced-code 渲染器（type:ui 专属；内容只读沙箱，无 RPC 桥）
+        if (raw.type !== 'ui') return { error: 'renderers 贡献仅 UI 插件(type: ui)可声明' }
+        const arr = (raw.contributes as Record<string, unknown>).renderers
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 8) return { error: 'renderers 需为 1-8 个渲染器的数组' }
+        const langs = new Set<string>()
+        for (const r of arr as Record<string, unknown>[]) {
+          if (!r || typeof r !== 'object') return { error: 'renderers: 渲染器条目非法' }
+          if (typeof r.lang !== 'string' || !/^[a-z0-9-]{1,20}$/.test(r.lang)) return { error: 'renderers: lang 非法（小写字母/数字/连字符，≤20）' }
+          if (r.lang === 'quiz' || r.lang === 'json' || r.lang === 'plan' || r.lang === 'ask') return { error: `renderers: lang ${r.lang} 为宿主保留围栏` }
+          if (langs.has(r.lang)) return { error: `renderers: 重复的 lang ${r.lang}` }
+          langs.add(r.lang)
+          if (typeof r.entry !== 'string' || !r.entry.trim() || !/^(?!\/)[\w][\w./-]{0,80}\.html?$/i.test(r.entry)) return { error: 'renderers: entry 需为插件内 .html 相对路径' }
+          if (r.height !== undefined && (typeof r.height !== 'number' || r.height < 40 || r.height > 2000)) return { error: 'renderers: height 需为 40-2000 的数值' }
+          if (r.title !== undefined && (typeof r.title !== 'string' || !r.title.trim() || r.title.length > 20)) return { error: 'renderers: title 需为 ≤20 字符的字符串' }
         }
       }
       if (key === 'tools' && raw.type !== 'ui') return { error: 'tools 贡献仅 UI 插件(type: ui)可声明' }
@@ -874,6 +922,118 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
     return views
   })
 
+  /** 列出所有已启用插件声明的命令（plugin-phase1-design C3）：附首个 view 槽位供宿主导航激活 */
+  ipcMain.handle('plugin:listCommands', () => {
+    const idx = readIndex()
+    const out: Array<{ pluginId: string; name: string; id: string; title: string; desc?: string; viewSlot?: string; type: string }> = []
+    for (const [id, entry] of Object.entries(idx)) {
+      if (!entry.enabled) continue
+      const dir = safePathInside(getPluginsRoot(), id)
+      if (!dir || !existsSync(dir)) continue
+      try {
+        const parsed = readManifestAt(dir)
+        if ('error' in parsed) continue
+        const m = parsed.manifest
+        const cs = (m.contributes?.commands ?? []) as Array<Record<string, unknown>>
+        const firstView = ((m.contributes?.views ?? []) as Array<Record<string, unknown>>)[0]
+        for (const c of cs) {
+          if (typeof c?.id !== 'string') continue
+          out.push({
+            pluginId: id,
+            name: m.name,
+            id: c.id,
+            title: String(c.title || c.id),
+            ...(typeof c.desc === 'string' && c.desc ? { desc: c.desc.slice(0, 80) } : {}),
+            ...(m.type === 'ui' && typeof firstView?.slot === 'string' ? { viewSlot: firstView.slot } : {}),
+            type: m.type,
+          })
+        }
+      } catch { /* 单个插件读取失败不影响其他插件 */ }
+    }
+    return out
+  })
+
+  /** 声明式设置（plugin-phase1-design C5）：schema / 当前值 / 写值（值落 kb.store settings.*） */
+  ipcMain.handle('plugin:getSettingsSchema', (_e, id: string) => {
+    const dir = safePathInside(getPluginsRoot(), String(id ?? ''))
+    if (!dir || !existsSync(dir)) return { schema: [] }
+    try {
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) return { schema: [] }
+      return { schema: (parsed.manifest.contributes?.settings ?? []) as unknown[] }
+    } catch { return { schema: [] } }
+  })
+
+  ipcMain.handle('plugin:getSettingValues', (_e, id: string) => {
+    const dir = safePathInside(getPluginsRoot(), String(id ?? ''))
+    const values: Record<string, unknown> = {}
+    if (!dir || !existsSync(dir)) return { values }
+    try {
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) return { values }
+      const schema = (parsed.manifest.contributes?.settings ?? []) as Array<Record<string, unknown>>
+      for (const it of schema) {
+        if (typeof it.key !== 'string') continue
+        const r = pluginStoreGet(String(id), `settings.${it.key}`)
+        values[it.key] = r.ok && r.value !== undefined ? r.value : it.default
+      }
+      return { values }
+    } catch { return { values } }
+  })
+
+  ipcMain.handle('plugin:setSettingValue', (_e, id: string, key: string, value: unknown) => {
+    const dir = safePathInside(getPluginsRoot(), String(id ?? ''))
+    if (!dir || !existsSync(dir)) return { ok: false, error: '插件不存在' }
+    try {
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) return { ok: false, error: '清单读取失败' }
+      const schema = (parsed.manifest.contributes?.settings ?? []) as Array<Record<string, unknown>>
+      const it = schema.find(s => s.key === String(key ?? ''))
+      if (!it) return { ok: false, error: '未知设置项' }
+      // 类型白名单校验（select 额外校验取值在 options 内）
+      const type = it.type as string
+      const valid = type === 'boolean' ? typeof value === 'boolean'
+        : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
+        : type === 'string' ? typeof value === 'string' && value.length <= 200
+        : Array.isArray(it.options) && (it.options as unknown[]).some(o => String((o as Record<string, unknown>)?.value ?? o) === String(value))
+      if (!valid) return { ok: false, error: '取值类型不符合 schema' }
+      const r = pluginStoreSet(String(id), `settings.${String(key)}`, value)
+      return r.ok ? { ok: true } : { ok: false, error: r.error }
+    } catch (e) {
+      return { ok: false, error: String((e as Error)?.message || e) }
+    }
+  })
+
+  /** 列出已启用 ui 插件声明的 fenced-code 渲染器（plugin-phase1-design C6） */
+  ipcMain.handle('plugin:listRenderers', () => {
+    const idx = readIndex()
+    const out: Array<{ pluginId: string; name: string; lang: string; entry: string; height?: number; title?: string }> = []
+    for (const [id, entry] of Object.entries(idx)) {
+      if (!entry.enabled) continue
+      const dir = safePathInside(getPluginsRoot(), id)
+      if (!dir || !existsSync(dir)) continue
+      try {
+        const parsed = readManifestAt(dir)
+        if ('error' in parsed) continue
+        const m = parsed.manifest
+        if (m.type !== 'ui') continue
+        const rs = (m.contributes?.renderers ?? []) as Array<Record<string, unknown>>
+        for (const r of rs) {
+          if (typeof r?.lang !== 'string' || typeof r?.entry !== 'string') continue
+          out.push({
+            pluginId: id,
+            name: m.name,
+            lang: r.lang,
+            entry: r.entry,
+            ...(typeof r.height === 'number' ? { height: r.height } : {}),
+            ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
+          })
+        }
+      } catch { /* 单个插件读取失败不影响其他插件 */ }
+    }
+    return out
+  })
+
   ipcMain.handle('plugin:listInstalled', (): PluginSummary[] => {
     const idx = readIndex()
     const out: PluginSummary[] = []
@@ -1146,6 +1306,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       return { enabled: entry.enabled, capabilities: entry.grantedCapabilities ?? [], vaultScope }
     },
     audit: (pluginId, action, detail) => auditWrite(pluginId, action, detail),
+    onSessionClosed: (pluginId) => unsubscribeAllPluginEvents(pluginId),
     methods: {
       // data 表 CRUD（v2 通道；执行复用 v1 逻辑但 pluginId 取自 token 会话，不信任调用方）
       'kb.data.query': {
@@ -1290,6 +1451,41 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       'kb.store.usage': {
         capability: '',
         run: (ctx) => pluginStoreUsage(ctx.pluginId),
+      },
+
+      // ---- kb.events.* 事件订阅（plugin-phase1-design C4）----
+      // capability '' + run 内逐事件校验（ADR-2：映射现有模块 capability，不新增 events:* 权限面）；
+      // 仅 code 插件可订阅（ADR-3，查清单类型——ui 无后台生命、declarative 无逻辑）。
+      'kb.events.subscribe': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { events?: unknown }
+          const list = Array.isArray(p.events) ? p.events.filter((e): e is string => typeof e === 'string') : []
+          if (list.length === 0) throw Object.assign(new Error('events 缺失'), { code: 'EPARAM' })
+          const dir = safePathInside(getPluginsRoot(), ctx.pluginId)
+          let pluginType = 'declarative'
+          if (dir && existsSync(dir)) {
+            try {
+              const m = readManifestAt(dir)
+              if (!('error' in m)) pluginType = m.manifest.type
+            } catch { /* 清单异常按 declarative 拒绝 */ }
+          }
+          if (pluginType !== 'code') throw Object.assign(new Error('仅 code 插件可订阅事件'), { code: 'EPERMISSION' })
+          const r = subscribePluginEvents(ctx.pluginId, list, ctx.capabilities)
+          if (r.subscribed.length === 0) {
+            throw Object.assign(new Error(`无可用订阅：${r.denied.map(d => `${d.event}（${d.reason}）`).join('；')}`), { code: 'EPERMISSION' })
+          }
+          return { subscribed: r.subscribed, denied: r.denied }
+        },
+      },
+      'kb.events.unsubscribe': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { events?: unknown }
+          const list = Array.isArray(p.events) ? p.events.filter((e): e is string => typeof e === 'string') : undefined
+          unsubscribePluginEvents(ctx.pluginId, list)
+          return { ok: true }
+        },
       },
 
       // ---- kb.metadata.* 知识库元数据只读面（knowledge-index-design §9 / plugin-api-v2-design §5.3）----

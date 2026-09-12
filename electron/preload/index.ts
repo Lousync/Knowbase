@@ -144,6 +144,17 @@ const api = {
   pluginUninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
   pluginGetContribution: (id: string, key: string) => ipcRenderer.invoke('plugin:getContribution', id, key),
   pluginListViews: (slot: unknown) => ipcRenderer.invoke('plugin:listViews', slot),
+  pluginListCommands: () => ipcRenderer.invoke('plugin:listCommands'),
+  pluginListRenderers: () => ipcRenderer.invoke('plugin:listRenderers'),
+  pluginGetSettingsSchema: (id: string) => ipcRenderer.invoke('plugin:getSettingsSchema', id),
+  pluginGetSettingValues: (id: string) => ipcRenderer.invoke('plugin:getSettingValues', id),
+  pluginSetSettingValue: (id: string, key: string, value: unknown) => ipcRenderer.invoke('plugin:setSettingValue', id, key, value),
+  /** 宿主事件推送（plugin-phase1-design C4）：主进程已按订阅过滤，这里按 pluginId 转发给常驻 Worker */
+  onPluginEvent: (cb: (p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => void) => {
+    const handler = (_e: unknown, p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => cb(p)
+    ipcRenderer.on('plugin:event', handler)
+    return () => { ipcRenderer.removeListener('plugin:event', handler) }
+  },
   pluginListDeleteFxSkins: () => ipcRenderer.invoke('plugin:listDeleteFxSkins'),
   // C 级模块插件:自有数据表读写(结构化 CRUD,主进程校验 data 能力)
   pluginDataQuery: (pluginId: string, table: string, opts: unknown) => ipcRenderer.invoke('pluginData:query', pluginId, table, opts),

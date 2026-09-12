@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PluginSummary } from '../../types'
-import { pluginListInstalled, onPluginInstalledChanged } from '../../lib/ipc'
+import { pluginListInstalled, onPluginInstalledChanged, onPluginEvent } from '../../lib/ipc'
+import { dispatchCodePluginAction } from '../../lib/pluginCommandBus'
 import { CodePluginHost } from './CodePluginHost'
 
 /**
@@ -26,6 +27,14 @@ export function CodePluginHosts() {
     const off = onPluginInstalledChanged(() => { void refresh() })
     return off
   }, [refresh])
+
+  // 宿主事件 → 常驻 Worker 转发（plugin-phase1-design C4）：主进程已按订阅 + 能力过滤，
+  // 这里只按 pluginId 找到对应 CodePluginHost 注册的推送通道
+  useEffect(() => {
+    return onPluginEvent((p) => {
+      dispatchCodePluginAction(p.pluginId, 'event', { event: p.event, payload: p.payload, ...(p.dropped ? { dropped: p.dropped } : {}) })
+    })
+  }, [])
 
   if (codePlugins.length === 0) return null
 

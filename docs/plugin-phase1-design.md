@@ -1,6 +1,6 @@
 # 插件一期改造设计（Slots 消费面 / 命令 / 事件 / 生命周期 / 渲染扩展点）
 
-> 分支：feature/ai-plugin-upgrade（ai-plugin worktree）　日期：2026-09-12　状态：评审中
+> 分支：feature/ai-plugin-upgrade（ai-plugin worktree）　日期：2026-09-12　状态：已实现（C1-C6 全量落码；真机验收并入统一清单）
 > 前置：P2（kb.metadata.* / kb.vault.*）已落地；本设计 = 双线合并前的「插件工作」范围，共 6 项（C1-C6）
 
 ## 1. 现状盘点（基于代码实证）
@@ -32,7 +32,8 @@
 
 ### C2 插槽消费面扩展
 
-- **新增宿主插槽 v1（3 个）**：`editor.rightPanel`（编辑器右栏，panel 模式）、`blog.sidebar`、`schedule.sidebar`。
+- **新增宿主插槽 v1（3 个）**：`editor.sidebar`（编辑器左栏底部——编辑器模块没有右栏，§6-1 落码裁决：
+  与另两槽统一 `<module>.sidebar` 命名）、`blog.sidebar`、`schedule.sidebar`。
   AI教学不加（资源管理器分区已挤）。
 - **消费模式**：复用 knowledge/index 现成模式——`pluginListViews(slot)` 拉取 + PluginFrame 渲染 + 无贡献时零渲染。
 - **编辑器右栏形态**：右栏已有大纲/相似页等功能块 → 插件 panel 以**页签**并入右栏页签组（icon 用贡献值）。

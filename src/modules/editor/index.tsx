@@ -29,6 +29,7 @@ import { extractOutline } from '../../lib/markdownOutline'
 import type { EditorDoc, DirCache, TreeNode, CreateIntent } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
 import { ConfirmDialog, ResizablePanel } from '../../components/shared'
+import { PluginSlotEntry } from '../../components/shared/PluginSlotEntry'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 
 interface Props {
@@ -1079,7 +1080,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
               onSnapClose={onSnapCloseSidebar}
               onSnapOpen={onSnapOpenSidebar}
             >
-              <div className="flex h-full w-full flex-col">{treeColumn}</div>
+              <div className="flex h-full w-full flex-col">{treeColumn}<PluginSlotEntry slot="editor.sidebar" /></div>
             </ResizablePanel>
           )
         })()}

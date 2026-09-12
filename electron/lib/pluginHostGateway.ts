@@ -51,6 +51,8 @@ export interface GatewayDeps {
   audit?(pluginId: string, action: string, detail: Record<string, unknown>): void
   /** token 生成器（默认 randomBytes；测试可注入固定值） */
   generateToken?(): string
+  /** 会话终结钩子（plugin-phase1-design C4）：close/重开替换/全清时通知（事件订阅清理用） */
+  onSessionClosed?(pluginId: string): void
 }
 
 export type RpcResult =
@@ -73,7 +75,12 @@ export function createGateway(deps: GatewayDeps) {
     if (!state) return { ok: false, code: 'ENOTFOUND', message: '插件未安装' }
     if (!state.enabled) return { ok: false, code: 'EDISABLED', message: '插件已禁用' }
     // 同插件重开：清旧会话（frame 意外未 close 的场景兜底）
-    for (const [t, s] of sessions) if (s.pluginId === pluginId) sessions.delete(t)
+    for (const [t, s] of sessions) {
+      if (s.pluginId === pluginId) {
+        sessions.delete(t)
+        deps.onSessionClosed?.(pluginId)
+      }
+    }
     const token = generateToken()
     sessions.set(token, { token, pluginId, capabilities: state.capabilities, vaultScope: state.vaultScope, createdAt: Date.now() })
     return { ok: true, token }
@@ -81,12 +88,16 @@ export function createGateway(deps: GatewayDeps) {
 
   /** 关闭会话（frame 卸载/宿主重启全清走 closeAll） */
   function close(token: string): void {
+    const s = sessions.get(token)
     sessions.delete(token)
+    if (s) deps.onSessionClosed?.(s.pluginId)
   }
 
   /** 宿主重启/应用退出时全清 */
   function closeAll(): void {
+    const closed = [...sessions.values()]
     sessions.clear()
+    for (const s of closed) deps.onSessionClosed?.(s.pluginId)
   }
 
   /** 会话数量（测试/诊断） */

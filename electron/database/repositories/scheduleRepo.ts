@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { recordActivity } from '../../lib/habitLinkService'
+import { emitPluginEvent } from '../../lib/pluginEvents'
 import * as V from '../../lib/kbStore/scheduleVaultRepo'
 
 // R6 去库化：真相源 = .knowbase/modules/schedule/*.json（sql.js 路径已移除，D9）
@@ -125,6 +126,7 @@ export function registerScheduleHandlers(): void {
     const updated = V.vaultUpdateTodo(id, data, new Date().toISOString())
     if (prevStatus !== undefined && prevStatus !== 'done' && data.status === 'done' && updated) {
       void recordActivity({ source: 'schedule', date: updated.date }, e.sender)
+      emitPluginEvent('schedule:todoCompleted', { todoId: id, title: updated.title ?? '' })
     }
     // id 不存在时 vaultUpdateTodo 返回 null 且不改文件
     return rowToTodo(updated!)

@@ -4,6 +4,7 @@ import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags, workspaceGetCurrent } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
+import { PluginSlotEntry } from '../../components/shared/PluginSlotEntry'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
@@ -299,6 +300,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               allTags={allTags}
             />
           </div>
+          <PluginSlotEntry slot="blog.sidebar" />
         </div>
       </ResizablePanel>
 

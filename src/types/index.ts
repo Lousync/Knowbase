@@ -442,6 +442,40 @@ export interface PluginViewContribution {
   granted: string[]
 }
 
+/** 插件命令（plugin-phase1-design C3；plugin:listCommands 行结构） */
+export interface PluginCommandInfo {
+  pluginId: string
+  name: string
+  /** 插件内命令 id；全局名 = `<pluginId>.<id>` */
+  id: string
+  title: string
+  desc?: string
+  /** 插件首个 view 的槽位（ui 插件才有）：宿主执行时切模块并激活该视图 */
+  viewSlot?: string
+  type: 'declarative' | 'ui' | 'code'
+}
+
+/** 插件声明式设置项（plugin-phase1-design C5；contributes.settings 条目） */
+export interface PluginSettingItem {
+  key: string
+  label: string
+  type: 'boolean' | 'number' | 'string' | 'select'
+  default?: unknown
+  /** select 专供：{value,label} 或字符串数组 */
+  options?: Array<Record<string, unknown> | string>
+  desc?: string
+}
+
+/** 插件 fenced-code 渲染器（plugin-phase1-design C6；plugin:listRenderers 行结构） */
+export interface PluginRendererInfo {
+  pluginId: string
+  name: string
+  lang: string
+  entry: string
+  height?: number
+  title?: string
+}
+
 export interface PluginSummary {
   id: string
   name: string
@@ -1098,6 +1132,12 @@ export interface ElectronAPI {
   pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
   pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
   pluginListViews: (slot?: string) => Promise<PluginViewContribution[]>
+  pluginListCommands: () => Promise<PluginCommandInfo[]>
+  pluginListRenderers: () => Promise<PluginRendererInfo[]>
+  pluginGetSettingsSchema: (id: string) => Promise<{ schema: PluginSettingItem[] }>
+  pluginGetSettingValues: (id: string) => Promise<{ values: Record<string, unknown> }>
+  pluginSetSettingValue: (id: string, key: string, value: unknown) => Promise<{ ok: boolean; error?: string }>
+  onPluginEvent: (cb: (p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => void) => () => void
   pluginDataQuery: (pluginId: string, table: string, opts?: { where?: Array<{ column: string; op?: string; value: unknown }>; orderBy?: string; desc?: boolean; limit?: number }) => Promise<Record<string, unknown>[]>
   pluginDataInsert: (pluginId: string, table: string, row: Record<string, unknown>) => Promise<{ ok: boolean; id?: string; error?: string }>
   pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>
