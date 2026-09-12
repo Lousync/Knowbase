@@ -244,8 +244,8 @@ def repack(src: str, out_dir: str, version: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser(description='修复 408 插件源并打包')
-    ap.add_argument('--src', default=r'C:/Users/徐志岩/AppData/Roaming/knowbase (dev KnowledgeRecorder)/plugins/knowbase.kb-408-pack')
-    ap.add_argument('--out', default=r'C:/Users/徐志岩/.workbuddy/tmp/kb408-v1.2.1')
+    ap.add_argument('--src', default=r'C:/Users/<用户名>/AppData/Roaming/knowbase (dev KnowledgeRecorder)/plugins/knowbase.kb-408-pack')
+    ap.add_argument('--out', default=r'C:/Users/<用户名>/.workbuddy/tmp/kb408-v1.2.1')
     ap.add_argument('--version', default='1.2.1')
     args = ap.parse_args()
 

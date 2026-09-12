@@ -9,7 +9,7 @@ import { vaultGetBacklinks, vaultGetBacklinkContext } from '../../electron/lib/k
 import * as fs from 'fs'
 import * as path from 'path'
 
-const VAULT = 'C:\\Users\\徐志岩\\Documents\\我的仓库'
+const VAULT = 'C:\\Users\\<用户名>\\Documents\\我的仓库'
 const KB = path.join(VAULT, '.knowbase')
 const settings: Record<string, unknown> = { storageKnowledge: 'vault', storageBlog: 'vault', storageData: 'vault', aiVaultFilePerm: 'write' }
 registerAiToolHandlers({ getSettingValue: (k) => settings[k] })

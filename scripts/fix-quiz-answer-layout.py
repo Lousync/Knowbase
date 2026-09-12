@@ -44,8 +44,8 @@ from dataclasses import dataclass, field
 
 # -------- 配置 --------
 
-DEFAULT_DEV_DB = r'C:/Users/徐志岩/AppData/Roaming/knowbase (dev KnowledgeRecorder)/data/knowledge.db'
-PROD_DB = r'C:/Users/徐志岩/AppData/Roaming/knowbase/data/knowledge.db'
+DEFAULT_DEV_DB = r'C:/Users/<用户名>/AppData/Roaming/knowbase (dev KnowledgeRecorder)/data/knowledge.db'
+PROD_DB = r'C:/Users/<用户名>/AppData/Roaming/knowbase/data/knowledge.db'
 
 SENT_END = r'[。：；！？;，]'  # 句末标点
 NUM_AFTER = r'[（(]?\d{1,2}[）)、.．]'  # 编号形式
