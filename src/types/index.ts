@@ -47,11 +47,35 @@ export interface ReleaseNote {
   groups: ReleaseNoteGroup[]
 }
 
+/** 与 electron/lib/releaseNotes/types.ts 镜像（跨线各声明一次的既有做法）。 */
+export interface ReleaseHighlightLink {
+  label: string
+  href?: string
+}
+
+/** 右侧动效演示区（可重播；只动 transform/opacity） */
+export type ReleaseHighlightDemo =
+  | { kind: 'notify'; title: string; message: string; caption?: string }
+  | { kind: 'compare'; caption?: string; rows: { label: string; display: string; width: number; after?: boolean }[] }
+  | { kind: 'dist'; caption?: string; rows: { label: string; display: string; width: number }[] }
+  | { kind: 'mini-list'; caption?: string; items: { text: string; done?: boolean }[] }
+
 export interface ReleaseNoteHighlight {
   version: string
+  /** 分节名（日程 / AI 助手 / 错题本 / 界面…） */
+  section: string
   title: string
   desc: string
   detail?: string
+  /** 顶部摘要行（粗体引导词 + 短句）；缺省不进摘要行 */
+  briefLead?: string
+  briefRest?: string
+  /** 标题旁的小标签（如「新增」） */
+  tag?: string
+  links?: ReleaseHighlightLink[]
+  /** 卡片内可折叠的「全部改动（N 条）」 */
+  changes?: string[]
+  demo?: ReleaseHighlightDemo
 }
 
 export interface ReleaseNoteListEntry {

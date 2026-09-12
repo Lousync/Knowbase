@@ -673,3 +673,33 @@ input:focus, textarea:focus, select:focus {
   ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 1ms; }
 }
 
+
+/* ===== 更新说明页 · 亮点卡动效演示区（rn- 前缀；只动 transform/opacity）===== */
+@keyframes rn-pop-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rn-bar-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes rn-row-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rn-check-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.rn-demo-anim { animation: rn-pop-in 300ms var(--ease-kb, cubic-bezier(0.22, 0.68, 0.32, 1)) both; }
+.rn-bar i, .rn-bar .fill {
+  transform-origin: left center;
+  animation: rn-bar-grow 700ms var(--ease-kb, cubic-bezier(0.22, 0.68, 0.32, 1)) both;
+}
+.rn-row-anim { animation: rn-row-in 360ms var(--ease-kb, cubic-bezier(0.22, 0.68, 0.32, 1)) both; }
+.rn-check-anim { animation: rn-check-pop 320ms var(--ease-kb, cubic-bezier(0.22, 0.68, 0.32, 1)) both; }
+@media (prefers-reduced-motion: reduce) {
+  .rn-demo-anim, .rn-row-anim, .rn-check-anim { animation: none; }
+  .rn-bar i, .rn-bar .fill { animation: none; transform: none; }
+}
