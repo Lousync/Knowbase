@@ -8,8 +8,19 @@
 
 import type { BudgetMessage } from './agentContextBudget'
 
-/** 自动压缩触发线 = agentContextBudgetTokens × 0.8（达到即先压再发） */
-export const COMPRESS_AT_RATIO = 0.8
+/** 自动压缩默认触发线（历史预算的百分比；设置 agentCompressAtPercent 缺省/异常时回退此值） */
+export const COMPRESS_AT_PERCENT_DEFAULT = 80
+
+/**
+ * 自动压缩触发 token 数 = 预算 × percent/100。percent 夹在 50-100
+ * （过低会频繁触发压缩调用烧钱，过高失去提前量），异常值回退默认 80。
+ */
+export function compressAtTokens(budgetTokens: number, percent: number | null | undefined): number {
+  const n = Number(percent)
+  const p = Number.isFinite(n) && n > 0 ? Math.floor(n) : COMPRESS_AT_PERCENT_DEFAULT
+  const clamped = Math.min(100, Math.max(50, p))
+  return Math.floor(budgetTokens * (clamped / 100))
+}
 /** 压缩时保留尾段轮数（含当前用户消息所在的轮，永不入纪要） */
 export const KEEP_RECENT_TURNS = 2
 /** 单次触发的最大压缩分片数（防首次巨会话一次性烧掉过多延迟/费用，剩余下次续压） */

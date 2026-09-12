@@ -81,7 +81,8 @@ messages = [ ...(digest ? [{ role:'user', content:'【此前对话纪要】\n' +
 - **位置**：`appendAgentMessage(sessionId,'user',…)`（:338）之后、历史装配（:362）之前。
 - **估算**：对实际发送面估算——`buildSystemPrompt` 系列拼接串 + toolPayload JSON +
   digest.text + base 历史，用现有 `estimateTokens`（2.6 chars/token）。
-- **阈值**：`COMPRESS_AT_RATIO = 0.8`，`compressAt = floor(agentContextBudgetTokens × 0.8)`；
+- **阈值**：设置 `agentCompressAtPercent`（默认 80，范围 50-100，设置页可调），
+  `compressAt = floor(agentContextBudgetTokens × percent/100)`；
   `agentContextBudgetTokens = 0`（关闭裁剪）时自动压缩同样关闭。
 - **开关**：`agentCompressionEnabled`（默认 true）。关闭 → 走现有裁剪。
 - **无需防抖**：压缩把检查点推到接近当前轮，装配量骤降，天然离开阈值区；下轮长回来再压。
@@ -167,11 +168,11 @@ export async function handleChatCommand(raw: string, ctx: ChatCommandCtx): Promi
 
 | 键 | 默认 | 说明 |
 |----|------|------|
-| `agentCompressionEnabled` | `true` | 「历史自动压缩」：上下文逼近预算时自动把旧轮次折叠为纪要（代替直接丢弃）；关闭则退回裁剪 |
+| `agentCompressionEnabled` | `true` | 「历史自动压缩」：上下文达到触发线时自动把旧轮次折叠为纪要（代替直接丢弃）；关闭则退回裁剪 |
+| `agentCompressAtPercent` | `80` | 「自动压缩触发线(%)」：历史预算的百分比，范围 50-100；越低压得越早、压缩调用越频繁 |
 | `agentCompressModelId` | `''` | 「压缩专用模型」：生成纪要的模型，留空用当前会话模型；可指定便宜模型降成本 |
 
-阈值 0.8 为常量不设 UI；`agentContextBudgetTokens` 语义不变（压缩目标线 = 其 0.8 倍，
-裁剪兜底线 = 原值）。
+阈值换算在 `compressAtTokens`（夹取 50-100，异常回退 80）；`agentContextBudgetTokens` 语义不变（压缩目标线 = 其百分比，裁剪兜底线 = 原值）。
 
 ## 12. 与主 worktree 治理的合并关系（预案）
 

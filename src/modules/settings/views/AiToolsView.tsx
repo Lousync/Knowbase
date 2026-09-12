@@ -130,6 +130,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
   const agentRunTokenBudget = s.agentRunTokenBudget ?? 500000
   const agentContextBudgetTokens = s.agentContextBudgetTokens ?? 24000
   const agentCompressionEnabled = s.agentCompressionEnabled !== false
+  const agentCompressAtPercent = s.agentCompressAtPercent ?? 80
   const agentCompressModelId = s.agentCompressModelId ?? ''
   // 压缩专用模型下拉：全部供应商的全部模型（'' = 跟随当前会话模型）
   const [compressModelOptions, setCompressModelOptions] = useState<Array<{ value: string; label: string }>>([])
@@ -223,6 +224,21 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
               className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
             />
           </label>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">自动压缩触发线</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={50}
+                max={100}
+                step={5}
+                value={String(agentCompressAtPercent)}
+                onChange={e => { void update('agentCompressAtPercent', Math.min(100, Math.max(50, Math.floor(Number(e.target.value) || 80)))) }}
+                className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+              />
+              <span className="text-[12px] text-[var(--text-muted)]">%</span>
+            </div>
+          </label>
           <div className="flex items-center justify-between gap-3 text-[13px]">
             <span className="text-[var(--text-primary)]">历史自动压缩</span>
             <SettingSwitch checked={agentCompressionEnabled} onChange={v => { void update('agentCompressionEnabled', v) }} aria-label="历史自动压缩" />
@@ -240,7 +256,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
           </label>
           <p className="text-[11px] text-[var(--text-muted)]">
             历史上下文预算控制带进模型的历史消息量，0 表示不裁剪（不推荐：长会话费用会快速上涨）。
-            开启自动压缩后，上下文逼近预算（80%）时先把较早的对话折叠为持久化纪要再发送（代替直接丢弃）；
+            开启自动压缩后，上下文达到触发线（历史预算的百分比）时先把较早的对话折叠为持久化纪要再发送（代替直接丢弃）；
            也可随时在聊天框输入 /compress 手动压缩。
           </p>
         </div>

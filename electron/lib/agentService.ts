@@ -4,7 +4,7 @@ import { listTools, invokeToolInternal, getSettingReader, checkModulePermission,
 import type { ToolDescription, AiToolInvokeResult } from './aiTools'
 import { invokeLlmStreamInternal } from './llmService'
 import { estimateTokens, trimHistoryByBudget } from './agentContextBudget'
-import { COMPRESS_AT_RATIO, composeContextWithDigest, rowsAfterDigest } from './agentCompressCore'
+import { compressAtTokens, composeContextWithDigest, rowsAfterDigest } from './agentCompressCore'
 import { compressSession } from './agentCompress'
 import type { SessionDigest } from './agentSessionRepo'
 import { clampMaxRounds, clampRunTokenBudget, isParallelSafe, partitionToolBatches, PARALLEL_CHUNK, PARALLEL_HINT, FINAL_ROUND_NOTICE, FORCED_SUMMARY_NOTICE } from './agentLoopPolicy'
@@ -493,14 +493,15 @@ async function runAgentLoop(
     ...composeContextWithDigest(asm.digest?.text, history),
   ]
 
-  // ---- 自动压缩预检（会话压缩 §6.1）：逼近预算时先把旧轮折叠为纪要再发送 ----
+  // ---- 自动压缩预检（会话压缩 §6.1）：逼近触发线时先把旧轮折叠为纪要再发送 ----
+  // 触发线 = 历史预算 × agentCompressAtPercent%（默认 80，设置可调，夹取 50-100）。
   // 估算面 = 实际发送串（system + 纪要 + 历史）+ tools payload。压缩后重装配
   // （检查点推进 → base 变小）；无可压段时 skipped 不调 LLM；失败静默回退现有裁剪。
   let compressed: { covered: number; digestChars: number } | undefined
   const budgetSetting = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
   if (!virtualKickoff && budgetSetting > 0 && getSettingReader()('agentCompressionEnabled') !== false) {
     const est = estimateTokens(convo.map(m => m.content ?? '').join('\n')) + estimateTokens(JSON.stringify(toolPayload))
-    if (est > Math.floor(budgetSetting * COMPRESS_AT_RATIO)) {
+    if (est > compressAtTokens(budgetSetting, Number(getSettingReader()('agentCompressAtPercent')))) {
       const cr = await compressSession({ sessionId, modelId: llmOpts?.modelId, effort: llmOpts?.effort })
       if (cr.ok && typeof cr.covered === 'number' && cr.covered > 0) {
         compressed = { covered: cr.covered, digestChars: cr.digestChars ?? 0 }
