@@ -19,7 +19,7 @@ import { QuizMode } from '../../components/shared/QuizMode'
 import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
-import { registerSelectionAskHost, selectionContext } from '../../lib/assistantContext'
+import { registerSelectionAskHost } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { StreamBubble } from '../../components/shared/AssistantPanel/StreamBubble'
 import { useAgentStream } from '../../components/shared/AssistantPanel/useAgentStream'
@@ -291,8 +291,9 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const [template, setTemplate] = useState<Template>(TEMPLATES[0])
   const [messages, setMessages] = useState<UiMsg[]>([])
   const [input, setInput] = useState('')
-  /** 划词引用片段（「问 AI」就地追问时填入输入区上方，发送后一次性消费） */
-  const [quote, setQuote] = useState('')
+  /** 划词引用片段列表（「问 AI」收进输入区上方引用胶囊，不自动发送；随消息一起发出后一次性消费） */
+  const [quotes, setQuotes] = useState<string[]>([])
+  const [quotesOpen, setQuotesOpen] = useState(false)
   const [pending, setPending] = useState(false)
   const [liveSteps, setLiveSteps] = useState<AgentTraceStep[]>([])
   const [lastChanges, setLastChanges] = useState<AgentChange[] | null>(null)
@@ -496,7 +497,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   /** 输入区（划词「问 AI」就地追问时聚焦用） */
   const inputRef = useRef<HTMLTextAreaElement>(null)
   /** 引用片段的 ref 镜像——sendText 是 useCallback，读 ref 避免闭包捕获旧值 */
-  const quoteRef = useRef('')
+  const quotesRef = useRef<string[]>([])
   // P3a 快速定位条：消息滚动容器 + 当前锚点高亮
   const scrollRef = useRef<HTMLDivElement>(null)
   /** 对话流滚动记忆（2026-09-08）：跳文档阅读视图会卸载对话容器（scrollTop 丢失）——
@@ -515,8 +516,13 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     return registerSelectionAskHost({
       accept: () => !!activeIdRef.current,
       ask: (text) => {
-        quoteRef.current = text
-        setQuote(text)
+        // 引用形式（不自动发送）：收进输入区上方引用胶囊，多条可累积，随用户消息一起发出
+        setQuotes(prev => {
+          const next = prev.includes(text) ? prev : [...prev, text].slice(-5)
+          quotesRef.current = next
+          return next
+        })
+        setQuotesOpen(true)
         setTimeout(() => inputRef.current?.focus(), 60)
       },
     })
@@ -614,7 +620,7 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   // 切换会话
   const openSession = useCallback(async (sid: string, title: string) => {
     setActiveId(sid); setActiveTitle(title); setLastChanges(null); setLiveSteps([])
-    quoteRef.current = ''; setQuote('') // 引用片段属于发起时那个对话，切会话即失效
+    quotesRef.current = []; setQuotes([]); setQuotesOpen(false) // 引用片段属于发起时那个对话，切会话即失效
     setArtTabs([]); setArtActive(null) // 工件栏页签=会话内存态：切会话清空（§2，阅读位置记忆保留在页签组件内）
     setMidView('chat'); setQuizOpen(false); setLastQuizReport(null) // P7 复位
     const row = sessions.find(s => s.id === sid)
@@ -632,13 +638,17 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setPending(true); setLiveSteps([]); beginStream()
     const sid = activeIdRef.current
     if (!sid) { setPending(false); return null }
-    setMessages(prev => [...prev, { role: 'user', content: raw, createdAt: new Date().toISOString() }]) // 条目4：乐观时间存 ISO（原纯时刻串必 Invalid Date）
+    // 划词引用片段：仅「输入框发送」路径消费（withQuote），避免逐页讲解/模板等命令误带上无关引用。
+    // 会话引用形式：引用以可见的 markdown 引用块并入消息正文（对话回看时来源可查），
+    // 不再走不可见的 selectionContext 注入；单条截断 600 字防刷屏
+    const qs = withQuote ? [...quotesRef.current] : []
+    if (qs.length > 0) { quotesRef.current = []; setQuotes([]); setQuotesOpen(false) }
+    const text = qs.length > 0
+      ? qs.map((q, i) => `> 【引用 ${i + 1}】${q.replace(/\s+/g, ' ').trim().slice(0, 600)}${q.replace(/\s+/g, ' ').trim().length > 600 ? '…' : ''}`).join('\n') + `\n\n${raw}`
+      : raw
+    setMessages(prev => [...prev, { role: 'user', content: text, createdAt: new Date().toISOString() }]) // 条目4：乐观时间存 ISO（原纯时刻串必 Invalid Date）
     const ov = convoLlm.current.get(sid)
-    // 划词引用片段：仅「输入框发送」路径消费（withQuote），避免逐页讲解/模板等命令误带上无关引用；
-    // 经 context 注入主进程 buildSystemPrompt 的【当前上下文】，与侧边栏口径一致
-    const q = withQuote ? quoteRef.current : ''
-    if (q) { quoteRef.current = ''; setQuote('') }
-    const r = await agentChat(sid, raw, q ? selectionContext(q) : undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
+    const r = await agentChat(sid, text, undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
     // V-2：失败提示下沉到 sendText——模板开场/ask 发送/PPT 逐页讲解等 5 处 void sendText 路径统一覆盖（原先只有 doSend 有 toast）
     if (r && !r.ok && r.code !== 'ABORTED') showToast({ type: 'error', message: `AI 调用失败：${r.error ?? ''}` })
     // 条目9②：本轮 system 注入分段按会话留存（hover 构成摘要）；条目9③：月度用量随每轮刷新
@@ -2063,19 +2073,40 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
                   )
                 })() : (
                   <>
-                    {quote && (
-                      <div className="mb-1.5 flex items-start gap-1.5 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                        <Quote size={11} className="mt-[3px] shrink-0 text-[var(--accent)]" />
-                        <span className="flex-1 min-w-0 text-[11px] leading-[1.5] text-[var(--text-secondary)] line-clamp-3">{quote}</span>
-                        <button type="button" onClick={() => { quoteRef.current = ''; setQuote('') }} title="移除引用"
-                          className="shrink-0 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
-                          <X size={11} />
-                        </button>
+                    {quotes.length > 0 && (
+                      <div className="mb-1.5">
+                        {/* 引用胶囊（会话引用形式）：不展示全文只报条数，点开管理；× 一键全清 */}
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" onClick={() => setQuotesOpen(o => !o)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                            title="点击查看/管理引用片段">
+                            <Quote size={10} className="text-[var(--accent)]" />
+                            <span>{quotes.length} 条对话引用</span>
+                          </button>
+                          <button type="button" onClick={() => { quotesRef.current = []; setQuotes([]); setQuotesOpen(false) }} title="移除全部引用"
+                            className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                            <X size={11} />
+                          </button>
+                        </div>
+                        {quotesOpen && (
+                          <div className="mt-1 space-y-1">
+                            {quotes.map((q, i) => (
+                              <div key={`${i}-${q.slice(0, 16)}`} className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                                <Quote size={11} className="mt-[3px] shrink-0 text-[var(--accent)]" />
+                                <span className="flex-1 min-w-0 text-[11px] leading-[1.5] text-[var(--text-secondary)] line-clamp-3">【引用 {i + 1}】{q}</span>
+                                <button type="button" onClick={() => setQuotes(prev => { const next = prev.filter((_, j) => j !== i); quotesRef.current = next; return next })} title="移除此引用"
+                                  className="shrink-0 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void doSend() } }}
-                      rows={2} placeholder={quote ? '针对选中片段提问…（Enter 发送）' : '粘贴资料或输入指令…（Enter 发送）'}
+                      rows={2} placeholder={quotes.length > 0 ? '针对引用内容提问…（Enter 发送）' : '粘贴资料或输入指令…（Enter 发送）'}
                       className="w-full px-3 py-2 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] resize-none outline-none focus:border-[var(--accent)]" />
                   </>
                 )}
