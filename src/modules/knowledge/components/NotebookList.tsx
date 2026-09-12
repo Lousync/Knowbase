@@ -4,6 +4,7 @@ import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { DeleteWipe } from '../../../components/shared/DeleteWipe'
 import { Collapsible } from '../../../components/shared/Collapsible'
+import { treeGuideStyle } from '../../../components/shared/treeGuides'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -455,6 +456,7 @@ export function NotebookList({
               }`}
               style={{
                 paddingLeft: `${depth * 12 + 6}px`, paddingRight: '4px',
+                ...treeGuideStyle(depth),
                 ...(cutItemIds?.has(cat.id) ? { opacity: 0.45 } : {})
               }}
             >
@@ -525,6 +527,7 @@ export function NotebookList({
                 }`}
                 style={{
                   paddingLeft: `${(depth + 1) * 12 + 6}px`, paddingRight: '4px',
+                  ...treeGuideStyle(depth + 1),
                   ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
                 }}
               >

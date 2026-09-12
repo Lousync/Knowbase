@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
 import { Collapsible } from '../../../components/shared/Collapsible'
+import { treeGuideStyle } from '../../../components/shared/treeGuides'
 import type { DirCache, TreeNode, CreateIntent } from '../types'
 import { getFileIcon } from '../../../lib/fileIcons'
 import ignoreRuleSvg from '../../../assets/ignore.svg?raw'
@@ -81,7 +82,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
       draggable
       onDragStart={(ev) => startDrag(ev, e.relPath)}
       className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${activePath === e.relPath ? 'bg-[var(--bg-selected)]/40' : ''}`}
-      style={{ paddingLeft: 6 + depth * 12 }}
+      style={{ paddingLeft: 6 + depth * 12, ...treeGuideStyle(depth) }}
       onClick={() => onOpenFile(e)}
       onContextMenu={(ev) => onContextMenu(ev, e)}
       title={e.relPath}
@@ -127,7 +128,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${
               dragOver === relPath ? 'bg-[var(--accent)]/15 ring-1 ring-inset ring-[var(--accent)]/40' : ''
             }`}
-            style={{ paddingLeft: 6 + depth * 12 }}
+            style={{ paddingLeft: 6 + depth * 12, ...treeGuideStyle(depth) }}
             onClick={() => onToggleDir(relPath)}
             onContextMenu={(e) => onContextMenu(e, dirNode)}
             title={relPath}
@@ -254,7 +255,7 @@ function InlineCreateRow({ depth, type, initial, onCommit, onCancel }: {
   return (
     <div
       className="flex items-center gap-1 rounded-md px-1.5 py-[3px]"
-      style={{ paddingLeft: 6 + depth * 12 }}
+      style={{ paddingLeft: 6 + depth * 12, ...treeGuideStyle(depth) }}
     >
       <span className="w-[12px] shrink-0" />
       {type === 'dir'
