@@ -113,6 +113,31 @@ export const RELEASE_NOTE_HIGHLIGHTS: readonly ReleaseNoteHighlight[] = [
   },
   {
     version: '3.1.0',
+    section: '界面',
+    title: '目录聚焦：侧栏只留当前路径',
+    tag: '新增',
+    desc: '文件一多，侧栏就是半个应用在滚动。点一下编辑器 / 知识库侧栏的**准星按钮**，树里只保留当前打开文件的目录链和同级文件，其余目录收成骨架条——悬停显原名，点击定位并退出聚焦。',
+    briefLead: '目录聚焦',
+    briefRest: '侧栏只留当前路径',
+    links: [{ label: '设置 → 编辑器 → 目录聚焦样式' }],
+    changes: [
+      '编辑器 / 知识库侧栏各一个准星开关，状态重启保留',
+      '骨架式：链外目录保留占位条，悬停显示原名',
+      '隐藏式：只留当前目录链，更干净',
+      '目录只认链条（同级零散目录也失焦），同级文件保留实名方便切换',
+      '点击骨架条 = 退出聚焦并定位展开',
+    ],
+    demo: {
+      kind: 'compare',
+      rows: [
+        { label: '全部展开', display: '23', width: 100 },
+        { label: '聚焦后', display: '6', width: 26, after: true },
+      ],
+      caption: '演示目录树 · 同屏可见条目数',
+    },
+  },
+  {
+    version: '3.1.0',
     section: '更新说明',
     title: '「更新说明」它自己来了',
     tag: '新增',
