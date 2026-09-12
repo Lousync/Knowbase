@@ -20,6 +20,16 @@ const SOURCE_LABEL: Record<AgentToolInfo['source'], string> = {
   skill: 'Skill',
 }
 
+/** 工具归属模块 → 用户语言（原来直接渲染 module id，用户看到的是 quiz/knowledge 这类内部标识） */
+const MODULE_LABEL: Record<string, string> = {
+  knowledge: '知识库',
+  blog: '博客/日记',
+  schedule: '日程',
+  checkin: '习惯打卡',
+  pomodoro: '番茄专注',
+  quiz: '错题本',
+}
+
 type AiTab = 'builtin' | 'mcp' | 'skill' | 'models' | 'perms'
 
 /** 设置 → AI 工具：月度用量汇总 + 内置工具清单 + MCP 外部服务器管理 + Skill 提示词资产 */
@@ -193,7 +203,7 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
               { label: SOURCE_LABEL[t.source] },
               ...(t.readOnly ? [{ label: '只读', tone: 'success' as const }] : []),
               ...(t.requires === 'write' ? [{ label: '写入', tone: 'warning' as const }] : []),
-              ...(t.module ? [{ label: t.module }] : []),
+              ...(t.module ? [{ label: MODULE_LABEL[t.module] ?? t.module }] : []),
             ],
             desc: t.description,
           }))}

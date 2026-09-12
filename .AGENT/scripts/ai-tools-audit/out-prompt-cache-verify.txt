@@ -1,0 +1,21 @@
+源文件: E:\Projects\KnowledgeRecorder\electron\lib\llmService.ts
+
+PASS  system 为数组形式
+PASS  system 带 ephemeral 断点
+PASS  system 文本未被破坏
+PASS  tools 数量不变
+PASS  tools 末元素带断点
+PASS  tools 非末元素不带断点
+PASS  tools 既有字段完整
+PASS  messages 未被改动
+PASS  非流式不带 stream
+PASS  无 tools 时 system 断点仍在
+PASS  无 tools 时不产出 tools 字段
+PASS  流式带 stream:true
+PASS  流式同样带断点
+PASS  Anthropic 非流式读 cache_read_input_tokens
+PASS  Anthropic 流式 message_start 读 cache_read
+PASS  OpenAI 兼容非流式读 prompt_tokens_details.cached_tokens
+PASS  OpenAI 兼容流式读 prompt_tokens_details.cached_tokens
+
+结论: PASS —— 17 项断言

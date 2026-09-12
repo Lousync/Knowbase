@@ -54,12 +54,18 @@ interface ChatRequest {
   effort?: 'off' | 'low' | 'medium' | 'high'
 }
 
+/**
+ * 网关归一化后的用量。cachedTokens 表示命中提示缓存的输入 token 数（观测用，
+ * 已包含在 promptTokens 之内，勿重复计入预算）；不支持缓存的供应商恒为 0/undefined。
+ */
+type LlmUsage = { promptTokens: number; completionTokens: number; cachedTokens?: number }
+
 interface ChatResult {
   content: string
   toolCalls: ToolCallNormalized[]
   /** OpenAI 线格式的 assistant 消息（多轮回喂时原样使用） */
   assistantMessage: ChatMessage
-  usage: { promptTokens: number; completionTokens: number }
+  usage: LlmUsage
   rawError?: never
 }
 
@@ -73,7 +79,7 @@ export type LlmStreamEvent =
   | { type: 'text'; delta: string }
   | { type: 'reasoning'; delta: string }
   | { type: 'tool_call'; index: number; id?: string; name?: string; argsDelta?: string }
-  | { type: 'usage'; promptTokens: number; completionTokens: number }
+  | { type: 'usage'; promptTokens: number; completionTokens: number; cachedTokens?: number }
   | { type: 'done' }
 
 const STREAM_FIRST_BYTE_MS = 60_000
@@ -330,6 +336,8 @@ function parseOpenAiChoice(json: any): ChatResult {
     usage: {
       promptTokens: Number(json?.usage?.prompt_tokens ?? 0),
       completionTokens: Number(json?.usage?.completion_tokens ?? 0),
+      // OpenAI / DeepSeek 等的自动前缀缓存命中量（不支持的网关返回 undefined → 0）
+      cachedTokens: Number(json?.usage?.prompt_tokens_details?.cached_tokens ?? 0),
     },
   }
 }
@@ -375,7 +383,7 @@ const openAiCompatibleAdapter: Adapter = {
       }
       let content = ''
       const acc = new Map<number, { id: string; name: string; args: string }>()
-      let usage = { promptTokens: 0, completionTokens: 0 }
+      let usage: LlmUsage = { promptTokens: 0, completionTokens: 0 }
       for await (const frame of readFrames(res)) {
         sa.chunk()
         const data = sseData(frame)
@@ -413,6 +421,7 @@ const openAiCompatibleAdapter: Adapter = {
           usage = {
             promptTokens: Number(json.usage.prompt_tokens ?? 0),
             completionTokens: Number(json.usage.completion_tokens ?? 0),
+            cachedTokens: Number(json.usage.prompt_tokens_details?.cached_tokens ?? 0),
           }
         }
       }
@@ -576,6 +585,17 @@ const ollamaAdapter: Adapter = {
 
 // ---- Anthropic Messages API 适配器（非流式） ----
 
+/**
+ * 提示缓存断点（P0，2026-09-12）。Anthropic 是**唯一需要显式标记**的 provider ——
+ * OpenAI / DeepSeek 等对 ≥1024 token 的前缀自动缓存，Ollama 本地无此机制。
+ *
+ * 缓存按「前缀」生效，Anthropic 的固定顺序是 tools → system → messages，断点语义是
+ * "到此为止的前缀可缓存"，所以打在 tools 末元素与 system 末尾，正好覆盖 agent loop
+ * 每轮重发且恒定不变的那一段（内置工具 schema ~7.4k tok + 系统提示）。
+ * 命中后按约 10% 计价（写入 1.25x，TTL 5 分钟）；messages 每轮增长，不打断点。
+ */
+const CACHE_CONTROL = { type: 'ephemeral' } as const
+
 /** OpenAI 线格式 → Anthropic 请求体（流式 / 非流式共用） */
 function buildAnthropicBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
   // system 抽离；tool 结果合并为 tool_result 块
@@ -603,17 +623,22 @@ function buildAnthropicBody(req: ChatRequest, stream: boolean): Record<string, u
     }
     if (blocks.length > 0) pushTurn('assistant', blocks.length === 1 ? blocks[0] : blocks)
   }
-  const tools = (req.tools ?? []).map((t: any) => ({
+  const tools = (req.tools ?? []).map((t: any, i: number) => ({
     name: String(t?.function?.name ?? ''),
     description: String(t?.function?.description ?? ''),
     input_schema: t?.function?.parameters ?? { type: 'object' },
+    // 只给最后一个工具打断点（断点 = 到此为止的前缀全可缓存，逐个打是浪费断点配额，上限 4 个）
+    ...(req.tools && i === req.tools.length - 1 ? { cache_control: CACHE_CONTROL } : {}),
   }))
   return {
     model: req.model,
     max_tokens: req.maxTokens,
     messages: turns,
     ...(stream ? { stream: true } : {}),
-    ...(systemParts.length > 0 ? { system: systemParts.join('\n\n') } : {}),
+    // system 必须用数组形式才能带 cache_control（字符串形式无法附加标记）
+    ...(systemParts.length > 0
+      ? { system: [{ type: 'text', text: systemParts.join('\n\n'), cache_control: CACHE_CONTROL }] }
+      : {}),
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
@@ -666,6 +691,8 @@ const anthropicAdapter: Adapter = {
       usage: {
         promptTokens: Number(json.usage?.input_tokens ?? 0),
         completionTokens: Number(json.usage?.output_tokens ?? 0),
+        // 缓存命中量（读取价）。cache_creation_input_tokens 是写入量，不计入此处
+        cachedTokens: Number(json.usage?.cache_read_input_tokens ?? 0),
       },
     }
   },
@@ -683,7 +710,7 @@ const anthropicAdapter: Adapter = {
         throw new Error(`HTTP ${res.status}: ${String(json?.error?.message ?? '').slice(0, 200) || '响应解析失败'}`)
       }
       let text = ''
-      let usage = { promptTokens: 0, completionTokens: 0 }
+      let usage: LlmUsage = { promptTokens: 0, completionTokens: 0 }
       /** 按 content block index 收集 tool_use（入参是 input_json_delta 分片拼接） */
       const blocks = new Map<number, { id: string; name: string; json: string }>()
       for await (const frame of readFrames(res)) {
@@ -694,7 +721,12 @@ const anthropicAdapter: Adapter = {
         if (!json) continue
         const type = String(json.type ?? '')
         if (type === 'message_start') {
-          usage = { ...usage, promptTokens: Number(json.message?.usage?.input_tokens ?? 0) }
+          // message_start 里就带完整的输入侧用量（含缓存命中量），一次取齐
+          usage = {
+            ...usage,
+            promptTokens: Number(json.message?.usage?.input_tokens ?? 0),
+            cachedTokens: Number(json.message?.usage?.cache_read_input_tokens ?? 0),
+          }
         } else if (type === 'content_block_start') {
           const cb = json.content_block ?? {}
           if (cb.type === 'tool_use') {
@@ -776,6 +808,8 @@ export type LlmInvokeResponse = {
   tokens: number
   promptTokens: number
   completionTokens: number
+  /** 命中提示缓存的输入 token 数（观测用，已含在 promptTokens 内） */
+  cachedTokens?: number
 } | {
   ok: false
   error: string
@@ -880,7 +914,7 @@ export async function invokeLlmStreamInternal(
     const r = await llmInvoke(req)
     if (r.ok) {
       if (r.content) onEvent({ type: 'text', delta: r.content })
-      onEvent({ type: 'usage', promptTokens: r.promptTokens, completionTokens: r.completionTokens })
+      onEvent({ type: 'usage', promptTokens: r.promptTokens, completionTokens: r.completionTokens, ...(r.cachedTokens ? { cachedTokens: r.cachedTokens } : {}) })
     }
     onEvent({ type: 'done' })
     return r
@@ -903,6 +937,7 @@ export async function invokeLlmStreamInternal(
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
+      ...(r.usage.cachedTokens ? { cachedTokens: r.usage.cachedTokens } : {}),
       durationMs: Date.now() - started,
       ok: true,
     })
@@ -915,6 +950,7 @@ export async function invokeLlmStreamInternal(
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
+      ...(r.usage.cachedTokens ? { cachedTokens: r.usage.cachedTokens } : {}),
     }
   } catch (err) {
     appendAudit(t.provider.id, 'llm.invoke', {

@@ -682,8 +682,46 @@ function notifyPluginsChanged(): void {
 
 // ---------- IPC ----------
 
+/**
+ * 已退役的插件 id —— 曾以 C 级模块插件形态存在，后改为内置模块（宿主接管其数据域）。
+ *
+ * 为什么需要「摘牌」这一步：旧版本升级上来的用户 `installed.json` 里仍留着这些注册项，
+ * 而插件的 `contributes.views`（如 `knowledge.sidebar`）在卸载前始终生效 → 知识库侧栏
+ * 会多出一个点开即坏的死入口（如「错题本(插件版)」），与内置的同名入口重复。
+ *
+ * 处置口径（2026-09-12）：**只摘掉注册项，不动磁盘目录、不删数据桶**。
+ * - 目录留着可追溯、可手动再装（不触发沙箱 safe-delete 拦截）
+ * - 数据桶（plugin_knowbase_quizbook_*）已确认在各 profile 下均为空文件不存在，
+ *   且「数据」面板已改接 vault 真实错题数据（quizDataAdmin.ts），桶不再有出口，
+ *   保留仅为可追溯；需要清理时走插件卸载流程（plugin:uninstall，含导出备份）
+ */
+export const RETIRED_PLUGIN_IDS: readonly string[] = ['knowbase.quizbook']
+
+/** 启动时摘除退役插件的注册项（幂等；无命中则不写盘） */
+function retirePlugins(): void {
+  const idx = readIndex()
+  let changed = false
+  for (const id of RETIRED_PLUGIN_IDS) {
+    const entry = idx[id]
+    if (!entry) continue
+    auditWrite(id, 'retire', {
+      version: entry.version,
+      reason: '插件形态已退役，改为内置模块（知识库侧栏入口与数据均由宿主接管）',
+    })
+    delete idx[id]
+    changed = true
+    console.log(`[Plugins] 已摘除退役插件的注册项: ${id}（插件目录与数据桶保留，未删除）`)
+  }
+  if (changed) {
+    writeIndex(idx)
+    notifyPluginsChanged()
+  }
+}
+
 export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) => unknown }): void {
   if (deps?.getSettingValue) pluginSettingReader = deps.getSettingValue
+  // 退役插件清理：必须在注册 IPC 之前跑，避免插件页/知识库侧栏先拿到旧快照
+  retirePlugins()
   ipcMain.handle('plugin:fetchRegistry', async () => {
     try {
       const now = Date.now()

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { X, Star, Trash2, FolderPlus, RotateCcw, ChevronDown, ChevronRight, ChevronLeft, Check, CheckSquare, Folder, Inbox, ExternalLink, StickyNote, Tag, Plus, Database } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { QuizMode } from '../../../components/shared/QuizMode'
-import { QuizMigratePanel } from './QuizMigratePanel'
+import { QuizDataPanel } from './QuizDataPanel'
 import type { QuizItem } from '../../../components/shared/QuizParser'
 import type { QuizRecordDto, QuizCollectionDto, QuizTagDto } from '../../../types'
 import {
@@ -11,6 +11,7 @@ import {
   quizCollectionList, quizCollectionCreate, quizCollectionDelete,
 } from '../../../lib/ipc'
 import { showToast } from '../../../lib/toast'
+import { useDataChanged } from '../../../lib/dataChanged'
 import { ResizablePanel } from '../../../components/shared/ResizablePanel'
 
 type Kind = 'favorite' | 'wrong'
@@ -91,8 +92,8 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
   const [newTagDraft, setTagDraft] = useState('')
   const [newTagKind, setNewTagKind] = useState<string>('topic')
   const [showBulkTag, setShowBulkTag] = useState(false)
-  /** 错题本插件数据面板（JSON 通道：状态/导出/清空） */
-  const [showMigrate, setShowMigrate] = useState(false)
+  /** 错题本数据面板（真实 vault 数据：概览 / 分布 / 导出 / 清理） */
+  const [showDataPanel, setShowDataPanel] = useState(false)
 
   /** 保存备注（本地立即更新 + 落库） */
   const saveNote = async (r: QuizRecordDto) => {
@@ -123,6 +124,11 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
   }, [spaceName])
 
   useEffect(() => { void loadStats() }, [loadStats])
+
+  // AI 通过 quiz.* 工具整理错题本（打标签/写备注/分组/移除）时由主进程广播 scope='quiz'；
+  // 本组件原本只在自身操作后本地 load，收不到外部写入 —— 不收这条广播就表现为
+  // 「AI 说改好了，错题本界面没反应，得关掉重开」（2026-09-12）
+  useDataChanged('quiz', () => { void load(); void loadStats() })
 
   /** 记录的"书"归属：空间内按知识点（来源笔记本）分书，全局按来源空间分书 */
   const bookKeyOf = (r: QuizRecordDto) => spaceName
@@ -582,8 +588,8 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
           </>
         )}
         <button
-          onClick={() => setShowMigrate(true)}
-          title="错题本插件数据（状态 / 导出备份 / 清空）"
+          onClick={() => setShowDataPanel(true)}
+          title="错题本数据：概览 / 分布 / 导出备份 / 清理"
           className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
         >
           <Database size={13} />
@@ -906,8 +912,14 @@ export function QuizCollection({ onClose, spaceName, onOpenPage }: {
         </div>
       </div>
 
-      {/* 错题本插件数据面板（JSON 版） */}
-      {showMigrate && <QuizMigratePanel onClose={() => setShowMigrate(false)} />}
+      {/* 错题本数据面板（真实 vault 数据） */}
+      {showDataPanel && (
+        <QuizDataPanel
+          spaceName={spaceName}
+          onClose={() => setShowDataPanel(false)}
+          onDataChanged={() => { void load(); void loadStats() }}
+        />
+      )}
     </div>
   )
 }

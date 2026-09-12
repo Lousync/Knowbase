@@ -46,6 +46,96 @@ interface AgentMessage {
   tool_call_id?: string
 }
 
+// ===== 工具结果的体积治理（2026-09-12，prompt cache 之后的第二轮） =====
+//
+// 为什么需要：prompt cache 只能覆盖**每轮逐字不变**的前缀（tools schema + system）。
+// 而工具返回是 convo.push({role:'tool', content: JSON.stringify(exec.data)})，会随轮次
+// 累积并被反复重发 —— 实测 quiz.list(limit=50) 一次约 16.7k 字符，在 8 轮任务里平均
+// 被重发 4.5 次。这类开销 cache 帮不上忙，只能从「拿得少」与「丢得早」两个方向治。
+
+/** 单条工具结果的字符硬上限（≈8k tok）。正常调用不会触及，兜住"拉全量"的极端情况 */
+const MAX_TOOL_RESULT_CHARS = 24000
+/** 触发硬上限时保留的预览字符数（让模型看清数据结构，但不足以占满上下文） */
+const TOOL_RESULT_PREVIEW_CHARS = 4000
+/** 发送前压缩：最近 N 条工具结果保持完整 */
+const KEEP_RECENT_TOOL_RESULTS = 3
+/** 更早的工具结果超过该字符数才压缩（小的不值得动） */
+const COMPRESS_TOOL_RESULT_CHARS = 1200
+
+/**
+ * 单条工具结果的硬上限（保险丝）。超限时不返回半截 JSON —— 半截 JSON 既解析不了、
+ * 又白占上下文 —— 而是换成合法摘要 + 预览 + 明确的收窄指引。
+ * 预览取自**序列化后的文本**、再交给 JSON.stringify 重新转义，因此即使切在
+ * `\uXXXX` 转义序列中间，产出的仍是合法 JSON。
+ */
+function capToolResult(raw: string, toolName: string): string {
+  return JSON.stringify({
+    ok: true,
+    truncated: true,
+    totalChars: raw.length,
+    preview: raw.slice(0, TOOL_RESULT_PREVIEW_CHARS),
+    hint: `工具 ${toolName} 的返回过大（${raw.length} 字符）已被系统截断。请缩小范围后重试：quiz.list 降低 limit 或加 tagNames 收窄；vault.read 降低 maxChars；vault.search 收窄关键词。`,
+  })
+}
+
+/** 递归降级：标量与短文本原样保留，长文本/大数组降为占位说明 */
+function shrinkValue(v: unknown, depth: number): unknown {
+  if (v === null || typeof v === 'number' || typeof v === 'boolean') return v
+  if (typeof v === 'string') return v.length <= 160 ? v : `…（${v.length} 字符已省略）`
+  if (Array.isArray(v)) {
+    // 小数组（如 tags）保留，大数组降级 —— AI 主要靠标量字段判断状态
+    if (depth >= 2 || v.length > 3) return `…（${v.length} 项已省略）`
+    return v.map(x => shrinkValue(x, depth + 1))
+  }
+  if (typeof v === 'object') {
+    const o: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) o[k] = shrinkValue(val, depth)
+    return o
+  }
+  return null
+}
+
+/** 把一条工具结果压缩为摘要（保留标量，降级明细）。幂等：已是压缩结果则原样返回 */
+function compressOneToolResult(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw)
+    // 幂等保护：否则 _originalChars 会被反复重写为新长度，同一段内容在不同轮次产出不同文本
+    if (parsed !== null && typeof parsed === 'object'
+      && (parsed as Record<string, unknown>)._compressed === true) return raw
+    return JSON.stringify({
+      ...(shrinkValue(parsed, 0) as Record<string, unknown>),
+      _compressed: true,
+      _originalChars: raw.length,
+      _hint: '此工具结果已压缩以节省上下文。如需明细请重新调用该工具并缩小范围。',
+    })
+  } catch {
+    return JSON.stringify({
+      _compressed: true,
+      _originalChars: raw.length,
+      _hint: '此工具结果过大且非结构化，已压缩。如需明细请重新调用并缩小范围。',
+    })
+  }
+}
+
+/**
+ * 历史工具结果的渐进压缩（发送前调用）。**必须是纯函数** —— 同一输入恒得同一输出，
+ * 这样已被压缩的老消息在后续轮次逐字不变，prompt cache 的前缀才不会被反复打散。
+ * 只压缩「较老的、且确实很大」的结果，并留下重新调用的指引。
+ */
+function compressStaleToolResults(convo: AgentMessage[]): AgentMessage[] {
+  const toolIdx: number[] = []
+  convo.forEach((m, i) => { if (m.role === 'tool') toolIdx.push(i) })
+  const cutoff = toolIdx.length - KEEP_RECENT_TOOL_RESULTS
+  if (cutoff <= 0) return convo
+  const stale = new Set(toolIdx.slice(0, cutoff))
+  return convo.map((m, i) => {
+    if (!stale.has(i)) return m
+    const c = String(m.content ?? '')
+    if (c.length <= COMPRESS_TOOL_RESULT_CHARS) return m
+    return { ...m, content: compressOneToolResult(c) }
+  })
+}
+
 export interface AgentTraceStep {
   kind: 'llm' | 'tool'
   /** llm: 本轮模型; tool: 工具注册名 */
@@ -56,6 +146,8 @@ export interface AgentTraceStep {
   /** 拆分用量（llm step） */
   promptTokens?: number
   completionTokens?: number
+  /** 命中提示缓存的输入 token 数（观测用，已含在 promptTokens 内） */
+  cachedTokens?: number
   summary?: string
   /** visual.html 实时占位事件（仅 agent:step 推送，不落库）：{slug,title}——渲染层据此开「生成中」页签 */
   args?: Record<string, unknown>
@@ -477,7 +569,7 @@ async function runAgentLoop(
     let thinkFrom = 0
     let thinkTo = 0
     const r = await invokeLlmStreamInternal(
-      { messages: convo, tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
+      { messages: compressStaleToolResults(convo), tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
       (e) => {
         if (e.type === 'text') batcher.push('text', e.delta)
         else if (e.type === 'reasoning') {
@@ -496,6 +588,7 @@ async function runAgentLoop(
       tokens: r.ok ? r.tokens : undefined,
       promptTokens: r.ok ? r.promptTokens : undefined,
       completionTokens: r.ok ? r.completionTokens : undefined,
+      cachedTokens: r.ok ? r.cachedTokens : undefined,
       // 带工具轮次的正文 = 过程旁白（落库供历史回看）。实时展示已由上面的 text delta 完成，
       // 这里只为「回看历史时仍能看到 AI 当时说了什么」
       ...(r.ok && r.toolCalls.length > 0 && r.content.trim()
@@ -615,10 +708,12 @@ async function runAgentLoop(
           if (target) changes.push({ tool: realName, action: label, target, ...(file ? { file } : {}) })
         }
       }
+      // 单条结果超上限时截断为合法摘要（见 capToolResult 说明）
+      const toolResultText = JSON.stringify(exec.ok ? { ok: true, data: exec.data } : { ok: false, error: exec.message })
       convo.push({
         role: 'tool',
         tool_call_id: tc.id,
-        content: JSON.stringify(exec.ok ? { ok: true, data: exec.data } : { ok: false, error: exec.message }),
+        content: toolResultText.length > MAX_TOOL_RESULT_CHARS ? capToolResult(toolResultText, realName) : toolResultText,
       })
     }
   }

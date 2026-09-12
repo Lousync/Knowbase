@@ -440,10 +440,11 @@ const api = {
   quizCollectionCreate: (name: string) => ipcRenderer.invoke('quizCollection:create', name),
   quizCollectionRename: (id: string, name: string) => ipcRenderer.invoke('quizCollection:rename', id, name),
   quizCollectionDelete: (id: string) => ipcRenderer.invoke('quizCollection:delete', id),
-  // quiz plugin data (JSON 通道：状态/导出备份/清空；主表迁移通道已随 sql.js 退役删除)
-  quizMigrateStatus: () => ipcRenderer.invoke('quizMigrate:status'),
-  quizMigrateExport: () => ipcRenderer.invoke('quizMigrate:export'),
-  quizMigrateDropPluginData: () => ipcRenderer.invoke('quizMigrate:dropPluginData'),
+  // quiz vault data（「数据」面板：概览统计 / 导出备份 / 清空已掌握 / 清空全部）
+  quizDataStats: (opts: unknown) => ipcRenderer.invoke('quizData:stats', opts),
+  quizDataExport: (opts: unknown) => ipcRenderer.invoke('quizData:export', opts),
+  quizDataClearMastered: (opts: unknown) => ipcRenderer.invoke('quizData:clearMastered', opts),
+  quizDataClearAll: (opts: unknown) => ipcRenderer.invoke('quizData:clearAll', opts),
   // fill popup
   isFillPopup,
   isDayPanel,

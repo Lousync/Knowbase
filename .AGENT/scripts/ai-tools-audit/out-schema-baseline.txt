@@ -1,0 +1,43 @@
+源文件: E:\Projects\KnowledgeRecorder\electron\lib\builtinTools.ts
+工具总数: 29
+
+【core —— 每轮常驻注入】14 个
+  builtin.quiz.list                   3105 字符  ~ 941 tok  [read/quiz]
+  builtin.vault.read                  2842 字符  ~ 894 tok  [read/-]
+  builtin.habits.stats                2438 字符  ~ 684 tok  [read/checkin]
+  builtin.quiz.stats                  2280 字符  ~ 693 tok  [read/quiz]
+  builtin.tool.request                2210 字符  ~ 786 tok  [read/-]
+  builtin.vault.list                  1752 字符  ~ 527 tok  [read/-]
+  builtin.vault.search                1519 字符  ~ 432 tok  [read/-]
+  builtin.pomodoro.summary            1499 字符  ~ 397 tok  [read/pomodoro]
+  builtin.vault.resolve-ref           1386 字符  ~ 447 tok  [read/-]
+  builtin.schedule.list-todos         1303 字符  ~ 372 tok  [read/schedule]
+  builtin.help.search                 1061 字符  ~ 418 tok  [read/-]
+  builtin.web.read                     932 字符  ~ 308 tok  [read/-]
+  builtin.knowledge.search             802 字符  ~ 237 tok  [read/knowledge]
+  builtin.web.search                   722 字符  ~ 245 tok  [read/-]
+  小计: 23851 字符  ~7381 tok
+
+【ondemand —— 默认折叠，tool.request 后才注入】15 个
+  builtin.quiz.gen-paper              4627 字符  ~1521 tok  [write/quiz]
+  builtin.schedule.create-todo        3014 字符  ~ 955 tok  [write/schedule]
+  builtin.vault.edit                  2659 字符  ~ 881 tok  [write/-]
+  builtin.vault.rename                2014 字符  ~ 681 tok  [write/-]
+  builtin.vault.write                 1784 字符  ~ 586 tok  [write/-]
+  builtin.quiz.tag                    1584 字符  ~ 519 tok  [write/quiz]
+  builtin.quiz.collect                1411 字符  ~ 421 tok  [write/quiz]
+  builtin.knowledge.create-page       1403 字符  ~ 439 tok  [write/knowledge]
+  builtin.blog.create-entry           1186 字符  ~ 369 tok  [write/blog]
+  visual.html                         1180 字符  ~ 450 tok  [write/-]
+  builtin.checkin.check-habit         1177 字符  ~ 351 tok  [write/checkin]
+  builtin.vault.trash                 1120 字符  ~ 368 tok  [write/-]
+  builtin.quiz.remove                  936 字符  ~ 311 tok  [write/quiz]
+  builtin.quiz.favorite                856 字符  ~ 264 tok  [write/quiz]
+  builtin.quiz.set-note                774 字符  ~ 239 tok  [write/quiz]
+  小计: 25725 字符  ~8355 tok
+
+合计若全部装载: ~15736 tok
+实际常驻(默认权限 read 态): ~7381 tok / 轮
+
+注：字符数含 TS 源码语法噪声（缩进/逗号/类型标注），实际 JSON payload 略小；
+    token 为估算值，用于横向比较而非精确计费。

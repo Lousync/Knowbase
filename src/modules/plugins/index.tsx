@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Puzzle, RefreshCw, Search, FolderOpen, Download, Loader2,
-  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield, Boxes, BookMarked,
+  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield, Boxes,
   History, Trash2, ScrollText, Package } from 'lucide-react'
 import {
-  pluginFetchRegistry, pluginInstall, pluginInstallFromFile, pluginInstallBundledSample,
+  pluginFetchRegistry, pluginInstall, pluginInstallFromFile,
   pluginListInstalled, pluginSetEnabled, pluginUninstall, pluginGetContribution,
   pluginSetGranted, pluginAuditList, pluginAuditClear, pluginAuditWrite,
   pluginGetAllowedLevels, pluginSetAllowedLevels,
@@ -262,32 +262,6 @@ export function PluginsModule() {
       setTab('installed')
     } else if (r.message && r.message !== '已取消') {
       showToast({ type: 'error', message: r.message })
-    }
-  }
-
-  /** 一键安装内置错题本插件（开发期从工作区 samples/quizbook-0.2.0.zip 直接装，prod 后续用 extraResources 预置） */
-  const handleInstallBundledQuizbook = async () => {
-    setBusy(true)
-    // 双保险：确保白名单含 C（内置示例安装本身已绕过等级检查，但授权状态需一致）
-    if (!allowedLevels.includes('C')) {
-      const r = await pluginSetAllowedLevels(Array.from(new Set([...allowedLevels, 'C'])))
-      if (r.success) setAllowedLevels(prev => Array.from(new Set([...prev, 'C'])))
-    }
-    const r = await pluginInstallBundledSample('quizbook-0.2.1.zip')
-    setBusy(false)
-    if (r.success) {
-      showToast({ type: 'info', message: '错题本插件已安装，请在详情页授权 data/knowledge 能力' })
-      window.dispatchEvent(new CustomEvent('plugins-changed'))
-      await refreshInstalled()
-      setTab('installed')
-      // 自动选中刚装的插件进详情页授权
-      const list = await pluginListInstalled()
-      const just = list.find(p => p.id === 'knowbase.quizbook')
-      if (just) setSelected({ kind: 'installed', plugin: just })
-    } else {
-      // 兜底：内置示例缺失（打包版或路径错）→ 走文件选择
-      showToast({ type: 'warning', message: r.message || '内置示例不可用，改用文件选择' })
-      await handleInstallFromFile()
     }
   }
 
@@ -963,29 +937,6 @@ export function PluginsModule() {
         <div key={tab} className="kb-view-in flex-1 overflow-y-auto">
           {tab === 'installed' ? (
             <div>
-              {/* 错题本官方推荐行式条目（未安装时显示，与其他已安装插件同款样式 + 右侧一键安装按钮） */}
-              {!installed.some(x => x.id === 'knowbase.quizbook') && (
-                <button
-                  onClick={() => void handleInstallBundledQuizbook()}
-                  className="w-full flex items-start gap-2.5 px-2 py-1.5 text-left border-l-2 border-l-transparent hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <BookMarked size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-medium truncate text-[var(--text-primary)]">错题本（插件版）</span>
-                      <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v0.2.1</span>
-                      <span className="text-[9px] px-1 py-px rounded bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">官方</span>
-                    </div>
-                    <div className="text-[11px] text-[var(--text-muted)] truncate">C 级模块插件 · 错题本彻底插件版（随程序分发）</div>
-                  </div>
-                  <span
-                    onClick={e => { e.stopPropagation(); void handleInstallBundledQuizbook() }}
-                    className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
-                  >
-                    一键安装
-                  </span>
-                </button>
-              )}
               {filteredInstalled.length === 0 ? (
                 <div className="py-8 text-center text-[12px] text-[var(--text-muted)]">
                   {q ? '没有匹配的插件' : '暂无插件，可前往市场安装'}

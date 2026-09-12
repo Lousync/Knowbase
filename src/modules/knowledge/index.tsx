@@ -18,7 +18,6 @@ import {
   getKnowledgeTags, pluginListViews, getKnowledgeGraph,
   getKnowledgeIndexWarnings,
   workspaceRename, workspaceGetCurrent,
-  quizMigrateStatus,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { recordFileOp } from '../../lib/fileOpHistory'
@@ -33,7 +32,6 @@ const PageEditor = lazy(() => import('./components/PageEditor').then((m) => ({ d
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { GraphView } from './components/graph/GraphView'
 import { QuizCollection } from './components/QuizCollection'
-import { QuizMigratePanel } from './components/QuizMigratePanel'
 import { ConfirmDialog } from '../../components/shared'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { PluginFrame } from '../../components/shared/PluginFrame'
@@ -43,9 +41,6 @@ import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { useSettings } from '../../lib/SettingsContext'
 import { KNOWLEDGE_SIDEBAR_ITEM_VARS } from '../../lib/settings'
-
-// 插件表存量回收弹窗：本会话仅自动弹一次
-let quizMigrateAutoShown = false
 
 // ---- 剪贴板类型 ----
 interface ClipItem { type: 'category' | 'page'; id: string }
@@ -81,8 +76,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** C 级模块插件声明的视图（slot=knowledge.sidebar）+ 当前打开的插件视图 */
   const [pluginViews, setPluginViews] = useState<PluginViewContribution[]>([])
   const [activePluginView, setActivePluginView] = useState<PluginViewContribution | null>(null)
-  /** 插件表存量回收：启动自动检测一次，有存量则弹 QuizMigratePanel（导出/清空），处理后不再弹 */
-  const [showMigrate, setShowMigrate] = useState(false)
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
   const { s: settings } = useSettings()
   /** 数据形态 = vault：知识库为只读导航，一切写收口到编辑器模块（后端也已白名单拒绝，这里给前端护栏+明确提示） */
@@ -96,22 +89,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** 删除动画状态：条目删除时先被红色吞噬（animating），动画后消失（done，等待 IPC 完成） */
   const [deletingMap, setDeletingMap] = useState<Map<string, 'animating' | 'done'>>(new Map())
 
-  // 插件表存量回收：知识库模块启动自动检测一次，有存量则弹窗（导出/清空），处理后不再弹
-  useEffect(() => {
-    if (quizMigrateAutoShown) return
-    let cancelled = false
-    quizMigrateStatus()
-      .then(s => {
-        if (cancelled) return
-        const hasLeftover = s.pluginTablesExist || (s.plugin?.records ?? 0) > 0
-        if (hasLeftover) {
-          quizMigrateAutoShown = true
-          setShowMigrate(true)
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
   const deletingRef = useRef(deletingMap)
   deletingRef.current = deletingMap
 
@@ -146,10 +123,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
 
   // 插件视图挂载点：加载声明了 knowledge.sidebar 的 C 级模块插件
+  // 订阅 plugins-changed：插件安装/卸载/启停后侧栏入口即时同步 —— 本模块 Tab 保活不重挂，
+  // 只跑一次挂载加载的话，已消失的入口会一直留在侧栏（如退役的「错题本(插件版)」）
   const loadPluginViews = useCallback(async () => {
     try { setPluginViews(await pluginListViews('knowledge.sidebar')) } catch { /* ignore */ }
   }, [])
-  useEffect(() => { void loadPluginViews() }, [loadPluginViews])
+  useEffect(() => {
+    void loadPluginViews()
+    window.addEventListener('plugins-changed', loadPluginViews)
+    return () => window.removeEventListener('plugins-changed', loadPluginViews)
+  }, [loadPluginViews])
 
   // AI 助手上下文（当前打开的页面 → 供全局侧栏「边看边问」）注册在下方 readingPage 声明之后：
   // 正文来源需要读到阅读页，而 effect 的依赖数组无法引用尚未声明的变量。
@@ -1658,8 +1641,6 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
           </div>
         </div>
       )}
-
-      {showMigrate && <QuizMigratePanel onClose={() => setShowMigrate(false)} />}
     </ImportZone>
   )
 }

@@ -78,10 +78,30 @@ export interface QuizStatsDto {
   correctRate: number
 }
 /** 错题本插件数据通道（JSON 版）状态；主表迁移语义已随 sql.js 退役 */
-export interface QuizMigrateStatus {
-  main: Record<string, number>
-  plugin: Record<string, number>
-  pluginTablesExist: boolean
+export interface QuizBookStat {
+  /** 书 = 来源笔记本（空间内按知识点分书） */
+  name: string
+  total: number
+  wrong: number
+  mastered: number
+  favorite: number
+}
+export interface QuizDataStats {
+  /** 统计范围：'' = 全部知识空间；否则为空间名 */
+  scope: string
+  /** 当前仓库根路径（面板展示"存在哪"） */
+  vaultRoot: string
+  total: number
+  wrong: number
+  mastered: number
+  favorite: number
+  notes: number
+  todayWrong: number
+  correctRate: number
+  tags: number
+  collections: number
+  byBook: QuizBookStat[]
+  byBand: Array<{ key: string; label: string; count: number }>
 }
 export interface QuizCollectionDto {
   id: string
@@ -683,6 +703,8 @@ export interface AgentTraceStep {
   /** 拆分用量（llm step；prompt=本次上下文输入，completion=本次生成） */
   promptTokens?: number
   completionTokens?: number
+  /** 命中提示缓存的输入 token 数（观测用，已含在 promptTokens 内） */
+  cachedTokens?: number
   summary?: string
   /** visual.html「生成中」实时事件（agent:step 专用，不落库）：{slug,title} */
   args?: Record<string, unknown>
@@ -1284,9 +1306,10 @@ export interface ElectronAPI {
   quizCollectionRename: (id: string, name: string) => Promise<QuizCollectionDto>
   quizCollectionDelete: (id: string) => Promise<void>
   // quiz plugin data（JSON 通道）
-  quizMigrateStatus: () => Promise<QuizMigrateStatus>
-  quizMigrateExport: () => Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }>
-  quizMigrateDropPluginData: () => Promise<{ ok: boolean; error?: string }>
+  quizDataStats: (opts?: { sourceSpace?: string }) => Promise<QuizDataStats>
+  quizDataExport: (opts?: { sourceSpace?: string }) => Promise<{ ok: boolean; path?: string; count?: number; error?: string }>
+  quizDataClearMastered: (opts?: { sourceSpace?: string }) => Promise<{ ok: boolean; removed: number; error?: string }>
+  quizDataClearAll: (opts?: { sourceSpace?: string }) => Promise<{ ok: boolean; removed: number; error?: string }>
   // fill popup
   isFillPopup: boolean
   isDayPanel: boolean
