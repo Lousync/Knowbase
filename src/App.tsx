@@ -459,6 +459,15 @@ export default function App() {
     return () => { off?.() }
   }, [])
 
+  // 日程截止提醒：系统通知被点击 → 主进程已唤起窗口，这里切到日程模块
+  useEffect(() => {
+    const off = window.api?.onScheduleReminderClick?.(() => {
+      setActiveTab('schedule')
+      setSidebarOpen(true)
+    })
+    return () => { off?.() }
+  }, [])
+
   // 日程打卡侧边栏：脱离态变化推送（独立窗口打开/销毁）
   useEffect(() => {
     const off = window.api?.onDayPanelStateChanged?.(({ detached }) => {

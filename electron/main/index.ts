@@ -31,7 +31,8 @@ import { registerSuperviseHandlers } from '../database/repositories/superviseRep
 import { registerSummaryHandlers } from '../database/repositories/summaryRepo'
 import { registerBlogTemplateHandlers } from '../database/repositories/blogTemplateRepo'
 import { registerQuizHandlers } from '../database/repositories/quizRepo'
-import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
+import { startSuperviseScheduler, stopSuperviseScheduler, enqueueExternalPush } from '../lib/pushService'
+import { initScheduleReminders } from '../lib/scheduleReminder'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 import { initDayPanel, disposeDayPanel, getPanelMode, setPanelMode, onPanelModeChanged, isPopoutOpen } from './dayPanelWindow'
 import { registerWindowBus } from './windowBus'
@@ -635,6 +636,9 @@ function registerWindowHandlers(): void {
 
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
+  // Windows 系统通知需要 AppUserModelId，否则不进操作中心（日程 DDL 提醒依赖系统通知通道）
+  app.setAppUserModelId('com.local.knowbase.programmer')
+
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()
 
@@ -911,6 +915,12 @@ app.whenReady().then(async () => {
 
   // 远程监督：每日汇总定时器 + 免打扰补发
   startSuperviseScheduler()
+
+  // 日程 DDL 提醒：接线设置读取器与外部通道；实际检查挂在上面那个 30s tick 里（复用调度器，不新建）
+  initScheduleReminders({
+    getSetting: (key) => settingsCache[key],
+    pushExternal: enqueueExternalPush,
+  })
 
   // MCP：恢复上次启用状态的外部服务器连接（异步，不阻断首帧）
   void restoreMcpConnections().catch((e) => console.warn('[MCP] Startup connection restore error (non-blocking):', (e as Error)?.message || e))

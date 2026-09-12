@@ -1,6 +1,7 @@
 import { adaptPush, type SupervisePlatform, type SupervisePushConfig, type PushPayload } from './pushAdapters'
 import { vaultRecordsAll, vaultHabitsAll } from './kbStore/habitVaultRepo'
 import { readJson, writeJson } from './kbStore/jsonStore'
+import { checkScheduleReminders } from './scheduleReminder'
 
 /**
  * 远程监督推送服务 —— 配置读写、免打扰判断、带重试的 webhook 发送、
@@ -274,6 +275,18 @@ export async function testPush(cfg: SuperviseConfig): Promise<{ ok: boolean; err
   }
 }
 
+/** 供其他功能（如日程 DDL 提醒）复用「远程监督」已配置的外部通道推送 */
+export async function enqueueExternalPush(
+  title: string,
+  contentMd: string
+): Promise<{ ok: boolean; skipped?: string; error?: string }> {
+  const cfg = getSuperviseConfig()
+  if (!cfg.enabled || !cfg.webhookUrl) return { ok: false, skipped: '未启用远程监督或未配置 webhook' }
+  const id = insertLog('instant', null, title, contentMd)
+  if (isInQuietHours(cfg)) return { ok: false, skipped: '免打扰时段，已挂起待补发' }
+  return deliverLog(id)
+}
+
 // ===== 即时推送（打卡钩子） =====
 
 function todayStr(now = new Date()): string {
@@ -390,6 +403,8 @@ async function flushPending(): Promise<void> {
 export function startSuperviseScheduler(): void {
   const tick = async (): Promise<void> => {
     try {
+      // 日程 DDL 提醒：属独立功能域，**不受「远程监督」开关影响**，先跑
+      await checkScheduleReminders()
       const cfg = getSuperviseConfig()
       if (!cfg.enabled) return
       // 每日汇总：已过配置时间且今天还没尝试过（启动晚于时间点也会补发一次）

@@ -62,6 +62,12 @@ const api = {
   getScheduleTags: () => ipcRenderer.invoke('schedule:getTags'),
   createScheduleTag: (name: string, color?: string) => ipcRenderer.invoke('schedule:createTag', name, color),
   deleteScheduleTag: (id: string) => ipcRenderer.invoke('schedule:deleteTag', id),
+  /** 日程截止提醒的系统通知被点击 → 主窗口切到日程模块（主进程 scheduleReminder.ts 发出） */
+  onScheduleReminderClick: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('schedule:reminderClick', handler)
+    return () => { ipcRenderer.removeListener('schedule:reminderClick', handler) }
+  },
 
   // knowledge (Scheme A)
   getKnowledgeCategories: () => ipcRenderer.invoke('knowledge:getCategories'),

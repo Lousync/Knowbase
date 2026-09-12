@@ -1005,6 +1005,8 @@ export interface ElectronAPI {
   getScheduleTags: () => Promise<ScheduleTag[]>
   createScheduleTag: (n: string, c?: string) => Promise<ScheduleTag>
   deleteScheduleTag: (id: string) => Promise<void>
+  /** 日程截止提醒的系统通知被点击 → 主窗口切到日程模块 */
+  onScheduleReminderClick: (cb: () => void) => () => void
   // knowledge (Scheme A)
   getKnowledgeCategories: () => Promise<KnowledgeCategory[]>
   createKnowledgeCategory: (d: CreateKnowledgeCategoryDTO) => Promise<KnowledgeCategory>
