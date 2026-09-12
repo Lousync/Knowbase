@@ -4,7 +4,7 @@ import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { ConfirmDialog } from '../../../components/shared'
 import { DeleteWipe } from '../../../components/shared/DeleteWipe'
 import { Collapsible } from '../../../components/shared/Collapsible'
-import { treeGuideStyle } from '../../../components/shared/treeGuides'
+import { TreeGuideLine } from '../../../components/shared/treeGuides'
 import { getSetting, setSetting } from '../../../lib/ipc'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
@@ -456,7 +456,6 @@ export function NotebookList({
               }`}
               style={{
                 paddingLeft: `${depth * 12 + 6}px`, paddingRight: '4px',
-                ...treeGuideStyle(depth),
                 ...(cutItemIds?.has(cat.id) ? { opacity: 0.45 } : {})
               }}
             >
@@ -493,12 +492,16 @@ export function NotebookList({
           )}
         </div>
         {/* 展开/收起：<Collapsible> 用函数子节点 —— 收起状态不挂载子树（保持原有的懒渲染语义），
-            展开/收起两个方向都有高度过渡；见 docs/ui-animation-plan.md C 类 */}
+            展开/收起两个方向都有高度过渡；见 docs/ui-animation-plan.md C 类。
+            子级块加 relative 包裹 + 贯穿竖线（TreeGuideLine）：线从本分类行下方直通末子级，
+            避免每行画线段被行圆角裁出竹节起伏。 */}
         {canExpand && (
           <Collapsible open={isExpanded} innerClassName="">
-            {() => (<>
-            {/* Pages directly under this category */}
-            {categoryPages.map(p => (
+            {() => (
+              <div className="relative">
+                <TreeGuideLine level={depth} />
+                {/* Pages directly under this category */}
+                {categoryPages.map(p => (
               <div key={p.id}
                 data-page-id={p.id}
                 draggable
@@ -527,7 +530,6 @@ export function NotebookList({
                 }`}
                 style={{
                   paddingLeft: `${(depth + 1) * 12 + 6}px`, paddingRight: '4px',
-                  ...treeGuideStyle(depth + 1),
                   ...(cutItemIds?.has(p.id) ? { opacity: 0.45 } : {})
                 }}
               >
@@ -554,7 +556,8 @@ export function NotebookList({
             ))}
             {/* Sub-categories */}
             {children.map(ch => renderCategory(ch, depth + 1, nbId))}
-            </>)}
+              </div>
+            )}
           </Collapsible>
         )}
       </div>

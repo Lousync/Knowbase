@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
 import { Collapsible } from '../../../components/shared/Collapsible'
-import { treeGuideStyle } from '../../../components/shared/treeGuides'
+import { TreeGuideLine } from '../../../components/shared/treeGuides'
 import type { DirCache, TreeNode, CreateIntent } from '../types'
 import { getFileIcon } from '../../../lib/fileIcons'
 import ignoreRuleSvg from '../../../assets/ignore.svg?raw'
@@ -82,7 +82,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
       draggable
       onDragStart={(ev) => startDrag(ev, e.relPath)}
       className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${activePath === e.relPath ? 'bg-[var(--bg-selected)]/40' : ''}`}
-      style={{ paddingLeft: 6 + depth * 12, ...treeGuideStyle(depth) }}
+      style={{ paddingLeft: 6 + depth * 12 }}
       onClick={() => onOpenFile(e)}
       onContextMenu={(ev) => onContextMenu(ev, e)}
       title={e.relPath}
@@ -128,7 +128,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${
               dragOver === relPath ? 'bg-[var(--accent)]/15 ring-1 ring-inset ring-[var(--accent)]/40' : ''
             }`}
-            style={{ paddingLeft: 6 + depth * 12, ...treeGuideStyle(depth) }}
+            style={{ paddingLeft: 6 + depth * 12 }}
             onClick={() => onToggleDir(relPath)}
             onContextMenu={(e) => onContextMenu(e, dirNode)}
             title={relPath}
@@ -193,12 +193,19 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             </>
           )
           // 根层（depth 0）保持直接子节点渲染：其父是 flex 列且依赖 mt-auto 把「软件文件」压到底，
-          // 加包裹层会换掉 flex 上下文；子目录统一走 <Collapsible>（收起时不挂载子树，
-          // 展开/收起两个方向都有高度过渡，docs/ui-animation-plan.md C 类）。
+          // 加包裹层会换掉 flex 上下文；根层是虚拟目录（无行），也没有属于自己的参考线。
+          // 子目录统一走 <Collapsible>（收起时不挂载子树，展开/收起两个方向都有高度过渡，
+          // docs/ui-animation-plan.md C 类）；子级块加 relative 包裹层 + 贯穿竖线——
+          // 线从父行下方直通末子级，避免「每行画线段被圆角裁成竹节」的起伏感。
           if (depth === 0) return isOpen ? children : null
           return (
             <Collapsible open={isOpen} innerClassName="">
-              {() => children}
+              {() => (
+                <div className="relative">
+                  <TreeGuideLine level={depth} />
+                  {children}
+                </div>
+              )}
             </Collapsible>
           )
         })()}
@@ -255,7 +262,7 @@ function InlineCreateRow({ depth, type, initial, onCommit, onCancel }: {
   return (
     <div
       className="flex items-center gap-1 rounded-md px-1.5 py-[3px]"
-      style={{ paddingLeft: 6 + depth * 12, ...treeGuideStyle(depth) }}
+      style={{ paddingLeft: 6 + depth * 12 }}
     >
       <span className="w-[12px] shrink-0" />
       {type === 'dir'
