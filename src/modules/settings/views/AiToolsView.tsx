@@ -121,10 +121,13 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
   onUsageChange: (u: AiToolUsage) => void
   monthlyLimit: number
 }) {
-  const { update } = useSettings()
+  const { s, update } = useSettings()
   const [tools, setTools] = useState<AgentToolInfo[]>([])
   const [recentAudit, setRecentAudit] = useState<AuditEntryInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const agentMaxRounds = s.agentMaxRounds ?? 16
+  const agentRunTokenBudget = s.agentRunTokenBudget ?? 500000
+  const agentContextBudgetTokens = s.agentContextBudgetTokens ?? 24000
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -168,6 +171,50 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
             <div className="h-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
           </div>
         )}
+      </div>
+
+      {/* Agent 循环预算（轮数 / token 预算 / 上下文裁剪；Agent 第 0+2 层） */}
+      <div data-setting-anchor="aiTools.agentLoop">
+        <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-1">Agent 循环</h2>
+        <p className="text-[12px] text-[var(--text-muted)] mb-4">
+          控制单次请求的推理预算：轮数或累计 token 触顶后自动总结收场（不丢弃已获取的信息）。互相独立的工具调用会并发执行以减少轮数消耗。
+        </p>
+        <div className="px-3.5 py-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] max-w-md space-y-2.5">
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">最大推理轮数</span>
+            <input
+              type="number"
+              min={2}
+              max={64}
+              value={String(agentMaxRounds)}
+              onChange={e => { void update('agentMaxRounds', Math.min(64, Math.max(2, Math.floor(Number(e.target.value) || 16)))) }}
+              className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">单次 token 预算</span>
+            <input
+              type="number"
+              min={0}
+              step={50000}
+              value={String(agentRunTokenBudget)}
+              onChange={e => { void update('agentRunTokenBudget', Math.max(0, Math.floor(Number(e.target.value) || 0))) }}
+              className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">历史上下文预算</span>
+            <input
+              type="number"
+              min={0}
+              step={2000}
+              value={String(agentContextBudgetTokens)}
+              onChange={e => { void update('agentContextBudgetTokens', Math.max(0, Math.floor(Number(e.target.value) || 0))) }}
+              className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+          <p className="text-[11px] text-[var(--text-muted)]">历史上下文预算控制带进模型的历史消息量，0 表示不裁剪（不推荐：长会话费用会快速上涨）。</p>
+        </div>
       </div>
 
       {/* 内置工具只读列表（popover 悬浮：展开覆盖下方内容，不推挤） */}

@@ -1,9 +1,10 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
-import type { ToolDescription } from './aiTools'
+import type { ToolDescription, AiToolInvokeResult } from './aiTools'
 import { invokeLlmStreamInternal } from './llmService'
 import { trimHistoryByBudget } from './agentContextBudget'
+import { clampMaxRounds, clampRunTokenBudget, isParallelSafe, partitionToolBatches, PARALLEL_CHUNK, PARALLEL_HINT, FINAL_ROUND_NOTICE, FORCED_SUMMARY_NOTICE } from './agentLoopPolicy'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
@@ -19,10 +20,10 @@ import { listWorkspaces } from './aiTeachingWorkspaces'
  * 最小 AgentRunner —— 「用户消息 → LLM 决策 → ToolRegistry 执行 → 结果回喂」循环。
  * - 工具来源即统一注册表（builtin/mcp/skill 全量，禁用项自动排除）
  * - 每轮工具执行都走 invokeToolInternal：入参校验/审计/月度上限与手动调用完全一致
- * - 循环上限 8 轮；LLM 网关不代执行工具（职责分离），执行权只在这里
+ * - 循环上限可配（settings: agentMaxRounds，缺省 16；另有 agentRunTokenBudget 累计 token 预算），
+ *   耗尽后做一次无工具的强制总结轮（agentLoopPolicy 第 0 层优雅收场）；
+ *   LLM 网关不代执行工具（职责分离），执行权只在这里
  */
-
-const MAX_ITERATIONS = 8
 
 /**
  * 单次请求内「写入类工具」调用次数上限（防失控循环刷盘；docs/agent-file-tools-design.md §5.5）。
@@ -129,6 +130,8 @@ export interface AgentChatResult {
   injection?: AiTeachInjectionStats
   /** 上下文预算裁剪统计（agentContextBudget；渲染层暂不展示，诊断/后续 UI 预留） */
   contextBudget?: { totalTurns: number; keptTurns: number; estimatedHistoryTokens: number }
+  /** 触达轮数/token 预算上限：本次回答来自强制总结轮（渲染层可提示「已达预算，以上为基于已获信息的总结」） */
+  hitCap?: boolean
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -230,6 +233,8 @@ function buildToolsPayload(sessionId?: string): {
   nameMap: Map<string, string>
   /** 本轮可用的写入类工具注册名集合（requires==='write'），供会话写上限计数 */
   writeTools: Set<string>
+  /** 本轮可用的只读工具注册名集合（并行批次判定用，Agent 循环第 1 层） */
+  readOnlyTools: Set<string>
   /** 因模块权限被过滤掉的工具所属模块（用于 system prompt 给出可操作指引） */
   deniedModules: Set<string>
   /** 是否有 vault.* 工具被 vaultFile 文件域权限拦截（指引文案用） */
@@ -274,6 +279,8 @@ function buildToolsPayload(sessionId?: string): {
   for (const t of tools) nameMap.set(toFnName(t.name), t.name)
   // 写入类工具集合：按注册声明的 requires 判定，不背名单（新增写工具自动纳入，无需同步此处）
   const writeTools = new Set(tools.filter(t => t.requires === 'write').map(t => t.name))
+  // 只读工具集合：并行批次判定用（Agent 循环第 1 层单轮密度；写/特殊工具另有名字排除兜底）
+  const readOnlyTools = new Set(tools.filter(t => t.readOnly && t.requires !== 'write').map(t => t.name))
   const skills = tools
     .filter(t => t.source === 'skill')
     .map(t => ({
@@ -281,7 +288,7 @@ function buildToolsPayload(sessionId?: string): {
       title: t.title,
       description: t.description.replace(/^\[Skill\]\s*/, ''),
     }))
-  return { payload, nameMap, writeTools, deniedModules, deniedVaultFile, hasOnDemandHidden, skills }
+  return { payload, nameMap, writeTools, readOnlyTools, deniedModules, deniedVaultFile, hasOnDemandHidden, skills }
 }
 
 /**
@@ -454,7 +461,7 @@ async function runAgentLoop(
       }
     : undefined
   const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint },
+    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint + PARALLEL_HINT },
     ...history,
   ]
   // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。
@@ -476,9 +483,23 @@ async function runAgentLoop(
   const emitStream = streamEmitters.get(signal)
   const batcher = new DeltaBatcher((e) => emitStream?.(e))
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
+  // ---- 循环预算（Agent 第 0+2 层）：轮数可配 + 累计 token 预算，耗尽优雅收场而非报错 ----
+  const maxRounds = clampMaxRounds(getSettingReader()('agentMaxRounds'))
+  const runTokenBudget = clampRunTokenBudget(getSettingReader()('agentRunTokenBudget'))
+  let runTokens = 0
+  let softLanded = false
+  /** token 预算触顶（或已到最后一轮）：本轮执行完后立即断出循环 → 强制总结轮 */
+  let budgetCapped = false
+
+  for (let i = 0; i < maxRounds; i++) {
     // ---- LLM 轮 ----
     if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
+    // 预算将尽（最后一轮 / token 预算触顶）：注入收场提示，让模型用已有信息总结（第 0 层）
+    if (!softLanded && (i === maxRounds - 1 || (runTokenBudget > 0 && runTokens >= runTokenBudget))) {
+      softLanded = true
+      budgetCapped = true
+      convo.push({ role: 'user', content: FINAL_ROUND_NOTICE })
+    }
     emitStream?.({ kind: 'round-start', round: i + 1 })
     const t0 = Date.now()
     // 思考时长统计（reasoning 全文不落库，只记时长，见 AgentTraceStep.thinkingMs）
@@ -513,6 +534,7 @@ async function runAgentLoop(
     }
     trace.push(llmStep)
     stepEmitters.get(signal)?.(llmStep) // 实时过程：渲染层活动气泡
+    if (r.ok) runTokens += r.tokens
     if (!r.ok) return { ok: false, sessionId, error: r.error, code: r.code, trace }
 
     if (!r.toolCalls || r.toolCalls.length === 0) {
@@ -528,52 +550,11 @@ async function runAgentLoop(
       }
     }
 
-    // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----
+    // ---- 记录 assistant(带 tool_calls)：按「并行只读段 / 串行件」分批执行并回喂（第 1 层单轮密度）----
     convo.push(r.assistantMessage)
-    for (const tc of r.toolCalls) {
-      if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
-      const realName = nameMap.get(tc.name) ?? tc.name.replace(/__/g, '.')
-      let args: Record<string, unknown> = {}
-      try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
 
-      // 会话写上限：单次请求内写入类工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）。
-      // 动态读 toolsState.writeTools——tool.request 启用新写工具后重建的集合要立即生效
-      if (toolsState.writeTools.has(realName)) {
-        if (sessionWrites >= MAX_SESSION_WRITES) {
-          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写入上限 ${MAX_SESSION_WRITES}` }
-          trace.push(denyStep)
-          stepEmitters.get(signal)?.(denyStep)
-          convo.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: JSON.stringify({ ok: false, error: `已达本次会话写入操作上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
-          })
-          continue
-        }
-        sessionWrites++
-      }
-
-      // visual.html 生成时序 §3.4：调用前推「生成中」实时事件（仅 slug/title 小字段，绝不带 html 全文；
-      // 不落库——渲染层据此在工件栏开占位页签，给即时反馈）
-      if (realName === 'visual.html') {
-        stepEmitters.get(signal)?.({
-          kind: 'tool', name: 'visual.html', ok: true, durationMs: 0,
-          args: { slug: String(args?.slug ?? ''), title: String(args?.title ?? '') },
-        })
-      }
-
-      // 过程时间线（§5.2.3）：在**调用前**先推「进行中」——现有 agent:step 是执行完才推，
-      // 渲染层若只靠它会滞后一整轮生成时间。执行完由 agent:step 原地转 ✓ 并补耗时。
-      emitStream?.({
-        kind: 'tool-start',
-        name: realName,
-        label: TOOL_ACTION_LABELS[realName] ?? (realName.startsWith('builtin.') ? realName.slice(8) : realName),
-        target: argTarget(args),
-      })
-
-      const t1 = Date.now()
-      const exec = await invokeToolInternal(realName, args, '', { sessionId, source })
-      const durationMs = Date.now() - t1
+    /** 单个工具调用的执行后记账（tool.request 重建 / trace / 实时步骤 / 改动清单 / 结果回喂），按调用顺序执行 */
+    const finishToolCall = (tc: { id: string }, realName: string, args: Record<string, unknown>, exec: AiToolInvokeResult, durationMs: number): void => {
       // P3：tool.request 成功 → 并入会话启用集合并重建工具 payload（下一轮 LLM 调用生效）
       if (realName === 'builtin.tool.request' && exec.ok) {
         const enabled = (typeof exec.data === 'object' && exec.data !== null && Array.isArray((exec.data as Record<string, unknown>).enabled))
@@ -632,9 +613,108 @@ async function runAgentLoop(
         content: JSON.stringify(exec.ok ? { ok: true, data: exec.data } : { ok: false, error: exec.message }),
       })
     }
+
+    /** 串行件：写上限判定 + visual 时序事件 + 执行 + 记账（原逐条路径，行为不变） */
+    const runSingleToolCall = async (tc: { id: string }, realName: string, args: Record<string, unknown>): Promise<void> => {
+      // 会话写上限：单次请求内写入类工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）。
+      // 动态读 toolsState.writeTools——tool.request 启用新写工具后重建的集合要立即生效
+      if (toolsState.writeTools.has(realName)) {
+        if (sessionWrites >= MAX_SESSION_WRITES) {
+          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写入上限 ${MAX_SESSION_WRITES}` }
+          trace.push(denyStep)
+          stepEmitters.get(signal)?.(denyStep)
+          convo.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, error: `已达本次会话写入操作上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
+          })
+          return
+        }
+        sessionWrites++
+      }
+      // visual.html 生成时序 §3.4：调用前推「生成中」实时事件（仅 slug/title 小字段，绝不带 html 全文；
+      // 不落库——渲染层据此在工件栏开占位页签，给即时反馈）
+      if (realName === 'visual.html') {
+        stepEmitters.get(signal)?.({
+          kind: 'tool', name: 'visual.html', ok: true, durationMs: 0,
+          args: { slug: String(args?.slug ?? ''), title: String(args?.title ?? '') },
+        })
+      }
+      // 过程时间线（§5.2.3）：在**调用前**先推「进行中」——现有 agent:step 是执行完才推，
+      // 渲染层若只靠它会滞后一整轮生成时间。执行完由 agent:step 原地转 ✓ 并补耗时。
+      emitStream?.({
+        kind: 'tool-start',
+        name: realName,
+        label: TOOL_ACTION_LABELS[realName] ?? (realName.startsWith('builtin.') ? realName.slice(8) : realName),
+        target: argTarget(args),
+      })
+      const t1 = Date.now()
+      const exec = await invokeToolInternal(realName, args, '', { sessionId, source })
+      finishToolCall(tc, realName, args, exec, Date.now() - t1)
+    }
+
+    // 参数预解析一次；并行安全 = 注册只读 且 不在写集合（防误注册兜底）；
+    // 特殊工具（tool.request / visual.html）按名字排除，保持串行时序
+    const prepared = r.toolCalls.map(tc => {
+      const realName = nameMap.get(tc.name) ?? tc.name.replace(/__/g, '.')
+      let args: Record<string, unknown> = {}
+      try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
+      return { tc, realName, args }
+    })
+    const batches = partitionToolBatches(prepared, c =>
+      isParallelSafe(c.realName, toolsState.readOnlyTools.has(c.realName) && !toolsState.writeTools.has(c.realName)))
+    for (const batch of batches) {
+      if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
+      if (!batch.parallel) {
+        const c = batch.items[0]
+        await runSingleToolCall(c.tc, c.realName, c.args)
+        continue
+      }
+      // 并行只读段：先按序推「进行中」事件 → 分块并发执行 → 按序记账回喂（trace/改动顺序与调用一致）
+      for (const c of batch.items) {
+        emitStream?.({
+          kind: 'tool-start',
+          name: c.realName,
+          label: TOOL_ACTION_LABELS[c.realName] ?? (c.realName.startsWith('builtin.') ? c.realName.slice(8) : c.realName),
+          target: argTarget(c.args),
+        })
+      }
+      const execs: Array<{ exec: AiToolInvokeResult; durationMs: number }> = []
+      for (let s = 0; s < batch.items.length; s += PARALLEL_CHUNK) {
+        const chunk = batch.items.slice(s, s + PARALLEL_CHUNK)
+        execs.push(...await Promise.all(chunk.map(async c => {
+          const t1 = Date.now()
+          const exec = await invokeToolInternal(c.realName, c.args, '', { sessionId, source })
+          return { exec, durationMs: Date.now() - t1 }
+        })))
+      }
+      for (let idx = 0; idx < batch.items.length; idx++) {
+        finishToolCall(batch.items[idx].tc, batch.items[idx].realName, batch.items[idx].args, execs[idx].exec, execs[idx].durationMs)
+      }
+    }
+    // 收场轮的工具结果已回喂，不再进入下一轮 → 走循环后的强制总结（模型无视提示仍开工具时兜底）
+    if (budgetCapped) break
   }
 
-  return { ok: false, sessionId, error: `已达最大推理轮数（${MAX_ITERATIONS}），请缩小问题范围后重试`, code: 'MAX_ITERATIONS', trace }
+  // ---- 轮数/token 预算耗尽：做一次无工具的强制总结轮，把已获取的信息变成交付（第 0 层优雅收场）----
+  convo.push({ role: 'user', content: FORCED_SUMMARY_NOTICE })
+  const fr = await invokeLlmStreamInternal(
+    { messages: convo, tools: [], signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
+    (e) => { if (e.type === 'text') batcher.push('text', e.delta) },
+  )
+  batcher.flush()
+  const frStep: AgentTraceStep = { kind: 'llm', ok: fr.ok, durationMs: 0, tokens: fr.ok ? fr.tokens : undefined, summary: fr.ok ? '预算耗尽总结轮' : undefined }
+  trace.push(frStep)
+  stepEmitters.get(signal)?.(frStep)
+  if (fr.ok && fr.content.trim()) {
+    const changesText = changes.length > 0
+      ? '\n\n——\n本次改动：\n' + changes.map((c, idx) => `${idx + 1}. ${c.action}「${c.target}」`).join('\n')
+      : ''
+    const reply = fr.content + changesText
+    appendAgentMessage(sessionId, 'assistant', reply, trace)
+    return { ok: true, sessionId, reply, changes, trace, injection, hitCap: true }
+  }
+  return { ok: false, sessionId, error: `已达最大推理轮数（${maxRounds}）且总结失败，请缩小问题范围后重试`, code: 'MAX_ITERATIONS', trace }
 }
 
 /** 重新生成最后一条回复：删掉末尾助手消息后按原用户消息重推 */
