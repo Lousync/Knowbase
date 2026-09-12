@@ -123,6 +123,11 @@ const api = {
     ipcRenderer.on('update:download-progress', handler)
     return () => { ipcRenderer.removeListener('update:download-progress', handler) }
   },
+  // 更新说明（VS Code 式 tab）：清单来自 CHANGELOG，阅读记录落仓库 .knowbase/modules/release-notes/
+  getReleaseNotesState: () => ipcRenderer.invoke('releaseNotes:getState'),
+  markReleaseNotesShown: (version: string) => ipcRenderer.invoke('releaseNotes:markShown', version),
+  getReleaseNote: (version: string) => ipcRenderer.invoke('releaseNotes:get', version),
+  listReleaseNotes: () => ipcRenderer.invoke('releaseNotes:list'),
   pluginFetchRegistry: () => ipcRenderer.invoke('plugin:fetchRegistry'),
   pluginInstall: (url: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:install', url, grantedCapabilities),
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => {

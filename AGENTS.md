@@ -74,7 +74,8 @@ src/
 8. **dev 主进程没有热重载** —— 改了 `electron/` 必须重启 dev。
 9. `-webkit-user-drag: none` 会被继承，拖拽源要挂 `.kb-draggable`；日程类拖拽用 **pointer events**（HTML5 拖放会静默失败）；pointer 手势结束会补发 click，需要 `dragGuard` 250ms 窗口兜底 + 手柄上 `stopPropagation`。
 10. `kbview://` 是独立 scheme + iframe sandbox，**绝不 srcdoc / blob**；白名单三处必须同步。欢迎页只渲染仓库根 `欢迎.html`（无 frontmatter，合成 id `kb-welcome-doc`；收藏 / 改名 / 排序一律拒绝）。
-11. 长列表用 `content-visibility`（`.kb-cv`）；`React.memo` 要求 props 引用稳定；effect 依赖数组注意 TDZ（把数组整体后移）。
+11. 长列表用 `content-visibility`（`.kb-cv` / `.kb-cv-sm`，**加在「列表项」上**，估值 120px / 60px 一项）——只有几十行的短列表**不要**加，估值会把滚动高度抬到实际的数倍、滚动条乱跳；`React.memo` 要求 props 引用稳定；effect 依赖数组注意 TDZ（把数组整体后移）。
+    **模块根节点必须 `h-full`，不能写 `flex-1`** —— 槽位容器（`App.tsx` 的 `renderMounted`）是**块级** div（只有 `flex-1 min-h-0`、没有 `flex` / `flex-col`），`flex-1` 在里面完全不生效 → 根节点高度随内容增长、永不溢出 → 内层 `overflow-y-auto` 拿不到可滚高度 → **表现是「界面能显示，但滚轮没反应」**，且 `html/body/#root` 是 `overflow:hidden`，溢出部分直接被裁掉、连页面级滚动都没有。`help` / `user` / `ai-teaching` / `blog` 四个模块的根节点都是 `h-full`，照抄。
 12. 冗余说明文字一律按 `docs/help-disclosure-pattern.md` 处理：bar 类用 swap-bar、信息卡用 hover 展开卡、强引导首启可见 +「知道了」记忆。**文案只收不删，禁醒目标签。**
 13. **所有操作都必须带动效** —— 面板开合、列表增删、弹层进出、按钮与开关反馈、视图 / Tab 切换、状态变更提示，一律走 `docs/ui-animation-plan.md` 已定的令牌与工具类（`.kb-view-in` / `.kb-overlay` / `.kb-pop` / `.kb-collapse` / `.kb-chevron` / `.kb-item-in(-out)` / `.kb-micro-pop` / `.kb-toast-in(-out)` 等），**不要另造过渡、不要用 `transition-all` 临时凑**；若某类交互还没有对应工具类，**先补基建（改 `src/styles/index.css` + 更新该文档）再落码**，不要就地写一次性动画。硬约束：① 性能只动 `transform` / `opacity` / `grid-rows`（后者是 `.kb-collapse` 的唯一例外，已验证成本可接受），拖拽**跟手过程不加动画**，全部动画带 `prefers-reduced-motion` 兜底；② 主题切换**禁用通配 `*` 过渡**，走 View Transition + 容器级降级；③ Tailwind v4 的 `rotate-*` / `translate-*` 是独立属性，收不到 `transition-transform`，一律用 `.kb-chevron`；④ 弹层动效走 `.kb-overlay > :first-child` 等「首子元素继承」规则，调用方只挂一个类；⑤ 折叠容器**外层 grid 必须常驻 DOM、只懒挂内层子树**，且用「延迟卸载 + open 类切换」而非条件渲染。
 14. 日程列清单有三处手工重复（`TodoColumn` / `TODO_COLUMNS` / `switch(col)`）：**加列漏 case = patch 静默丢弃、IPC 照样成功**，表象是「按钮点了没反应」。加列必须补跑 `.AGENT/scripts/schedule-reminder/verify-snooze-persist.mjs` 的 `COLUMN_CASES`。
@@ -91,6 +92,7 @@ src/
 21. **同一文件禁止并行 Edit** —— 并行会静默互相覆盖，而工具仍回 "Successfully edited"。同文件串行、不同文件才可并行；改完 grep 复核关键标识。
 22. **`electron/database/` 不是死代码**：R6 去库化后目录名未改，它现在是 IPC handler 注册层（29 个 `registerXxxHandlers()`，转发给 `lib/kbStore`），**别删**。`grep sql.js` 只会命中注释里的说明文字。
 23. **沙箱构建**：build 前 `mv out out_prev_xxx` 可能被整体拒绝（EPERM）；退路是删空 `out/renderer/assets` 再 build。
+24. **`CHANGELOG.md` 是「应用内更新说明」的唯一源** —— 改完必须重跑 `.AGENT/scripts/release-notes/build-release-notes.mjs` 生成 `electron/lib/releaseNotes/data.ts`（忘跑 = 页面显示上一版内容，无任何报错；契约脚本 §4 会拦住）。触发规则（只在 major.minor 变化时自动打开 / 首装不弹 / **页面成功展示后**才推进基线）的纯函数在 `electron/lib/releaseNotes/judge.ts` —— 它是零依赖独立文件就是为了让脚本能 import，**改规则必须同步补 `.AGENT/scripts/release-notes/verify-release-notes.mjs` 的用例表**，别把规则写回 `index.ts`。
 
 ---
 
@@ -144,6 +146,7 @@ npm run pack     # build + electron-builder 打包
 | UI 变更流水 | `docs/ui-updates.md` |
 | 动效方案与落地进度 | `docs/ui-animation-plan.md` |
 | 帮助披露规范 | `docs/help-disclosure-pattern.md` |
+| 更新说明（发版告知机制 / 触发规则 / 数据三层） | `docs/release-notes-design.md` |
 | 未决问题收集 | `docs/verification-issues-*.md` |
 | 设计文档 / 原型去哪了 | `docs/DESIGN-ARCHIVE.md` —— 已落码或已搁置的设计方案、原型、视觉稿，统一归档在独立的设计过程留存库 **DesignProcess** |
 | 语音输入 ASR | **已评估暂缓，长期不做**（`docs/voice-input-design.md` 已论证到落码级）。勿重复调研 |

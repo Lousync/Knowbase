@@ -142,6 +142,11 @@ export const installUpdate = (filePath: string) => a().installUpdate(filePath)
 export const updatePauseDownload = () => a().updatePauseDownload()
 export const updateCancelDownload = () => a().updateCancelDownload()
 export const onUpdateDownloadProgress = (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => a().onUpdateDownloadProgress(cb)
+// 更新说明（VS Code 式 tab）
+export const getReleaseNotesState = () => a().getReleaseNotesState()
+export const markReleaseNotesShown = (version: string) => a().markReleaseNotesShown(version)
+export const getReleaseNote = (version: string) => a().getReleaseNote(version)
+export const listReleaseNotes = () => a().listReleaseNotes()
 export const pluginFetchRegistry = () => a().pluginFetchRegistry()
 export const pluginInstall = (url: string, grantedCapabilities?: string[]) => a().pluginInstall(url, grantedCapabilities)
 /** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */

@@ -4,7 +4,8 @@ import {
   CheckCircle2, AlertTriangle, Loader2, Pause, X, MonitorUp, FileText,
 } from 'lucide-react'
 import { useSettings } from '../../../lib/SettingsContext'
-import { getAppVersion, openExternal, workspaceImportWelcomeDoc } from '../../../lib/ipc'
+import { getAppVersion, listReleaseNotes, openExternal, workspaceImportWelcomeDoc } from '../../../lib/ipc'
+import { SettingSwitch } from '../../../components/shared/SettingSwitch'
 import {
   useUpdateStore, updateCheck, updateDownload, updatePause, updateCancel, updateInstall,
   updateFailKind, updateFailMessage,
@@ -23,8 +24,13 @@ export function AboutView() {
   // 导入《欢迎》页面：已存在同名文件时不直接覆盖，先弹应用内确认（该文件用户可自由改写）
   const [importingWelcome, setImportingWelcome] = useState(false)
   const [overwriteAsk, setOverwriteAsk] = useState(false)
+  // 更新说明：已积累的版本数（按钮文案用）
+  const [notesCount, setNotesCount] = useState(0)
 
   useEffect(() => { getAppVersion().then(setAppVersion).catch(() => {}) }, [])
+  useEffect(() => {
+    listReleaseNotes().then(l => setNotesCount(l?.length ?? 0)).catch(() => {})
+  }, [])
 
   /** force=false 首次尝试：仓库无同名文件则直接导入；已有则转为覆盖确认 */
   const runImportWelcome = async (force: boolean) => {
@@ -205,6 +211,49 @@ export function AboutView() {
             )}
           </div>
         )}
+      </div>
+
+      {/* 更新说明（VS Code 式 tab）：开关注册在 src/lib/settings.ts 的 releaseNotesAutoOpen /
+          releaseNotesKeepHistory，说明见 docs/release-notes-design.md */}
+      <div className="mb-8" data-setting-anchor="advanced.releaseNotes">
+        <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">更新说明</h3>
+
+        <div className="flex items-center justify-between gap-3 max-w-md py-1.5">
+          <span className="text-[12px] text-[var(--text-primary)]">新版本时自动打开更新说明</span>
+          <SettingSwitch
+            checked={s.releaseNotesAutoOpen !== false}
+            onChange={v => update('releaseNotesAutoOpen', v)}
+            aria-label="新版本时自动打开更新说明"
+          />
+        </div>
+        <p className="text-[11px] text-[var(--text-muted)] max-w-md leading-relaxed">
+          中间版本号（x.y）变化后的首次启动自动打开一页；修正版（x.y.z）与全新安装不打扰。
+        </p>
+
+        <div className="flex items-center justify-between gap-3 max-w-md py-1.5 mt-3">
+          <span className="text-[12px] text-[var(--text-primary)]">在仓库中保留更新说明存档</span>
+          <SettingSwitch
+            checked={s.releaseNotesKeepHistory !== false}
+            onChange={v => update('releaseNotesKeepHistory', v)}
+            aria-label="在仓库中保留更新说明存档"
+          />
+        </div>
+        <p className="text-[11px] text-[var(--text-muted)] max-w-md leading-relaxed">
+          版本说明与阅读记录写入仓库的 <span className="font-mono">.knowbase/modules/release-notes/</span>，换电脑拷走仓库一并带走。
+        </p>
+
+        <div className="mt-3" data-setting-anchor="advanced.releaseNotesOpen">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('release-notes:open'))}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[var(--text-primary)] border border-[var(--border-color)] rounded hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <FileText size={12} />
+            打开更新说明
+          </button>
+          <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed max-w-md">
+            共 {notesCount} 个版本，页内可回看历史版本与全部变更条目。
+          </p>
+        </div>
       </div>
 
       <div data-setting-anchor="advanced.onboarding">

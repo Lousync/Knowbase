@@ -17,6 +17,7 @@ const MODULE_TABS: Array<{ id: TabName; label: string }> = [
   { id: 'user', label: '账户' },
 ]
 const tabLabel = (t: TabName) => MODULE_TABS.find((m) => m.id === t)?.label ?? t
+
 import { TitleBar, ActivityBar, GlobalConfirm } from './components/shared'
 import { ZenHotZone } from './components/shared/ZenHotZone'
 import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
@@ -29,7 +30,7 @@ import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
-import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent } from './lib/ipc'
+import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent, getReleaseNotesState } from './lib/ipc'
 /* 模块引入方式（2026-09-10 二次修正：回退到静态 import）
    曾把 12 个模块改成 React.lazy 做代码分割——首屏从 13.3MB 降到 3.37MB，但代价是
    「每次打开应用后，进入一个尚未访问过的模块都要现取 chunk」：生产下数十 ms，
@@ -51,6 +52,7 @@ import { ToolboxModule } from './modules/toolbox'
 import { PluginsModule } from './modules/plugins'
 import { EditorModule } from './modules/editor'
 import { AiTeachingModule } from './modules/ai-teaching'
+import { ReleaseNotesModule } from './modules/release-notes'
 
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { VaultPicker } from './components/shared/VaultPicker'
@@ -69,6 +71,10 @@ import { ResizablePanel } from './components/shared/ResizablePanel'
 import { WindowResizeHandles } from './components/shared/WindowResizeHandles'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
+/** 更新说明自动打开的延迟（ms）。错开标题栏 updateStartupCheck() 的 6s 静默检查，
+ *  也留出首屏渲染时间——它是一次「告知」，不该和启动路径抢资源。 */
+const RELEASE_NOTES_AUTO_OPEN_DELAY_MS = 2000
+
 /** 模块 chunk 拉取期间的占位（仅首次访问该 Tab 时出现一瞬，之后由保活层常驻） */
 function ModuleLoadingFallback() {
   return <div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)] select-none">加载中…</div>
@@ -258,6 +264,7 @@ export default function App() {
       { id: 'plugins', label: '打开 插件' },
       { id: 'help', label: '打开 帮助' },
       { id: 'user', label: '打开 账户' },
+      { id: 'releaseNotes', label: '打开 更新说明', hint: '本版做了什么' },
     ]
     const items: PaletteItem[] = tabs.map((t) => ({
       id: `open-${t.id}`,
@@ -324,6 +331,41 @@ export default function App() {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsReady, loaded])
+
+  // ---- 更新说明（VS Code 式）：启动按版本判定自动打开 ----
+  // 判定在主进程（app.getVersion() vs 仓库 `.knowbase/modules/release-notes/index.json` 的基线），
+  // 渲染层只消费结果。延迟 2s：错开 updateStartupCheck() 的 6s（不抢网络/IO），也不与首屏渲染抢。
+  // 无当前仓库 / IPC 未就绪 → 静默失败，绝不打扰（更新说明不值得为它弹错误）。
+  const activeTabRef = useRef<TabName>('blog')
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  const tabBeforeNotes = useRef<TabName | null>(null)
+  const notesCheckedRef = useRef(false)
+  useEffect(() => {
+    if (!settingsReady || !loaded || notesCheckedRef.current) return
+    notesCheckedRef.current = true
+    let alive = true
+    let timer = 0
+    getReleaseNotesState()
+      .then((st) => {
+        if (!alive || !st?.shouldAutoOpen) return
+        timer = window.setTimeout(() => {
+          if (!alive) return
+          const prev = activeTabRef.current
+          tabBeforeNotes.current = prev === 'releaseNotes' ? null : prev
+          setActiveTab('releaseNotes')
+        }, RELEASE_NOTES_AUTO_OPEN_DELAY_MS)
+      })
+      .catch(() => { /* 静默 */ })
+    return () => { alive = false; if (timer) window.clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsReady, loaded])
+
+  /** 「知道了」：回到进更新说明之前那个模块（没有来源时退回启动模块） */
+  const dismissReleaseNotes = useCallback(() => {
+    const prev = tabBeforeNotes.current
+    tabBeforeNotes.current = null
+    openTab(prev ?? ((s.startupTab as TabName) || 'blog'))
+  }, [openTab, s.startupTab])
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   // 插件主题:先确保 <style> 已注入,再应用主题类(插件主题依赖运行时注入的 CSS 变量)
@@ -424,6 +466,15 @@ export default function App() {
     const handler = () => { setActiveTab('help'); setSidebarOpen(true) }
     window.addEventListener('help:open', handler)
     return () => window.removeEventListener('help:open', handler)
+  }, [])
+
+  // Listen for release-notes:open — 设置→关于与更新 / 活动栏齿轮菜单的手动入口。
+  // 走事件而非 prop：与 settings:open / help:open / onboarding:show 的既有通道一致，
+  // 模块页本身不需要知道是谁把它打开的。
+  useEffect(() => {
+    const handler = () => { setActiveTab('releaseNotes'); setSidebarOpen(true); setPalette(null) }
+    window.addEventListener('release-notes:open', handler)
+    return () => window.removeEventListener('release-notes:open', handler)
   }, [])
 
   // Listen for ai-learn:goto —— AI 学堂「动手做」跳模块（学堂自身先收起，避免浮层压住目标）
@@ -648,6 +699,7 @@ export default function App() {
       case 'help': return <HelpModule />
       case 'devtools': return DevToolsModuleDynamic ? <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} /> : null
       case 'user': return <UserModule />
+      case 'releaseNotes': return <ReleaseNotesModule onDismiss={dismissReleaseNotes} />
       default: return null
     }
   }

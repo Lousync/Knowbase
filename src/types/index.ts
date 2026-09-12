@@ -15,7 +15,57 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor' | 'aiTeaching'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor' | 'aiTeaching' | 'releaseNotes'
+
+// ===== 更新说明（release notes）=====
+// 主进程侧的同一份契约见 electron/lib/releaseNotes/types.ts
+// （两个 tsconfig 互不可见，沿用本仓「跨线类型各侧各声明一次」的做法）
+
+export type ReleaseNoteKind = 'feature' | 'ux' | 'fix' | 'internal' | 'other'
+
+export interface ReleaseNoteItem {
+  /** `- **标题**：正文` 里的粗体标题；没有粗体前缀时为空串 */
+  lead: string
+  /** 条目正文（已剥掉 Markdown 粗体标记，反引号保留给渲染层做行内 code） */
+  rest: string
+  /** 缩进子项（已拍平为纯文本） */
+  sub: string[]
+}
+
+export interface ReleaseNoteGroup {
+  title: string
+  kind: ReleaseNoteKind
+  items: ReleaseNoteItem[]
+}
+
+export interface ReleaseNote {
+  /** 不带前导 v，如 `3.0.0` */
+  version: string
+  /** CHANGELOG 原文里的日期，缺省为空串（老版本多数没写） */
+  date: string
+  summary: string
+  groups: ReleaseNoteGroup[]
+}
+
+export interface ReleaseNoteHighlight {
+  version: string
+  title: string
+  desc: string
+  detail?: string
+}
+
+export interface ReleaseNoteListEntry {
+  version: string
+  date: string
+  summary: string
+  itemCount: number
+}
+
+export interface ReleaseNotesState {
+  currentVersion: string
+  hasNotes: boolean
+  shouldAutoOpen: boolean
+}
 
 // toolbox
 export interface ToolboxScript {
@@ -1072,6 +1122,11 @@ export interface ElectronAPI {
   updatePauseDownload: () => Promise<{ ok: boolean; message?: string }>
   updateCancelDownload: () => Promise<{ ok: boolean; removedPartial?: boolean; message?: string }>
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => () => void
+  // 更新说明（VS Code 式 tab）
+  getReleaseNotesState: () => Promise<ReleaseNotesState>
+  markReleaseNotesShown: (version: string) => Promise<{ ok: boolean; error?: string }>
+  getReleaseNote: (version: string) => Promise<{ note: ReleaseNote | null; highlights: ReleaseNoteHighlight[] }>
+  listReleaseNotes: () => Promise<ReleaseNoteListEntry[]>
   pluginFetchRegistry: () => Promise<{ ok: boolean; plugins: PluginRegistryEntry[]; updatedAt?: string; message?: string }>
   pluginInstall: (url: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => () => void

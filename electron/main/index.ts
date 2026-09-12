@@ -38,6 +38,7 @@ import { initDayPanel, disposeDayPanel, getPanelMode, setPanelMode, onPanelModeC
 import { registerWindowBus } from './windowBus'
 import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
+import { registerReleaseNotesHandlers } from '../lib/releaseNotes'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
 import { registerAiToolHandlers } from '../lib/aiTools'
 import { registerKbVisualProtocol } from '../lib/kbVisualProtocol'
@@ -825,6 +826,8 @@ app.whenReady().then(async () => {
   // 开发者工具(内部对 app.isPackaged 自行守卫,打包版不注册任何 handler)
   registerDevtoolsHandlers()
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
+  // 更新说明（VS Code 式 tab）：CHANGELOG 生成的清单 + 手写亮点 + 仓库内阅读记录
+  registerReleaseNotesHandlers({ getSettingValue: (key) => settingsCache[key] })
   // 设备传输：局域网短时双向互传（工具箱）
   registerLanShareHandlers()
   // 编辑器工作区（Vault 仓库）：文件服务 + 授权根管理（getSetting 供 AI教学 产物根沉底名单）
