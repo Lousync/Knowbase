@@ -3,7 +3,7 @@
   "name": "Markdown使用指南",
   "version": "1.0.0",
   "author": "Knowbase",
-  "description": "Markdown 基本语法完整指南(markdown.com.cn 教程系列总结):概览 / 标题 / 段落 / 换行 / 强调 / 引用块 / 列表 / 代码 / 分隔线 / 链接 / 图片 / 转义字符 / 内嵌 HTML,逐章附语法示例与最佳实践。安装后一键导入知识库新建学习空间《Markdown 使用指南》。",
+  "description": "Markdown 基本语法完整指南(参考来源: markdown.com.cn 教程系列,经整理改写):概览 / 标题 / 段落 / 换行 / 强调 / 引用块 / 列表 / 代码 / 分隔线 / 链接 / 图片 / 转义字符 / 内嵌 HTML,逐章附语法示例与最佳实践。安装后一键导入知识库新建学习空间《Markdown 使用指南》。",
   "type": "declarative",
   "icon": "icon.svg",
   "category": "知识包",

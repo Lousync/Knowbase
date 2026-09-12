@@ -105,7 +105,7 @@ class McpManagerImpl {
       transport = new StreamableHTTPClientTransport(ep.url!)
     }
 
-    const client = new Client({ name: 'Knowbase', version: '1.0.0' })
+    const client = new Client({ name: 'Phrontis', version: '1.0.0' })
     try {
       await withTimeout(client.connect(transport), CALL_TIMEOUT_MS, '连接')
       const listed = await withTimeout(client.listTools(), CALL_TIMEOUT_MS, '工具发现')

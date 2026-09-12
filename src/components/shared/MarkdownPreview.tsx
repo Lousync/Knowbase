@@ -10,6 +10,9 @@ import { showToast } from '../../lib/toast'
 import { copyImageUrlToClipboard, workspaceGetCurrent, workspaceReadImage } from '../../lib/ipc'
 import { preprocessContent, parseQuizFence, parseQuizFenceLoose } from './QuizParser'
 import { QuizCard } from './QuizCard'
+import { PluginFenceRenderer } from './PluginFenceRenderer'
+import { pluginListRenderers } from '../../lib/ipc'
+import type { PluginRendererInfo } from '../../types'
 import { normalizeAnswerLayout } from '../../lib/answerLayout'
 
 // Same ID generation as parseHeadings() in OutlinePanel — must match for outline navigation
@@ -90,9 +93,45 @@ const REMARK_PLUGINS: any = [remarkGfm, remarkMath]
 const REHYPE_PLUGINS: any = [rehypeHighlight, [rehypeKatex, { throwOnError: false, strict: false }]]
 type MdComponents = NonNullable<React.ComponentProps<typeof ReactMarkdown>['components']>
 
+/** 插件围栏渲染（带回退）：加载失败 / 3 秒未就绪 → 回退普通代码块 */
+function FenceWithFallback({ info, code, pageId, pageTitle, children }: {
+  info: PluginRendererInfo
+  code: string
+  pageId?: string
+  pageTitle?: string
+  children: React.ReactNode
+}) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <pre>{children}</pre>
+  return (
+    <PluginFenceRenderer
+      pluginId={info.pluginId}
+      entry={info.entry}
+      height={info.height}
+      code={code}
+      pageId={pageId}
+      pageTitle={pageTitle}
+      onFailed={() => setFailed(true)}
+    />
+  )
+}
+
 function MarkdownPreviewInner({ content, onWikiLink, onLinkClick, knownWikiTitles, draftWikiTitles, pageId, pageTitle }: Props) {
   // 旧 408 选择题格式 → ```quiz 围栏（供 pre 组件渲染判题卡片）；非选择题块原样保留
   const processedContent = useMemo(() => preprocessContent(content), [content])
+
+  // 插件 fenced-code 渲染器（plugin-phase1-design C6）：lang → 渲染器映射（挂载时拉一次）
+  const [fenceRenderers, setFenceRenderers] = useState<Map<string, PluginRendererInfo>>(new Map())
+  useEffect(() => {
+    let alive = true
+    pluginListRenderers().then(list => {
+      if (!alive) return
+      const m = new Map<string, PluginRendererInfo>()
+      for (const r of list ?? []) m.set(r.lang, r)
+      setFenceRenderers(m)
+    }).catch(() => null)
+    return () => { alive = false }
+  }, [])
 
   const handleLinkClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
@@ -126,6 +165,15 @@ function MarkdownPreviewInner({ content, onWikiLink, onLinkClick, knownWikiTitle
         if (/language-quiz/.test(cls)) {
           const fixed = parseQuizFenceLoose(extractText(children))
           if (fixed) return <QuizCard quiz={fixed} pageId={pageId} pageTitle={pageTitle} />
+        }
+      }
+      // 插件渲染器（plugin-phase1-design C6）：命中 lang 且插件已启用 → 内容只读沙箱；失败回退普通代码块
+      const langMatch = cls.match(/language-([a-z0-9-]+)/i)
+      const fenceLang = langMatch?.[1]?.toLowerCase()
+      if (fenceLang) {
+        const r = fenceRenderers.get(fenceLang)
+        if (r) {
+          return <FenceWithFallback info={r} code={extractText(children)} pageId={pageId} pageTitle={pageTitle}>{children}</FenceWithFallback>
         }
       }
       return <pre>{children}</pre>
@@ -242,7 +290,7 @@ function MarkdownPreviewInner({ content, onWikiLink, onLinkClick, knownWikiTitle
       const text = extractText(children)
       return <h6 id={headingId(text)}>{renderInlineExtras(children, onWikiLink, knownWikiTitles, draftWikiTitles)}</h6>
     },
-  }), [handleLinkClick, onWikiLink, knownWikiTitles, draftWikiTitles, pageId, pageTitle])
+  }), [handleLinkClick, onWikiLink, knownWikiTitles, draftWikiTitles, pageId, pageTitle, fenceRenderers])
 
   return (
     <div className="prose-content">

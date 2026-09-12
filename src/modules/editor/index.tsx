@@ -19,6 +19,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { countWords } from '../../lib/wordCount'
 import { shouldExitZen } from '../../lib/zenMode'
 import { FileTree } from './components/FileTree'
+import { FolderFocusButton } from '../../components/shared/FolderFocusButton'
 import { type MonacoPaneHandle } from './components/MonacoPane'
 // monaco 主包 8.3MB —— 绝不能进首屏。宿主组件单独 lazy（使用处见下方 Suspense）：
 // 代价只是「本次运行第一次打开编辑器」多一瞬加载，而不是每次切模块都等。
@@ -29,6 +30,7 @@ import { extractOutline } from '../../lib/markdownOutline'
 import type { EditorDoc, DirCache, TreeNode, CreateIntent } from './types'
 import { joinRel, parentRel, baseName, languageFor, splitFrontmatter, joinFrontmatter, fullContent, savedFullContent } from './types'
 import { ConfirmDialog, ResizablePanel } from '../../components/shared'
+import { PluginSlotEntry } from '../../components/shared/PluginSlotEntry'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 
 interface Props {
@@ -564,6 +566,27 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
     setExpanded((prev) => new Set(prev).add(dirRel))
   }, [])
 
+  // Ctrl+N — 新建文件（根目录内联命名行）。与 Ctrl+S 同款不设 isEditingInput 守卫：
+  // Monaco 聚焦时也要可用（keydown 冒泡到 window，Monaco 不吞）
+  useEffect(() => {
+    if (!isActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.altKey || (e.key !== 'n' && e.key !== 'N')) return
+      e.preventDefault()
+      askCreateNode('', 'file')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isActive, askCreateNode])
+
+  // 知识库 Ctrl+N 跳转：App 切到编辑器 Tab 后触发「新建知识页」命名行
+  // （读写分工铁律：知识库=阅读器，建页写入只发生在编辑器）
+  useEffect(() => {
+    const h = () => askCreateKnowledgePage('')
+    window.addEventListener('kb-editor-new-page', h)
+    return () => window.removeEventListener('kb-editor-new-page', h)
+  }, [askCreateKnowledgePage])
+
   /** 内联提交：按类型清洗并执行创建（文件/目录直接建；知识页带 frontmatter 模板） */
   const commitCreate = useCallback(async (dirRel: string, type: 'file' | 'dir' | 'knowledge', rawName: string) => {
     setCreating(null)
@@ -995,6 +1018,11 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
               <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
                 <FileText size={12} />
                 资源管理器
+                <FolderFocusButton
+                  className="ml-auto"
+                  on={!!zenSettings.editorFolderFocus}
+                  onToggle={() => zenUpdate('editorFolderFocus', !zenSettings.editorFolderFocus)}
+                />
                 <button
                   onClick={(e) => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -1002,7 +1030,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                   }}
                   title="新建（文件 / 文件夹 / 知识页）"
                   aria-expanded={createMenu !== null}
-                  className={`ml-auto p-1 rounded-md transition-colors ${
+                  className={`p-1 rounded-md transition-colors ${
                     createMenu
                       ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
@@ -1016,6 +1044,12 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                 softNames={softNames}
                 expanded={expanded}
                 activePath={activePath}
+                focusOn={!!zenSettings.editorFolderFocus}
+                onFocusLocate={(rel, isDir) => {
+                  zenUpdate('editorFolderFocus', false)
+                  if (isDir) setExpanded((prev) => new Set(prev).add(rel))
+                  else void openFile({ name: rel.split('/').pop() || rel, type: 'file', size: 0, mtime: 0, relPath: rel })
+                }}
                 onToggleDir={(p) => void toggleDir(p)}
                 onOpenFile={(n) => void openFile(n)}
                 onMove={(src, dst) => void moveNode(src, dst)}
@@ -1058,7 +1092,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
               onSnapClose={onSnapCloseSidebar}
               onSnapOpen={onSnapOpenSidebar}
             >
-              <div className="flex h-full w-full flex-col">{treeColumn}</div>
+              <div className="flex h-full w-full flex-col">{treeColumn}<PluginSlotEntry slot="editor.sidebar" /></div>
             </ResizablePanel>
           )
         })()}
@@ -1151,7 +1185,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
               {previewOpen && activeDoc?.language === 'markdown' && (
                 <>
                   <div className="w-px shrink-0 bg-[var(--border-color)]" />
-                  <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="kb-view-fade flex min-w-0 flex-1 flex-col">
                     <div className="flex items-center gap-1.5 border-b border-[var(--border-color)] px-3 py-1 text-[11.5px] text-[var(--text-muted)]">
                       <Eye size={12} />
                       预览
@@ -1171,7 +1205,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
             {/* 大纲浮层：markdown 标题树 → 点击跳转 */}
             {outlineOpen && activeDoc?.language === 'markdown' && (
               <div
-                className="absolute top-2 right-2 z-20 w-72 max-h-[65%] overflow-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]/98 shadow-xl py-1.5 flex flex-col"
+                className="kb-pop absolute top-2 right-2 z-20 w-72 max-h-[65%] overflow-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]/98 shadow-xl py-1.5 flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 {(() => {
@@ -1218,7 +1252,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
                   </button>
                 )}
                 <span className="ml-auto">{activeDoc.size.toLocaleString()} B</span>
-                {fullContent(activeDoc) !== savedFullContent(activeDoc) && <span className="text-[var(--accent)]">未保存</span>}
+                {fullContent(activeDoc) !== savedFullContent(activeDoc) && <span className="kb-item-in text-[var(--accent)]">未保存</span>}
               </>
             )}
           </div>
@@ -1238,7 +1272,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
 
       {/* frontmatter 查看/编辑弹窗 */}
       {fmDraft && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30" onClick={() => setFmDraft(null)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 kb-overlay" onClick={() => setFmDraft(null)}>
           <div
             className="flex w-[480px] max-w-[90vw] flex-col gap-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
@@ -1287,7 +1321,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
 
       {/* 资源管理器「+」新建下拉：文件 / 文件夹 / 知识页 */}
       {createMenu && (
-        <div className="fixed inset-0 z-[70]" onClick={() => setCreateMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCreateMenu(null) }}>
+        <div className="fixed inset-0 z-[70] kb-pop-layer" onClick={() => setCreateMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCreateMenu(null) }}>
           <div
             className="absolute min-w-[150px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
             style={{ left: Math.min(createMenu.x, window.innerWidth - 170), top: Math.min(createMenu.y, window.innerHeight - 140) }}
@@ -1311,7 +1345,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
 
       {/* 右键菜单 */}
       {ctxMenu && (
-        <div className="fixed inset-0 z-[70]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null) }}>
+        <div className="fixed inset-0 z-[70] kb-pop-layer" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null) }}>
           <div
             ref={ctxMenuRef}
             className="absolute min-w-[150px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
@@ -1394,7 +1428,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
 
       {/* tab 右键：状态动作（归档为知识页 / 转为草稿）+ 关闭 */}
       {tabCtx && (
-        <div className="fixed inset-0 z-[70]" onClick={() => setTabCtx(null)} onContextMenu={(e) => { e.preventDefault(); setTabCtx(null) }}>
+        <div className="fixed inset-0 z-[70] kb-pop-layer" onClick={() => setTabCtx(null)} onContextMenu={(e) => { e.preventDefault(); setTabCtx(null) }}>
           <div
             ref={tabCtxRef}
             className="absolute min-w-[160px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
@@ -1466,7 +1500,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
 
       {/* 新建 / 重命名输入弹窗（Electron 渲染进程不支持 window.prompt） */}
       {inputBox && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setInputBox(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30 kb-overlay" onClick={() => setInputBox(null)}>
           <div
             className="w-80 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
@@ -1503,7 +1537,7 @@ export function EditorModule({ isActive = true, sidebarEl = null, sidebarHosted 
 
       {/* 保存冲突对话框：磁盘被外部修改（对标 VS Code 的 saveConflictResolution） */}
       {conflictState && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setConflictState(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30 kb-overlay" onClick={() => setConflictState(null)}>
           <div
             className="w-[380px] rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}

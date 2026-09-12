@@ -431,7 +431,7 @@ export function PasswordVault({ onBack }: Props) {
           title={e.favorite ? '取消收藏' : '收藏并置顶'}
           className={`flex items-center justify-center rounded transition-colors ${e.favorite ? 'text-[var(--warning)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-muted)]'}`}
         >
-          <Star size={13} fill={e.favorite ? 'currentColor' : 'none'} />
+          <Star key={e.favorite ? 'on' : 'off'} size={13} className="kb-micro-pop" fill={e.favorite ? 'currentColor' : 'none'} />
         </button>
 
         {/* 名称 */}
@@ -566,7 +566,7 @@ export function PasswordVault({ onBack }: Props) {
                 {g.isCollapsed ? <Folder size={11} /> : <FolderOpen size={11} />}
                 <span className="font-medium">{g.name}</span>
                 <span className="text-[var(--text-disabled)]">{g.total}</span>
-                <ChevronRight size={12} className={`ml-auto transition-transform ${g.isCollapsed ? '' : 'rotate-90'}`} />
+                <ChevronRight size={12} className={`kb-chevron ml-auto ${g.isCollapsed ? '' : 'rotate-90'}`} />
               </button>
               {!g.isCollapsed && g.visibleItems.map(renderRow)}
               {!g.isCollapsed && g.visibleItems.length < g.total && (
@@ -701,7 +701,7 @@ export function PasswordVault({ onBack }: Props) {
                 title={favorite ? '取消收藏' : '收藏并置顶'}
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11.5px] border transition-colors ${favorite ? 'border-[var(--warning)] text-[var(--warning)]' : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
               >
-                <Star size={12} fill={favorite ? 'currentColor' : 'none'} /> {favorite ? '已收藏' : '收藏'}
+                <Star key={favorite ? 'on' : 'off'} size={12} className="kb-micro-pop" fill={favorite ? 'currentColor' : 'none'} /> {favorite ? '已收藏' : '收藏'}
               </button>
             </div>
 
@@ -890,7 +890,7 @@ export function PasswordVault({ onBack }: Props) {
 
       {/* New Entry Modal */}
       {showNewForm && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50" onClick={() => setShowNewForm(false)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 kb-overlay" onClick={() => setShowNewForm(false)}>
           <div
             className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl flex flex-col"
             style={{ width: '460px' }}
@@ -1003,7 +1003,7 @@ export function PasswordVault({ onBack }: Props) {
 
       {/* Delete confirmation */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50" onClick={() => setDeleteTarget(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 kb-overlay" onClick={() => setDeleteTarget(null)}>
           <div
             className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl p-5"
             style={{ width: '360px' }}

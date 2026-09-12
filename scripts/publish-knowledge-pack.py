@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-publish-knowledge-pack.py — 知识包发布到远程市场（Lousync/Knowbase-plugins）
+publish-knowledge-pack.py — 知识包发布到远程市场（Lousync/Phrontis-plugins）
 
 流程：质量门（zip/src 一致性 + quiz JSON 合法性 + manifest 合规复刻校验 + icon 安全）
       → 本地生成新 registry.json / CHANGELOG.md
@@ -32,7 +32,7 @@ import subprocess
 import sys
 import zipfile
 
-REPO = 'Lousync/Knowbase-plugins'
+REPO = 'Lousync/Phrontis-plugins'
 BRANCH = 'main'
 
 # ---------- 工具 ----------

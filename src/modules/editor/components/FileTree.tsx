@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
+import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
+import { Collapsible } from '../../../components/shared/Collapsible'
+import { TreeGuideLine } from '../../../components/shared/treeGuides'
+import { useSettings } from '../../../lib/SettingsContext'
 import type { DirCache, TreeNode, CreateIntent } from '../types'
 import { getFileIcon } from '../../../lib/fileIcons'
 import ignoreRuleSvg from '../../../assets/ignore.svg?raw'
@@ -23,6 +26,10 @@ interface Props {
   /** 软件生成项名单（根层 .ignore / AI教学 产物根等，ws:listDir 附带）：
    *  命中条目从主列表移到底部「软件文件」折叠节（VS Code 时间线式，默认收起） */
   softNames?: string[]
+  /** 目录聚焦：开启后只显示当前打开文件的目录链 + 同级项，其余骨架化/隐藏（样式 folderFocusStyle） */
+  focusOn?: boolean
+  /** 点击骨架条 = 退出聚焦并定位（目录展开 / 文件打开） */
+  onFocusLocate?: (relPath: string, isDir: boolean) => void
 }
 
 const DRAG_MIME = 'text/x-kb-rel'
@@ -48,8 +55,39 @@ function FileIcon({ name }: { name: string }) {
  * 拖拽：条目均可拖（mime: text/x-kb-rel）；目录与根容器是落点，
  * drop 时把源相对路径移动到目标目录下（主进程 ws:rename 跨目录移动）。
  */
-export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths, draftRelPaths, softNames }: Props) {
+export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFile, onContextMenu, onMove, creating, onCommitCreate, onCancelCreate, hiddenRelPaths, draftRelPaths, softNames, focusOn, onFocusLocate }: Props) {
   const [dragOver, setDragOver] = useState<string | null>(null)
+
+  /**
+   * 目录聚焦（2026-09-12）：只保留「当前打开文件的祖先目录链 + 同级文件」实名——
+   * 链外的目录一律失焦（兄弟目录也不保留实名），同级文件保留实名方便切换；其余骨架化/隐藏
+   */
+  const { s: focusSettings } = useSettings()
+  const focusHide = (focusSettings.folderFocusStyle ?? 'skeleton') === 'hidden'
+  // 聚焦目标 = 当前打开文件；全部标签关闭后回退到本次会话最近打开的文件（否则无打开文件时开关永远空操作）
+  const lastActiveRef = useRef<string | null>(null)
+  if (activePath) lastActiveRef.current = activePath
+  const focusPath = activePath ?? lastActiveRef.current
+  const focusActive = !!focusOn && !!focusPath
+  const curParentDir = focusPath ? focusPath.split('/').slice(0, -1).join('/') : null
+  const isChainDir = (rel: string) => !!focusPath && (focusPath + '/').startsWith(rel + '/')
+  const isSiblingItem = (rel: string) => !!focusPath && rel.split('/').slice(0, -1).join('/') === curParentDir
+  const skelWidth = (rel: string) => { let h = 0; for (let i = 0; i < rel.length; i++) h = (h * 31 + rel.charCodeAt(i)) >>> 0; return 42 + (h % 48) }
+  /** 骨架条：占位 + 悬停显原名；点击 = 退出聚焦并定位 */
+  const renderSkeletonRow = (relPath: string, name: string, isDir: boolean, depth: number, icon: React.ReactNode) => (
+    <div
+      key={`skel-${relPath}`}
+      onClick={() => onFocusLocate?.(relPath, isDir)}
+      title={`${name}（点击退出聚焦并定位）`}
+      className="group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)]"
+      style={{ paddingLeft: 6 + depth * 12 }}
+    >
+      <span className="w-[12px] shrink-0" />
+      <span className="opacity-25 shrink-0 inline-flex">{icon}</span>
+      <span className="h-[10px] rounded-[5px] bg-[var(--bg-tertiary)] shrink-0 group-hover:hidden" style={{ width: skelWidth(relPath) }} />
+      <span className="hidden group-hover:block truncate text-[12.5px] text-[var(--text-muted)]">{name}</span>
+    </div>
+  )
   // 「软件文件」折叠节开合（默认收起，localStorage 记忆——VS Code 时间线式）
   const [softOpen, setSoftOpen] = useState(() => {
     try { return localStorage.getItem('kb.treeSoftOpen') === '1' } catch { return false }
@@ -74,29 +112,34 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
     if (src && src !== dirRel) onMove(src, dirRel)
   }
 
-  const renderFileRow = (e: TreeNode, depth: number): React.ReactNode => (
-    <div
-      key={e.relPath}
-      draggable
-      onDragStart={(ev) => startDrag(ev, e.relPath)}
-      className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${activePath === e.relPath ? 'bg-[var(--bg-selected)]/40' : ''}`}
-      style={{ paddingLeft: 6 + depth * 12 }}
-      onClick={() => onOpenFile(e)}
-      onContextMenu={(ev) => onContextMenu(ev, e)}
-      title={e.relPath}
-    >
-      <span className="w-[12px] shrink-0" />
-      <FileIcon name={e.name} />
-      <span className={`truncate text-[12.5px] ${activePath === e.relPath ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{e.name}</span>
-      {draftRelPaths?.has(e.relPath) && (
-        <span className="ml-auto shrink-0 rounded bg-[var(--warning)]/15 px-1 text-[9px] leading-[14px] text-[var(--warning)]" title="草稿（修改中）— 右键可归档为知识页">草稿</span>
-      )}
-    </div>
-  )
+  const renderFileRow = (e: TreeNode, depth: number): React.ReactNode => {
+    if (focusActive && e.relPath !== focusPath && !isSiblingItem(e.relPath)) {
+      if (focusHide) return null
+      return renderSkeletonRow(e.relPath, e.name, false, depth, <FileIcon name={e.name} />)
+    }
+    return (
+      <div
+        key={e.relPath}
+        draggable
+        onDragStart={(ev) => startDrag(ev, e.relPath)}
+        className={`group flex items-center gap-1 rounded-md px-1.5 py-[3px] cursor-pointer select-none hover:bg-[var(--bg-hover)] ${activePath === e.relPath ? 'bg-[var(--bg-selected)]/40' : ''} ${focusActive && focusPath === e.relPath ? 'ring-1 ring-inset ring-[var(--accent)]/40' : ''}`}
+        style={{ paddingLeft: 6 + depth * 12 }}
+        onClick={() => onOpenFile(e)}
+        onContextMenu={(ev) => onContextMenu(ev, e)}
+        title={e.relPath}
+      >
+        <span className="w-[12px] shrink-0" />
+        <FileIcon name={e.name} />
+        <span className={`truncate text-[12.5px] ${activePath === e.relPath ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{e.name}</span>
+        {draftRelPaths?.has(e.relPath) && (
+          <span className="ml-auto shrink-0 rounded bg-[var(--warning)]/15 px-1 text-[9px] leading-[14px] text-[var(--warning)]" title="草稿（修改中）— 右键可归档为知识页">草稿</span>
+        )}
+      </div>
+    )
+  }
 
   const renderDir = (relPath: string, depth: number): React.ReactNode => {
     const entries = dirCache[relPath] ?? []
-    const isOpen = expanded.has(relPath)
     const dirNode = relPath === '' ? null : {
       name: relPath.split('/').pop() || relPath,
       type: 'dir' as const,
@@ -104,6 +147,12 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
       mtime: 0,
       relPath,
     }
+    // 目录聚焦：目录只认链条（兄弟目录也失焦），根容器永不骨架化；链上目录强制展开
+    if (focusActive && dirNode && !isChainDir(relPath)) {
+      if (focusHide) return null
+      return renderSkeletonRow(relPath, dirNode.name, true, depth, <Folder size={14} className="text-[var(--text-muted)]" />)
+    }
+    const isOpen = expanded.has(relPath) || (focusActive && isChainDir(relPath))
     return (
       <div
         key={relPath}
@@ -131,17 +180,20 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
             onContextMenu={(e) => onContextMenu(e, dirNode)}
             title={relPath}
           >
-            {isOpen ? <ChevronDown size={12} className="shrink-0 text-[var(--text-muted)]" /> : <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />}
+            <ChevronRight
+              size={12}
+              className={`kb-chevron shrink-0 text-[var(--text-muted)] ${isOpen ? 'rotate-90' : ''}`}
+            />
             {isOpen ? <FolderOpen size={14} className="shrink-0 text-[var(--text-muted)]" /> : <Folder size={14} className="shrink-0 text-[var(--text-muted)]" />}
             <span className="truncate text-[12.5px] text-[var(--text-primary)]">{dirNode.name}</span>
           </div>
         )}
-        {isOpen && (() => {
+        {(() => {
           // 软件生成项分组（仅根层）：命中名单的条目移到底部「软件文件」折叠节（VS Code 时间线式）
           const softSet = depth === 0 && softNames?.length ? new Set(softNames) : null
           const main = softSet ? entries.filter((e) => !softSet.has(e.name)) : entries
           const softItems = softSet ? entries.filter((e) => softSet.has(e.name)) : []
-          return (
+          const children = (
             <>
               {main.map((e) => {
                 // 双态模型：已归档知识页在编辑器中隐藏（目录骨架/草稿/代码文件保留）
@@ -161,7 +213,7 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                   onCancel={onCancelCreate ?? (() => {})}
                 />
               )}
-              {softItems.length > 0 && (
+              {softItems.length > 0 && !focusActive && (
                 <div className="mt-auto border-t border-[var(--border-color)] pt-1">
                   <div
                     onClick={toggleSoftOpen}
@@ -169,16 +221,39 @@ export function FileTree({ dirCache, expanded, activePath, onToggleDir, onOpenFi
                     style={{ paddingLeft: 6 }}
                     title="软件生成的目录与文件（AI教学 产物、.ignore 过滤规则等）"
                   >
-                    {softOpen ? <ChevronDown size={12} className="shrink-0 text-[var(--text-muted)]" /> : <ChevronRight size={12} className="shrink-0 text-[var(--text-muted)]" />}
+                    <ChevronRight
+                      size={12}
+                      className={`kb-chevron shrink-0 text-[var(--text-muted)] ${softOpen ? 'rotate-90' : ''}`}
+                    />
                     <span className="truncate text-[12px] text-[var(--text-muted)]">软件文件</span>
                     <span className="ml-auto shrink-0 pr-1 text-[10px] text-[var(--text-muted)]">{softItems.length}</span>
                   </div>
-                  {softOpen && softItems.map((e) =>
-                    e.type === 'dir' ? renderDir(e.relPath, 1) : renderFileRow(e, 1)
-                  )}
+                  <div className={`kb-collapse ${softOpen ? 'open' : ''}`}>
+                    <div className="flex flex-col">
+                      {softItems.map((e) =>
+                        e.type === 'dir' ? renderDir(e.relPath, 1) : renderFileRow(e, 1)
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>
+          )
+          // 根层（depth 0）保持直接子节点渲染：其父是 flex 列且依赖 mt-auto 把「软件文件」压到底，
+          // 加包裹层会换掉 flex 上下文；根层是虚拟目录（无行），也没有属于自己的参考线。
+          // 子目录统一走 <Collapsible>（收起时不挂载子树，展开/收起两个方向都有高度过渡，
+          // docs/ui-animation-plan.md C 类）；子级块加 relative 包裹层 + 贯穿竖线——
+          // 线从父行下方直通末子级，避免「每行画线段被圆角裁成竹节」的起伏感。
+          if (depth === 0) return isOpen ? children : null
+          return (
+            <Collapsible open={isOpen} innerClassName="">
+              {() => (
+                <div className="relative">
+                  <TreeGuideLine level={depth} />
+                  {children}
+                </div>
+              )}
+            </Collapsible>
           )
         })()}
       </div>

@@ -5,7 +5,7 @@ import {
   getScheduleTags, createScheduleTag, createScheduleTodo, getScheduleTodos,
 } from '../../../lib/ipc'
 import type { PeriodStats } from '../../../lib/ipc'
-import { getSummaryWindow, type PeriodWindow, type MonthlyMode, SUMMARY_TAG_DEFS } from '../../../lib/summary'
+import { getSummaryWindow, getNextSummaryWindow, addDaysStr, type PeriodWindow, type MonthlyMode, SUMMARY_TAG_DEFS } from '../../../lib/summary'
 import { useSettings } from '../../../lib/SettingsContext'
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -72,12 +72,21 @@ export function SummaryPanel({ date }: { date: string }) {
       let tags = await getScheduleTags()
       let tag = tags.find(t => t.name === def.name)
       if (!tag) tag = await createScheduleTag(def.name, def.color)
+
+      // 默认截止类：DDL = 下一次总结日的前一天 23:59。
+      // 必须走 getSummaryWindow（周总结日可配置 + 月总结三模式），不写死「下周日」；
+      // 取 23:59 而非 00:00 —— 网格时间轴默认 07:00 起算，00:00 会算出负值被列容器裁掉，红线不可见。
+      const nextWin = getNextSummaryWindow(date, weeklyDay, monthlyMode, monthlyFixedDay)
+      const ddlDay = nextWin ? addDaysStr(nextWin.end, -1) : win.nextDate
+      const ddlTime = `${ddlDay} 23:59`
+
       await createScheduleTodo({
         title,
         date: win.nextDate,
-        taskType: 'plan',
+        taskType: 'deadline',
+        time: ddlTime,
         tagId: tag.id,
-        description: `来自${win.type === 'week' ? '周' : '月'}总结（${date}），细节可在日程模块补充`,
+        description: `来自${win.type === 'week' ? '周' : '月'}总结（${date}），截止 ${ddlTime}，细节可在日程模块补充`,
       })
       setTaskTitle('')
       const todos = await getScheduleTodos(win.nextDate)
@@ -87,7 +96,7 @@ export function SummaryPanel({ date }: { date: string }) {
     } finally {
       setAdding(false)
     }
-  }, [taskTitle, win, adding, date])
+  }, [taskTitle, win, adding, date, weeklyDay, monthlyMode, monthlyFixedDay])
 
   if (!win) return null
 

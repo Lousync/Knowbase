@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, X, RotateCcw, Star } from 'lucide-react'
 import { MarkdownPreview } from './MarkdownPreview'
 import type { QuizItem } from './QuizParser'
-import { quizRecordReport, quizRecordToggleFavorite, quizPluginReport, quizPluginToggleFavorite } from '../../lib/ipc'
+import { quizRecordReport, quizRecordToggleFavorite } from '../../lib/ipc'
 
 interface Props {
   quizzes: QuizItem[]
@@ -10,8 +10,6 @@ interface Props {
   onClose: () => void
   /** 来源页面 ID（传入后启用收藏 + 错题上报） */
   pageId?: string
-  /** 插件模式：判题/收藏上报写入插件命名空间表（而非主表），pluginId 由宿主注入 */
-  pluginReport?: { pluginId: string }
   /** P7（AI教学）：整套答完时回调成绩摘要（用于测验报告落盘等）；再来一遍会再次触发 */
   onFinish?: (summary: { total: number; correctCount: number; records: Array<{ no: number; correct: boolean; picked: string }> }) => void
 }
@@ -27,7 +25,7 @@ interface Record {
  * 全部答完显示得分与错题清单。键盘：1-4/A-D 作答，Enter 下一题，Esc 退出。
  * 用捕获阶段监听并 stopPropagation，避免与页面级快捷键（如 Esc 返回列表）冲突。
  */
-export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, onFinish }: Props) {
+export function QuizMode({ quizzes, pageTitle, onClose, pageId, onFinish }: Props) {
   const [idx, setIdx] = useState(0)
   const [picked, setPicked] = useState<string | null>(null)
   const [records, setRecords] = useState<Record[]>([])
@@ -51,12 +49,6 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, on
 
   const toggleFav = () => {
     if (!pageId || !quiz) return
-    if (pluginReport) {
-      quizPluginToggleFavorite(pluginReport.pluginId, pageId, quiz.no)
-        .then(r => setFavMap(m => ({ ...m, [quiz.no]: r.favorite })))
-        .catch(() => { /* ignore */ })
-      return
-    }
     quizRecordToggleFavorite(pageId, quiz.no, { pageTitle, snapshot: snapshot(quiz) })
       .then(r => setFavMap(m => ({ ...m, [quiz.no]: r.isFavorite })))
       .catch(() => { /* ignore */ })
@@ -78,15 +70,11 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, on
       const ok = key === quiz.answer
       setRecords(rs => [...rs, { no: quiz.no, correct: ok, picked: key }])
       if (pageId) {
-        if (pluginReport) {
-          quizPluginReport(pluginReport.pluginId, pageId, quiz.no, ok, { pageTitle, snapshot: snapshot(quiz) }).catch(() => { /* ignore */ })
-        } else {
-          quizRecordReport(pageId, quiz.no, ok, { pageTitle, snapshot: snapshot(quiz) }).catch(() => { /* ignore */ })
-        }
+        quizRecordReport(pageId, quiz.no, ok, { pageTitle, snapshot: snapshot(quiz) }).catch(() => { /* ignore */ })
       }
       if (ok) window.setTimeout(goNext, 500)
     },
-    [quiz, picked, goNext, pageId, pageTitle, pluginReport],
+    [quiz, picked, goNext, pageId, pageTitle],
   )
 
   const restart = () => {
@@ -143,7 +131,7 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, on
   const rightList = useMemo(() => records.filter(r => r.correct), [records])
 
   return (
-    <div className="absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="刷题模式">
+    <div className="kb-view-fade absolute inset-0 z-50 bg-[var(--bg-primary)] flex flex-col" role="dialog" aria-label="刷题模式">
       {/* 顶栏 */}
       <div className="shrink-0 flex items-center gap-3 px-4 h-11 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
         <button
@@ -260,7 +248,7 @@ export function QuizMode({ quizzes, pageTitle, onClose, pageId, pluginReport, on
                     favMap[quiz.no] ? 'text-[#f5b301]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                   }`}
                 >
-                  <Star size={17} fill={favMap[quiz.no] ? 'currentColor' : 'none'} />
+                  <Star key={favMap[quiz.no] ? 'on' : 'off'} size={17} className="kb-micro-pop" fill={favMap[quiz.no] ? 'currentColor' : 'none'} />
                 </button>
               )}
             </div>

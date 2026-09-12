@@ -1,11 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal, ListChecks, SquarePen } from 'lucide-react'
+import { Trash2, Eye, Edit3, Star, FileText, ChevronDown, ExternalLink, X, ChevronRight, ChevronLeft, Plus, ImagePlus, StickyNote, Link2, BookOpen, MoreHorizontal, ListChecks, SquarePen, Sparkles, RefreshCw } from 'lucide-react'
 import { MarkdownPreview } from '../../../components/shared/MarkdownPreview'
 import { QuizMode } from '../../../components/shared/QuizMode'
 import { extractQuizzes } from '../../../components/shared/QuizParser'
-import type { KnowledgePage, KnowledgeCategory, KnowledgeTag, KnowledgeBacklinkItem } from '../../../types'
-import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinkContext, getKnowledgeManualLinks, addKnowledgeManualLink, removeKnowledgeManualLink, createKnowledgePage, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName } from '../../../lib/ipc'
+import type { KnowledgePage, KnowledgeCategory, KnowledgeTag, KnowledgeBacklinkItem, SimilarPageHit } from '../../../types'
+import { getKnowledgePageById, updateKnowledgePage, getKnowledgeBacklinkContext, getKnowledgeManualLinks, addKnowledgeManualLink, removeKnowledgeManualLink, createKnowledgePage, updateKnowledgeLinks, toggleKnowledgeStar, getSetting, setSetting, getAttachmentsPath, openExternal, getKnowledgeTags, createKnowledgeTag, getAttachmentPath, readAttachmentBase64, readAttachmentBase64ByFileName, getKnowledgeSimilarPages } from '../../../lib/ipc'
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import { uploadImageFile, insertImageAtCursor, isImageFile, IMAGE_OWNER } from '../../../lib/editorImage'
@@ -58,6 +58,9 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
   // 知识库以阅读优先:md/txt 页面打开即预览(右上角眼睛或 Ctrl+/ 切回编辑)
   const [preview, setPreview] = useState(true)
   const [backlinks, setBacklinks] = useState<KnowledgeBacklinkItem[]>([])
+  // 相似笔记（A3-3：标题+首段语义/关键词混合召回，排除自身）
+  const [similar, setSimilar] = useState<SimilarPageHit[]>([])
+  const [similarLoading, setSimilarLoading] = useState(false)
   // 手动关联（双向）
   const [manualLinks, setManualLinks] = useState<KnowledgePage[]>([])
   const [linkPickerOpen, setLinkPickerOpen] = useState(false)
@@ -213,6 +216,12 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
         }
       }),
       getKnowledgeBacklinkContext(pageId).then(setBacklinks),
+      // 相似笔记：随页面装载刷新（保存后经 kb-reload-detail 重读也会再触发）；失败静默空态
+      setSimilarLoading(true),
+      getKnowledgeSimilarPages(pageId)
+        .then(r => setSimilar(r.hits ?? []))
+        .catch(() => setSimilar([]))
+        .finally(() => setSimilarLoading(false)),
       // 手动关联是旧 DB-only 通道，仓库读源模式下主进程统一拒绝（抛错刷屏）→ vault 模式直接空态，不发调用
       vaultModeRef.current ? Promise.resolve(setManualLinks([])) : getKnowledgeManualLinks(pageId).then(setManualLinks),
       getKnowledgeTags().then(setAllTags)
@@ -736,7 +745,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                 {!isWelcomeHtml && !isArchiveFile && (
                   <button onClick={() => { handleToggleStar(); setShowMoreMenu(false) }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">
-                    <Star size={13} className={page.isStarred ? 'text-[var(--warning)]' : ''} fill={page.isStarred ? 'currentColor' : 'none'} />
+                    <Star key={page.isStarred ? 'on' : 'off'} size={13} className={`kb-micro-pop ${page.isStarred ? 'text-[var(--warning)]' : ''}`} fill={page.isStarred ? 'currentColor' : 'none'} />
                     {page.isStarred ? '取消收藏' : '收藏页面'}
                   </button>
                 )}
@@ -1017,7 +1026,7 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
 
       {/* Wiki disambiguation picker */}
       {wikiPicker && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50" onClick={() => setWikiPicker(null)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 kb-overlay" onClick={() => setWikiPicker(null)}>
           <div
             className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl flex flex-col"
             style={{ width: '420px', maxHeight: '400px' }}
@@ -1182,13 +1191,40 @@ export function PageEditor({ pageId, categories, allPages, zoom = 1, onBack, onD
                     )}
                   </div>
                 ))}
+
+                {/* 相关笔记（A3-3：标题+首段混合召回；via=关键词/语义/混合） */}
+                <div className="flex items-center gap-1 px-3 pt-3 pb-1">
+                  <Sparkles size={11} className="text-[var(--text-muted)]" />
+                  <span className="flex-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">相关笔记 · {similar.length}</span>
+                  <button
+                    onClick={() => { if (pageId) { setSimilarLoading(true); void getKnowledgeSimilarPages(pageId).then(r => setSimilar(r.hits ?? [])).catch(() => setSimilar([])).finally(() => setSimilarLoading(false)) } }}
+                    className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
+                    title="重新查找相关笔记"
+                  >
+                    <RefreshCw size={11} className={similarLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+                {similar.map(s => (
+                  <div key={s.pageId} onClick={() => onNavigate(s.pageId)} className="px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-hover)] border-b border-[var(--border-color)]">
+                    <span className="text-[12px] text-[var(--text-primary)] truncate block">{s.title || '无标题'}</span>
+                    {s.excerpt && (
+                      <p className="mt-0.5 text-[10px] leading-snug text-[var(--text-muted)] line-clamp-2">{s.excerpt}</p>
+                    )}
+                    <span className="mt-0.5 inline-block text-[9px] px-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+                      {s.via === 'semantic' ? '语义' : s.via === 'hybrid' ? '混合' : '关键词'}
+                    </span>
+                  </div>
+                ))}
+                {!similarLoading && similar.length === 0 && (
+                  <p className="px-3 py-1 text-[10px] text-[var(--text-muted)] leading-relaxed">暂无相关笔记。</p>
+                )}
               </div>
         </div>
       </ResizablePanel>
 
       {/* 手动关联选择器 */}
       {linkPickerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-24" onClick={() => setLinkPickerOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-24 kb-overlay" onClick={() => setLinkPickerOpen(false)}>
           <div className="w-[380px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">

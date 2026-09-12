@@ -10,6 +10,7 @@ import {
   vaultRenameCategory, vaultRenamePage, vaultMoveCategoryOrder, vaultMovePageOrder,
 } from '../../lib/kbStore/knowledgeVaultRepo'
 import { getCurrentVault } from '../../lib/kbStore/vaultContext'
+import { emitPluginEvent } from '../../lib/pluginEvents'
 import { getGraphIndex } from '../../lib/kbStore/graphIndex'
 import { getKnowledgeIndex, invalidateKnowledgeIndex } from '../../lib/kbStore/knowledgeIndex'
 
@@ -149,6 +150,7 @@ export function registerKnowledgeHandlers(): void {
     if (abs === rootAbs || !abs.startsWith(rootAbs + sep)) throw new Error('页面路径越界，已阻止删除')
     await shell.trashItem(abs)
     invalidateKnowledgeIndex()
+    emitPluginEvent('knowledge:pageDeleted', { pageId: entry.id, title: entry.title })
   })
 
   // 移动页面（上下排序）— 同目录页面 frontmatter.sortOrder 互换

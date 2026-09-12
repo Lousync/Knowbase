@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { recordActivity } from '../../lib/habitLinkService'
+import { emitPluginEvent } from '../../lib/pluginEvents'
 import * as V from '../../lib/kbStore/scheduleVaultRepo'
 
 // R6 去库化：真相源 = .knowbase/modules/schedule/*.json（sql.js 路径已移除，D9）
@@ -12,6 +13,7 @@ interface TodoRow {
   tag_id: string | null; status: string; sort_order: number
   end_criteria: string | null; parent_id: string | null
   scheduled_start: number | null; scheduled_end: number | null
+  snooze_until?: string | null
   created_at: string; updated_at: string
 }
 
@@ -26,6 +28,7 @@ function rowToTodo(row: TodoRow) {
     // 排期时段（当天分钟数）；旧数据缺字段 → 兜 null
     scheduledStart: typeof row.scheduled_start === 'number' ? row.scheduled_start : null,
     scheduledEnd: typeof row.scheduled_end === 'number' ? row.scheduled_end : null,
+    snoozeUntil: row.snooze_until ?? null,
     createdAt: row.created_at, updatedAt: row.updated_at
   }
 }
@@ -107,6 +110,7 @@ export function registerScheduleHandlers(): void {
       end_criteria: data.endCriteria || '', parent_id: data.parentId || null,
       scheduled_start: typeof data.scheduledStart === 'number' ? data.scheduledStart : null,
       scheduled_end: typeof data.scheduledEnd === 'number' ? data.scheduledEnd : null,
+      snooze_until: null,
       created_at: vNow, updated_at: vNow
     }
     return rowToTodo(V.vaultCreateTodo(row))
@@ -118,6 +122,7 @@ export function registerScheduleHandlers(): void {
     quadrant?: number; taskType?: 'deadline' | 'plan'; tagId?: string | null
     status?: string; endCriteria?: string; parentId?: string | null
     scheduledStart?: number | null; scheduledEnd?: number | null
+    snoozeUntil?: string | null
   }) => {
     // 联动需要状态跃迁判定:先取旧状态,只有 pending → done 才算"完成"事件
     // (改标题/象限等普通编辑也走本 handler,不能每次都触发)
@@ -125,6 +130,7 @@ export function registerScheduleHandlers(): void {
     const updated = V.vaultUpdateTodo(id, data, new Date().toISOString())
     if (prevStatus !== undefined && prevStatus !== 'done' && data.status === 'done' && updated) {
       void recordActivity({ source: 'schedule', date: updated.date }, e.sender)
+      emitPluginEvent('schedule:todoCompleted', { todoId: id, title: updated.title ?? '' })
     }
     // id 不存在时 vaultUpdateTodo 返回 null 且不改文件
     return rowToTodo(updated!)

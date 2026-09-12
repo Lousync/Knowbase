@@ -1,0 +1,29 @@
+源文件: E:\Projects\KnowledgeRecorder\electron\lib\agentService.ts
+
+PASS  构造的样本确实超过硬上限
+PASS  截断结果是合法 JSON
+PASS  截断结果标记 truncated
+PASS  截断结果带原始长度 totalChars
+PASS  截断结果保留预览
+PASS  截断结果给出收窄指引
+PASS  截断后体积显著小于原体积
+PASS  切在 \u 转义中间仍是合法 JSON
+PASS  构造的大结果确实超压缩阈值
+PASS  老的大结果被压缩
+PASS  老的小结果保持原样
+PASS  最近窗口内的结果保持完整
+PASS  非 tool 消息未被改动
+PASS  tool_call_id 被保留
+PASS  压缩后保留标量 total
+PASS  压缩后保留标量 returned
+PASS  大数组降级为占位说明
+PASS  小数组 tags 保留
+PASS  短字符串 source 保留
+PASS  压缩结果体积大幅下降
+PASS  纯函数：同一输入两次调用逐字节相同
+PASS  轮次推进后旧消息的压缩结果不变（前缀稳定）
+PASS  轮次推进后窗口内消息仍完整
+PASS  轮次推进后新消息未被误压
+PASS  压缩结果再次压缩不再变化
+
+结论: PASS —— 25 项断言

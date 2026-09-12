@@ -1,8 +1,13 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
-import type { ToolDescription } from './aiTools'
+import type { ToolDescription, AiToolInvokeResult } from './aiTools'
 import { invokeLlmStreamInternal } from './llmService'
+import { estimateTokens, trimHistoryByBudget } from './agentContextBudget'
+import { compressAtTokens, composeContextWithDigest, rowsAfterDigest } from './agentCompressCore'
+import { compressSession } from './agentCompress'
+import type { SessionDigest } from './agentSessionRepo'
+import { clampMaxRounds, clampRunTokenBudget, isParallelSafe, partitionToolBatches, PARALLEL_CHUNK, PARALLEL_HINT, FINAL_ROUND_NOTICE, FORCED_SUMMARY_NOTICE } from './agentLoopPolicy'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
@@ -18,10 +23,10 @@ import { listWorkspaces } from './aiTeachingWorkspaces'
  * 最小 AgentRunner —— 「用户消息 → LLM 决策 → ToolRegistry 执行 → 结果回喂」循环。
  * - 工具来源即统一注册表（builtin/mcp/skill 全量，禁用项自动排除）
  * - 每轮工具执行都走 invokeToolInternal：入参校验/审计/月度上限与手动调用完全一致
- * - 循环上限 8 轮；LLM 网关不代执行工具（职责分离），执行权只在这里
+ * - 循环上限可配（settings: agentMaxRounds，缺省 16；另有 agentRunTokenBudget 累计 token 预算），
+ *   耗尽后做一次无工具的强制总结轮（agentLoopPolicy 第 0 层优雅收场）；
+ *   LLM 网关不代执行工具（职责分离），执行权只在这里
  */
-
-const MAX_ITERATIONS = 8
 
 /**
  * 单次请求内「写入类工具」调用次数上限（防失控循环刷盘；docs/agent-file-tools-design.md §5.5）。
@@ -46,6 +51,96 @@ interface AgentMessage {
   tool_call_id?: string
 }
 
+// ===== 工具结果的体积治理（2026-09-12，prompt cache 之后的第二轮） =====
+//
+// 为什么需要：prompt cache 只能覆盖**每轮逐字不变**的前缀（tools schema + system）。
+// 而工具返回是 convo.push({role:'tool', content: JSON.stringify(exec.data)})，会随轮次
+// 累积并被反复重发 —— 实测 quiz.list(limit=50) 一次约 16.7k 字符，在 8 轮任务里平均
+// 被重发 4.5 次。这类开销 cache 帮不上忙，只能从「拿得少」与「丢得早」两个方向治。
+
+/** 单条工具结果的字符硬上限（≈8k tok）。正常调用不会触及，兜住"拉全量"的极端情况 */
+const MAX_TOOL_RESULT_CHARS = 24000
+/** 触发硬上限时保留的预览字符数（让模型看清数据结构，但不足以占满上下文） */
+const TOOL_RESULT_PREVIEW_CHARS = 4000
+/** 发送前压缩：最近 N 条工具结果保持完整 */
+const KEEP_RECENT_TOOL_RESULTS = 3
+/** 更早的工具结果超过该字符数才压缩（小的不值得动） */
+const COMPRESS_TOOL_RESULT_CHARS = 1200
+
+/**
+ * 单条工具结果的硬上限（保险丝）。超限时不返回半截 JSON —— 半截 JSON 既解析不了、
+ * 又白占上下文 —— 而是换成合法摘要 + 预览 + 明确的收窄指引。
+ * 预览取自**序列化后的文本**、再交给 JSON.stringify 重新转义，因此即使切在
+ * `\uXXXX` 转义序列中间，产出的仍是合法 JSON。
+ */
+function capToolResult(raw: string, toolName: string): string {
+  return JSON.stringify({
+    ok: true,
+    truncated: true,
+    totalChars: raw.length,
+    preview: raw.slice(0, TOOL_RESULT_PREVIEW_CHARS),
+    hint: `工具 ${toolName} 的返回过大（${raw.length} 字符）已被系统截断。请缩小范围后重试：quiz.list 降低 limit 或加 tagNames 收窄；vault.read 降低 maxChars；vault.search 收窄关键词。`,
+  })
+}
+
+/** 递归降级：标量与短文本原样保留，长文本/大数组降为占位说明 */
+function shrinkValue(v: unknown, depth: number): unknown {
+  if (v === null || typeof v === 'number' || typeof v === 'boolean') return v
+  if (typeof v === 'string') return v.length <= 160 ? v : `…（${v.length} 字符已省略）`
+  if (Array.isArray(v)) {
+    // 小数组（如 tags）保留，大数组降级 —— AI 主要靠标量字段判断状态
+    if (depth >= 2 || v.length > 3) return `…（${v.length} 项已省略）`
+    return v.map(x => shrinkValue(x, depth + 1))
+  }
+  if (typeof v === 'object') {
+    const o: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) o[k] = shrinkValue(val, depth)
+    return o
+  }
+  return null
+}
+
+/** 把一条工具结果压缩为摘要（保留标量，降级明细）。幂等：已是压缩结果则原样返回 */
+function compressOneToolResult(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw)
+    // 幂等保护：否则 _originalChars 会被反复重写为新长度，同一段内容在不同轮次产出不同文本
+    if (parsed !== null && typeof parsed === 'object'
+      && (parsed as Record<string, unknown>)._compressed === true) return raw
+    return JSON.stringify({
+      ...(shrinkValue(parsed, 0) as Record<string, unknown>),
+      _compressed: true,
+      _originalChars: raw.length,
+      _hint: '此工具结果已压缩以节省上下文。如需明细请重新调用该工具并缩小范围。',
+    })
+  } catch {
+    return JSON.stringify({
+      _compressed: true,
+      _originalChars: raw.length,
+      _hint: '此工具结果过大且非结构化，已压缩。如需明细请重新调用并缩小范围。',
+    })
+  }
+}
+
+/**
+ * 历史工具结果的渐进压缩（发送前调用）。**必须是纯函数** —— 同一输入恒得同一输出，
+ * 这样已被压缩的老消息在后续轮次逐字不变，prompt cache 的前缀才不会被反复打散。
+ * 只压缩「较老的、且确实很大」的结果，并留下重新调用的指引。
+ */
+function compressStaleToolResults(convo: AgentMessage[]): AgentMessage[] {
+  const toolIdx: number[] = []
+  convo.forEach((m, i) => { if (m.role === 'tool') toolIdx.push(i) })
+  const cutoff = toolIdx.length - KEEP_RECENT_TOOL_RESULTS
+  if (cutoff <= 0) return convo
+  const stale = new Set(toolIdx.slice(0, cutoff))
+  return convo.map((m, i) => {
+    if (!stale.has(i)) return m
+    const c = String(m.content ?? '')
+    if (c.length <= COMPRESS_TOOL_RESULT_CHARS) return m
+    return { ...m, content: compressOneToolResult(c) }
+  })
+}
+
 export interface AgentTraceStep {
   kind: 'llm' | 'tool'
   /** llm: 本轮模型; tool: 工具注册名 */
@@ -56,6 +151,8 @@ export interface AgentTraceStep {
   /** 拆分用量（llm step） */
   promptTokens?: number
   completionTokens?: number
+  /** 命中提示缓存的输入 token 数（观测用，已含在 promptTokens 内） */
+  cachedTokens?: number
   summary?: string
   /** visual.html 实时占位事件（仅 agent:step 推送，不落库）：{slug,title}——渲染层据此开「生成中」页签 */
   args?: Record<string, unknown>
@@ -126,6 +223,12 @@ export interface AgentChatResult {
   changes?: AgentChange[]
   /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（渲染层据此估算「上下文构成」摘要；其它来源不设） */
   injection?: AiTeachInjectionStats
+  /** 上下文预算裁剪统计（agentContextBudget；渲染层暂不展示，诊断/后续 UI 预留） */
+  contextBudget?: { totalTurns: number; keptTurns: number; estimatedHistoryTokens: number }
+  /** 触达轮数/token 预算上限：本次回答来自强制总结轮（渲染层可提示「已达预算，以上为基于已获信息的总结」） */
+  hitCap?: boolean
+  /** 本次请求前自动压缩了历史（会话压缩 §6.1；渲染层据此 toast 告知） */
+  compressed?: { covered: number; digestChars: number }
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -227,6 +330,8 @@ function buildToolsPayload(sessionId?: string): {
   nameMap: Map<string, string>
   /** 本轮可用的写入类工具注册名集合（requires==='write'），供会话写上限计数 */
   writeTools: Set<string>
+  /** 本轮可用的只读工具注册名集合（并行批次判定用，Agent 循环第 1 层） */
+  readOnlyTools: Set<string>
   /** 因模块权限被过滤掉的工具所属模块（用于 system prompt 给出可操作指引） */
   deniedModules: Set<string>
   /** 是否有 vault.* 工具被 vaultFile 文件域权限拦截（指引文案用） */
@@ -271,6 +376,8 @@ function buildToolsPayload(sessionId?: string): {
   for (const t of tools) nameMap.set(toFnName(t.name), t.name)
   // 写入类工具集合：按注册声明的 requires 判定，不背名单（新增写工具自动纳入，无需同步此处）
   const writeTools = new Set(tools.filter(t => t.requires === 'write').map(t => t.name))
+  // 只读工具集合：并行批次判定用（Agent 循环第 1 层单轮密度；写/特殊工具另有名字排除兜底）
+  const readOnlyTools = new Set(tools.filter(t => t.readOnly && t.requires !== 'write').map(t => t.name))
   const skills = tools
     .filter(t => t.source === 'skill')
     .map(t => ({
@@ -278,7 +385,7 @@ function buildToolsPayload(sessionId?: string): {
       title: t.title,
       description: t.description.replace(/^\[Skill\]\s*/, ''),
     }))
-  return { payload, nameMap, writeTools, deniedModules, deniedVaultFile, hasOnDemandHidden, skills }
+  return { payload, nameMap, writeTools, readOnlyTools, deniedModules, deniedVaultFile, hasOnDemandHidden, skills }
 }
 
 /**
@@ -290,7 +397,7 @@ function buildToolsPayload(sessionId?: string): {
 const LEGACY_TEACHING_TITLES = new Set(['跟我学（教学）', '深度研读（织网）', '周复盘', '画像诊断'])
 
 const SYSTEM_PROMPT_BASE = [
-  '你是本地知识管理应用 Knowbase 内置的 AI 助手。',
+  '你是本地知识管理应用 Phrontis 内置的 AI 助手。',
   '你可以调用工具读写用户的本地数据（知识库、博客日记、日程待办、习惯打卡、书签、番茄专注统计等）。',
   '规则：',
   '1. 需要数据时先调工具，不要编造；',
@@ -331,6 +438,31 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, _chatId: st
   return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
 
+/**
+ * 历史装配（会话压缩改造）：digest 检查点之后的消息 → 条数硬上限（-40）→ token 轮级裁剪。
+ * 检查点之前的旧轮已被纪要替代、不再进上下文；无 digest / 检查点失效时与原行为一致
+ * （裁剪兜底语义不变：压缩失败/关闭时行为逐字节同改造前）。
+ */
+function assembleAgentHistory(sessionId: string): {
+  digest: SessionDigest | null
+  history: { role: 'user' | 'assistant'; content: string }[]
+  budget: { totalTurns: number; keptTurns: number; estimatedHistoryTokens: number }
+} {
+  const rowsAll = getAgentMessages(sessionId).filter(m => m.role === 'user' || m.role === 'assistant')
+  const digest = getAgentSession(sessionId)?.digest ?? null
+  const baseRows = digest ? (rowsAfterDigest(rowsAll, digest.upto_id) ?? rowsAll) : rowsAll
+  const historyAll = baseRows
+    .slice(-40)
+    .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  const budgetTokens = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
+  const budget = trimHistoryByBudget(historyAll, budgetTokens)
+  return {
+    digest,
+    history: budget.kept,
+    budget: { totalTurns: budget.totalTurns, keptTurns: budget.totalTurns - budget.droppedTurns, estimatedHistoryTokens: budget.estimatedTokens },
+  }
+}
+
 /** 从会话库当前内容直接推理（不追加新用户消息）——重新生成/编辑重推共用 */
 async function runAgentLoop(
   sessionId: string,
@@ -347,10 +479,10 @@ async function runAgentLoop(
   opts?: { allowEmptyHistory?: boolean }
 ): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
-  const history = getAgentMessages(sessionId)
-    .filter(m => m.role === 'user' || m.role === 'assistant')
-    .slice(-40)
-    .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  // 会话压缩：检查点之前的旧轮已被纪要替代（assembleAgentHistory）；其后再做
+  // 条数硬上限（-40）与 token 轮级裁剪——压缩失败/关闭时兜底，长会话不再全量进模型
+  let asm = assembleAgentHistory(sessionId)
+  let history = asm.history
   const virtualKickoff = opts?.allowEmptyHistory === true && history.length === 0
   if (!virtualKickoff && (history.length === 0 || history[history.length - 1].role !== 'user')) {
     return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
@@ -445,10 +577,32 @@ async function runAgentLoop(
         ruleChars: titleRuleHint.length + quizRuleHint.length + planRuleHint.length + askRuleHint.length + visualHint.length,
       }
     : undefined
-  const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint },
-    ...history,
+  const systemFull = baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint + PARALLEL_HINT
+  // 纪要以首条 user 消息注入（composeContextWithDigest）——system+tools 是 prompt cache
+  // 前缀必须逐字稳定，纪要变化只重建一次性前缀
+  let convo: AgentMessage[] = [
+    { role: 'system', content: systemFull },
+    ...composeContextWithDigest(asm.digest?.text, history),
   ]
+
+  // ---- 自动压缩预检（会话压缩 §6.1）：逼近触发线时先把旧轮折叠为纪要再发送 ----
+  // 触发线 = 历史预算 × agentCompressAtPercent%（默认 80，设置可调，夹取 50-100）。
+  // 估算面 = 实际发送串（system + 纪要 + 历史）+ tools payload。压缩后重装配
+  // （检查点推进 → base 变小）；无可压段时 skipped 不调 LLM；失败静默回退现有裁剪。
+  let compressed: { covered: number; digestChars: number } | undefined
+  const budgetSetting = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
+  if (!virtualKickoff && budgetSetting > 0 && getSettingReader()('agentCompressionEnabled') !== false) {
+    const est = estimateTokens(convo.map(m => m.content ?? '').join('\n')) + estimateTokens(JSON.stringify(toolPayload))
+    if (est > compressAtTokens(budgetSetting, Number(getSettingReader()('agentCompressAtPercent')))) {
+      const cr = await compressSession({ sessionId, modelId: llmOpts?.modelId, effort: llmOpts?.effort })
+      if (cr.ok && typeof cr.covered === 'number' && cr.covered > 0) {
+        compressed = { covered: cr.covered, digestChars: cr.digestChars ?? 0 }
+        asm = assembleAgentHistory(sessionId)
+        history = asm.history
+        convo = [{ role: 'system', content: systemFull }, ...composeContextWithDigest(asm.digest?.text, history)]
+      }
+    }
+  }
   // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。
   // 场景规则本身随 CONSTRAINTS.md 每轮注入（持久），这里只负责「让 AI 开口说第一句」。
   if (virtualKickoff) convo.push({ role: 'user', content: '（请按上述会话要求开始）' })
@@ -468,16 +622,30 @@ async function runAgentLoop(
   const emitStream = streamEmitters.get(signal)
   const batcher = new DeltaBatcher((e) => emitStream?.(e))
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
+  // ---- 循环预算（Agent 第 0+2 层）：轮数可配 + 累计 token 预算，耗尽优雅收场而非报错 ----
+  const maxRounds = clampMaxRounds(getSettingReader()('agentMaxRounds'))
+  const runTokenBudget = clampRunTokenBudget(getSettingReader()('agentRunTokenBudget'))
+  let runTokens = 0
+  let softLanded = false
+  /** token 预算触顶（或已到最后一轮）：本轮执行完后立即断出循环 → 强制总结轮 */
+  let budgetCapped = false
+
+  for (let i = 0; i < maxRounds; i++) {
     // ---- LLM 轮 ----
     if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
+    // 预算将尽（最后一轮 / token 预算触顶）：注入收场提示，让模型用已有信息总结（第 0 层）
+    if (!softLanded && (i === maxRounds - 1 || (runTokenBudget > 0 && runTokens >= runTokenBudget))) {
+      softLanded = true
+      budgetCapped = true
+      convo.push({ role: 'user', content: FINAL_ROUND_NOTICE })
+    }
     emitStream?.({ kind: 'round-start', round: i + 1 })
     const t0 = Date.now()
     // 思考时长统计（reasoning 全文不落库，只记时长，见 AgentTraceStep.thinkingMs）
     let thinkFrom = 0
     let thinkTo = 0
     const r = await invokeLlmStreamInternal(
-      { messages: convo, tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
+      { messages: compressStaleToolResults(convo), tools: toolPayload, signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
       (e) => {
         if (e.type === 'text') batcher.push('text', e.delta)
         else if (e.type === 'reasoning') {
@@ -496,6 +664,7 @@ async function runAgentLoop(
       tokens: r.ok ? r.tokens : undefined,
       promptTokens: r.ok ? r.promptTokens : undefined,
       completionTokens: r.ok ? r.completionTokens : undefined,
+      cachedTokens: r.ok ? r.cachedTokens : undefined,
       // 带工具轮次的正文 = 过程旁白（落库供历史回看）。实时展示已由上面的 text delta 完成，
       // 这里只为「回看历史时仍能看到 AI 当时说了什么」
       ...(r.ok && r.toolCalls.length > 0 && r.content.trim()
@@ -505,6 +674,7 @@ async function runAgentLoop(
     }
     trace.push(llmStep)
     stepEmitters.get(signal)?.(llmStep) // 实时过程：渲染层活动气泡
+    if (r.ok) runTokens += r.tokens
     if (!r.ok) return { ok: false, sessionId, error: r.error, code: r.code, trace }
 
     if (!r.toolCalls || r.toolCalls.length === 0) {
@@ -514,55 +684,18 @@ async function runAgentLoop(
         : ''
       const reply = r.content + changesText
       appendAgentMessage(sessionId, 'assistant', reply, trace)
-      return { ok: true, sessionId, reply, changes, trace, injection }
+      return {
+        ok: true, sessionId, reply, changes, trace, injection,
+        ...(compressed ? { compressed } : {}),
+        contextBudget: asm.budget,
+      }
     }
 
-    // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----
+    // ---- 记录 assistant(带 tool_calls)：按「并行只读段 / 串行件」分批执行并回喂（第 1 层单轮密度）----
     convo.push(r.assistantMessage)
-    for (const tc of r.toolCalls) {
-      if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
-      const realName = nameMap.get(tc.name) ?? tc.name.replace(/__/g, '.')
-      let args: Record<string, unknown> = {}
-      try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
 
-      // 会话写上限：单次请求内写入类工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）。
-      // 动态读 toolsState.writeTools——tool.request 启用新写工具后重建的集合要立即生效
-      if (toolsState.writeTools.has(realName)) {
-        if (sessionWrites >= MAX_SESSION_WRITES) {
-          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写入上限 ${MAX_SESSION_WRITES}` }
-          trace.push(denyStep)
-          stepEmitters.get(signal)?.(denyStep)
-          convo.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: JSON.stringify({ ok: false, error: `已达本次会话写入操作上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
-          })
-          continue
-        }
-        sessionWrites++
-      }
-
-      // visual.html 生成时序 §3.4：调用前推「生成中」实时事件（仅 slug/title 小字段，绝不带 html 全文；
-      // 不落库——渲染层据此在工件栏开占位页签，给即时反馈）
-      if (realName === 'visual.html') {
-        stepEmitters.get(signal)?.({
-          kind: 'tool', name: 'visual.html', ok: true, durationMs: 0,
-          args: { slug: String(args?.slug ?? ''), title: String(args?.title ?? '') },
-        })
-      }
-
-      // 过程时间线（§5.2.3）：在**调用前**先推「进行中」——现有 agent:step 是执行完才推，
-      // 渲染层若只靠它会滞后一整轮生成时间。执行完由 agent:step 原地转 ✓ 并补耗时。
-      emitStream?.({
-        kind: 'tool-start',
-        name: realName,
-        label: TOOL_ACTION_LABELS[realName] ?? (realName.startsWith('builtin.') ? realName.slice(8) : realName),
-        target: argTarget(args),
-      })
-
-      const t1 = Date.now()
-      const exec = await invokeToolInternal(realName, args, '', { sessionId, source })
-      const durationMs = Date.now() - t1
+    /** 单个工具调用的执行后记账（tool.request 重建 / trace / 实时步骤 / 改动清单 / 结果回喂），按调用顺序执行 */
+    const finishToolCall = (tc: { id: string }, realName: string, args: Record<string, unknown>, exec: AiToolInvokeResult, durationMs: number): void => {
       // P3：tool.request 成功 → 并入会话启用集合并重建工具 payload（下一轮 LLM 调用生效）
       if (realName === 'builtin.tool.request' && exec.ok) {
         const enabled = (typeof exec.data === 'object' && exec.data !== null && Array.isArray((exec.data as Record<string, unknown>).enabled))
@@ -615,15 +748,116 @@ async function runAgentLoop(
           if (target) changes.push({ tool: realName, action: label, target, ...(file ? { file } : {}) })
         }
       }
+      // 单条结果超上限时截断为合法摘要（见 capToolResult 说明）
+      const toolResultText = JSON.stringify(exec.ok ? { ok: true, data: exec.data } : { ok: false, error: exec.message })
       convo.push({
         role: 'tool',
         tool_call_id: tc.id,
-        content: JSON.stringify(exec.ok ? { ok: true, data: exec.data } : { ok: false, error: exec.message }),
+        content: toolResultText.length > MAX_TOOL_RESULT_CHARS ? capToolResult(toolResultText, realName) : toolResultText,
       })
     }
+
+    /** 串行件：写上限判定 + visual 时序事件 + 执行 + 记账（原逐条路径，行为不变） */
+    const runSingleToolCall = async (tc: { id: string }, realName: string, args: Record<string, unknown>): Promise<void> => {
+      // 会话写上限：单次请求内写入类工具最多 MAX_SESSION_WRITES 次（防失控循环刷盘）。
+      // 动态读 toolsState.writeTools——tool.request 启用新写工具后重建的集合要立即生效
+      if (toolsState.writeTools.has(realName)) {
+        if (sessionWrites >= MAX_SESSION_WRITES) {
+          const denyStep: AgentTraceStep = { kind: 'tool', name: realName, ok: false, durationMs: 0, summary: `会话写入上限 ${MAX_SESSION_WRITES}` }
+          trace.push(denyStep)
+          stepEmitters.get(signal)?.(denyStep)
+          convo.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, error: `已达本次会话写入操作上限（${MAX_SESSION_WRITES} 次）。请停止写入类操作并总结已完成内容` }),
+          })
+          return
+        }
+        sessionWrites++
+      }
+      // visual.html 生成时序 §3.4：调用前推「生成中」实时事件（仅 slug/title 小字段，绝不带 html 全文；
+      // 不落库——渲染层据此在工件栏开占位页签，给即时反馈）
+      if (realName === 'visual.html') {
+        stepEmitters.get(signal)?.({
+          kind: 'tool', name: 'visual.html', ok: true, durationMs: 0,
+          args: { slug: String(args?.slug ?? ''), title: String(args?.title ?? '') },
+        })
+      }
+      // 过程时间线（§5.2.3）：在**调用前**先推「进行中」——现有 agent:step 是执行完才推，
+      // 渲染层若只靠它会滞后一整轮生成时间。执行完由 agent:step 原地转 ✓ 并补耗时。
+      emitStream?.({
+        kind: 'tool-start',
+        name: realName,
+        label: TOOL_ACTION_LABELS[realName] ?? (realName.startsWith('builtin.') ? realName.slice(8) : realName),
+        target: argTarget(args),
+      })
+      const t1 = Date.now()
+      const exec = await invokeToolInternal(realName, args, '', { sessionId, source })
+      finishToolCall(tc, realName, args, exec, Date.now() - t1)
+    }
+
+    // 参数预解析一次；并行安全 = 注册只读 且 不在写集合（防误注册兜底）；
+    // 特殊工具（tool.request / visual.html）按名字排除，保持串行时序
+    const prepared = r.toolCalls.map(tc => {
+      const realName = nameMap.get(tc.name) ?? tc.name.replace(/__/g, '.')
+      let args: Record<string, unknown> = {}
+      try { args = JSON.parse(tc.arguments || '{}') } catch { /* 保持空对象 */ }
+      return { tc, realName, args }
+    })
+    const batches = partitionToolBatches(prepared, c =>
+      isParallelSafe(c.realName, toolsState.readOnlyTools.has(c.realName) && !toolsState.writeTools.has(c.realName)))
+    for (const batch of batches) {
+      if (signal.aborted) return { ok: false, sessionId, code: 'ABORTED', error: '已停止生成', trace }
+      if (!batch.parallel) {
+        const c = batch.items[0]
+        await runSingleToolCall(c.tc, c.realName, c.args)
+        continue
+      }
+      // 并行只读段：先按序推「进行中」事件 → 分块并发执行 → 按序记账回喂（trace/改动顺序与调用一致）
+      for (const c of batch.items) {
+        emitStream?.({
+          kind: 'tool-start',
+          name: c.realName,
+          label: TOOL_ACTION_LABELS[c.realName] ?? (c.realName.startsWith('builtin.') ? c.realName.slice(8) : c.realName),
+          target: argTarget(c.args),
+        })
+      }
+      const execs: Array<{ exec: AiToolInvokeResult; durationMs: number }> = []
+      for (let s = 0; s < batch.items.length; s += PARALLEL_CHUNK) {
+        const chunk = batch.items.slice(s, s + PARALLEL_CHUNK)
+        execs.push(...await Promise.all(chunk.map(async c => {
+          const t1 = Date.now()
+          const exec = await invokeToolInternal(c.realName, c.args, '', { sessionId, source })
+          return { exec, durationMs: Date.now() - t1 }
+        })))
+      }
+      for (let idx = 0; idx < batch.items.length; idx++) {
+        finishToolCall(batch.items[idx].tc, batch.items[idx].realName, batch.items[idx].args, execs[idx].exec, execs[idx].durationMs)
+      }
+    }
+    // 收场轮的工具结果已回喂，不再进入下一轮 → 走循环后的强制总结（模型无视提示仍开工具时兜底）
+    if (budgetCapped) break
   }
 
-  return { ok: false, sessionId, error: `已达最大推理轮数（${MAX_ITERATIONS}），请缩小问题范围后重试`, code: 'MAX_ITERATIONS', trace }
+  // ---- 轮数/token 预算耗尽：做一次无工具的强制总结轮，把已获取的信息变成交付（第 0 层优雅收场）----
+  convo.push({ role: 'user', content: FORCED_SUMMARY_NOTICE })
+  const fr = await invokeLlmStreamInternal(
+    { messages: convo, tools: [], signal, providerId, modelId: modelOverride, effort: llmOpts?.effort },
+    (e) => { if (e.type === 'text') batcher.push('text', e.delta) },
+  )
+  batcher.flush()
+  const frStep: AgentTraceStep = { kind: 'llm', ok: fr.ok, durationMs: 0, tokens: fr.ok ? fr.tokens : undefined, summary: fr.ok ? '预算耗尽总结轮' : undefined }
+  trace.push(frStep)
+  stepEmitters.get(signal)?.(frStep)
+  if (fr.ok && fr.content.trim()) {
+    const changesText = changes.length > 0
+      ? '\n\n——\n本次改动：\n' + changes.map((c, idx) => `${idx + 1}. ${c.action}「${c.target}」`).join('\n')
+      : ''
+    const reply = fr.content + changesText
+    appendAgentMessage(sessionId, 'assistant', reply, trace)
+    return { ok: true, sessionId, reply, changes, trace, injection, hitCap: true, ...(compressed ? { compressed } : {}) }
+  }
+  return { ok: false, sessionId, error: `已达最大推理轮数（${maxRounds}）且总结失败，请缩小问题范围后重试`, code: 'MAX_ITERATIONS', trace }
 }
 
 /** 重新生成最后一条回复：删掉末尾助手消息后按原用户消息重推 */
@@ -657,10 +891,10 @@ async function agentEditAndRegen(req: AgentChatRequest & { messageId: string }, 
   const content = String(req?.message ?? '').trim()
   if (!content) return { ok: false, error: '内容不能为空', trace }
   if (!sessionId || !sessionExists(sessionId)) return { ok: false, error: '会话不存在', trace }
-  const msg = getMessageById(String(req.messageId ?? ''))
+  const msg = getMessageById(sessionId, String(req.messageId ?? ''))
   if (!msg || msg.session_id !== sessionId) return { ok: false, sessionId, error: '消息不存在', trace }
   if (msg.role !== 'user') return { ok: false, sessionId, error: '只能编辑用户消息', trace }
-  updateMessageContent(msg.id, content)
+  updateMessageContent(sessionId, msg.id, content)
   deleteMessagesAfter(sessionId, msg.id)
   return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
@@ -699,8 +933,10 @@ export function registerAgentHandlers(): void {
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentStartScene(req, signal)))
   ipcMain.handle('agent:editMessage', (e, req: AgentChatRequest & { messageId: string }) =>
     withAbort(String(req?.chatId ?? '') || randomUUID(), e.sender, signal => agentEditAndRegen(req, signal)))
-  ipcMain.handle('agent:deleteMessage', (_e, messageId: string) => {
-    deleteMessage(String(messageId ?? ''))
+  ipcMain.handle('agent:deleteMessage', (_e, payload: { sessionId?: unknown; messageId?: unknown }) => {
+    // v2 存储按会话分文件：删除需定位会话文件，渲染层随消息一并传 sessionId
+    const p = (payload ?? {}) as { sessionId?: unknown; messageId?: unknown }
+    deleteMessage(String(p.sessionId ?? ''), String(p.messageId ?? ''))
     return true
   })
   ipcMain.handle('agent:abort', (_e, chatId: string) => {

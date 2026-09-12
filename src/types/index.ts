@@ -15,7 +15,81 @@ export interface EntryFilter { date?: string; tagId?: string; pinnedOnly?: boole
 export interface CreateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date: string; tags?: string[]; states?: string }
 export interface UpdateEntryDTO { title?: string; contentMd?: string; contentHtml?: string; date?: string; isPinned?: boolean; isStarred?: boolean; tags?: string[]; states?: string }
 export interface Tag { id: string; name: string; color: string }
-export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor' | 'aiTeaching'
+export type TabName = 'blog' | 'schedule' | 'knowledge' | 'moments' | 'recycle' | 'settings' | 'help' | 'user' | 'toolbox' | 'plugins' | 'devtools' | 'editor' | 'aiTeaching' | 'releaseNotes'
+
+// ===== 更新说明（release notes）=====
+// 主进程侧的同一份契约见 electron/lib/releaseNotes/types.ts
+// （两个 tsconfig 互不可见，沿用本仓「跨线类型各侧各声明一次」的做法）
+
+export type ReleaseNoteKind = 'feature' | 'ux' | 'fix' | 'internal' | 'other'
+
+export interface ReleaseNoteItem {
+  /** `- **标题**：正文` 里的粗体标题；没有粗体前缀时为空串 */
+  lead: string
+  /** 条目正文（已剥掉 Markdown 粗体标记，反引号保留给渲染层做行内 code） */
+  rest: string
+  /** 缩进子项（已拍平为纯文本） */
+  sub: string[]
+}
+
+export interface ReleaseNoteGroup {
+  title: string
+  kind: ReleaseNoteKind
+  items: ReleaseNoteItem[]
+}
+
+export interface ReleaseNote {
+  /** 不带前导 v，如 `3.0.0` */
+  version: string
+  /** CHANGELOG 原文里的日期，缺省为空串（老版本多数没写） */
+  date: string
+  summary: string
+  groups: ReleaseNoteGroup[]
+}
+
+/** 与 electron/lib/releaseNotes/types.ts 镜像（跨线各声明一次的既有做法）。 */
+export interface ReleaseHighlightLink {
+  label: string
+  href?: string
+}
+
+/** 右侧动效演示区（可重播；只动 transform/opacity） */
+export type ReleaseHighlightDemo =
+  | { kind: 'notify'; title: string; message: string; caption?: string }
+  | { kind: 'compare'; caption?: string; rows: { label: string; display: string; width: number; after?: boolean }[] }
+  | { kind: 'dist'; caption?: string; rows: { label: string; display: string; width: number }[] }
+  | { kind: 'mini-list'; caption?: string; items: { text: string; done?: boolean }[] }
+
+export interface ReleaseNoteHighlight {
+  version: string
+  /** 分节名（日程 / AI 助手 / 错题本 / 界面…） */
+  section: string
+  title: string
+  desc: string
+  detail?: string
+  /** 顶部摘要行（粗体引导词 + 短句）；缺省不进摘要行 */
+  briefLead?: string
+  briefRest?: string
+  /** 标题旁的小标签（如「新增」） */
+  tag?: string
+  links?: ReleaseHighlightLink[]
+  /** 卡片内可折叠的「全部改动（N 条）」 */
+  changes?: string[]
+  demo?: ReleaseHighlightDemo
+}
+
+export interface ReleaseNoteListEntry {
+  version: string
+  date: string
+  summary: string
+  itemCount: number
+}
+
+export interface ReleaseNotesState {
+  currentVersion: string
+  hasNotes: boolean
+  shouldAutoOpen: boolean
+}
 
 // toolbox
 export interface ToolboxScript {
@@ -78,10 +152,30 @@ export interface QuizStatsDto {
   correctRate: number
 }
 /** 错题本插件数据通道（JSON 版）状态；主表迁移语义已随 sql.js 退役 */
-export interface QuizMigrateStatus {
-  main: Record<string, number>
-  plugin: Record<string, number>
-  pluginTablesExist: boolean
+export interface QuizBookStat {
+  /** 书 = 来源笔记本（空间内按知识点分书） */
+  name: string
+  total: number
+  wrong: number
+  mastered: number
+  favorite: number
+}
+export interface QuizDataStats {
+  /** 统计范围：'' = 全部知识空间；否则为空间名 */
+  scope: string
+  /** 当前仓库根路径（面板展示"存在哪"） */
+  vaultRoot: string
+  total: number
+  wrong: number
+  mastered: number
+  favorite: number
+  notes: number
+  todayWrong: number
+  correctRate: number
+  tags: number
+  collections: number
+  byBook: QuizBookStat[]
+  byBand: Array<{ key: string; label: string; count: number }>
 }
 export interface QuizCollectionDto {
   id: string
@@ -278,6 +372,11 @@ export interface ScheduleTodo {
    */
   scheduledStart: number | null
   scheduledEnd: number | null
+  /**
+   * 提醒「稍后」（snooze）：在此时间之前不再提醒该任务，ISO 字符串（'YYYY-MM-DD HH:mm'）。
+   * 缺省 / null = 未打盹。本轮日程改造新增的唯一字段。
+   */
+  snoozeUntil?: string | null
   createdAt: string; updatedAt: string
   tag?: ScheduleTag | null
   subtasks?: ScheduleTodo[]
@@ -294,6 +393,8 @@ export interface UpdateScheduleTodoDTO {
   quadrant?: number; taskType?: 'deadline' | 'plan' | 'daily'; tagId?: string | null
   status?: string; endCriteria?: string; parentId?: string | null
   scheduledStart?: number | null; scheduledEnd?: number | null
+  /** 提醒「稍后」目标时间；传 null 表示清除打盹 */
+  snoozeUntil?: string | null
 }
 
 // knowledge
@@ -332,6 +433,13 @@ export interface KnowledgeBacklinkItem {
   id: string; title: string; fileType: string
   updatedAt: string
   excerpt: string
+}
+/** 相似笔记条目（编辑器右栏「相关笔记」，A3-3；via=命中方式 keyword/semantic/hybrid） */
+export interface SimilarPageHit {
+  pageId: string; title: string; path: string
+  excerpt: string
+  via: 'keyword' | 'semantic' | 'hybrid'
+  score: number
 }
 export interface KnowledgeTag { id: string; name: string; color: string }
 export interface CreateKnowledgeCategoryDTO { name: string; parentId?: string | null; categoryType?: 'notebook' | 'folder' | 'space' }
@@ -433,6 +541,40 @@ export interface PluginViewContribution {
   mode: string
   icon?: string
   granted: string[]
+}
+
+/** 插件命令（plugin-phase1-design C3；plugin:listCommands 行结构） */
+export interface PluginCommandInfo {
+  pluginId: string
+  name: string
+  /** 插件内命令 id；全局名 = `<pluginId>.<id>` */
+  id: string
+  title: string
+  desc?: string
+  /** 插件首个 view 的槽位（ui 插件才有）：宿主执行时切模块并激活该视图 */
+  viewSlot?: string
+  type: 'declarative' | 'ui' | 'code'
+}
+
+/** 插件声明式设置项（plugin-phase1-design C5；contributes.settings 条目） */
+export interface PluginSettingItem {
+  key: string
+  label: string
+  type: 'boolean' | 'number' | 'string' | 'select'
+  default?: unknown
+  /** select 专供：{value,label} 或字符串数组 */
+  options?: Array<Record<string, unknown> | string>
+  desc?: string
+}
+
+/** 插件 fenced-code 渲染器（plugin-phase1-design C6；plugin:listRenderers 行结构） */
+export interface PluginRendererInfo {
+  pluginId: string
+  name: string
+  lang: string
+  entry: string
+  height?: number
+  title?: string
 }
 
 export interface PluginSummary {
@@ -602,6 +744,8 @@ export interface LlmProviderInfo {
   hasKey: boolean
   models: string[]
   headers?: Record<string, string>
+  /** 嵌入模型名（空串=未配置；知识语义检索用） */
+  embeddingModel: string
   isDefault: boolean
 }
 
@@ -617,6 +761,8 @@ export interface LlmProviderDraft {
   enabled?: boolean
   /** 自定义请求头（opencode 等网关要求 x-opencode-session 之类路由头时在此配置） */
   headers?: Record<string, string>
+  /** 嵌入模型名（知识语义索引用）；不配 = 该供应商不参与嵌入 */
+  embeddingModel?: string
 }
 
 export interface LlmTestResultInfo {
@@ -642,6 +788,17 @@ export interface LlmUsageInfo {
   visionMonthTokens?: number
   /** 视觉转写月度页数 */
   visionPages?: number
+}
+
+/** 本月用量细分（网关补强：审计聚合，按供应商/模型） */
+export interface LlmUsageBreakdownEntry {
+  providerId: string
+  provider: string
+  model: string
+  calls: number
+  tokens: number
+  promptTokens: number
+  completionTokens: number
 }
 
 // ===== CC Switch 一键导入 =====
@@ -676,6 +833,8 @@ export interface AgentTraceStep {
   /** 拆分用量（llm step；prompt=本次上下文输入，completion=本次生成） */
   promptTokens?: number
   completionTokens?: number
+  /** 命中提示缓存的输入 token 数（观测用，已含在 promptTokens 内） */
+  cachedTokens?: number
   summary?: string
   /** visual.html「生成中」实时事件（agent:step 专用，不落库）：{slug,title} */
   args?: Record<string, unknown>
@@ -835,6 +994,20 @@ export interface AgentChatResult {
   changes?: AgentChange[]
   /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（上下文构成摘要；其它来源无此字段） */
   injection?: AiTeachInjectionStats
+  /** 触达轮数/token 预算上限：本次回答来自强制总结轮（渲染层可提示） */
+  hitCap?: boolean
+  /** 本次请求前自动压缩了历史（会话压缩 §6.1；渲染层据此 toast 告知） */
+  compressed?: { covered: number; digestChars: number }
+}
+
+/** 会话压缩结果（agent:compressSession；AgentCompressResult 的渲染层镜像） */
+export interface AgentCompressResult {
+  ok: boolean
+  skipped?: 'nothing-to-compress'
+  covered?: number
+  digestChars?: number
+  slices?: number
+  error?: string
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -998,6 +1171,8 @@ export interface ElectronAPI {
   getScheduleTags: () => Promise<ScheduleTag[]>
   createScheduleTag: (n: string, c?: string) => Promise<ScheduleTag>
   deleteScheduleTag: (id: string) => Promise<void>
+  /** 日程截止提醒的系统通知被点击 → 主窗口切到日程模块 */
+  onScheduleReminderClick: (cb: () => void) => () => void
   // knowledge (Scheme A)
   getKnowledgeCategories: () => Promise<KnowledgeCategory[]>
   createKnowledgeCategory: (d: CreateKnowledgeCategoryDTO) => Promise<KnowledgeCategory>
@@ -1013,6 +1188,7 @@ export interface ElectronAPI {
   searchKnowledgePages: (q: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinks: (pageId: string) => Promise<KnowledgePage[]>
   getKnowledgeBacklinkContext: (pageId: string) => Promise<KnowledgeBacklinkItem[]>
+  getKnowledgeSimilarPages: (pageId: string) => Promise<{ hits: SimilarPageHit[]; semantic?: { enabled: boolean; reason?: string } }>
   getKnowledgeManualLinks: (pageId: string) => Promise<KnowledgePage[]>
   addKnowledgeManualLink: (pageId: string, targetId: string) => Promise<{ ok: boolean }>
   removeKnowledgeManualLink: (a: string, b: string) => Promise<{ ok: boolean }>
@@ -1028,11 +1204,17 @@ export interface ElectronAPI {
   moveKnowledgePage: (id: string, direction: 'up' | 'down') => Promise<void>
   reorderKnowledgePage: (id: string, targetIndex: number) => Promise<void>
   moveKnowledgeCategory: (id: string, direction: 'up' | 'down') => Promise<void>
+  duplicateKnowledgePage: (data: { pageId: string; targetCategoryId?: string | null }) => Promise<unknown>
+  duplicateKnowledgeCategory: (data: { categoryId: string; targetParentId?: string | null }) => Promise<unknown>
   // import
   showImportOpenDialog: () => Promise<string[]>
   readImportFiles: (paths: string[]) => Promise<ImportFileResult[]>
   importPdf: (base64: string, fileName: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
   importPdfFile: (filePath: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importBinary: (base64: string, fileName: string, fileType: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  importBinaryFile: (filePath: string, fileType: string) => Promise<{ id?: string; title?: string; fileType?: string; error?: string }>
+  showFolderDialog: () => Promise<string[] | null>
+  importFolder: (folderPath: string, parentCategoryId: string | null) => Promise<{ error?: string; name?: string; fileCount?: number; folderCount?: number } | null>
   openExternal: (filePath: string) => Promise<void>
   getAppVersion: () => Promise<string>
   checkForUpdate: () => Promise<{ ok: boolean; hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; notes: string; asset: { name: string; url: string; size: number } | null; message?: string }>
@@ -1041,6 +1223,11 @@ export interface ElectronAPI {
   updatePauseDownload: () => Promise<{ ok: boolean; message?: string }>
   updateCancelDownload: () => Promise<{ ok: boolean; removedPartial?: boolean; message?: string }>
   onUpdateDownloadProgress: (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => () => void
+  // 更新说明（VS Code 式 tab）
+  getReleaseNotesState: () => Promise<ReleaseNotesState>
+  markReleaseNotesShown: (version: string) => Promise<{ ok: boolean; error?: string }>
+  getReleaseNote: (version: string) => Promise<{ note: ReleaseNote | null; highlights: ReleaseNoteHighlight[] }>
+  listReleaseNotes: () => Promise<ReleaseNoteListEntry[]>
   pluginFetchRegistry: () => Promise<{ ok: boolean; plugins: PluginRegistryEntry[]; updatedAt?: string; message?: string }>
   pluginInstall: (url: string, grantedCapabilities?: string[]) => Promise<{ success: boolean; message?: string }>
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => () => void
@@ -1055,6 +1242,12 @@ export interface ElectronAPI {
   pluginUninstall: (id: string) => Promise<{ success: boolean; message?: string }>
   pluginGetContribution: (id: string, key: string) => Promise<{ ok: boolean; data?: unknown; message?: string }>
   pluginListViews: (slot?: string) => Promise<PluginViewContribution[]>
+  pluginListCommands: () => Promise<PluginCommandInfo[]>
+  pluginListRenderers: () => Promise<PluginRendererInfo[]>
+  pluginGetSettingsSchema: (id: string) => Promise<{ schema: PluginSettingItem[] }>
+  pluginGetSettingValues: (id: string) => Promise<{ values: Record<string, unknown> }>
+  pluginSetSettingValue: (id: string, key: string, value: unknown) => Promise<{ ok: boolean; error?: string }>
+  onPluginEvent: (cb: (p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => void) => () => void
   pluginDataQuery: (pluginId: string, table: string, opts?: { where?: Array<{ column: string; op?: string; value: unknown }>; orderBy?: string; desc?: boolean; limit?: number }) => Promise<Record<string, unknown>[]>
   pluginDataInsert: (pluginId: string, table: string, row: Record<string, unknown>) => Promise<{ ok: boolean; id?: string; error?: string }>
   pluginDataUpdate: (pluginId: string, table: string, rowId: string | number, patch: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>
@@ -1275,11 +1468,10 @@ export interface ElectronAPI {
   quizCollectionRename: (id: string, name: string) => Promise<QuizCollectionDto>
   quizCollectionDelete: (id: string) => Promise<void>
   // quiz plugin data（JSON 通道）
-  quizMigrateStatus: () => Promise<QuizMigrateStatus>
-  quizMigrateExport: () => Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }>
-  quizMigrateDropPluginData: () => Promise<{ ok: boolean; error?: string }>
-  quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }) => Promise<{ ok: boolean; error?: string }>
-  quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => Promise<{ ok: boolean; favorite: boolean }>
+  quizDataStats: (opts?: { sourceSpace?: string }) => Promise<QuizDataStats>
+  quizDataExport: (opts?: { sourceSpace?: string }) => Promise<{ ok: boolean; path?: string; count?: number; error?: string }>
+  quizDataClearMastered: (opts?: { sourceSpace?: string }) => Promise<{ ok: boolean; removed: number; error?: string }>
+  quizDataClearAll: (opts?: { sourceSpace?: string }) => Promise<{ ok: boolean; removed: number; error?: string }>
   // fill popup
   isFillPopup: boolean
   isDayPanel: boolean
@@ -1346,6 +1538,7 @@ export interface ElectronAPI {
   llmSetDefaultModel: (value: string) => Promise<{ ok: boolean }>
   llmTestModel: (providerId: string, model: string) => Promise<LlmModelTestResultInfo>
   llmGetUsage: () => Promise<LlmUsageInfo>
+  llmUsageBreakdown: () => Promise<{ month: string; entries: LlmUsageBreakdownEntry[] }>
   // 划词翻译 / 离线词典
   dictLookup: (word: string) => Promise<DictLookupResult>
   dictStatus: () => Promise<DictStatus>
@@ -1364,7 +1557,9 @@ export interface ElectronAPI {
   agentRegenerate: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentStartScene: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string; source?: string; modelId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
-  agentDeleteMessage: (messageId: string) => Promise<boolean>
+  agentDeleteMessage: (sessionId: string, messageId: string) => Promise<boolean>
+  /** 会话压缩（/compress 指令 + 自动预检共用）：折叠检查点后旧轮为纪要并推进检查点 */
+  agentCompressSession: (req: { sessionId: string; modelId?: string; providerId?: string; effort?: string }) => Promise<AgentCompressResult>
   agentAbort: (chatId: string) => Promise<boolean>
   /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
   onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void

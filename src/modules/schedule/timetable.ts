@@ -211,15 +211,32 @@ export function layoutDay<T extends ScheduledLike>(items: T[]): Laid<T>[] {
   return out
 }
 
-/** 某人某天是否需要画「截止红线」（截止时刻落在当天，且未完成） */export function dueOfDay<T extends { time: string | null; taskType: string }>(items: T[], dateStr: string): number[] {
-  const out: number[] = []
+/** 红线标记：带截止时间的任务，画在「截止时刻」所在的那一行（与排期完全解耦） */
+export interface DueMark {
+  /** 距当天零点的分钟数（渲染用 top = (min − dayStartMin) × pxPerMin） */
+  min: number
+  /** 归属任务标题（红线上标注「属于哪个任务」） */
+  title: string
+  id: string
+  taskType: string
+}
+
+/**
+ * 某人某天所有「带截止时间」的未完成任务 → 红线标记。
+ * 数据源与排期解耦：无论是 deadline 还是被 AI/编辑赋予了 time 的 plan/daily，
+ * 只要 time 落在本日且未完成就画红线（满足「先看 DDL 线、后排期」的诉求）。
+ */
+export function dueOfDay<T extends { time: string | null; id: string; title: string; taskType: string }>(
+  items: T[], dateStr: string,
+): DueMark[] {
+  const out: DueMark[] = []
   for (const t of items) {
-    if (t.taskType !== 'deadline' || !t.time) continue
+    if (!t.time) continue
     if (t.time.slice(0, 10) !== dateStr) continue
     const hh = Number(t.time.slice(11, 13))
     const mm = Number(t.time.slice(14, 16))
     if (Number.isNaN(hh) || Number.isNaN(mm)) continue
-    out.push(hh * 60 + mm)
+    out.push({ min: hh * 60 + mm, title: t.title, id: t.id, taskType: t.taskType })
   }
   return out
 }

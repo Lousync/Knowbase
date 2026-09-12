@@ -62,6 +62,12 @@ const api = {
   getScheduleTags: () => ipcRenderer.invoke('schedule:getTags'),
   createScheduleTag: (name: string, color?: string) => ipcRenderer.invoke('schedule:createTag', name, color),
   deleteScheduleTag: (id: string) => ipcRenderer.invoke('schedule:deleteTag', id),
+  /** 日程截止提醒的系统通知被点击 → 主窗口切到日程模块（主进程 scheduleReminder.ts 发出） */
+  onScheduleReminderClick: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('schedule:reminderClick', handler)
+    return () => { ipcRenderer.removeListener('schedule:reminderClick', handler) }
+  },
 
   // knowledge (Scheme A)
   getKnowledgeCategories: () => ipcRenderer.invoke('knowledge:getCategories'),
@@ -78,6 +84,7 @@ const api = {
   searchKnowledgePages: (q: string) => ipcRenderer.invoke('knowledge:searchPages', q),
   getKnowledgeBacklinks: (pageId: string) => ipcRenderer.invoke('knowledge:getBacklinks', pageId),
   getKnowledgeBacklinkContext: (pageId: string) => ipcRenderer.invoke('knowledge:getBacklinkContext', pageId),
+  getKnowledgeSimilarPages: (pageId: string) => ipcRenderer.invoke('knowledge:similarPages', pageId),
   getKnowledgeManualLinks: (pageId: string) => ipcRenderer.invoke('knowledge:getManualLinks', pageId),
   addKnowledgeManualLink: (pageId: string, targetId: string) => ipcRenderer.invoke('knowledge:addManualLink', pageId, targetId),
   removeKnowledgeManualLink: (a: string, b: string) => ipcRenderer.invoke('knowledge:removeManualLink', a, b),
@@ -117,6 +124,11 @@ const api = {
     ipcRenderer.on('update:download-progress', handler)
     return () => { ipcRenderer.removeListener('update:download-progress', handler) }
   },
+  // 更新说明（VS Code 式 tab）：清单来自 CHANGELOG，阅读记录落仓库 .knowbase/modules/release-notes/
+  getReleaseNotesState: () => ipcRenderer.invoke('releaseNotes:getState'),
+  markReleaseNotesShown: (version: string) => ipcRenderer.invoke('releaseNotes:markShown', version),
+  getReleaseNote: (version: string) => ipcRenderer.invoke('releaseNotes:get', version),
+  listReleaseNotes: () => ipcRenderer.invoke('releaseNotes:list'),
   pluginFetchRegistry: () => ipcRenderer.invoke('plugin:fetchRegistry'),
   pluginInstall: (url: string, grantedCapabilities?: string[]) => ipcRenderer.invoke('plugin:install', url, grantedCapabilities),
   onPluginDownloadProgress: (cb: (p: { key: string; received: number; total: number; percent: number; host?: string }) => void) => {
@@ -143,6 +155,17 @@ const api = {
   pluginUninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
   pluginGetContribution: (id: string, key: string) => ipcRenderer.invoke('plugin:getContribution', id, key),
   pluginListViews: (slot: unknown) => ipcRenderer.invoke('plugin:listViews', slot),
+  pluginListCommands: () => ipcRenderer.invoke('plugin:listCommands'),
+  pluginListRenderers: () => ipcRenderer.invoke('plugin:listRenderers'),
+  pluginGetSettingsSchema: (id: string) => ipcRenderer.invoke('plugin:getSettingsSchema', id),
+  pluginGetSettingValues: (id: string) => ipcRenderer.invoke('plugin:getSettingValues', id),
+  pluginSetSettingValue: (id: string, key: string, value: unknown) => ipcRenderer.invoke('plugin:setSettingValue', id, key, value),
+  /** 宿主事件推送（plugin-phase1-design C4）：主进程已按订阅过滤，这里按 pluginId 转发给常驻 Worker */
+  onPluginEvent: (cb: (p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => void) => {
+    const handler = (_e: unknown, p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => cb(p)
+    ipcRenderer.on('plugin:event', handler)
+    return () => { ipcRenderer.removeListener('plugin:event', handler) }
+  },
   pluginListDeleteFxSkins: () => ipcRenderer.invoke('plugin:listDeleteFxSkins'),
   // C 级模块插件:自有数据表读写(结构化 CRUD,主进程校验 data 能力)
   pluginDataQuery: (pluginId: string, table: string, opts: unknown) => ipcRenderer.invoke('pluginData:query', pluginId, table, opts),
@@ -186,6 +209,7 @@ const api = {
   llmVisionModels: () => ipcRenderer.invoke('llm:visionModels'),
   llmTestModel: (providerId: string, model: string) => ipcRenderer.invoke('llm:testModel', { providerId, model }),
   llmGetUsage: () => ipcRenderer.invoke('llm:getUsage'),
+  llmUsageBreakdown: () => ipcRenderer.invoke('llm:usageBreakdown'),
   llmReasoningCapable: (model: string) => ipcRenderer.invoke('llm:reasoningCapable', model),
   // 划词翻译 / 离线词典
   dictLookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),
@@ -200,7 +224,9 @@ const api = {
   agentRegenerate: (req: { sessionId: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:regenerate', req),
   agentStartScene: (req: { sessionId: string; context?: unknown; chatId?: string; source?: string; modelId?: string }) => ipcRenderer.invoke('agent:startScene', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),
-  agentDeleteMessage: (messageId: string) => ipcRenderer.invoke('agent:deleteMessage', messageId),
+  agentDeleteMessage: (sessionId: string, messageId: string) => ipcRenderer.invoke('agent:deleteMessage', { sessionId, messageId }),
+  /** 会话压缩（/compress 指令 + 自动预检共用）：折叠检查点后旧轮为纪要并推进检查点 */
+  agentCompressSession: (req: { sessionId: string; modelId?: string; providerId?: string; effort?: string }) => ipcRenderer.invoke('agent:compressSession', req),
   agentAbort: (chatId: string) => ipcRenderer.invoke('agent:abort', chatId),
   /** AgentRunner 实时过程步骤（chatId 过滤后驱动前端活动气泡） */
   onAgentStep: (cb: (p: { chatId: string; step: unknown }) => void) => {
@@ -434,14 +460,11 @@ const api = {
   quizCollectionCreate: (name: string) => ipcRenderer.invoke('quizCollection:create', name),
   quizCollectionRename: (id: string, name: string) => ipcRenderer.invoke('quizCollection:rename', id, name),
   quizCollectionDelete: (id: string) => ipcRenderer.invoke('quizCollection:delete', id),
-  // quiz plugin data (JSON 通道：状态/导出备份/清空；主表迁移通道已随 sql.js 退役删除)
-  quizMigrateStatus: () => ipcRenderer.invoke('quizMigrate:status'),
-  quizMigrateExport: () => ipcRenderer.invoke('quizMigrate:export'),
-  quizMigrateDropPluginData: () => ipcRenderer.invoke('quizMigrate:dropPluginData'),
-  // plugin-mode quiz report (write to plugin namespace tables)
-  quizPluginReport: (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta: unknown) => ipcRenderer.invoke('quiz:pluginReport', pluginId, pageId, quizNo, correct, meta),
-  quizPluginToggleFavorite: (pluginId: string, pageId: string, quizNo: number) => ipcRenderer.invoke('quiz:pluginToggleFavorite', pluginId, pageId, quizNo),
-
+  // quiz vault data（「数据」面板：概览统计 / 导出备份 / 清空已掌握 / 清空全部）
+  quizDataStats: (opts: unknown) => ipcRenderer.invoke('quizData:stats', opts),
+  quizDataExport: (opts: unknown) => ipcRenderer.invoke('quizData:export', opts),
+  quizDataClearMastered: (opts: unknown) => ipcRenderer.invoke('quizData:clearMastered', opts),
+  quizDataClearAll: (opts: unknown) => ipcRenderer.invoke('quizData:clearAll', opts),
   // fill popup
   isFillPopup,
   isDayPanel,

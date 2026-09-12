@@ -1,7 +1,14 @@
 import { useState, useCallback } from 'react'
-import { X } from 'lucide-react'
+import { X, Pin } from 'lucide-react'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
+
+/**
+ * 页签栏：预览/钉住双态（VS Code 模型，2026-09-12）。
+ * - 预览态（斜体）：浏览产生，全栏最多一个「预览槽」，再次浏览原位替换——标签栏不膨胀；
+ * - 钉住态（正常字重 + 图钉）：双击标签 / 图钉按钮 / 右键菜单显式固定，永不被浏览替换；
+ * - 编辑中（dirty，未保存）视同钉住：不会被替换，关闭走未保存确认。
+ * 知识库 vault 只读化后 dirty 几乎不再产生，钉住是标签累积的唯一入口。 */
 
 export interface PageInfo {
   title: string
@@ -12,14 +19,19 @@ interface PageTabBarProps {
   openPageIds: string[]
   activePageId: string | null
   openPageInfos: Record<string, PageInfo>
+  /** 编辑中（未保存）——视同钉住，关闭需确认 */
   dirtyPageIds?: Set<string>
+  /** 用户显式固定的标签 */
+  pinnedPageIds?: Set<string>
   onSelectTab: (pageId: string) => void
   onCloseTab: (pageId: string) => void
   onReorder: (newOrder: string[]) => void
+  onTogglePin: (pageId: string) => void
+  onTabContextMenu?: (e: React.MouseEvent, pageId: string) => void
   rightActions?: React.ReactNode
 }
 
-export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPageIds, onSelectTab, onCloseTab, onReorder, rightActions }: PageTabBarProps) {
+export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPageIds, pinnedPageIds, onSelectTab, onCloseTab, onReorder, onTogglePin, onTabContextMenu, rightActions }: PageTabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const handleDragStart = useCallback((e: React.DragEvent, pageId: string) => {
@@ -94,7 +106,8 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPage
         const title = info?.title || ''
         const isActive = pageId === activePageId
         const isDragged = pageId === draggedId
-        const isPreview = dirtyPageIds ? !dirtyPageIds.has(pageId) : false
+        const isPinned = (pinnedPageIds?.has(pageId) ?? false) || (dirtyPageIds?.has(pageId) ?? false)
+        const isPreview = !isPinned
         const fileType = info?.fileType || ''
 
         return (
@@ -103,6 +116,9 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPage
             data-tab-id={pageId}
             draggable
             onClick={() => onSelectTab(pageId)}
+            onDoubleClick={(e) => { e.preventDefault(); onTogglePin(pageId) }}
+            onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); onCloseTab(pageId) } }}
+            onContextMenu={(e) => { e.preventDefault(); onTabContextMenu?.(e, pageId) }}
             onDragStart={e => handleDragStart(e, pageId)}
             onDragEnd={handleDragEnd}
             onDragOver={e => handleTabDragOver(e, pageId)}
@@ -122,11 +138,24 @@ export function PageTabBar({ openPageIds, activePageId, openPageInfos, dirtyPage
             <span className={`truncate max-w-[140px] ${isPreview ? 'italic' : ''}`}>{title || '加载中...'}</span>
             {(() => { const fi = getFileTypeInfo(fileType); return <span className="shrink-0 text-[8px] px-1 rounded font-medium" style={{ backgroundColor: fi.color + '20', color: fi.color }}>{fi.badge}</span> })()}
             <button
+              onClick={e => { e.stopPropagation(); onTogglePin(pageId) }}
+              onDoubleClick={e => e.stopPropagation()}
+              className={`p-0.5 rounded hover:bg-[var(--bg-hover)] shrink-0
+                ${isPinned
+                  ? 'opacity-100 text-[var(--accent)]'
+                  : 'opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)]'}
+              `}
+              title={isPinned ? '取消固定' : '固定标签（双击标签也可）'}
+            >
+              <Pin size={12} className={isPinned ? 'fill-current' : ''} />
+            </button>
+            <button
               onClick={e => { e.stopPropagation(); onCloseTab(pageId) }}
+              onDoubleClick={e => e.stopPropagation()}
               className={`p-0.5 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0
                 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
               `}
-              title="关闭"
+              title="关闭（中键点击也可）"
             >
               <X size={14} />
             </button>

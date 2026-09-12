@@ -5,7 +5,7 @@ import { loadHelpDocs, type HelpDoc } from './docsLoader'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { openExternal } from '../../lib/ipc'
 
-const ISSUES_URL = 'https://github.com/Lousync/Knowbase/issues'
+const ISSUES_URL = 'https://github.com/Lousync/Phrontis/issues'
 
 // Module-level target for cross-component navigation (toast "查看详情" etc.)
 let pendingDocId: string | null = null
@@ -120,12 +120,12 @@ export function HelpModule() {
       <div className="flex-1 overflow-y-auto py-8">
         <div className="max-w-2xl mx-auto px-8">
           {activeEntry && (
-            <>
+            <div key={activeEntry.id} className="kb-view-in">
               <h2 className="text-[15px] font-medium text-[var(--text-primary)] mb-6">
                 {activeEntry.title}
               </h2>
               <MarkdownPreview content={activeEntry.md} />
-            </>
+            </div>
           )}
         </div>
       </div>

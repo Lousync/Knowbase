@@ -1,24 +1,39 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, AlertCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, Info, ExternalLink, CheckCircle2 } from 'lucide-react'
 import type { ToastMessage } from '../../lib/toast'
 import { navigateToHelp } from '../../modules/help'
+import { prefersReducedMotion } from '../../lib/usePresence'
 
 interface ActiveToast extends ToastMessage {
   progress: number   // 0..1, 1 = done
 }
 
+const EXIT_MS = 190
+
 export function Toast() {
   const [toasts, setToasts] = useState<ActiveToast[]>([])
+  // 正在播退场的 toast id（先播 kb-toast-out，再真正移除）
+  const [leaving, setLeaving] = useState<string[]>([])
   // V-3：过期主驱动 = 每条 toast 一个独立 setTimeout（墙钟）。
   // 原实现靠 interval tick 累计 progress 判定过期——窗口最小化/被完全遮挡时渲染层定时器
   // 会被 Chromium intensive throttling 压到每分钟 1 tick，5s 的 toast 实际滞留数分钟。
   // setTimeout 被节流推迟后，窗口恢复可见会立即补触发，不会冻结。
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  // 已进入退场的 id（ref 做幂等判定，state 只驱动渲染——
+  //  放在 setState updater 里 setTimeout 会在 StrictMode 下被双调用）
+  const leavingRef = useRef(new Set<string>())
 
   const remove = useCallback((id: string) => {
     const t = timers.current.get(id)
     if (t) { clearTimeout(t); timers.current.delete(id) }
-    setToasts(prev => prev.filter(x => x.id !== id))
+    if (leavingRef.current.has(id)) return
+    leavingRef.current.add(id)
+    setLeaving(prev => [...prev, id])
+    setTimeout(() => {
+      leavingRef.current.delete(id)
+      setLeaving(prev => prev.filter(x => x !== id))
+      setToasts(prev => prev.filter(x => x.id !== id))
+    }, prefersReducedMotion() ? 0 : EXIT_MS)
   }, [])
 
   // 登记过期闹钟（同 id 重复 show = 重置计时，与进度条重置语义一致）
@@ -38,6 +53,11 @@ export function Toast() {
 
   const onShow = useCallback((e: Event) => {
     const msg = (e as CustomEvent<ToastMessage>).detail
+    // 同 id 再次出现（如显式传 id 的进度类提示）时取消退场，恢复到正常态
+    if (leavingRef.current.has(msg.id)) {
+      leavingRef.current.delete(msg.id)
+      setLeaving(prev => prev.filter(x => x !== msg.id))
+    }
     arm(msg)
     setToasts(prev => {
       // Same type+message: replace the existing toast, resetting its progress
@@ -85,16 +105,16 @@ export function Toast() {
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none">
       {toasts.map(t => (
-        <ToastItem key={t.id} toast={t} onDismiss={remove} />
+        <ToastItem key={t.id} toast={t} closing={leaving.includes(t.id)} onDismiss={remove} />
       ))}
     </div>
   )
 }
 
-function ToastItem({ toast: t, onDismiss }: { toast: ActiveToast; onDismiss: (id: string) => void }) {
-  const Icon = t.type === 'error' ? AlertCircle : t.type === 'warning' ? AlertTriangle : Info
-  const iconColor = t.type === 'error' ? 'text-[#f14c4c]' : t.type === 'warning' ? 'text-[#cca700]' : 'text-[var(--accent)]'
-  const borderColor = t.type === 'error' ? 'border-[#f14c4c]' : t.type === 'warning' ? 'border-[#cca700]' : 'border-[var(--accent)]'
+function ToastItem({ toast: t, closing = false, onDismiss }: { toast: ActiveToast; closing?: boolean; onDismiss: (id: string) => void }) {
+  const Icon = t.type === 'error' ? AlertCircle : t.type === 'warning' ? AlertTriangle : t.type === 'success' ? CheckCircle2 : Info
+  const iconColor = t.type === 'error' ? 'text-[#f14c4c]' : t.type === 'warning' ? 'text-[#cca700]' : t.type === 'success' ? 'text-emerald-400' : 'text-[var(--accent)]'
+  const borderColor = t.type === 'error' ? 'border-[#f14c4c]' : t.type === 'warning' ? 'border-[#cca700]' : t.type === 'success' ? 'border-emerald-400' : 'border-[var(--accent)]'
 
   const handleDetail = () => {
     if (t.detail) {
@@ -105,7 +125,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: ActiveToast; onDismiss: (id
 
   return (
     <div
-      className={`pointer-events-auto bg-[var(--bg-secondary)] border ${borderColor} border-l-[3px] rounded-lg shadow-2xl w-[380px] overflow-hidden`}
+      className={`pointer-events-auto bg-[var(--bg-secondary)] border ${borderColor} border-l-[3px] rounded-lg shadow-2xl w-[380px] overflow-hidden ${closing ? 'kb-toast-out' : 'kb-toast-in'}`}
     >
       <div className="flex items-start gap-3 px-4 pt-3 pb-2">
         <Icon size={16} className={`shrink-0 mt-0.5 ${iconColor}`} />

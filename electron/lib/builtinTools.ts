@@ -9,12 +9,21 @@ import { resolveSafe, detectConflict, writeWorkspaceFile, renameWorkspacePath, t
 import { getCurrentVault } from './kbStore/vaultContext'
 import { pomoSessionsAll } from './kbStore/pomoVaultRepo'
 import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
-import { vaultSearchPages as vaultSearchKnowledgePages, vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { vaultGetPageById, vaultGetCategories, vaultCreatePage } from './kbStore/knowledgeVaultRepo'
+import { searchKnowledge } from './knowledgeSearch'
 import { searchHelp } from './helpService'
 import { vaultCreateEntry } from './kbStore/blogVaultRepo'
 import { vaultHabitsAll, vaultRecordsAll, vaultHabitRecordAddIfAbsent } from './kbStore/habitVaultRepo'
 import { vaultTodosAll, vaultCreateTodo } from './kbStore/scheduleVaultRepo'
 import { extractDocText } from './docsReader'
+import {
+  quizRecordList,
+  quizRecordSetNote, quizRecordSetFavorite, quizRecordRemoveById,
+  quizRecordAddTags, quizRecordSetTags, quizRecordSetCollections, quizRecordCollectionIds,
+  quizTagList, quizTagResolveOrCreate,
+  quizCollectionList, quizCollectionResolveOrCreate,
+} from '../database/repositories/quizRepo'
+import { quizDataStats } from './quizDataAdmin'
 import type { ToolJsonSchema } from './aiTools'
 
 /**
@@ -154,12 +163,12 @@ function ruleSummary(ruleType: string, ruleDays: number[], weeklyTarget: number)
 
 const VAULT_DOT_DIR = '.knowbase'
 const VAULT_MODULES_DIR = 'modules'
-const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
+export const MAX_VAULT_FILE = 10 * 1024 * 1024 // read >10MB 拒
 const MAX_VAULT_SEARCH_FILE = 1024 * 1024 // search 只扫 ≤1MB 文本
 const MAX_VAULT_SEARCH_FILES = 400
-const MAX_VAULT_LIST_ENTRIES = 200
+export const MAX_VAULT_LIST_ENTRIES = 200
 
-function vaultRootPath(): string {
+export function vaultRootPath(): string {
   const cur = getCurrentVault()
   if (!cur || !cur.rootPath) throw new Error('当前没有打开的仓库：请先在应用中打开知识仓库')
   return cur.rootPath
@@ -183,7 +192,7 @@ function isModulesJson(parts: string[]): boolean {
 }
 
 /** 子路径是否 AI 允许（目录枚举用）：点目录一律拒，.knowbase 仅 modules 子树放行 */
-function childAiAllowed(root: string, childAbs: string): boolean {
+export function childAiAllowed(root: string, childAbs: string): boolean {
   const parts = vaultRelParts(root, childAbs)
   if (parts.length === 0) return false
   const first = parts[0]
@@ -195,7 +204,7 @@ function childAiAllowed(root: string, childAbs: string): boolean {
 }
 
 /** 读白名单：.md/.txt（可见区任意处）+ .json（仅 .knowbase/modules） */
-function isAiReadableFile(root: string, abs: string): boolean {
+export function isAiReadableFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (!childAiAllowed(root, abs)) return false
@@ -226,7 +235,7 @@ function walkAiFiles(root: string, dirAbs: string, out: string[], budget: { coun
 }
 
 /** 写白名单（B2）：普通可见区 .md/.txt；.knowbase 全面禁写（modules/*.json 只读、cache/config 等本就不可见） */
-function isAiWritableFile(root: string, abs: string): boolean {
+export function isAiWritableFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (parts[0].startsWith('.')) return false // 含 .knowbase：任何写操作都拒
@@ -235,7 +244,7 @@ function isAiWritableFile(root: string, abs: string): boolean {
 }
 
 /** 文档白名单（docs.read-text）：普通可见区 .pdf/.pptx（.knowbase 内部暂不开放） */
-function isAiDocFile(root: string, abs: string): boolean {
+export function isAiDocFile(root: string, abs: string): boolean {
   const parts = vaultRelParts(root, abs)
   if (parts.length === 0) return false
   if (parts[0].startsWith('.')) return false
@@ -244,7 +253,7 @@ function isAiDocFile(root: string, abs: string): boolean {
 }
 
 /** 写前守卫：writable 判定 + 大小 + mtime 冲突（expectedMtimeMs 来自 vault.read 基线） */
-function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
+export function assertAiWritable(root: string, abs: string, expectedMtimeMs: unknown): void {
   if (!isAiWritableFile(root, abs)) {
     throw new Error('该位置不可写：AI 仅可新建/修改仓库内普通 .md/.txt 文件（.knowbase 内部数据只读保护）')
   }
@@ -277,36 +286,40 @@ function broadcastExternalWrite(relPath: string, mtimeMs?: number): void {
 const SEARCH_LIMIT_SCHEMA = {
   type: 'object',
   properties: {
-    query: { type: 'string', description: '关键词, 空格分隔为 AND' },
+    query: { type: 'string', description: '检索词，空格分词（自然语言问句亦可，语义检索可用时按含义召回）' },
     limit: { type: 'number', description: '上限, 默认8' },
+    mode: { type: 'string', enum: ['auto', 'keyword', 'semantic'], description: '检索方式：auto=可用则混合（默认）/ keyword=仅关键词 / semantic=仅语义' },
   },
   required: ['query'],
 } satisfies ToolJsonSchema
 
 export function registerBuiltinTools(): void {
 
-  // 1. builtin.knowledge.search —— 关键词搜索知识库页面
+  // 1. builtin.knowledge.search —— 知识库混合检索（关键词 + 语义，knowledge-index-design §9）
   registerTool({
     name: 'builtin.knowledge.search',
     title: '搜索知识库页面',
-    description: '关键词搜索知识库页面, 返回 id/标题/摘录',
+    description: '搜索知识库页面，返回 id/标题/摘录/相关度。配好嵌入模型后支持语义检索（问句/换述也能命中），结果 via 字段标注命中方式',
     inputSchema: SEARCH_LIMIT_SCHEMA,
     source: 'builtin',
     enabled: true,
     readOnly: true,
     module: 'knowledge',
-  }, args => {
+  }, async args => {
     const q = str(args.query).trim()
     const limit = clamp(Math.floor(num(args.limit, 8)), 1, 50)
-    const terms = q.split(/\s+/).filter(Boolean)
-    if (terms.length === 0) return []
-    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）
+    const mode = args.mode === 'keyword' || args.mode === 'semantic' ? args.mode : 'auto'
+    if (!q) return []
+    // 与知识库 UI 同一份磁盘 .md（vault 唯一真相源）；未配嵌入模型时 auto 自动降级纯关键词
     try {
-      return vaultSearchKnowledgePages(q).slice(0, limit).map(r => ({
-        id: r.id,
-        title: r.title,
-        excerpt: r.excerpt || r.title,
-        updatedAt: r.updatedAt,
+      const r = await searchKnowledge({ query: q, topK: limit, mode })
+      return r.hits.map(h => ({
+        id: h.pageId,
+        title: h.title,
+        excerpt: h.excerpt || h.title,
+        updatedAt: h.updatedAt,
+        score: h.score,
+        via: h.via,
       }))
     } catch (err) {
       throw new Error(`知识库搜索失败（仓库未就绪？）：${String((err as Error)?.message ?? err)}`)
@@ -552,7 +565,11 @@ export function registerBuiltinTools(): void {
         date: { type: 'string', description: 'YYYY-MM-DD, 默认今天' },
         title: { type: 'string', description: '待办内容' },
         quadrant: { type: 'number', description: '0紧急重要/1重要不紧急/2紧急不重要/3不重要, 默认1' },
-        time: { type: 'string', description: 'HH:mm 可选' },
+        taskType: { type: 'string', enum: ['plan', 'deadline', 'daily'], description: "任务类型：plan 计划 / deadline 截止类 / daily 零碎当天完成，默认 plan" },
+        time: { type: 'string', description: "截止时刻，完整格式 'YYYY-MM-DD HH:mm'（deadline 类才带）；仅当文本里识别出明确时间承诺才传，否则不传、不编造" },
+        tagId: { type: 'string', description: '标签 ID（来自 schedule:getTags 或列表结果），可选' },
+        scheduledStart: { type: 'number', description: '排期起点（当天分钟数 0-1439，如 09:00=540），配合 date 与 scheduledEnd 落格；可选' },
+        scheduledEnd: { type: 'number', description: '排期终点（当天分钟数），可选' },
       },
       required: ['title'],
     },
@@ -567,16 +584,28 @@ export function registerBuiltinTools(): void {
     if (!title) throw new Error('待办内容不能为空')
     const date = /^\d{4}-\d{2}-\d{2}$/.test(str(args.date)) ? str(args.date) : todayLocal()
     const quadrant = clamp(Math.floor(num(args.quadrant, 1)), 0, 3)
-    const time = /^\d{1,2}:\d{2}$/.test(str(args.time)) ? str(args.time) : null
+    const taskType = (['plan', 'deadline', 'daily'] as const).includes(str(args.taskType) as 'plan' | 'deadline' | 'daily')
+      ? (str(args.taskType) as 'plan' | 'deadline' | 'daily')
+      : 'plan'
+    // 修正真 bug：旧校验 /^\d{1,2}:\d{2}$/ 只认 HH:mm，但 ScheduleTodo.time 实际是 'YYYY-MM-DD HH:mm'，
+    // 放开 AI 写 DDL 会立刻产出畸形数据（各处取得时分用的是 slice(11,13)/slice(14,16)）。
+    const rawTime = str(args.time).trim()
+    const time = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}$/.test(rawTime) ? rawTime.replace('T', ' ') : null
+    // 截止时刻只在 deadline 类带；其他类型即便误传也丢弃，避免脏数据
+    const finalTime = taskType === 'deadline' ? time : null
+    const tagId = str(args.tagId).trim() ? str(args.tagId).trim() : null
+    const scheduledStart = typeof args.scheduledStart === 'number' && Number.isFinite(args.scheduledStart) ? args.scheduledStart : null
+    const scheduledEnd = typeof args.scheduledEnd === 'number' && Number.isFinite(args.scheduledEnd) ? args.scheduledEnd : null
     const id = randomUUID()
     // 写 .knowbase/modules/schedule/todos.json（默认值同表列：plan/pending/sort 0）
     const now = new Date().toISOString()
     vaultCreateTodo({
-      id, title, description: '', date, time, quadrant,
-      task_type: 'plan', tag_id: null, status: 'pending', sort_order: 0,
+      id, title, description: '', date, time: finalTime, quadrant,
+      task_type: taskType, tag_id: tagId, status: 'pending', sort_order: 0,
       end_criteria: '', parent_id: null,
-      // AI 建的任务默认不排期，落进「待安排」栏等着被拖进日程表
-      scheduled_start: null, scheduled_end: null,
+      // AI 建的任务默认不排期（除非显式传 scheduledStart/End），落进「待安排」栏等着被拖进日程表
+      scheduled_start: scheduledStart, scheduled_end: scheduledEnd,
+      snooze_until: null,
       created_at: now, updated_at: now,
     })
     // 主进程写盘后必须主动广播：日程模块是保活的（切 Tab 不重载），
@@ -643,13 +672,13 @@ export function registerBuiltinTools(): void {
     return { source, count: results.length, results }
   })
 
-  // 14. builtin.help.search —— Knowbase 官方手册检索（跨模块通用，不设 module）
+  // 14. builtin.help.search —— Phrontis 官方手册检索（跨模块通用，不设 module）
   //     背景：帮助文档原先只在渲染层 bundle 里，AI 完全读不到 → 答不了「知识库为什么看不到我的文件」。
   //     迁到 resources/help 后由本工具按需检索（见 docs/ai-learn-center-design.md §7.5）。
   registerTool({
     name: 'builtin.help.search',
-    title: '检索 Knowbase 使用手册',
-    description: '检索本软件（Knowbase）的官方使用手册。当用户询问「这个软件怎么用 / 某功能在哪 / 为什么某个行为不符合预期 / 怎么备份 / 权限怎么设 / 快捷键是什么」这类关于软件自身的问题时，先调用本工具查手册再回答，不要凭猜测描述软件行为。也可用 id 参数直接读取某一篇全文',
+    title: '检索 Phrontis 使用手册',
+    description: '检索本软件（Phrontis）的官方使用手册。当用户询问「这个软件怎么用 / 某功能在哪 / 为什么某个行为不符合预期 / 怎么备份 / 权限怎么设 / 快捷键是什么」这类关于软件自身的问题时，先调用本工具查手册再回答，不要凭猜测描述软件行为。也可用 id 参数直接读取某一篇全文',
     inputSchema: {
       type: 'object',
       properties: {
@@ -678,7 +707,7 @@ export function registerBuiltinTools(): void {
   registerTool({
     name: 'builtin.tool.request',
     title: '申请启用扩展工具',
-    description: "写入类工具（vault.write / vault.edit / vault.rename / vault.trash / knowledge.create-page / blog.create-entry / schedule.create-todo / checkin.check-habit）默认不在工具列表中。需要执行写操作时调用本工具申请（逗号分隔工具名），确认后本会话内持续可用。只申请确实需要的，不要一次全申请",
+    description: "写入类工具（vault.write / vault.edit / vault.rename / vault.trash / knowledge.create-page / blog.create-entry / schedule.create-todo / checkin.check-habit / quiz.set-note / quiz.tag / quiz.collect / quiz.favorite / quiz.remove / quiz.gen-paper）默认不在工具列表中。需要执行写操作时调用本工具申请（逗号分隔工具名），确认后本会话内持续可用。只申请确实需要的，不要一次全申请",
     inputSchema: {
       type: 'object',
       properties: {
@@ -1186,5 +1215,438 @@ export function registerBuiltinTools(): void {
     const r = writeVisual(sid, str(args.slug), String(args.html ?? ''), getSettingReader())
     if (!r.ok) throw new Error(r.error ?? '示意图写入失败')
     return { relPath: r.relPath, lines: r.lines }
+  })
+
+  // =====================================================================
+  // ===== quiz 错题本工具（2026-09-12）：AI 整理错题本 + 按错误类型组卷 =====
+  //
+  // 落点约定：数据层一律走 quizRepo 抽出的业务函数（与界面同一条受控写路径）。
+  // 既不撬开 vault 文件白名单（.knowbase 仍全面禁写），也禁止 AI 直接改
+  // .knowbase/modules/quiz/*.json —— 直改 JSON 会绕过关联行同步与快照不变量。
+  //
+  // 装载层：读工具 tier=core（整理错题本每轮都要先看清数据）；写工具 tier=ondemand
+  // （写是低频高危动作，须经 builtin.tool.request 申请 + quiz 模块的 write 权限）。
+  // =====================================================================
+
+  const splitCsv = (v: unknown): string[] =>
+    str(v).split(/[,，\s]+/).map(s => s.trim()).filter(Boolean)
+
+  /** 错次档位（与 QuizCollection 的 WRONG_BANDS / quizDataAdmin 的 BANDS 同口径） */
+  const QUIZ_BAND_LABEL: Record<string, string> = {
+    stubborn: '顽固错（4 次以上）', mid: '中错（2–3 次）', light: '轻错（1 次）',
+  }
+  const quizBandKeyOf = (wrongCount: number): string =>
+    wrongCount >= 4 ? 'stubborn' : wrongCount >= 2 ? 'mid' : 'light'
+
+  // 25. builtin.quiz.list —— 查错题本（整理前的第一步）
+  registerTool({
+    name: 'builtin.quiz.list',
+    title: '查错题本',
+    description: '按条件查错题本记录。kind：wrong=尚未掌握的错题（默认）/ favorite=已收藏 / all=两者并集。可按学习空间、标签名、自定义分组名筛选。返回的 id 供 quiz.set-note / quiz.tag / quiz.collect / quiz.favorite / quiz.remove 使用。整理错题本的第一步：先看清有什么，再动手',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['wrong', 'favorite', 'all'], description: 'wrong=错题(默认) / favorite=收藏 / all=并集' },
+        sourceSpace: { type: 'string', description: '限定学习空间名，省略=全部空间' },
+        tagNames: { type: 'string', description: '标签名筛选，多个用逗号分隔，命中任一即算匹配' },
+        collectionName: { type: 'string', description: '自定义分组名筛选，可省略' },
+        limit: { type: 'number', description: '最多返回条数，默认 20，上限 100。返回体较占上下文：先用小 limit 看概况，确有必要再提高或配合 tagNames/collectionName 收窄' },
+        withQuestion: { type: 'boolean', description: '是否返回题干（默认 true）；只要 id 清单时可传 false 省 token' },
+      },
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    tier: 'core',
+    module: 'quiz',
+  }, args => {
+    const rawKind = str(args.kind, 'wrong')
+    const kind: 'wrong' | 'favorite' | 'all' = rawKind === 'favorite' || rawKind === 'all' ? rawKind : 'wrong'
+    const tags = quizTagList()
+    const cols = quizCollectionList()
+    const tagNameById = new Map(tags.map(t => [t.id, t.name]))
+    const colNameById = new Map(cols.map(c => [c.id, c.name]))
+    // 标签名 → id：查询刻意不自动建标签（查询不该有副作用），未命中的名字如实回报
+    const wantedTagNames = splitCsv(args.tagNames)
+    const tagIds: string[] = []
+    const unknownTags: string[] = []
+    for (const n of wantedTagNames) {
+      const hit = tags.find(t => t.name === n)
+      if (hit) tagIds.push(hit.id); else unknownTags.push(n)
+    }
+    const wantedCol = str(args.collectionName).trim()
+    const colHit = wantedCol ? cols.find(c => c.name === wantedCol) : undefined
+    // 阈值下调（2026-09-12）：limit=50 时返回体约 16.7k 字符（≈7k tok），而 agent loop
+    // 每轮重发整个 convo，一次拉取会在整任务里被重发数倍。默认降到 20（≈6.3k 字符）
+    const limit = clamp(Math.floor(num(args.limit, 20)), 1, 100)
+    const withQuestion = args.withQuestion !== false
+    const rows = quizRecordList({
+      kind,
+      sourceSpace: str(args.sourceSpace).trim(),
+      collectionId: wantedCol ? (colHit?.id ?? '__no_such_collection__') : '',
+      tagIds,
+    })
+    return {
+      total: rows.length,
+      returned: Math.min(rows.length, limit),
+      ...(unknownTags.length
+        ? { unknownTags, unknownTagsHint: '这些标签名不存在（查询不会自动新建标签）。请核对名称，或用 quiz.stats 查看现有标签清单' }
+        : {}),
+      ...(wantedCol && !colHit ? { unknownCollection: wantedCol, unknownCollectionHint: '该分组名不存在' } : {}),
+      items: rows.slice(0, limit).map(r => ({
+        id: r.id,
+        pageTitle: r.pageTitle,
+        quizNo: r.quizNo,
+        ...(withQuestion ? { question: (r.snapshot?.question ?? '').slice(0, 300) } : {}),
+        wrongCount: r.wrongCount,
+        correctCount: r.correctCount,
+        streakCorrect: r.streakCorrect,
+        isFavorite: r.isFavorite,
+        ...(r.note ? { note: r.note } : {}),
+        tags: r.tagIds.map(id => tagNameById.get(id) ?? id),
+        collections: r.collectionIds.map(id => colNameById.get(id) ?? id),
+        source: [r.sourceSpace, r.sourceNotebook, r.sourceChapter].filter(Boolean).join(' / '),
+      })),
+    }
+  })
+
+  // 26. builtin.quiz.stats —— 错题本概览 + 按标签（错误类型）的薄弱分布
+  registerTool({
+    name: 'builtin.quiz.stats',
+    title: '错题本统计',
+    description: '错题本概览统计 + 按标签（考点／错误类型）聚合的薄弱分布：每个标签下待复习错题数、累计错次、正确率，按累计错次降序。用来判断"哪类错误最集中"，再决定整理方向或组卷范围。概览口径与「数据」面板完全一致（同一实现，不会两套数字打架）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceSpace: { type: 'string', description: '限定学习空间名，省略=全部空间' },
+      },
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: true,
+    requires: 'read',
+    tier: 'core',
+    module: 'quiz',
+  }, args => {
+    const space = str(args.sourceSpace).trim()
+    const overall = quizDataStats(space) // 与「数据」面板同一实现
+    const tagById = new Map(quizTagList().map(t => [t.id, t]))
+    const rows = quizRecordList({ kind: 'wrong', sourceSpace: space })
+    const agg = new Map<string, { name: string; kind: string; wrongRecords: number; wrongSum: number; correctSum: number }>()
+    let untaggedWrong = 0
+    for (const r of rows) {
+      if (r.tagIds.length === 0) { untaggedWrong += 1; continue }
+      for (const tid of r.tagIds) {
+        const t = tagById.get(tid)
+        if (!agg.has(tid)) {
+          agg.set(tid, { name: t?.name ?? tid, kind: t?.kind ?? 'custom', wrongRecords: 0, wrongSum: 0, correctSum: 0 })
+        }
+        const a = agg.get(tid)!
+        a.wrongRecords += 1
+        a.wrongSum += r.wrongCount
+        a.correctSum += r.correctCount
+      }
+    }
+    const byTag = [...agg.values()]
+      .map(a => ({
+        ...a,
+        correctRate: a.wrongSum + a.correctSum > 0 ? Math.round((a.correctSum / (a.wrongSum + a.correctSum)) * 100) : 0,
+      }))
+      .sort((x, y) => y.wrongSum - x.wrongSum || y.wrongRecords - x.wrongRecords)
+    return {
+      scope: space || '全部学习空间',
+      overall: {
+        total: overall.total,
+        wrong: overall.wrong,
+        mastered: overall.mastered,
+        favorite: overall.favorite,
+        notes: overall.notes,
+        todayWrong: overall.todayWrong,
+        correctRate: overall.correctRate,
+        tags: overall.tags,
+        collections: overall.collections,
+      },
+      byBand: overall.byBand,
+      byNotebook: overall.byBook,
+      byTag,
+      untaggedWrong,
+      ...(untaggedWrong > 0
+        ? { hint: `有 ${untaggedWrong} 道错题没有任何标签（byTag 统计不到）。建议先 quiz.list 取出这些题，按错误类型归类后用 quiz.tag 批量打标` }
+        : {}),
+    }
+  })
+
+  // 27. builtin.quiz.set-note —— 写错因备注
+  registerTool({
+    name: 'builtin.quiz.set-note',
+    title: '写错题备注',
+    description: '给一道错题写备注（≤500 字），如错因分析、正确思路、易错点提醒。整条覆盖：传空串即清空备注',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        recordId: { type: 'string', description: '错题记录 id（来自 quiz.list）' },
+        note: { type: 'string', description: '备注正文；传空串=清空备注', allowEmpty: true },
+      },
+      required: ['recordId', 'note'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    module: 'quiz',
+  }, args => {
+    const recordId = str(args.recordId).trim()
+    if (!recordId) throw new Error('recordId 不能为空')
+    quizRecordSetNote(recordId, str(args.note))
+    broadcastDataChanged('quiz')
+    return { ok: true, recordId }
+  })
+
+  // 28. builtin.quiz.tag —— 批量打标签（AI 整理错题本的核心动作）
+  registerTool({
+    name: 'builtin.quiz.tag',
+    title: '给错题打标签',
+    description: '给错题批量打标签，即"按错误类型归类"。标签按名字指定，不存在会自动新建（无须先建标签）；查找按名字去重，不会因换类别建出同名重复标签。mode=add（默认，追加，保留原有标签）/ set（整体覆盖该题的标签）。这是 AI 整理错题本的核心动作',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        recordIds: { type: 'string', description: '错题记录 id，多个用逗号分隔' },
+        tags: { type: 'string', description: '标签名，多个用逗号分隔，如 "二叉树遍历,递归"' },
+        tagKind: { type: 'string', enum: ['topic', 'type', 'difficulty', 'custom'], description: '标签类别：topic 考点(默认) / type 题型 / difficulty 难度 / custom 关键词。仅对新建的标签生效' },
+        mode: { type: 'string', enum: ['add', 'set'], description: 'add=追加(默认) / set=整体覆盖' },
+      },
+      required: ['recordIds', 'tags'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    module: 'quiz',
+  }, args => {
+    const rids = splitCsv(args.recordIds)
+    const names = splitCsv(args.tags)
+    if (rids.length === 0) throw new Error('recordIds 不能为空')
+    if (names.length === 0) throw new Error('tags 不能为空')
+    const kind = ['topic', 'type', 'difficulty', 'custom'].includes(str(args.tagKind)) ? str(args.tagKind) : 'topic'
+    const mode = str(args.mode) === 'set' ? 'set' : 'add'
+    const tagIds = names.map(n => quizTagResolveOrCreate(n, kind).id)
+    if (mode === 'set') {
+      for (const rid of rids) quizRecordSetTags(rid, tagIds)
+    } else {
+      quizRecordAddTags(rids, tagIds)
+    }
+    broadcastDataChanged('quiz')
+    return { ok: true, records: rids.length, tags: names, tagKind: kind, mode }
+  })
+
+  // 29. builtin.quiz.collect —— 加入自定义分组
+  registerTool({
+    name: 'builtin.quiz.collect',
+    title: '错题加入分组',
+    description: '把错题批量放进自定义分组（如"考前冲刺""二刷错题"）。分组按名字指定，不存在会自动新建。mode=add（默认，追加）/ set（整体覆盖该题的分组）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        recordIds: { type: 'string', description: '错题记录 id，多个用逗号分隔' },
+        collection: { type: 'string', description: '分组名（不存在则新建）' },
+        mode: { type: 'string', enum: ['add', 'set'], description: 'add=追加(默认) / set=整体覆盖' },
+      },
+      required: ['recordIds', 'collection'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    module: 'quiz',
+  }, args => {
+    const rids = splitCsv(args.recordIds)
+    const name = str(args.collection).trim()
+    if (rids.length === 0) throw new Error('recordIds 不能为空')
+    if (!name) throw new Error('collection 不能为空')
+    const mode = str(args.mode) === 'set' ? 'set' : 'add'
+    const col = quizCollectionResolveOrCreate(name)
+    if (mode === 'set') {
+      for (const rid of rids) quizRecordSetCollections(rid, [col.id])
+    } else {
+      for (const rid of rids) {
+        const cur = quizRecordCollectionIds(rid)
+        if (cur.includes(col.id)) continue
+        quizRecordSetCollections(rid, [...cur, col.id])
+      }
+    }
+    broadcastDataChanged('quiz')
+    return { ok: true, collection: col.name, collectionId: col.id, records: rids.length, mode }
+  })
+
+  // 30. builtin.quiz.favorite —— 收藏 / 取消收藏
+  registerTool({
+    name: 'builtin.quiz.favorite',
+    title: '收藏或取消收藏错题',
+    description: '设置某道错题的收藏状态（收藏的题会出现在错题本的「收藏」页签，便于单独拎出来复习）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        recordId: { type: 'string', description: '错题记录 id' },
+        favorite: { type: 'boolean', description: 'true=收藏 / false=取消收藏' },
+      },
+      required: ['recordId', 'favorite'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    module: 'quiz',
+  }, args => {
+    const recordId = str(args.recordId).trim()
+    if (!recordId) throw new Error('recordId 不能为空')
+    const r = quizRecordSetFavorite(recordId, args.favorite === true)
+    if (!r) throw new Error(`错题记录不存在: ${recordId}`)
+    broadcastDataChanged('quiz')
+    return { ok: true, recordId, isFavorite: r.isFavorite }
+  })
+
+  // 31. builtin.quiz.remove —— 从错题本移除（破坏性）
+  registerTool({
+    name: 'builtin.quiz.remove',
+    title: '移除错题',
+    description: '从错题本移除若干条记录（连同其标签、分组关联一并清理）。破坏性、不可撤销：执行前必须先用 quiz.list 核对 id 无误并征得用户同意。若只是想说明"为什么错"，请改用 quiz.set-note 写备注，不要删',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        recordIds: { type: 'string', description: '错题记录 id，多个用逗号分隔' },
+      },
+      required: ['recordIds'],
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    module: 'quiz',
+  }, args => {
+    const rids = splitCsv(args.recordIds)
+    if (rids.length === 0) throw new Error('recordIds 不能为空')
+    let removed = 0
+    const missing: string[] = []
+    for (const rid of rids) {
+      if (quizRecordRemoveById(rid)) removed += 1; else missing.push(rid)
+    }
+    broadcastDataChanged('quiz')
+    return { ok: true, removed, ...(missing.length ? { missing, missingHint: '这些 id 在错题本中不存在（可能已被移除）' } : {}) }
+  })
+
+  // 32. builtin.quiz.gen-paper —— 按错误类型组卷成知识库练习页
+  registerTool({
+    name: 'builtin.quiz.gen-paper',
+    title: '按错误类型组卷成练习页',
+    description: '从错题本按条件抽题，生成一份知识库练习页（.md）。页内每道题是一个 quiz 围栏，因此可以直接在该页作答——答错的题会自动回流错题本、答对两次视为掌握，形成"错题 → 组卷 → 重练 → 回流"闭环。支持按学习空间／标签名／错次档位／题量／排序筛题',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '练习页标题，缺省按日期自动命名' },
+        sourceSpace: { type: 'string', description: '限定学习空间名，省略=全部空间' },
+        tagNames: { type: 'string', description: '标签名筛选，多个用逗号分隔，命中任一即算匹配' },
+        band: { type: 'string', enum: ['all', 'stubborn', 'mid', 'light'], description: '错次档位：all=不限(默认) / stubborn=顽固错(≥4次) / mid=中错(2-3次) / light=轻错(1次)' },
+        limit: { type: 'number', description: '最多出题数，默认 20，上限 100' },
+        order: { type: 'string', enum: ['wrong', 'recent', 'random'], description: 'wrong=按错次降序(默认) / recent=按最近更新 / random=随机' },
+        categoryName: { type: 'string', description: '存入的知识库分类名（精确匹配）；省略则存入默认收件箱' },
+      },
+    },
+    source: 'builtin',
+    enabled: true,
+    readOnly: false,
+    requires: 'write',
+    tier: 'ondemand',
+    module: 'quiz',
+  }, args => {
+    const space = str(args.sourceSpace).trim()
+    const tags = quizTagList()
+    const tagIds: string[] = []
+    const unknownTags: string[] = []
+    for (const n of splitCsv(args.tagNames)) {
+      const hit = tags.find(t => t.name === n)
+      if (hit) tagIds.push(hit.id); else unknownTags.push(n)
+    }
+    const rawBand = str(args.band)
+    const band = ['all', 'stubborn', 'mid', 'light'].includes(rawBand) ? rawBand : 'all'
+    const rawOrder = str(args.order)
+    const order = ['wrong', 'recent', 'random'].includes(rawOrder) ? rawOrder : 'wrong'
+    const limit = clamp(Math.floor(num(args.limit, 20)), 1, 100)
+
+    // 抽题：kind='wrong' = 尚未掌握的错题；无快照（题干）的旧记录出不了卷，先剔除并如实回报
+    const candidates = quizRecordList({ kind: 'wrong', sourceSpace: space, tagIds })
+      .filter(r => !!r.snapshot && (r.snapshot.question ?? '').trim() !== '')
+    const matched = band === 'all' ? candidates : candidates.filter(r => quizBandKeyOf(r.wrongCount) === band)
+    if (matched.length === 0) {
+      const bandText = band === 'all' ? '不限档位' : QUIZ_BAND_LABEL[band]
+      throw new Error(
+        `没有符合条件的错题可组卷（空间「${space || '全部'}」· 标签「${tagIds.length ? splitCsv(args.tagNames).join('、') : '不限'}」· ${bandText}）。`
+        + '可先调 quiz.stats 看现有错题的分布，再调整筛选条件',
+      )
+    }
+    if (order === 'wrong') matched.sort((a, b) => b.wrongCount - a.wrongCount || b.correctCount - a.correctCount)
+    else if (order === 'recent') matched.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0))
+    else matched.sort(() => Math.random() - 0.5)
+    const picked = matched.slice(0, limit)
+
+    const dateStr = todayLocal()
+    const cond = [
+      space || '全部学习空间',
+      tagIds.length ? `标签：${splitCsv(args.tagNames).join('、')}` : '',
+      band === 'all' ? '' : QUIZ_BAND_LABEL[band],
+    ].filter(Boolean).join(' · ')
+    const title = str(args.title).trim() || `错题重练 · ${dateStr}`
+
+    const lines: string[] = []
+    lines.push(`# ${title}`)
+    lines.push('')
+    lines.push(`> 由错题本自动组卷（${cond}），共 ${picked.length} 题，生成于 ${dateStr}。`)
+    lines.push('> 直接在本页作答：答错的题会自动回流到错题本，答对两次即视为已掌握。')
+    lines.push('')
+    picked.forEach((r, i) => {
+      const snap = r.snapshot!
+      // 重排题号：记录里的 quiz_no 是它在原页面的序号，在本卷里必须重新从 1 排，
+      // 否则答题回报 (pageId, quizNo) 会与页面上的题序对不上（2026-09-12）
+      lines.push('```quiz')
+      lines.push(JSON.stringify({
+        no: i + 1,
+        points: '',
+        question: snap.question,
+        options: snap.options,
+        answer: snap.answer,
+        explanation: snap.explanation || '',
+      }))
+      lines.push('```')
+      lines.push('')
+    })
+
+    // 建页走知识库受控写层：与手工新建页面同一条路径（自动生成 frontmatter id 并登记索引）
+    let categoryId: string | null = null
+    const catName = str(args.categoryName).trim()
+    if (catName) {
+      const cat = vaultGetCategories().find(c => c.name === catName && c.categoryType !== 'space')
+      if (!cat) throw new Error(`未找到分类「${catName}」；可省略 categoryName 以存入默认收件箱`)
+      categoryId = cat.id
+    }
+    const page = vaultCreatePage({ title, contentMd: lines.join('\n'), categoryId })
+    // 同 knowledge.create-page：.md 落盘即失效索引并广播，否则列表/搜索里看不到新练习页
+    invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
+    broadcastDataChanged('knowledge')
+    broadcastDataChanged('quiz')
+    return {
+      ok: true,
+      pageId: page.id,
+      title,
+      path: page.path,
+      questions: picked.length,
+      matched: matched.length,
+      ...(unknownTags.length ? { unknownTags } : {}),
+      hint: '练习页已生成，用户可直接打开该页答题；答错的题会自动记入错题本',
+    }
   })
 }

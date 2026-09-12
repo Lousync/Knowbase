@@ -1,4 +1,4 @@
-import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, AgentChatMessage, AgentChatResult, AgentContextInfo, AgentSessionInfo, AgentSessionSource, AgentStoredMessage, AgentTraceStep, AgentStreamEvent, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, QuizMigrateStatus, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, PdfOpResult, PdfExportResult, AiTeachSourceInput, CreatePasswordEntryDTO, UpdatePasswordEntryDTO } from '../types'
+import type { ElectronAPI, Entry, EntryFilter, CreateEntryDTO, UpdateEntryDTO, Tag, CreateScheduleTodoDTO, UpdateScheduleTodoDTO, CreateKnowledgeCategoryDTO, UpdateKnowledgeCategoryDTO, CreateKnowledgePageDTO, UpdateKnowledgePageDTO, KnowledgeTag, ExportFileResult, UserProfile, UserStats, UserExportData, UserImportData, MomentsPost, CreateMomentsPostDTO, UpdateMomentsPostDTO, MomentsAlbum, AttachmentMeta, CreateHabitDTO, UpdateHabitDTO, HabitLink, HabitAutoCheckin, SuperviseConfig, AiToolsListResult, AiToolInvokeResult, AiToolUsage, AuditEntryInfo, McpServerInfo, McpServerDraft, McpToolPreview, McpTestResult, SkillInfo, SkillInstallResult, LlmProviderInfo, LlmProviderDraft, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, LlmUsageInfo, LlmUsageBreakdownEntry, AgentChatMessage, AgentChatResult, AgentCompressResult, AgentContextInfo, AgentSessionInfo, AgentSessionSource, AgentStoredMessage, AgentTraceStep, AgentStreamEvent, CcSwitchScanResult, CcSwitchImportResult, QuizSnapshotDto, QuizRecordDto, QuizCollectionDto, QuizStatsDto, QuizTagDto, PluginViewContribution, PluginCommandInfo, PluginSettingItem, PluginRendererInfo, QuizDataStats, DictLookupResult, DictStatus, TranslateInvokeRequest, TranslateInvokeResult, PdfOpResult, PdfExportResult, AiTeachSourceInput, CreatePasswordEntryDTO, UpdatePasswordEntryDTO } from '../types'
 import type { SettingsKey, SettingsValue, AppSettings } from './settings'
 import { SETTINGS_DEFAULTS } from './settings'
 const a = () => { if (!window.api) throw new Error('Electron API not available.'); return window.api }
@@ -99,6 +99,7 @@ export const deleteKnowledgePage = async (id: string) => { const r = await a().d
 export const searchKnowledgePages = (q: string) => a().searchKnowledgePages(q)
 export const getKnowledgeBacklinks = (pageId: string) => a().getKnowledgeBacklinks(pageId)
 export const getKnowledgeBacklinkContext = (pageId: string) => a().getKnowledgeBacklinkContext(pageId)
+export const getKnowledgeSimilarPages = (pageId: string) => a().getKnowledgeSimilarPages(pageId)
 export const getKnowledgeManualLinks = (pageId: string) => a().getKnowledgeManualLinks(pageId)
 export const addKnowledgeManualLink = (pageId: string, targetId: string) => a().addKnowledgeManualLink(pageId, targetId)
 export const removeKnowledgeManualLink = (pageIdA: string, pageIdB: string) => a().removeKnowledgeManualLink(pageIdA, pageIdB)
@@ -142,6 +143,11 @@ export const installUpdate = (filePath: string) => a().installUpdate(filePath)
 export const updatePauseDownload = () => a().updatePauseDownload()
 export const updateCancelDownload = () => a().updateCancelDownload()
 export const onUpdateDownloadProgress = (cb: (p: { percent: number; receivedBytes: number; totalBytes: number }) => void) => a().onUpdateDownloadProgress(cb)
+// 更新说明（VS Code 式 tab）
+export const getReleaseNotesState = () => a().getReleaseNotesState()
+export const markReleaseNotesShown = (version: string) => a().markReleaseNotesShown(version)
+export const getReleaseNote = (version: string) => a().getReleaseNote(version)
+export const listReleaseNotes = () => a().listReleaseNotes()
 export const pluginFetchRegistry = () => a().pluginFetchRegistry()
 export const pluginInstall = (url: string, grantedCapabilities?: string[]) => a().pluginInstall(url, grantedCapabilities)
 /** 插件集合变化（安装/卸载/启停/内置落位）——后台 code 宿主与插件页监听 */
@@ -157,6 +163,16 @@ export const pluginUninstall = (id: string) => a().pluginUninstall(id)
 export const pluginGetContribution = (id: string, key: string) => a().pluginGetContribution(id, key)
 /** 列出已启用插件声明的视图挂载点（可按 slot 过滤） */
 export const pluginListViews = (slot?: string): Promise<PluginViewContribution[]> => a().pluginListViews(slot)
+/** 列出已启用插件声明的命令（plugin-phase1-design C3；附首个 view 槽位供导航激活） */
+export const pluginListCommands = (): Promise<PluginCommandInfo[]> => a().pluginListCommands()
+/** 已启用插件声明的 fenced-code 渲染器（plugin-phase1-design C6） */
+export const pluginListRenderers = (): Promise<PluginRendererInfo[]> => a().pluginListRenderers()
+/** 声明式设置（plugin-phase1-design C5）：schema / 当前值（默认值合并）/ 写值（落 kb.store settings.*） */
+export const pluginGetSettingsSchema = (id: string): Promise<{ schema: PluginSettingItem[] }> => a().pluginGetSettingsSchema(id)
+export const pluginGetSettingValues = (id: string): Promise<{ values: Record<string, unknown> }> => a().pluginGetSettingValues(id)
+export const pluginSetSettingValue = (id: string, key: string, value: unknown): Promise<{ ok: boolean; error?: string }> => a().pluginSetSettingValue(id, key, value)
+/** 宿主事件推送（plugin-phase1-design C4）：主进程已按订阅过滤，按 pluginId 转发常驻 Worker */
+export const onPluginEvent = (cb: (p: { pluginId: string; event: string; payload: unknown; dropped?: number }) => void): (() => void) => a().onPluginEvent(cb)
 /** C 级模块插件：自有数据表读写（主进程校验 data 能力后执行，禁止任意 SQL） */
 export const pluginDataQuery = (pluginId: string, table: string, opts?: { where?: Array<{ column: string; op?: string; value: unknown }>; orderBy?: string; desc?: boolean; limit?: number }): Promise<Record<string, unknown>[]> => a().pluginDataQuery(pluginId, table, opts)
 export const pluginDataInsert = (pluginId: string, table: string, row: Record<string, unknown>): Promise<{ ok: boolean; id?: string; error?: string }> => a().pluginDataInsert(pluginId, table, row)
@@ -401,12 +417,10 @@ export const quizCollectionCreate = (name: string): Promise<QuizCollectionDto> =
 export const quizCollectionRename = (id: string, name: string): Promise<QuizCollectionDto> => a().quizCollectionRename(id, name)
 export const quizCollectionDelete = (id: string): Promise<void> => a().quizCollectionDelete(id)
 // ===== 错题本插件数据通道（JSON 版） =====
-export const quizMigrateStatus = (): Promise<QuizMigrateStatus> => a().quizMigrateStatus()
-export const quizMigrateExport = (): Promise<{ ok: boolean; path?: string; data?: Record<string, unknown[]>; error?: string }> => a().quizMigrateExport()
-export const quizMigrateDropPluginData = (): Promise<{ ok: boolean; error?: string }> => a().quizMigrateDropPluginData()
-/** 插件模式判题上报 / 收藏切换（写 JSON 插件桶） */
-export const quizPluginReport = (pluginId: string, pageId: string, quizNo: number, correct: boolean, meta?: { pageTitle?: string; snapshot?: unknown }): Promise<{ ok: boolean; error?: string }> => a().quizPluginReport(pluginId, pageId, quizNo, correct, meta)
-export const quizPluginToggleFavorite = (pluginId: string, pageId: string, quizNo: number): Promise<{ ok: boolean; favorite: boolean }> => a().quizPluginToggleFavorite(pluginId, pageId, quizNo)
+export const quizDataStats = (opts?: { sourceSpace?: string }): Promise<QuizDataStats> => a().quizDataStats(opts)
+export const quizDataExport = (opts?: { sourceSpace?: string }): Promise<{ ok: boolean; path?: string; count?: number; error?: string }> => a().quizDataExport(opts)
+export const quizDataClearMastered = (opts?: { sourceSpace?: string }): Promise<{ ok: boolean; removed: number; error?: string }> => a().quizDataClearMastered(opts)
+export const quizDataClearAll = (opts?: { sourceSpace?: string }): Promise<{ ok: boolean; removed: number; error?: string }> => a().quizDataClearAll(opts)
 
 // ===== AI Tools (ToolRegistry) =====
 export const aiToolsList = (): Promise<AiToolsListResult> => a().aiToolsList()
@@ -444,6 +458,7 @@ export const llmAddModel = (id: string, model: string): Promise<{ ok: boolean; m
 export const llmSetDefaultModel = (value: string): Promise<{ ok: boolean }> => a().llmSetDefaultModel(value)
 export const llmTestModel = (providerId: string, model: string): Promise<LlmModelTestResultInfo> => a().llmTestModel(providerId, model)
 export const llmGetUsage = (): Promise<LlmUsageInfo> => a().llmGetUsage()
+export const llmUsageBreakdown = (): Promise<{ month: string; entries: LlmUsageBreakdownEntry[] }> => a().llmUsageBreakdown()
 
 // ===== 划词翻译 / 离线词典 =====
 export const dictLookup = (word: string): Promise<DictLookupResult> => a().dictLookup(word)
@@ -462,7 +477,9 @@ export const agentRegenerate = (sessionId: string, context?: AgentContextInfo, c
 /** 场景/模板启动：不落任何用户消息，用虚拟首轮触发（聊天区第一条即 AI 回复） */
 export const agentStartScene = (sessionId: string, chatId?: string, source?: string, modelId?: string): Promise<AgentChatResult> => a().agentStartScene({ sessionId, chatId, source, modelId })
 export const agentEditMessage = (sessionId: string, messageId: string, message: string, context?: AgentContextInfo, chatId?: string): Promise<AgentChatResult> => a().agentEditMessage({ sessionId, messageId, message, context, chatId })
-export const agentDeleteMessage = (messageId: string): Promise<boolean> => a().agentDeleteMessage(messageId)
+export const agentDeleteMessage = (sessionId: string, messageId: string): Promise<boolean> => a().agentDeleteMessage(sessionId, messageId)
+/** 会话压缩（conversation-compaction-design）：/compress 指令触发；自动预检在主进程内不走此通道 */
+export const agentCompressSession = (req: { sessionId: string; modelId?: string; providerId?: string; effort?: 'off' | 'low' | 'medium' | 'high' }): Promise<AgentCompressResult> => a().agentCompressSession(req)
 export const agentAbort = (chatId: string): Promise<boolean> => a().agentAbort(chatId)
 /** 保存/清除会话级全局要求（仅该会话后续轮次生效，空串=清除） */
 export const agentSetSessionInstructions = (id: string, instructions: string): Promise<{ ok: boolean; error?: string }> => a().agentSetSessionInstructions(id, instructions)

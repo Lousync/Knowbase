@@ -76,7 +76,7 @@ export function PasswordSection({ hasPassword, onPasswordChanged }: Props) {
 
       {/* Password modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={() => setShowModal(false)}>
           <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-[360px]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
               <div className="flex items-center gap-2 text-[14px] font-semibold text-[var(--text-primary)]">

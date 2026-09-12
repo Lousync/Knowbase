@@ -116,7 +116,7 @@ export function VaultArchiveSection() {
 
       {/* 冲突逐条决策弹窗（D5：覆盖/跳过/重命名） */}
       {conflicts && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50" onClick={cancelDialog}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 kb-overlay" onClick={cancelDialog}>
           <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-[620px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)] shrink-0">
               <div className="text-[14px] font-semibold">导入冲突：{conflicts.length} 个文件已存在</div>

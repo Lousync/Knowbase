@@ -30,24 +30,29 @@ export interface GatewayCtx {
   pluginId: string
   /** 会话期能力快照（open 时刻） */
   capabilities: string[]
+  /** manifest.vaultScope 快照（写路径收敛前缀；未声明 = 全库可写） */
+  vaultScope?: string[]
 }
 
 export interface GatewaySession {
   token: string
   pluginId: string
   capabilities: string[]
+  vaultScope?: string[]
   createdAt: number
 }
 
 export interface GatewayDeps {
   /** 查插件当前安装/启用/授权状态；未安装返回 null */
-  sessionState(pluginId: string): { enabled: boolean; capabilities: string[] } | null
+  sessionState(pluginId: string): { enabled: boolean; capabilities: string[]; vaultScope?: string[] } | null
   /** 方法路由表：`kb.data.query` → { capability:'data', run } 等 */
   methods: Record<string, GatewayMethodDef>
   /** 审计钩子（写 plugin_audit_log） */
   audit?(pluginId: string, action: string, detail: Record<string, unknown>): void
   /** token 生成器（默认 randomBytes；测试可注入固定值） */
   generateToken?(): string
+  /** 会话终结钩子（plugin-phase1-design C4）：close/重开替换/全清时通知（事件订阅清理用） */
+  onSessionClosed?(pluginId: string): void
 }
 
 export type RpcResult =
@@ -70,20 +75,29 @@ export function createGateway(deps: GatewayDeps) {
     if (!state) return { ok: false, code: 'ENOTFOUND', message: '插件未安装' }
     if (!state.enabled) return { ok: false, code: 'EDISABLED', message: '插件已禁用' }
     // 同插件重开：清旧会话（frame 意外未 close 的场景兜底）
-    for (const [t, s] of sessions) if (s.pluginId === pluginId) sessions.delete(t)
+    for (const [t, s] of sessions) {
+      if (s.pluginId === pluginId) {
+        sessions.delete(t)
+        deps.onSessionClosed?.(pluginId)
+      }
+    }
     const token = generateToken()
-    sessions.set(token, { token, pluginId, capabilities: state.capabilities, createdAt: Date.now() })
+    sessions.set(token, { token, pluginId, capabilities: state.capabilities, vaultScope: state.vaultScope, createdAt: Date.now() })
     return { ok: true, token }
   }
 
   /** 关闭会话（frame 卸载/宿主重启全清走 closeAll） */
   function close(token: string): void {
+    const s = sessions.get(token)
     sessions.delete(token)
+    if (s) deps.onSessionClosed?.(s.pluginId)
   }
 
   /** 宿主重启/应用退出时全清 */
   function closeAll(): void {
+    const closed = [...sessions.values()]
     sessions.clear()
+    for (const s of closed) deps.onSessionClosed?.(s.pluginId)
   }
 
   /** 会话数量（测试/诊断） */
@@ -117,7 +131,7 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: false, code: 'ECAPABILITY', message: `缺少能力: ${def.capability}` }
     }
     try {
-      const ctx: GatewayCtx = { pluginId: session.pluginId, capabilities: session.capabilities }
+      const ctx: GatewayCtx = { pluginId: session.pluginId, capabilities: session.capabilities, vaultScope: session.vaultScope }
       const result = def.run(ctx, params)
       // 同步/异步统一：同步直接返回，异步则补 then（错误转 RpcResult）
       if (result instanceof Promise) {

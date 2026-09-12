@@ -31,12 +31,14 @@ import { registerSuperviseHandlers } from '../database/repositories/superviseRep
 import { registerSummaryHandlers } from '../database/repositories/summaryRepo'
 import { registerBlogTemplateHandlers } from '../database/repositories/blogTemplateRepo'
 import { registerQuizHandlers } from '../database/repositories/quizRepo'
-import { startSuperviseScheduler, stopSuperviseScheduler } from '../lib/pushService'
+import { startSuperviseScheduler, stopSuperviseScheduler, enqueueExternalPush } from '../lib/pushService'
+import { initScheduleReminders } from '../lib/scheduleReminder'
 import { initPasswordFiller, destroyPasswordFiller } from './passwordFiller'
 import { initDayPanel, disposeDayPanel, getPanelMode, setPanelMode, onPanelModeChanged, isPopoutOpen } from './dayPanelWindow'
 import { registerWindowBus } from './windowBus'
 import { registerDevtoolsHandlers } from './devtools'
 import { registerUpdateHandlers } from '../lib/updateService'
+import { registerReleaseNotesHandlers } from '../lib/releaseNotes'
 import { registerPluginHandlers, getPluginsRoot } from '../lib/pluginRegistry'
 import { registerAiToolHandlers } from '../lib/aiTools'
 import { registerKbVisualProtocol } from '../lib/kbVisualProtocol'
@@ -45,6 +47,9 @@ import { registerMcpHandlers, restoreMcpConnections } from '../lib/mcpService'
 import { registerSkillHandlers } from '../lib/skillService'
 import { registerLlmHandlers } from '../lib/llmService'
 import { registerAgentHandlers } from '../lib/agentService'
+import { registerAgentCompressHandlers } from '../lib/agentCompress'
+import { registerSemanticIndexHandlers } from '../lib/kbStore/semanticIndex'
+import { registerKnowledgeSearchHandlers } from '../lib/knowledgeSearch'
 import { registerAiTeachingFolderHandlers, migrateRootDir as migrateAiTeachRootDir } from '../lib/aiTeachingFolders'
 import { registerAiTeachingWorkspaceHandlers } from '../lib/aiTeachingWorkspaces'
 import { registerAiTeachingSourceHandlers } from '../lib/aiTeachingSources'
@@ -208,7 +213,7 @@ function createTray(): void {
     }
     if (process.platform === 'win32') img = img.resize({ width: 16, height: 16 })
     tray = new Tray(img)
-    tray.setToolTip('Knowbase · 日程打卡')
+    tray.setToolTip('Phrontis · 日程打卡')
     const rebuildMenu = () => {
       tray?.setContextMenu(Menu.buildFromTemplate([
         { label: '显示主窗口', click: showMainWindow },
@@ -219,7 +224,7 @@ function createTray(): void {
           { label: '桌面小组件', type: 'radio', checked: getPanelMode() === 'desktop-widget', click: () => setPanelMode('desktop-widget') },
         ]},
         { type: 'separator' },
-        { label: '退出 Knowbase', click: () => { isQuitting = true; app.quit() } },
+        { label: '退出 Phrontis', click: () => { isQuitting = true; app.quit() } },
       ]))
     }
     rebuildMenu()
@@ -241,7 +246,7 @@ function createWindow(): void {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: 'Knowbase',
+    title: 'Phrontis',
     frame: false,                          // 无边框 → 自定义标题栏
     titleBarStyle: 'hidden',              // macOS 隐藏原生标题栏
     transparent: true,                     // 透明底 → 根容器 18px 自绘圆角（最大化时渲染层自动切直角）
@@ -263,7 +268,7 @@ function createWindow(): void {
     event.preventDefault()
   })
 
-  console.log('[Boot] Knowbase main ready - net-v2 -', app.getVersion())
+  console.log('[Boot] Phrontis main ready - net-v2 -', app.getVersion())
 
   // 开发模式：F12 切换 DevTools（默认菜单已禁用）
   mainWindow.webContents.on('before-input-event', (_event, input) => {
@@ -635,6 +640,9 @@ function registerWindowHandlers(): void {
 
 // ===== 应用生命周期 =====
 app.whenReady().then(async () => {
+  // Windows 系统通知需要 AppUserModelId，否则不进操作中心（日程 DDL 提醒依赖系统通知通道）
+  app.setAppUserModelId('com.local.knowbase.programmer')
+
   // Initialize settings cache once at startup
   settingsCache = loadSettingsFromDisk()
 
@@ -659,17 +667,37 @@ app.whenReady().then(async () => {
         pluginDebugLog(`403 out-of-bounds - resolved=${resolved}`)
         return new Response('Forbidden', { status: 403 })
       }
-      if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+      // 内置插件只读兜底（plugin-phase1-design C1）：内置插件首启才播种进插件根目录，
+      // 播种前（含启动尾部自检）按插件根查找必然 404——这里按序回落 builtin-plugins 目录，
+      // 消解启动时序依赖。逐候选做同样的越界校验，只读不写。
+      let file: string | null = existsSync(resolved) && statSync(resolved).isFile() ? resolved : null
+      if (!file) {
+        const builtinCandidates = app.isPackaged
+          ? [join(process.resourcesPath, 'builtin-plugins')]
+          : [
+              join(app.getAppPath(), 'resources', 'builtin-plugins'),
+              resolve(app.getAppPath(), '../..', 'resources', 'builtin-plugins'),
+              join(process.cwd(), 'resources', 'builtin-plugins'),
+            ]
+        for (const builtinDir of builtinCandidates) {
+          if (!existsSync(builtinDir)) continue
+          const bResolved = resolve(join(builtinDir, id), rel)
+          const bRoot = join(builtinDir, id)
+          if (!bResolved.startsWith(bRoot.endsWith(sep) ? bRoot : bRoot + sep)) continue
+          if (existsSync(bResolved) && statSync(bResolved).isFile()) { file = bResolved; break }
+        }
+      }
+      if (!file) {
         pluginDebugLog(`404 not found - resolved=${resolved}`)
         return new Response('Not Found', { status: 404 })
       }
-      const ext = (resolved.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
+      const ext = (file.match(/\.(\w+)$/)?.[1] || '').toLowerCase()
       const mimeMap: Record<string, string> = {
         html: 'text/html', js: 'text/javascript', mjs: 'text/javascript', css: 'text/css',
         json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
         jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', woff2: 'font/woff2', woff: 'font/woff',
       }
-      return new Response(Readable.toWeb(createReadStream(resolved)) as unknown as BodyInit, {
+      return new Response(Readable.toWeb(createReadStream(file)) as unknown as BodyInit, {
         headers: {
           'Content-Type': mimeMap[ext] || 'application/octet-stream',
           'Cache-Control': 'no-cache',
@@ -821,6 +849,8 @@ app.whenReady().then(async () => {
   // 开发者工具(内部对 app.isPackaged 自行守卫,打包版不注册任何 handler)
   registerDevtoolsHandlers()
   registerUpdateHandlers({ getSettingValue: (key) => settingsCache[key] })
+  // 更新说明（VS Code 式 tab）：CHANGELOG 生成的清单 + 手写亮点 + 仓库内阅读记录
+  registerReleaseNotesHandlers({ getSettingValue: (key) => settingsCache[key] })
   // 设备传输：局域网短时双向互传（工具箱）
   registerLanShareHandlers()
   // 编辑器工作区（Vault 仓库）：文件服务 + 授权根管理（getSetting 供 AI教学 产物根沉底名单）
@@ -859,6 +889,12 @@ app.whenReady().then(async () => {
     }
     registerLlmHandlers({ getSettingValue, setSettingValue })
     registerAgentHandlers()
+    // 会话压缩（conversation-compaction-design）：agent:compressSession（/compress 指令 + 自动预检共用）
+    registerAgentCompressHandlers()
+    // 知识语义索引（knowledge-index-design）：设置页状态卡 + 手动重建
+    registerSemanticIndexHandlers()
+    // 相似笔记（编辑器右栏）检索 handler
+    registerKnowledgeSearchHandlers()
     // AI教学 P1：会话 ⇄ 文件夹绑定（aiTeach:* IPC，总纲 §二）
     registerAiTeachingFolderHandlers((key) => settingsCache[key])
     // AI教学 P5：工作区两层（元数据 .knowbase/modules/aiTeaching/workspaces.json，§3.2-6/3-6）
@@ -911,6 +947,12 @@ app.whenReady().then(async () => {
 
   // 远程监督：每日汇总定时器 + 免打扰补发
   startSuperviseScheduler()
+
+  // 日程 DDL 提醒：接线设置读取器与外部通道；实际检查挂在上面那个 30s tick 里（复用调度器，不新建）
+  initScheduleReminders({
+    getSetting: (key) => settingsCache[key],
+    pushExternal: enqueueExternalPush,
+  })
 
   // MCP：恢复上次启用状态的外部服务器连接（异步，不阻断首帧）
   void restoreMcpConnections().catch((e) => console.warn('[MCP] Startup connection restore error (non-blocking):', (e as Error)?.message || e))

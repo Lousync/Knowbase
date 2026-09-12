@@ -262,7 +262,7 @@ export function GraphView({ onExit, scopePath, scopeName, onClearScope, onOpenIn
   const kindLabel = (k: string): string => (k === 'tag' ? '标签' : k === 'dangling' ? '未解析引用' : '页面')
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden h-full relative bg-[var(--bg-primary)]">
+    <div className="kb-view-fade flex-1 flex flex-col overflow-hidden h-full relative bg-[var(--bg-primary)]">
       <GraphCanvas
         ref={canvasRef}
         data={displayData}

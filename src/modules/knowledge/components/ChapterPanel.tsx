@@ -3,7 +3,7 @@ import { Folder, Pencil, Trash2, Star, Download, ChevronDown, ChevronUp, Chevron
 import type { KnowledgeCategory, KnowledgePage } from '../../../types'
 import { FileIcon } from '../../../components/shared/FileIcon'
 import { getFileTypeInfo } from '../../../lib/fileTypes'
-import { ConfirmDialog } from '../../../components/shared'
+import { ConfirmDialog, Collapsible } from '../../../components/shared'
 import { getSetting, setSetting, reorderKnowledgePage } from '../../../lib/ipc'
 import { isEditingInput } from '../../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../../lib/activeTab'
@@ -270,13 +270,14 @@ export function ChapterPanel({
           title={chaptersOpen ? '收起章节列表' : '展开章节列表'}
         >
           <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
-            {chaptersOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {/* Tailwind v4 的 rotate-* 写的是 rotate 属性，transition-transform 收不到 → 用单图标 + .kb-chevron */}
+            <ChevronRight size={11} className={`kb-chevron ${chaptersOpen ? 'rotate-90' : ''}`} />
             章节
           </span>
           <span className="text-[10px] text-[var(--text-muted)]">{chapters.length}</span>
         </button>
-        {chaptersOpen && (
-        <>
+        {/* 章节折叠（docs/ui-animation-plan.md C 类）：Collapsible 保持「收起不挂载子树」的懒语义 */}
+        <Collapsible open={chaptersOpen} innerClassName="">{() => (
         <div className="max-h-[38vh] overflow-y-auto">
         {chapters.map(ch => (
           <div key={ch.id} data-chapter-id={ch.id}>
@@ -327,8 +328,7 @@ export function ChapterPanel({
           </div>
         ))}
         </div>
-        </>
-        )}
+        )}</Collapsible>
       </div>
       )}
 
@@ -424,7 +424,7 @@ export function ChapterPanel({
           title={pgOpen ? '收起页面列表' : '展开页面列表'}
         >
           <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
-            {pgOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            <ChevronRight size={11} className={`kb-chevron ${pgOpen ? 'rotate-90' : ''}`} />
             页面
           </span>
           <span className="text-[10px] text-[var(--text-muted)]">{pages.length}</span>
@@ -499,7 +499,7 @@ export function ChapterPanel({
                   </div>
                   <button onClick={e => { e.stopPropagation(); onToggleStar(p.id) }}
                     className="shrink-0 p-0.5 hidden group-hover:block">
-                    <Star size={13} className={p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'} />
+                    <Star key={p.isStarred ? 'on' : 'off'} size={13} className={`kb-micro-pop ${p.isStarred ? 'text-[var(--warning)] fill-[#c5a332]' : 'text-[var(--text-muted)]'}`} />
                   </button>
                   {deletingState(p.id) === 'animating' && <DeleteWipe />}
                 </div>
@@ -519,7 +519,7 @@ export function ChapterPanel({
 
       {/* Context menu */}
       {contextMenu && (
-        <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)}>
+        <div className="fixed inset-0 z-[60] kb-pop-layer" onClick={() => setContextMenu(null)}>
           <div
             className="absolute bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded shadow-xl py-0.5 min-w-[170px]"
             ref={contextMenuRef}

@@ -17,6 +17,7 @@ const MODULE_TABS: Array<{ id: TabName; label: string }> = [
   { id: 'user', label: '账户' },
 ]
 const tabLabel = (t: TabName) => MODULE_TABS.find((m) => m.id === t)?.label ?? t
+
 import { TitleBar, ActivityBar, GlobalConfirm } from './components/shared'
 import { ZenHotZone } from './components/shared/ZenHotZone'
 import { WorkbenchStatusBar } from './components/shared/WorkbenchStatusBar'
@@ -29,7 +30,10 @@ import { FONT_CSS_MAP, applyThemeClass } from './lib/settings'
 import { useSettings } from './lib/SettingsContext'
 import { isEditingInput } from './lib/shortcuts'
 import { setGlobalActiveTab } from './lib/activeTab'
-import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent } from './lib/ipc'
+import { getKnowledgePages, getKnowledgeCategories, getKnowledgeTags, workspaceGetCurrent, getReleaseNotesState, pluginListCommands, onPluginInstalledChanged } from './lib/ipc'
+import { requestPluginViewActivation, dispatchCodePluginAction } from './lib/pluginCommandBus'
+import { showToast } from './lib/toast'
+import type { PluginCommandInfo } from './types'
 /* 模块引入方式（2026-09-10 二次修正：回退到静态 import）
    曾把 12 个模块改成 React.lazy 做代码分割——首屏从 13.3MB 降到 3.37MB，但代价是
    「每次打开应用后，进入一个尚未访问过的模块都要现取 chunk」：生产下数十 ms，
@@ -51,6 +55,7 @@ import { ToolboxModule } from './modules/toolbox'
 import { PluginsModule } from './modules/plugins'
 import { EditorModule } from './modules/editor'
 import { AiTeachingModule } from './modules/ai-teaching'
+import { ReleaseNotesModule } from './modules/release-notes'
 
 import { FillPopup } from './modules/toolbox/components/FillPopup'
 import { VaultPicker } from './components/shared/VaultPicker'
@@ -69,6 +74,10 @@ import { ResizablePanel } from './components/shared/ResizablePanel'
 import { WindowResizeHandles } from './components/shared/WindowResizeHandles'
 // 仅类型引用,编译期擦除,不会把 devtools 模块带进正式版 bundle
 import type { DevToolsModuleProps } from './modules/devtools'
+/** 更新说明自动打开的延迟（ms）。错开标题栏 updateStartupCheck() 的 6s 静默检查，
+ *  也留出首屏渲染时间——它是一次「告知」，不该和启动路径抢资源。 */
+const RELEASE_NOTES_AUTO_OPEN_DELAY_MS = 2000
+
 /** 模块 chunk 拉取期间的占位（仅首次访问该 Tab 时出现一瞬，之后由保活层常驻） */
 function ModuleLoadingFallback() {
   return <div className="flex-1 flex items-center justify-center text-[12px] text-[var(--text-muted)] select-none">加载中…</div>
@@ -163,6 +172,14 @@ export default function App() {
   const [palette, setPalette] = useState<null | 'command' | 'file'>(null)
   const [fileItems, setFileItems] = useState<PaletteItem[]>([])
   const [fileLoading, setFileLoading] = useState(false)
+  // 插件命令（plugin-phase1-design C3）：命令面板聚合 + 执行分发（切模块激活视图 / 推常驻 Worker）
+  const [pluginCommands, setPluginCommands] = useState<PluginCommandInfo[]>([])
+  useEffect(() => {
+    const load = () => { void pluginListCommands().then(setPluginCommands).catch(() => null) }
+    load()
+    const off = onPluginInstalledChanged(load)
+    return off
+  }, [])
   // W3 · Editor Groups v1：副栏模块（两栏互不相同；null = 未分屏）
   const [secondaryTab, setSecondaryTab] = useState<TabName | null>(null)
   // 工具箱「回主页」信号（单调递增）：已在工具箱时点击活动栏图标 → +1，工具箱模块据此退出当前工具。
@@ -244,6 +261,31 @@ export default function App() {
     setSidebarOpen(true)
     setPalette(null)
   }, [])
+
+  /** 插件命令执行分发（plugin-phase1-design C3）：有视图 → 切模块激活；code 插件 → 推常驻 Worker */
+  const SLOT_MODULE: Record<string, TabName> = { knowledge: 'knowledge', editor: 'editor', blog: 'blog', schedule: 'schedule', aiTeach: 'aiTeaching' }
+  const runPluginCommand = useCallback((c: PluginCommandInfo) => {
+    if (c.viewSlot) {
+      const mod = SLOT_MODULE[c.viewSlot.split('.')[0]]
+      if (mod) {
+        openTab(mod)
+        // 模块可能刚首挂：稍候广播激活（PluginSlotEntry 同时消费暂存请求，双保险）
+        const slot = c.viewSlot
+        window.setTimeout(() => requestPluginViewActivation(c.pluginId, slot), 80)
+        return
+      }
+    }
+    if (c.type === 'code') {
+      if (!dispatchCodePluginAction(c.pluginId, 'command', { commandId: c.id })) {
+        showToast({ type: 'info', message: `插件「${c.name}」后台未运行，无法执行命令` })
+      }
+      setPalette(null)
+      return
+    }
+    showToast({ type: 'info', message: '该插件没有可打开的视图' })
+    setPalette(null)
+  }, [openTab])
+
   const buildCommandItems = (): PaletteItem[] => {
     const tabs: Array<{ id: TabName; label: string; hint?: string }> = [
       { id: 'editor', label: '打开 编辑器', hint: 'Vault 文件' },
@@ -258,6 +300,7 @@ export default function App() {
       { id: 'plugins', label: '打开 插件' },
       { id: 'help', label: '打开 帮助' },
       { id: 'user', label: '打开 账户' },
+      { id: 'releaseNotes', label: '打开 更新说明', hint: '本版做了什么' },
     ]
     const items: PaletteItem[] = tabs.map((t) => ({
       id: `open-${t.id}`,
@@ -277,6 +320,16 @@ export default function App() {
     MODULE_TABS.filter((m) => m.id !== activeTab).forEach((m) => {
       items.push({ id: `split-${m.id}`, label: `分屏：在副栏打开 ${m.label}`, group: '分屏', run: () => { setSecondaryTab(m.id); setPalette(null) } })
     })
+    // 插件命令（plugin-phase1-design C3）：hint = 插件名，与内置命令并列
+    for (const c of pluginCommands) {
+      items.push({
+        id: `plugin-cmd-${c.pluginId}.${c.id}`,
+        label: c.title,
+        hint: c.name,
+        group: '插件命令',
+        run: () => runPluginCommand(c),
+      })
+    }
     return items
   }
 
@@ -324,6 +377,41 @@ export default function App() {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsReady, loaded])
+
+  // ---- 更新说明（VS Code 式）：启动按版本判定自动打开 ----
+  // 判定在主进程（app.getVersion() vs 仓库 `.knowbase/modules/release-notes/index.json` 的基线），
+  // 渲染层只消费结果。延迟 2s：错开 updateStartupCheck() 的 6s（不抢网络/IO），也不与首屏渲染抢。
+  // 无当前仓库 / IPC 未就绪 → 静默失败，绝不打扰（更新说明不值得为它弹错误）。
+  const activeTabRef = useRef<TabName>('blog')
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  const tabBeforeNotes = useRef<TabName | null>(null)
+  const notesCheckedRef = useRef(false)
+  useEffect(() => {
+    if (!settingsReady || !loaded || notesCheckedRef.current) return
+    notesCheckedRef.current = true
+    let alive = true
+    let timer = 0
+    getReleaseNotesState()
+      .then((st) => {
+        if (!alive || !st?.shouldAutoOpen) return
+        timer = window.setTimeout(() => {
+          if (!alive) return
+          const prev = activeTabRef.current
+          tabBeforeNotes.current = prev === 'releaseNotes' ? null : prev
+          setActiveTab('releaseNotes')
+        }, RELEASE_NOTES_AUTO_OPEN_DELAY_MS)
+      })
+      .catch(() => { /* 静默 */ })
+    return () => { alive = false; if (timer) window.clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsReady, loaded])
+
+  /** 「知道了」：回到进更新说明之前那个模块（没有来源时退回启动模块） */
+  const dismissReleaseNotes = useCallback(() => {
+    const prev = tabBeforeNotes.current
+    tabBeforeNotes.current = null
+    openTab(prev ?? ((s.startupTab as TabName) || 'blog'))
+  }, [openTab, s.startupTab])
 
   // Apply theme class to <html> — reacts to async loaded settings (fixes stale-default bug)
   // 插件主题:先确保 <style> 已注入,再应用主题类(插件主题依赖运行时注入的 CSS 变量)
@@ -426,6 +514,15 @@ export default function App() {
     return () => window.removeEventListener('help:open', handler)
   }, [])
 
+  // Listen for release-notes:open — 设置→关于与更新 / 活动栏齿轮菜单的手动入口。
+  // 走事件而非 prop：与 settings:open / help:open / onboarding:show 的既有通道一致，
+  // 模块页本身不需要知道是谁把它打开的。
+  useEffect(() => {
+    const handler = () => { setActiveTab('releaseNotes'); setSidebarOpen(true); setPalette(null) }
+    window.addEventListener('release-notes:open', handler)
+    return () => window.removeEventListener('release-notes:open', handler)
+  }, [])
+
   // Listen for ai-learn:goto —— AI 学堂「动手做」跳模块（学堂自身先收起，避免浮层压住目标）
   useEffect(() => {
     const handler = (e: Event) => {
@@ -455,6 +552,15 @@ export default function App() {
           if (p.tool) window.dispatchEvent(new CustomEvent('toolbox:open-tool', { detail: { tool: p.tool } }))
         }
       }
+    })
+    return () => { off?.() }
+  }, [])
+
+  // 日程截止提醒：系统通知被点击 → 主进程已唤起窗口，这里切到日程模块
+  useEffect(() => {
+    const off = window.api?.onScheduleReminderClick?.(() => {
+      setActiveTab('schedule')
+      setSidebarOpen(true)
     })
     return () => { off?.() }
   }, [])
@@ -639,6 +745,7 @@ export default function App() {
       case 'help': return <HelpModule />
       case 'devtools': return DevToolsModuleDynamic ? <DevToolsModuleDynamic sidebarOpen={sidebarOpen} sidebarWidths={sidebarWidths} onSnapCloseSidebar={() => setSidebarOpen(false)} onSnapOpenSidebar={() => setSidebarOpen(true)} /> : null
       case 'user': return <UserModule />
+      case 'releaseNotes': return <ReleaseNotesModule onDismiss={dismissReleaseNotes} />
       default: return null
     }
   }
@@ -647,8 +754,12 @@ export default function App() {
     if (on) mountedTabs.current.add(name)
     if (!on && !mountedTabs.current.has(name)) return null
     // Suspense 不产生 DOM 节点，容器布局与改前一致；fallback 只在该模块 chunk 首次拉取期间出现。
+    // 切 Tab 动效（docs/ui-animation-plan.md A 类）：display:none → 显示时浏览器会重新起播 CSS 动画，
+    // 所以同一个 kb-view-fade 类在每次切换时自动重放，无需卸载重建（保活语义不变）。
+    // 这里用**纯淡入**而非 kb-view-in：模块容器内含 Monaco / PDF canvas / 插件 iframe，
+    // 位移动画会把整棵子树提升为合成层重新栅格化（见计划文档 §五 风险表）。
     return (
-      <div key={name} className="flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>
+      <div key={name} className="kb-view-fade flex-1 min-h-0" style={on ? undefined : { display: 'none' }}>
         <Suspense fallback={<ModuleLoadingFallback />}>{renderModuleContent(name, on)}</Suspense>
       </div>
     )
@@ -741,7 +852,7 @@ export default function App() {
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('ai-assistant:toggle'))}
                       title="AI 助手 (Ctrl+J)"
-                      className="absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
+                      className="kb-pop absolute bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-opacity hover:opacity-90"
                     >
                       <Sparkles size={19} />
                     </button>

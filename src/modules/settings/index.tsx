@@ -173,7 +173,7 @@ export function SettingsModule() {
         <div className="mt-auto pt-2 border-t border-[var(--border-color)] px-4">
           <span className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
             <Info size={13} />
-            Knowbase v{appVersion}
+            Phrontis v{appVersion}
           </span>
         </div>
       </div>
@@ -204,6 +204,9 @@ export function SettingsModule() {
         {/* Content */}
         <div ref={contentRef} className="flex-1 overflow-y-auto py-6">
           <div className="max-w-2xl mx-auto px-6">
+            {/* 切换大项时内容淡入上移（key 变化触发重挂载 → 动画重播；搜索态与结果视图共用固定 key，
+                避免每次输入都重播） */}
+            <div key={searching ? 'search-results' : section} className="kb-view-in">
             {searching ? (
               hits.length > 0
                 ? <SearchResultsView query={query.trim()} hits={hits} onPick={jumpTo} />
@@ -226,6 +229,7 @@ export function SettingsModule() {
                 {section === 'about' && <AboutView />}
               </>
             )}
+            </div>
           </div>
         </div>
       </div>

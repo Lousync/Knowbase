@@ -64,7 +64,7 @@ export function RecycleBinPanel({ module, onClose, onRestored }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={onClose}>
       <div
         className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[500px] max-h-[520px] shadow-2xl flex flex-col"
         onClick={e => e.stopPropagation()}

@@ -3,12 +3,13 @@ import { Bot, Gauge, Plus, Trash2, RefreshCw, Loader2, Star, Pencil, Import } fr
 import { useSettings } from '../../../lib/SettingsContext'
 import { showToast } from '../../../lib/toast'
 import { SettingSwitch } from '../../../components/shared/SettingSwitch'
+import { Collapsible } from '../../../components/shared/Collapsible'
 import {
   llmListProviders, llmSaveProvider, llmRemoveProvider, llmToggleProvider,
   llmTestConnection, llmRefreshModels, llmSetDefaultModel, llmGetUsage, llmAddModel, llmTestModel,
-  llmCcSwitchList, llmCcSwitchImport, openExternal,
+  llmCcSwitchList, llmCcSwitchImport, openExternal, llmUsageBreakdown,
 } from '../../../lib/ipc'
-import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, CcSwitchItem } from '../../../types'
+import type { LlmProviderInfo, LlmProviderType, LlmTestResultInfo, LlmModelTestResultInfo, CcSwitchItem, LlmUsageBreakdownEntry } from '../../../types'
 import { prettyModelName, isOpenCodeFree } from '../../../lib/modelNames'
 
 /** 免费=用户手动标记 ∪ id 含 free（上游不提供该元数据，双轨启发式） */
@@ -36,6 +37,7 @@ export function AiModelsTab() {
   const [providers, setProviders] = useState<LlmProviderInfo[]>([])
   const [defaultModel, setDefaultModel] = useState('')
   const [usage, setUsage] = useState({ monthTokens: 0 })
+  const [breakdown, setBreakdown] = useState<{ month: string; entries: LlmUsageBreakdownEntry[] }>({ month: '', entries: [] })
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [ccsOpen, setCcsOpen] = useState(false)
@@ -61,10 +63,11 @@ export function AiModelsTab() {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const [r, u] = await Promise.all([llmListProviders(), llmGetUsage()])
+      const [r, u, b] = await Promise.all([llmListProviders(), llmGetUsage(), llmUsageBreakdown()])
       setProviders(r.providers)
       setDefaultModel(r.defaultChatModel)
       setUsage(u)
+      setBreakdown(b)
     } finally {
       setLoading(false)
     }
@@ -93,6 +96,19 @@ export function AiModelsTab() {
                 className="w-28 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] text-right outline-none focus:border-[var(--accent)]" />
             </label>
           </div>
+          {breakdown.entries.length > 0 && (
+            <div className="mt-3 pt-2.5 border-t border-[var(--border-color)]">
+              <p className="text-[11px] text-[var(--text-muted)] mb-1.5">按供应商/模型细分（{breakdown.month}）</p>
+              <div className="space-y-1">
+                {breakdown.entries.slice(0, 8).map(e => (
+                  <div key={`${e.providerId}-${e.model}`} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="truncate text-[var(--text-secondary)]" title={`${e.provider} · ${e.model}`}>{e.provider} · {prettyModelName(e.model)}</span>
+                    <span className="shrink-0 tabular-nums text-[var(--text-muted)]">{e.calls} 次 · {e.tokens.toLocaleString()} tok</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -134,7 +150,8 @@ export function AiModelsTab() {
           </div>
         </div>
 
-        {editing && <ProviderForm onDone={async () => { setEditing(false); await refresh() }} />}
+        {/* 新增服务商表单展开动效（docs/ui-animation-plan.md C 类） */}
+        <Collapsible open={editing} innerClassName="">{() => <ProviderForm onDone={async () => { setEditing(false); await refresh() }} />}</Collapsible>
 
       {ccsOpen && (
         <CcSwitchImportModal
@@ -225,7 +242,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
       </div>
       <p className="text-[11px] text-[var(--text-muted)] mt-1 truncate font-mono">{p.baseUrl}</p>
       <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-        {p.models.length > 0 ? `${p.models.length} 个模型` : '未拉取模型'} · {p.hasKey ? '已配置 Key' : '无 Key'}
+        {p.models.length > 0 ? `${p.models.length} 个模型` : '未拉取模型'} · {p.hasKey ? '已配置 Key' : '无 Key'}{p.embeddingModel ? ` · 语义:${p.embeddingModel}` : ''}
       </p>
       <div className="flex items-center gap-1 mt-1.5">
         <input value={manualModel} onChange={e => setManualModel(e.target.value)}
@@ -263,7 +280,7 @@ function ProviderCard({ p, onChanged, onSetDefault }: {
           <Trash2 size={11} />
         </button>
       </div>
-      {editing && <ProviderForm initial={p} onDone={async () => { setEditing(false); await onChanged() }} />}
+      <Collapsible open={editing} innerClassName="">{() => <ProviderForm initial={p} onDone={async () => { setEditing(false); await onChanged() }} />}</Collapsible>
       {testResult && (
         <p className={`text-[11px] mt-1.5 ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
           {testResult.ok ? `✓ 连接成功（${testResult.latencyMs}ms，${testResult.models?.length ?? 0} 个模型）` : `✗ ${testResult.error}`}
@@ -278,6 +295,7 @@ function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initia
   const [type, setType] = useState<LlmProviderType>(initial?.type ?? 'openai-compatible')
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? '')
   const [apiKey, setApiKey] = useState('')
+  const [embeddingModel, setEmbeddingModel] = useState(initial?.embeddingModel ?? '')
   const [headersText, setHeadersText] = useState(initial?.headers && Object.keys(initial.headers).length ? JSON.stringify(initial.headers, null, 2) : '')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -305,6 +323,10 @@ function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initia
         <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
           className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono outline-none focus:border-[var(--accent)]" />
       </Row>
+      <Row label="嵌入模型（可选——知识语义检索用，如 text-embedding-3-small / bge-m3 / embedding-3）">
+        <input value={embeddingModel} onChange={e => setEmbeddingModel(e.target.value)}
+          className="w-full px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[12px] font-mono outline-none focus:border-[var(--accent)]" />
+      </Row>
       <Row label="自定义请求头（JSON，可选——opencode 等网关要求的路由头在此填，如 {&quot;x-opencode-session&quot;:&quot;knowbase&quot;}）">
         <textarea value={headersText} onChange={e => setHeadersText(e.target.value)} rows={2}
           placeholder='{"x-opencode-session": "knowbase"}'
@@ -326,7 +348,7 @@ function ProviderForm({ onDone, initial }: { onDone: () => Promise<void>; initia
             } catch { showToast({ type: 'error', message: '自定义请求头不是合法的 JSON 对象（{"头名":"值"}）' }); return }
           }
           setSaving(true)
-          try { const r = await llmSaveProvider({ id: initial?.id, name, type, baseUrl, apiKey: apiKey || undefined, headers }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
+          try { const r = await llmSaveProvider({ id: initial?.id, name, type, baseUrl, apiKey: apiKey || undefined, headers, embeddingModel: embeddingModel.trim() || undefined }); if (r.ok) await onDone(); else showToast({ type: 'error', message: r.error ?? '保存失败' }) } finally { setSaving(false) }
         }}
           className="px-3 py-1.5 rounded-md text-[12px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
           保存
@@ -392,7 +414,7 @@ function CcSwitchImportModal({ onClose, onImported }: { onClose: () => void; onI
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 kb-overlay" onClick={onClose}>
       <div className="w-[520px] max-h-[80vh] overflow-y-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl"
         onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-4 pb-3 border-b border-[var(--border-color)]">

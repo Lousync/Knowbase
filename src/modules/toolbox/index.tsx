@@ -219,7 +219,7 @@ export function ToolboxModule({ homeSignal = 0 }: ToolboxModuleProps) {
   // 内置工具全屏
   if (activeTool) {
     return (
-      <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+      <div className="kb-view-in flex flex-col h-full bg-[var(--bg-primary)]">
         {renderTool()}
       </div>
     )
@@ -228,10 +228,12 @@ export function ToolboxModule({ homeSignal = 0 }: ToolboxModuleProps) {
   // UI 插件工具全屏宿主
   if (activePluginTool) {
     return (
-      <PluginToolHost
-        tool={activePluginTool}
-        onBack={() => { setActivePluginTool(null); refreshPluginTools() }}
-      />
+      <div className="kb-view-in flex min-h-0 flex-1 flex-col">
+        <PluginToolHost
+          tool={activePluginTool}
+          onBack={() => { setActivePluginTool(null); refreshPluginTools() }}
+        />
+      </div>
     )
   }
 
@@ -315,7 +317,7 @@ export function ToolboxModule({ homeSignal = 0 }: ToolboxModuleProps) {
       </div>
 
       {/* Tool sections（隐藏项连同分区标题一起不渲染；全隐藏 → 空态） */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="kb-view-in flex-1 overflow-y-auto p-6 space-y-6">
         {dataVis.length === 0 && prodVis.length === 0 && pluginVis.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--text-muted)]">所有工具均已隐藏，点击右上角 👁 管理显示</div>
         ) : (

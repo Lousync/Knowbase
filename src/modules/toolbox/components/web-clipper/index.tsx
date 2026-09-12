@@ -125,7 +125,7 @@ export function WebClipper({ onBack }: { onBack: () => void }) {
             <div className="text-[11.5px] text-[var(--text-muted)] leading-relaxed">
               {st?.vault
                 ? <>剪藏落点：<code className="text-[var(--text-secondary)]">{st.vault.name}/.knowbase/_draft/clipper/</code>（草稿区，不进知识索引/图谱；编辑器打开整理后加 frontmatter id 转正）</>
-                : <span className="text-[var(--warning)]">尚未打开仓库——扩展剪藏会收到「请先在 Knowbase 打开仓库」提示</span>}
+                : <span className="text-[var(--warning)]">尚未打开仓库——扩展剪藏会收到「请先在 Phrontis 打开仓库」提示</span>}
             </div>
           </div>
 

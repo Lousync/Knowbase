@@ -10,15 +10,41 @@ export const THEME_OPTIONS = [
   { id: 'light', label: '浅色' },
 ] as const
 
-/** Apply a theme class to <html> — clears any previous theme-* class, adds the new one.
+/**
+ * Apply a theme class to <html> — clears any previous theme-* class, adds the new one.
  *  Call this whenever the user switches themes. New themes only need a new THEME_OPTIONS entry
- *  and a matching `html.theme-<id>` CSS block. */
+ *  and a matching `html.theme-<id>` CSS block.
+ *
+ *  动效（docs/ui-animation-plan.md §五 F 类）：
+ *  主题切换的视觉是「整屏换色」，用通配选择器做过渡会让每帧对全文档做样式重算 + 颜色插值
+ *  （实测 4290 节点下单帧 133ms、界面冻结），故改用 View Transition —— 截两张快照做交叉淡化，
+ *  逐节点成本为零（实测与瞬时切换帧分布一致），过渡时长/缓动在 index.css 的
+ *  ::view-transition-old/new(root) 里统一配置。
+ *  首次应用主题（页面上还没有 theme-* 类）不启用过渡，避免首屏白白淡入一次。
+ */
 export function applyThemeClass(themeId: string): void {
-  document.documentElement.className = document.documentElement.className
-    .split(/\s+/)
-    .filter(c => !c.startsWith('theme-'))
-    .join(' ')
-  document.documentElement.classList.add(`theme-${themeId}`)
+  const root = document.documentElement
+  const apply = (): void => {
+    root.className = root.className
+      .split(/\s+/)
+      .filter(c => !c.startsWith('theme-'))
+      .join(' ')
+    root.classList.add(`theme-${themeId}`)
+  }
+
+  const hasTheme = /(^|\s)theme-/.test(root.className)
+  const reduce = typeof window !== 'undefined' && !!window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  if (hasTheme && !reduce && typeof document.startViewTransition === 'function') {
+    try {
+      document.startViewTransition(apply)
+      return
+    } catch {
+      // 快照失败（如文档不可见）时退回瞬时切换
+    }
+  }
+  apply()
 }
 
 export const FONT_OPTIONS = [
@@ -106,6 +132,10 @@ export const SETTINGS = {
   editorFontSize: { default: 13, type: 'number', label: '字号', group: '字号', desc: '编辑器正文字号（可直接输入数字）', keywords: ['字号', '字体大小', '大小', 'fontsize', 'font size'], section: 'editor', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'editor.fontSize', min: 10, max: 40, step: 1, unit: 'px' },
   zoom: { default: 1.0, type: 'number', label: '界面缩放', group: '缩放', desc: '整体界面缩放比例（可直接输入百分比）', keywords: ['缩放', 'zoom', '放大', '缩小', '重置', '比例', '界面大小'], section: 'general', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'advanced.zoom', min: 85, max: 150, step: 5, unit: '%' },
   markdownDim: { default: true, type: 'toggle', label: 'Markdown 标记淡化', group: '显示', desc: '弱化版所见即所得：编辑时淡化 Markdown 标记，光标行保留原始标记', keywords: ['markdown', '淡化', '标记', 'md', 'dim', '弱化'], section: 'editor', ui: true, scope: 'global', level: 'normal', affects: 'live' , anchor: 'editor.markdownDim' },
+  sidebarTreeGuides: { default: 'line', type: 'select', label: '侧栏层级参考线', group: '显示', desc: '编辑器 / 知识库 / AI教学 左栏多层树的层级竖线样式：实线 / 虚线 / 关闭', keywords: ['树', '层级', '参考线', '竖线', '缩进', '指南线', 'tree', 'guide', 'indent'], section: 'editor', ui: false, scope: 'global', level: 'normal', affects: 'live', anchor: 'editor.treeGuides' },
+  folderFocusStyle: { default: 'skeleton', type: 'select', label: '目录聚焦样式', group: '显示', desc: '目录聚焦开启时（编辑器/知识库侧栏准星按钮），非当前路径分支的呈现方式：骨架条（悬停显原名）/ 直接隐藏', keywords: ['目录聚焦', '聚焦', '骨架', '沉浸文件夹', '隐藏', 'folder', 'focus', 'skeleton'], section: 'editor', ui: false, scope: 'global', level: 'normal', affects: 'live', anchor: 'editor.folderFocus' },
+  editorFolderFocus: { default: false, type: 'toggle', label: '编辑器目录聚焦', group: '显示', desc: '文件树只显示当前打开文件所在目录链；侧栏「准星」按钮同款开关，重启保留', keywords: ['目录聚焦', '聚焦', '文件树', '沉浸', 'focus'], section: 'editor', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+  knowledgeFolderFocus: { default: false, type: 'toggle', label: '知识库目录聚焦', group: '显示', desc: '知识库树只显示当前页面所在目录链；侧栏「准星」按钮同款开关，重启保留', keywords: ['目录聚焦', '聚焦', '知识库', '沉浸', 'focus'], section: 'editor', ui: false, scope: 'global', level: 'normal', affects: 'live' },
   exportEncoding: { default: 'utf-8', type: 'select', label: '默认编码', group: '导出', desc: '导出文件的默认字符编码', keywords: ['编码', 'encoding', 'utf', 'utf8', 'utf-8', 'gbk', 'gb2312', 'bom', '乱码'], section: 'data', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'export.encoding' },
   skipDeleteConfirm_blog: { default: false, type: 'toggle', label: '博客删除确认', group: '删除确认', desc: '跳过博客文章删除确认', keywords: ['删除确认', '博客', '跳过', 'confirm'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
   skipDeleteConfirm_knowledge: { default: false, type: 'toggle', label: '知识库页面删除确认', group: '删除确认', desc: '跳过知识库页面删除确认', keywords: ['删除确认', '页面', '知识库', '跳过', 'confirm'], section: 'security', ui: false, scope: 'global', level: 'normal', affects: 'live' },
@@ -141,8 +171,21 @@ export const SETTINGS = {
   sidebarIconStyle: { default: 'default', type: 'select', label: '侧边栏图标风格', group: '图标', desc: '活动栏模块图标风格；安装带图标包的插件后自动追加', keywords: ['侧边栏图标', '图标包', '图标', '活动栏', 'icon', 'sidebar'], section: 'appearance', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'appearance.sidebarIcons' },
   checkinReminderEnabled: { default: true, type: 'toggle', label: '启用打卡提醒', group: '打卡提醒', desc: '到点提醒当天未打卡的习惯', keywords: ['打卡', '提醒', '启用', '开关', 'checkin', '通知'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.enable' },
   checkinReminderTime: { default: '20:00', type: 'time', label: '提醒时间', group: '打卡提醒', desc: '每天触发打卡提醒的时间点', keywords: ['时间', '提醒时间', '几点', '打卡时间', '20:00'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.time' },
+
+  // ---- 日程截止（DDL）提醒：系统通知主通道；逻辑见 electron/lib/scheduleReminder.ts ----
+  scheduleReminderEnabled: { default: true, type: 'toggle', label: '启用截止提醒', group: '截止提醒', desc: '任务临近截止时通过系统通知提醒（应用需在运行）', keywords: ['截止', '提醒', '系统通知', '通知', 'ddl', 'reminder', 'notification', '临近'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.ddlEnable' },
+  scheduleReminderLead: { default: '30', type: 'select', label: '提前多久提醒', group: '截止提醒', desc: '在截止时刻之前多久发出提醒（绝对时刻，与软件是否打开无关）', keywords: ['提前', '提前量', '提前多久', 'lead', '几分钟', '提醒时间', 'ddl'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.ddlLead' },
+  scheduleReminderOverdueRepeat: { default: false, type: 'toggle', label: '逾期后重复提醒', group: '截止提醒', desc: '任务已过截止时间仍未完成时，继续在后续巡检中提醒；默认只在到点前后提醒一次', keywords: ['逾期', '过期', '重复', '再提醒', 'overdue', 'ddl', '超时'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.ddlOverdue' },
+  scheduleReminderQuietStart: { default: '22:30', type: 'time', label: '免打扰开始', group: '截止提醒', desc: '进入该时刻后不再发送提醒（跨天区间，如 22:30 ~ 次日 07:30）', keywords: ['免打扰', '静默', '勿扰', '夜里', 'quiet', '安静'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.ddlQuiet' },
+  scheduleReminderQuietEnd: { default: '07:30', type: 'time', label: '免打扰结束', group: '截止提醒', desc: '越过该时刻后恢复提醒；免打扰期间错过的提醒会在结束后补发一次', keywords: ['免打扰', '静默', '勿扰', '早晨', 'quiet', '恢复'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.ddlQuiet' },
+  scheduleReminderExternalPush: { default: false, type: 'toggle', label: '同时推送外部通道', group: '截止提醒', desc: '除系统通知外，另通过「远程监督」已配置的 webhook 推送；需先在远程监督中完成配置', keywords: ['外部', '推送', 'webhook', '远程监督', '手机', 'external', 'push'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'reminder.ddlExternal' },
   lanShareAutoStopMinutes: { default: 15, type: 'number', label: '设备传输自动关闭', group: '设备互联', desc: '设备传输无连接自动关闭分钟数', keywords: ['设备传输', '传输', '自动关闭', '超时', 'lanshare'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: '分钟' },
   onboardingDone: { default: false, type: 'toggle', label: '新手引导完成', group: '引导', desc: '是否已完成新手引导（由引导流程维护）', keywords: ['引导', '新手', 'onboarding'], section: 'about', ui: false, scope: 'global', level: 'normal', affects: 'live' },
+
+  // ---- 更新说明（VS Code 式 tab）：清单由 CHANGELOG 生成，阅读记录落仓库 .knowbase/modules/release-notes/ ----
+  // 详见 docs/release-notes-design.md
+  releaseNotesAutoOpen: { default: true, type: 'toggle', label: '新版本时自动打开更新说明', group: '更新说明', desc: '中间版本号（x.y）变化后的首次启动，自动打开一页更新说明；修正版（x.y.z）不打扰', keywords: ['更新说明', '更新日志', '发布说明', '新版本', '自动打开', 'release notes', 'changelog'], section: 'about', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'advanced.releaseNotes' },
+  releaseNotesKeepHistory: { default: true, type: 'toggle', label: '在仓库中保留更新说明存档', group: '更新说明', desc: '把当前版本的更新说明与阅读记录写进仓库 .knowbase/modules/release-notes/，换电脑拷走仓库一并带走', keywords: ['更新说明', '存档', '保留', '阅读记录', 'release notes', 'knowbase'], section: 'about', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'advanced.releaseNotes' },
   badgeEggActivated: { default: false, type: 'toggle', label: '角标彩蛋', group: '彩蛋', desc: '彩蛋：标题栏角标变为 YHAz（外观页输入 YHAz 激活）', keywords: ['彩蛋', '角标', 'YHAz', 'badge'], section: 'appearance', ui: false, scope: 'global', level: 'normal', affects: 'live' },
   aiToolMonthlyLimit: { default: 0, type: 'number', label: '月度调用上限', group: '工具调用', desc: '每月最多调用次数，0 表示不限制', keywords: ['上限', '限制', '每月', '调用上限', 'limit', '额度', '配额'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.monthlyLimit', aiTab: 'builtin', min: 0, max: 1000000, step: 10 },
   aiSkillDisabled: { default: '[]', type: 'json', label: '停用 Skill', group: 'Skill', desc: '停用的 Skill 注册名列表（JSON）', keywords: ['skill', '停用', '禁用', '技能'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'skill' },
@@ -150,11 +193,17 @@ export const SETTINGS = {
   defaultChatModel: { default: '', type: 'text', label: '默认对话模型', group: '模型', desc: '默认对话模型（格式 providerId:modelId）', keywords: ['模型', '默认', 'chat', 'model'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models' },
   llmMaxTokens: { default: 4096, type: 'number', label: '单次 maxTokens 上限', group: '模型', desc: '单次调用 maxTokens 上限', keywords: ['token', 'maxTokens', '上限', '输出长度'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models', min: 128, max: 131072, step: 256 },
   aiStreamEnabled: { default: true, type: 'toggle', label: '流式输出', group: '对话输出', desc: 'AI 回复逐字输出并实时显示工具调用过程；关闭后退回一次性返回（供应商不支持流式时也会自动回退）', keywords: ['流式', '逐字', '打字机', 'stream', '输出', '过程', '时间线'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.stream', aiTab: 'models' },
+  agentMaxRounds: { default: 16, type: 'number', label: '最大推理轮数', group: 'Agent 循环', desc: '单次请求内 LLM 决策轮数上限，耗尽后自动做一次总结收场（不会丢弃已获取的信息）；复杂任务可调大', keywords: ['轮数', '推理', 'agent', '上限', '循环', '迭代'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.agentLoop', aiTab: 'builtin', min: 2, max: 64, step: 1 },
+  agentRunTokenBudget: { default: 500000, type: 'number', label: '单次请求 token 预算', group: 'Agent 循环', desc: '各轮累计 token 达到此值即进入总结收场（防止失控循环烧费用），0 表示不限制', keywords: ['token', '预算', '费用', '上限', '失控'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.agentLoop', aiTab: 'builtin', min: 0, max: 10000000, step: 50000 },
+  agentContextBudgetTokens: { default: 24000, type: 'number', label: '历史上下文预算', group: 'Agent 循环', desc: '注入模型的历史消息按 token 预算裁剪（保首尾、中间轮丢弃），0 表示不裁剪', keywords: ['上下文', '历史', '裁剪', 'token', '预算'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.agentLoop', aiTab: 'builtin', min: 0, max: 200000, step: 2000 },
+  agentCompressionEnabled: { default: true, type: 'toggle', label: '历史自动压缩', group: 'Agent 循环', desc: '上下文达到触发线时自动把较早的对话折叠为持久化纪要（代替直接丢弃），也可随时输入 /compress 手动触发；关闭后退回裁剪', keywords: ['压缩', '纪要', 'compact', 'compress', '上下文', '历史'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.agentLoop', aiTab: 'builtin' },
+  agentCompressAtPercent: { default: 80, type: 'number', label: '自动压缩触发线(%)', group: 'Agent 循环', desc: '上下文估算达到历史预算的该百分比时自动压缩（80 = 预算用到八成先压再发）；越低压得越早、压缩调用越频繁，范围 50-100', keywords: ['压缩', '触发', '阈值', '百分比', 'compress', 'threshold'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.agentLoop', aiTab: 'builtin', min: 50, max: 100, step: 5 },
+  agentCompressModelId: { default: '', type: 'text', label: '压缩专用模型', group: 'Agent 循环', desc: '生成压缩纪要的模型（格式 providerId:modelId），留空用当前会话模型；可指定便宜模型降低压缩成本', keywords: ['压缩', '纪要', '模型', '成本', 'compress', 'model'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.agentLoop', aiTab: 'builtin' },
   aiShowThinking: { default: true, type: 'toggle', label: '显示思考过程', group: '对话输出', desc: '推理模型返回的思考链以折叠区实时显示；普通模型没有思考链，此项无效果（自动不出现）', keywords: ['思考', '思考链', '推理', 'thinking', 'reasoning', '过程'], section: 'aiTools', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'aiTools.thinking', aiTab: 'models' },
   sofficePath: { default: '', type: 'text', label: 'LibreOffice 路径', group: '模型', desc: 'pptx 视觉转写用的 soffice 可执行文件绝对路径（留空=自动探测常见安装位与 PATH）', keywords: ['libreoffice', 'soffice', 'pptx', '视觉转写', '转换'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models' },
   webCrawlMaxPages: { default: 80, type: 'number', label: '网页抓取页数上限', group: '模型', desc: '单次「展开网页」批量抓取的最大章节数（防超大站失控）', keywords: ['网页', '抓取', 'crawl', '上限', '素材'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models', min: 1, max: 200, step: 1 },
   webCrawlDelayMs: { default: 300, type: 'number', label: '网页抓取页间隔(ms)', group: '模型', desc: '批量抓取每页间隔（礼貌抓取，单位毫秒）', keywords: ['网页', '抓取', '间隔', 'delay', 'crawl'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', aiTab: 'models', min: 0, max: 5000, step: 50 },
-  aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","pomodoro":"read"}', type: 'json', label: 'AI 模块权限', group: '权限', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写（JSON）', keywords: ['权限', 'permission', '授权', '模块'], section: 'aiTools', ui: false, scope: 'global', level: 'danger', affects: 'live', aiTab: 'perms' },
+  aiModulePermissions: { default: '{"knowledge":"read","blog":"read","schedule":"read","checkin":"read","pomodoro":"read","quiz":"read"}', type: 'json', label: 'AI 模块权限', group: '权限', desc: 'AI 按模块权限：off=禁止 read=只读 write=可读写（JSON）', keywords: ['权限', 'permission', '授权', '模块'], section: 'aiTools', ui: false, scope: 'global', level: 'danger', affects: 'live', aiTab: 'perms' },
   assistantWidth: { default: 380, type: 'number', label: 'AI 助手侧栏宽度', group: 'AI 助手', desc: 'AI 助手侧栏宽度', keywords: ['助手', '侧栏', '宽度', 'assistant'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live', unit: 'px' },
   learnProgress: { default: '{"done":[],"last":1}', type: 'json', label: 'AI 学堂学习进度', group: 'AI 助手', desc: '上手路径已完成步骤与当前所在步骤（JSON）', keywords: ['ai 学堂', '上手', '教程', '进度', 'learn'], section: 'aiTools', ui: false, scope: 'global', level: 'normal', affects: 'live' },
   dayPanelState: { default: '', type: 'json', label: '日程打卡小窗状态', group: '小窗', desc: '日程打卡小窗位置大小（主进程直写）', keywords: ['小窗', '打卡', 'daypanel', '悬浮'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live' },
@@ -170,7 +219,6 @@ export const SETTINGS = {
   scheduleTimetableStartHour: { default: '7', type: 'select', label: '日程表起始时间', group: '日程表', desc: '时间轴每天从几点开始显示；范围外的时段不占纵向空间', keywords: ['日程表', '起始', '开始时间', '范围', '时间轴', 'timetable', 'starthour'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'schedule.timetableStartHour' },
   scheduleTimetableEndHour: { default: '23', type: 'select', label: '日程表终止时间', group: '日程表', desc: '时间轴每天到几点结束显示；需比起始时间至少晚 4 小时', keywords: ['日程表', '终止', '结束时间', '范围', '时间轴', 'timetable', 'endhour'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live', anchor: 'schedule.timetableEndHour' },
   fillPopupAlwaysOnTop: { default: true, type: 'toggle', label: '小密码本始终置顶', group: '小窗', desc: '悬浮小密码本（Ctrl+Alt+P）默认盖在所有窗口之上；关闭后退化为普通窗口可被遮挡', keywords: ['小密码本', '置顶', '顶层', 'fill', 'popup', '密码', '悬浮'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live' },
-  quizbookMode: { default: 'plugin', type: 'select', label: '错题本形态', group: '错题本', desc: '错题本形态：plugin=插件版（默认）/ builtin=内置版（回退）', keywords: ['错题本', '形态', 'quiz', 'plugin', '内置'], section: 'modules', ui: false, scope: 'global', level: 'experimental', affects: 'reload' },
   aiTeachRootDir: { default: 'AI教学', type: 'text', label: 'AI教学产物根目录', group: 'AI教学', desc: '会话文件夹所在仓库根目录名；改名会把已有目录一并重命名迁移（占用/权限失败则保留原目录）', keywords: ['AI教学', '教学', '目录', '根目录', '文件夹', '产物', 'aiteach'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live' },
   aiTeachDeleteSessionFolder: { default: 'ask', type: 'select', label: '删除会话时文件夹处理', group: 'AI教学', desc: 'ask=每次询问 / keep=保留文件夹 / delete=会话文件夹一并移入系统回收站', keywords: ['AI教学', '删除', '会话', '文件夹', '回收站', '产物'], section: 'modules', ui: true, scope: 'global', level: 'normal', affects: 'live' },
   aiTeachUsageDetail: { default: 'compact', type: 'select', label: '输入区用量指示档位', group: 'AI教学', desc: 'off=隐藏 / compact=上下文占用圆环（点击看详情）/ detailed=圆环+文字摘要（UI 优化条目9）', keywords: ['AI教学', '用量', 'token', '上下文', '圆环', '预算'], section: 'modules', ui: false, scope: 'global', level: 'normal', affects: 'live' },

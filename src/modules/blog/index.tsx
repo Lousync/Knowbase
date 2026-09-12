@@ -4,6 +4,7 @@ import { Entry, Tag } from '../../types'
 import { getEntries, createEntry, deleteEntry, getEntryById, toggleEntryStar, getSetting, setSetting, openExternal, getTags, workspaceGetCurrent } from '../../lib/ipc'
 import { useSettings } from '../../lib/SettingsContext'
 import { ConfirmDialog } from '../../components/shared'
+import { PluginSlotEntry } from '../../components/shared/PluginSlotEntry'
 import { registerAssistantContext } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { isEditingInput } from '../../lib/shortcuts'
@@ -299,6 +300,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               allTags={allTags}
             />
           </div>
+          <PluginSlotEntry slot="blog.sidebar" />
         </div>
       </ResizablePanel>
 
@@ -312,6 +314,8 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
       )}
 
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* 视图切换淡入（key=view 触发重挂载 → 动画重播；列表/编辑器/详情三态共用一套） */}
+        <div key={view} className="kb-view-in flex min-h-0 flex-1 flex-col">
         {view === 'list' && (
           <>
             {/* Month switcher + tag filter bar */}
@@ -391,7 +395,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
               onEntryClick={entry => { setSelectedId(entry.id); setSelectedDate(entry.date); setView(entry.date === today ? 'editor' : 'detail'); if (entry.date !== today) setLiveContent(entry.contentMd || '') }}
               onToggleStar={handleToggleStar}
               onNewEntry={handleTodayEntry}
-              cardSize={s.blogCardSize}
+              cardSize={(['s', 'm', 'l'] as const).includes(s.blogCardSize as 's' | 'm' | 'l') ? s.blogCardSize as 's' | 'm' | 'l' : 'm'}
             />
           </>
         )}
@@ -418,6 +422,7 @@ export function BlogModule({ showLineNumbers = false, sidebarOpen = true, zoom =
             onToggleOutline={handleToggleOutline}
           />
         )}
+        </div>
       </main>
       </div>
     </div>
@@ -464,7 +469,7 @@ function EntryDetail({ entryId, onEdit, onDelete, onBack, onToggleOutline }: {
                 </button>
               )}
               <button onClick={handleToggleStar} className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors" title={entry.isStarred ? '取消收藏' : '收藏'}>
-                <Star size={16} className={entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'} />
+                <Star key={entry.isStarred ? 'on' : 'off'} size={16} className={`kb-micro-pop ${entry.isStarred ? 'text-[var(--warning)] fill-[var(--warning)]' : 'text-[var(--text-muted)]'}`} />
               </button>
               <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-[var(--accent)] text-white rounded hover:bg-[var(--accent-hover)]">编辑</button>
               <button onClick={handleDeleteClick} className="px-3 py-1.5 text-sm text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded">删除</button>

@@ -44,7 +44,7 @@ function escapeHtml(s: string): string {
 export function buildHtmlExport(categories: BookmarkCategory[], bookmarks: BookmarkItem[]): string {
   const lines: string[] = [
     '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
-    '<!-- Saved by Knowbase 网址导航 -->',
+    '<!-- Saved by Phrontis 网址导航 -->',
     '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
     '<TITLE>Bookmarks</TITLE>',
     '<H1>Bookmarks</H1>',
@@ -91,7 +91,7 @@ export function parseJsonImport(text: string): ParsedImport {
     throw new Error('文件不是合法的 JSON')
   }
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.bookmarks)) {
-    throw new Error('文件格式不符合 Knowbase 书签导出规范')
+    throw new Error('文件格式不符合 Phrontis 书签导出规范')
   }
 
   const seenCatNames = new Set<string>()

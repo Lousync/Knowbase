@@ -131,7 +131,7 @@ export function createClipperServer(opts: ClipperServerOptions): Server {
       const provided = auth && auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
       if (!tokenMatches(opts.getToken(), provided)) return deny(res, 401, '无效的配对令牌')
       const vault = opts.getVaultRoot()
-      if (!vault) return deny(res, 422, 'NO_VAULT：请先在 Knowbase 中打开一个仓库')
+      if (!vault) return deny(res, 422, 'NO_VAULT：请先在 Phrontis 中打开一个仓库')
       const CLIP_REL_DIR = '.knowbase/_draft/clipper' // 回执/展示统一正斜杠（win32 join 会混入反斜杠）
       readBody(req, async (raw) => {
         if (raw === null) return deny(res, 413, '请求体超过 5MB 上限')

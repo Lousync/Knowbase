@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Puzzle, RefreshCw, Search, FolderOpen, Download, Loader2,
-  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield, Boxes, BookMarked,
+  CheckCircle2, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Shield, Boxes,
   History, Trash2, ScrollText, Package } from 'lucide-react'
 import {
-  pluginFetchRegistry, pluginInstall, pluginInstallFromFile, pluginInstallBundledSample,
+  pluginFetchRegistry, pluginInstall, pluginInstallFromFile,
   pluginListInstalled, pluginSetEnabled, pluginUninstall, pluginGetContribution,
   pluginSetGranted, pluginAuditList, pluginAuditClear, pluginAuditWrite,
   pluginGetAllowedLevels, pluginSetAllowedLevels,
@@ -14,6 +14,7 @@ import { useSettings } from '../../lib/SettingsContext'
 import { showToast } from '../../lib/toast'
 import { startBackgroundPluginInstall } from '../../lib/pluginDownloadBus'
 import { PluginIconImg } from '../../components/shared/PluginIconImg'
+import { PluginSettingsForm } from './PluginSettingsForm'
 import type { PluginSummary, PluginRegistryEntry, PluginAuditEntry, PluginRiskLevel } from '../../types'
 
 /**
@@ -53,6 +54,8 @@ const CAPABILITY_LABELS: Record<string, string> = {
   knowledge: '知识库访问与重刷',
   navigation: '导航跳转',
   files: '本地文件读取',
+  'vault:read': '知识库检索(只读)',
+  'vault:write': '仓库文件写入',
 }
 
 const CAPABILITY_DESCS: Record<string, string> = {
@@ -62,6 +65,8 @@ const CAPABILITY_DESCS: Record<string, string> = {
   knowledge: '允许插件打开宿主刷题器等知识功能(判题写入插件自己的数据表)',
   navigation: '允许插件请求跳转到指定页面',
   files: '允许插件弹系统对话框挑文件并读取其内容(每次经你手动确认,不会静默访问磁盘)',
+  'vault:read': '允许插件检索与读取知识库笔记的元数据(标题/标签/属性/链接/搜索,只读,不能修改任何内容)',
+  'vault:write': '允许插件写入或删除仓库内的普通 .md/.txt 文件(受插件声明目录范围与保护区规则约束,不涉及 .knowbase 内部数据)',
 }
 
 const DATA_TARGETS: Record<string, string> = {
@@ -262,32 +267,6 @@ export function PluginsModule() {
       setTab('installed')
     } else if (r.message && r.message !== '已取消') {
       showToast({ type: 'error', message: r.message })
-    }
-  }
-
-  /** 一键安装内置错题本插件（开发期从工作区 samples/quizbook-0.2.0.zip 直接装，prod 后续用 extraResources 预置） */
-  const handleInstallBundledQuizbook = async () => {
-    setBusy(true)
-    // 双保险：确保白名单含 C（内置示例安装本身已绕过等级检查，但授权状态需一致）
-    if (!allowedLevels.includes('C')) {
-      const r = await pluginSetAllowedLevels(Array.from(new Set([...allowedLevels, 'C'])))
-      if (r.success) setAllowedLevels(prev => Array.from(new Set([...prev, 'C'])))
-    }
-    const r = await pluginInstallBundledSample('quizbook-0.2.1.zip')
-    setBusy(false)
-    if (r.success) {
-      showToast({ type: 'info', message: '错题本插件已安装，请在详情页授权 data/knowledge 能力' })
-      window.dispatchEvent(new CustomEvent('plugins-changed'))
-      await refreshInstalled()
-      setTab('installed')
-      // 自动选中刚装的插件进详情页授权
-      const list = await pluginListInstalled()
-      const just = list.find(p => p.id === 'knowbase.quizbook')
-      if (just) setSelected({ kind: 'installed', plugin: just })
-    } else {
-      // 兜底：内置示例缺失（打包版或路径错）→ 走文件选择
-      showToast({ type: 'warning', message: r.message || '内置示例不可用，改用文件选择' })
-      await handleInstallFromFile()
     }
   }
 
@@ -503,7 +482,7 @@ export function PluginsModule() {
     const { entry, level, isUpdate, newContributions, newCapabilities, granted } = consent
     const dataTargets = (entry.contributions || []).filter(k => DATA_TARGETS[k])
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55" onMouseDown={e => { if (e.target === e.currentTarget) setConsent(null) }}>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 kb-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setConsent(null) }}>
         <div className="w-[440px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--border-color)]">
             <div className="flex items-center gap-2 mb-1">
@@ -726,6 +705,9 @@ export function PluginsModule() {
             </>
           )}
 
+          {/* 声明式设置（plugin-phase1-design C5）：schema 驱动表单，值落插件私有 kb.store */}
+          {p.enabled && !p.broken && <PluginSettingsForm pluginId={p.id} />}
+
           <SectionTitle>提供的内容</SectionTitle>
           <div className="space-y-2 mb-8">
             {p.broken ? (
@@ -919,21 +901,9 @@ export function PluginsModule() {
           )}
         </div>
 
-        {/* 错题本模式切换 + C 级白名单（两行紧凑，不与列表同流避免突兀） */}
+        {/* C 级白名单（错题本插件版退役后保留通用 C 级开关） */}
         {tab === 'installed' && (
           <div className="px-3 py-1.5 flex flex-col gap-1 text-[10px] text-[var(--text-muted)] border-b border-[var(--border-color)]/60">
-            <select
-              value={s.quizbookMode}
-              onChange={e => {
-                const next = e.target.value
-                update('quizbookMode', next as 'builtin' | 'plugin')
-                showToast({ type: 'info', message: next === 'plugin' ? '已切换为插件版（知识空间侧边栏查看）' : '已切换回内置版' })
-              }}
-              className="px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--input-bg)] text-[var(--text-primary)] text-[10px] outline-none w-fit"
-            >
-              <option value="plugin">错题本 · 插件版（默认）</option>
-              <option value="builtin">错题本 · 内置版（回退）</option>
-            </select>
             <label className="flex items-center gap-1 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -971,33 +941,10 @@ export function PluginsModule() {
           </div>
         )}
 
-        {/* 列表 */}
-        <div className="flex-1 overflow-y-auto">
+        {/* 列表（tab 切换重放进场，见 docs/ui-animation-plan.md A 类） */}
+        <div key={tab} className="kb-view-in flex-1 overflow-y-auto">
           {tab === 'installed' ? (
             <div>
-              {/* 错题本官方推荐行式条目（未安装时显示，与其他已安装插件同款样式 + 右侧一键安装按钮） */}
-              {!installed.some(x => x.id === 'knowbase.quizbook') && (
-                <button
-                  onClick={() => void handleInstallBundledQuizbook()}
-                  className="w-full flex items-start gap-2.5 px-2 py-1.5 text-left border-l-2 border-l-transparent hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <BookMarked size={15} className="shrink-0 mt-0.5 text-[var(--accent)]" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-medium truncate text-[var(--text-primary)]">错题本（插件版）</span>
-                      <span className="text-[10px] text-[var(--text-disabled)] font-mono shrink-0">v0.2.1</span>
-                      <span className="text-[9px] px-1 py-px rounded bg-[var(--accent)]/10 text-[var(--accent)] shrink-0">官方</span>
-                    </div>
-                    <div className="text-[11px] text-[var(--text-muted)] truncate">C 级模块插件 · 错题本彻底插件版（随程序分发）</div>
-                  </div>
-                  <span
-                    onClick={e => { e.stopPropagation(); void handleInstallBundledQuizbook() }}
-                    className="shrink-0 px-2 py-0.5 text-[10px] rounded border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
-                  >
-                    一键安装
-                  </span>
-                </button>
-              )}
               {filteredInstalled.length === 0 ? (
                 <div className="py-8 text-center text-[12px] text-[var(--text-muted)]">
                   {q ? '没有匹配的插件' : '暂无插件，可前往市场安装'}
@@ -1020,7 +967,7 @@ export function PluginsModule() {
         </div>
 
         <div className="px-3 py-2 border-t border-[var(--border-color)] shrink-0">
-          <span className="text-[10px] text-[var(--text-disabled)]">插件来自 GitHub · Lousync/Knowbase-plugins</span>
+          <span className="text-[10px] text-[var(--text-disabled)]">插件来自 GitHub · Lousync/Phrontis-plugins</span>
         </div>
       </div>
 
@@ -1040,7 +987,7 @@ export function PluginsModule() {
 
       {/* 内容型插件导入确认(A 级知情授权) */}
       {kpConfirm && selected?.kind === 'installed' && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55" onMouseDown={e => { if (e.target === e.currentTarget) setKpConfirm(null) }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 kb-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setKpConfirm(null) }}>
           <div className="w-[440px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-[var(--border-color)]">
               <div className="flex items-center gap-2 mb-1">

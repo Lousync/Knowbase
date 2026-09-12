@@ -58,7 +58,7 @@ function ensureIpcBinding(): void {
     const cur = store.get(p.key)
     if (!cur || cur.status !== 'downloading') return
     const pct = p.total > 0 ? Math.max(0, Math.min(100, Math.round(p.percent))) : 0
-    setEntry(p.key, { pct, receivedMb: Math.round((p.received / 1048576) * 10) / 10, host: p.host || undefined })
+    setEntry(p.key, { name: cur.name, pct, receivedMb: Math.round((p.received / 1048576) * 10) / 10, host: p.host || undefined })
   })
 }
 

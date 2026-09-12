@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import type { TabName } from '../../types'
-import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, LifeBuoy, Trash2 } from 'lucide-react'
+import { Palette, ChevronRight, ChevronDown, Check, Download, FlaskConical, History, LifeBuoy, Trash2 } from 'lucide-react'
 import { useSettings } from '../../lib/SettingsContext'
 import { applyThemeClass } from '../../lib/settings'
 import { useContextMenuPosition } from '../../lib/useContextMenuPosition'
@@ -284,6 +284,16 @@ export function ActivityBar({ active, onChange, onToggleSidebar, flush }: Props)
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
               <LifeBuoy size={15} className="text-[var(--text-muted)]" />
               帮助
+            </button>
+
+            <div className="border-t border-[var(--border-color)] my-0.5" />
+
+            {/* 更新说明（VS Code 式 tab）：与「帮助」同层——低频、只读、回头才看。
+                不占活动栏图标位（该列只放高频模块）。 */}
+            <button onClick={() => { window.dispatchEvent(new CustomEvent('release-notes:open')); setMenuOpen(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+              <History size={15} className="text-[var(--text-muted)]" />
+              更新说明
             </button>
 
             <div className="border-t border-[var(--border-color)] my-0.5" />

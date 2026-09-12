@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
-import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon, ArrowUp } from 'lucide-react'
+import { FileText, Folder, ListTree, X, BookMarked, Puzzle, Share2, Image as ImageIcon, ArrowUp, Pin, PinOff } from 'lucide-react'
 import type { KnowledgeCategory, KnowledgePage, KnowledgeTag, PluginViewContribution } from '../../types'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
 import { WelcomeHtmlView } from './components/WelcomeHtmlView'
@@ -17,7 +17,7 @@ import {
   showExportSaveDialog, writeExportTextFile,
   getKnowledgeTags, pluginListViews, getKnowledgeGraph,
   getKnowledgeIndexWarnings,
-  workspaceRename, workspaceGetCurrent
+  workspaceRename, workspaceGetCurrent,
 } from '../../lib/ipc'
 import { showToast } from '../../lib/toast'
 import { recordFileOp } from '../../lib/fileOpHistory'
@@ -32,13 +32,12 @@ const PageEditor = lazy(() => import('./components/PageEditor').then((m) => ({ d
 import { PageTabBar, type PageInfo } from './components/PageTabBar'
 import { GraphView } from './components/graph/GraphView'
 import { QuizCollection } from './components/QuizCollection'
-import { QuizMode } from '../../components/shared/QuizMode'
-import type { QuizItem } from '../../components/shared/QuizParser'
 import { ConfirmDialog } from '../../components/shared'
 import { OutlinePanel, parseHeadings } from '../../components/shared/OutlinePanel'
 import { PluginFrame } from '../../components/shared/PluginFrame'
 import { ImportZone } from '../shared/components/ImportZone'
 import { ResizablePanel } from '../../components/shared/ResizablePanel'
+import { FolderFocusButton } from '../../components/shared/FolderFocusButton'
 import { isEditingInput } from '../../lib/shortcuts'
 import { getGlobalActiveTab } from '../../lib/activeTab'
 import { useSettings } from '../../lib/SettingsContext'
@@ -78,10 +77,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** C 级模块插件声明的视图（slot=knowledge.sidebar）+ 当前打开的插件视图 */
   const [pluginViews, setPluginViews] = useState<PluginViewContribution[]>([])
   const [activePluginView, setActivePluginView] = useState<PluginViewContribution | null>(null)
-  /** 插件通过 host.review 请求的重刷会话（宿主开 QuizMode，判题写插件表） */
-  const [pluginReview, setPluginReview] = useState<{ title: string; pageId?: string; items: QuizItem[] } | null>(null)
   // 知识库侧边栏条目大小（紧凑/标准/宽松）→ CSS 变量，树行密度随之缩放
-  const { s: settings } = useSettings()
+  const { s: settings, update: updateSettings } = useSettings()
   /** 数据形态 = vault：知识库为只读导航，一切写收口到编辑器模块（后端也已白名单拒绝，这里给前端护栏+明确提示） */
   const vaultReadonly = true // R6 D9 后恒 vault：知识库只读导航，写收口编辑器（sqlite 读源已退役）
   const writeBlocked = (action: string): boolean => {
@@ -92,6 +89,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   const sidebarItemVars = KNOWLEDGE_SIDEBAR_ITEM_VARS[settings.knowledgeSidebarItemSize] ?? KNOWLEDGE_SIDEBAR_ITEM_VARS.m
   /** 删除动画状态：条目删除时先被红色吞噬（animating），动画后消失（done，等待 IPC 完成） */
   const [deletingMap, setDeletingMap] = useState<Map<string, 'animating' | 'done'>>(new Map())
+
   const deletingRef = useRef(deletingMap)
   deletingRef.current = deletingMap
 
@@ -101,13 +99,29 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   /** 工作区标题下「移出当前目录」drop 区激活态（拖页面到此返回上一级/零散） */
   const [ejectOn, setEjectOn] = useState(false)
 
-  // ---- 预览标签页（VS Code 风格） ----
+  // ---- 预览/固定标签（VS Code 风格）：dirty=编辑中（关闭需确认，视同固定） ----
   const [dirtyPageIds, setDirtyPageIds] = useState<Set<string>>(new Set())
   const dirtyPageIdsRef = useRef(dirtyPageIds)
   useEffect(() => { dirtyPageIdsRef.current = dirtyPageIds }, [dirtyPageIds])
 
+  // ---- 固定标签：浏览只占一个「预览槽」，显式固定（双击/图钉/右键）才累积，永不被浏览替换 ----
+  const [pinnedPageIds, setPinnedPageIds] = useState<Set<string>>(new Set())
+  const pinnedPageIdsRef = useRef(pinnedPageIds)
+  useEffect(() => { pinnedPageIdsRef.current = pinnedPageIds }, [pinnedPageIds])
+
   // ---- 未保存关闭确认 ----
   const [unsavedClosePageId, setUnsavedClosePageId] = useState<string | null>(null)
+
+  // ---- 页签右键菜单（固定/关闭族） ----
+  const [tabCtx, setTabCtx] = useState<{ x: number; y: number; pageId: string } | null>(null)
+  const handleTabContextMenu = useCallback((e: React.MouseEvent, pageId: string) => {
+    // 粗夹取：菜单约 170×140，避免贴屏幕右/下缘溢出
+    setTabCtx({
+      x: Math.min(e.clientX, window.innerWidth - 180),
+      y: Math.min(e.clientY, window.innerHeight - 150),
+      pageId,
+    })
+  }, [])
 
   const openPageIdsRef = useRef(openPageIds)
   const activePageIdRef = useRef(activePageId)
@@ -126,10 +140,16 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
   useEffect(() => { selectedChapterIdRef.current = selectedChapterId }, [selectedChapterId])
 
   // 插件视图挂载点：加载声明了 knowledge.sidebar 的 C 级模块插件
+  // 订阅 plugins-changed：插件安装/卸载/启停后侧栏入口即时同步 —— 本模块 Tab 保活不重挂，
+  // 只跑一次挂载加载的话，已消失的入口会一直留在侧栏（如退役的「错题本(插件版)」）
   const loadPluginViews = useCallback(async () => {
     try { setPluginViews(await pluginListViews('knowledge.sidebar')) } catch { /* ignore */ }
   }, [])
-  useEffect(() => { void loadPluginViews() }, [loadPluginViews])
+  useEffect(() => {
+    void loadPluginViews()
+    window.addEventListener('plugins-changed', loadPluginViews)
+    return () => window.removeEventListener('plugins-changed', loadPluginViews)
+  }, [loadPluginViews])
 
   // AI 助手上下文（当前打开的页面 → 供全局侧栏「边看边问」）注册在下方 readingPage 声明之后：
   // 正文来源需要读到阅读页，而 effect 的依赖数组无法引用尚未声明的变量。
@@ -359,7 +379,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
 
   const handleImportFolder = async () => {
     try {
-      const paths: string[] = await showFolderDialog()
+      const paths = await showFolderDialog()
       if (!paths || paths.length === 0) return
       const catId = selectedChapterId || null
       for (const folderPath of paths) {
@@ -526,13 +546,15 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       return
     }
 
-    // VS Code-style preview: if current tab is not dirty, replace it (single preview slot)
+    // 预览/钉住双态（VS Code 模型）：只替换「当前预览槽」（非固定、非编辑中）。
+    // 固定标签永不被替换；必须原位替换而非整栏重置，否则钉住的标签会被清掉
     const dirty = dirtyPageIdsRef.current
-    const replaceCurrent = activeId && !dirty.has(activeId)
+    const pinned = pinnedPageIdsRef.current
+    const replaceCurrent = activeId && !dirty.has(activeId) && !pinned.has(activeId)
 
     if (replaceCurrent) {
-      // Replace the non-dirty preview tab
-      setOpenPageIds([pageId])
+      // Replace the preview tab in place (pinned/dirty neighbors stay)
+      setOpenPageIds(prev => prev.map(id => (id === activeId ? pageId : id)))
       setOpenPageInfos(prev => {
         const next = { ...prev }
         delete next[activeId]
@@ -540,7 +562,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         return next
       })
     } else {
-      // Append as a new tab (dirty tab stays, or explicitly opened)
+      // Append as a new tab (pinned/dirty tabs stay, or explicitly opened)
       setOpenPageIds(prev => [...prev, pageId])
     }
 
@@ -565,6 +587,7 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     setOpenPageIds(nextIds)
     setOpenPageInfos(prev => { const next = { ...prev }; delete next[pageId]; return next })
     setDirtyPageIds(prev => { const next = new Set(prev); next.delete(pageId); return next })
+    setPinnedPageIds(prev => { const next = new Set(prev); next.delete(pageId); return next })
     if (activePageIdRef.current === pageId) {
       if (nextIds.length === 0) {
         setActivePageId(null)
@@ -572,6 +595,47 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         setShowOutline(false)
       }
       else { const newIdx = Math.min(idx, nextIds.length - 1); setActivePageId(nextIds[newIdx]) }
+    }
+  }, [])
+
+  /** 固定/取消固定：双击标签、图钉按钮、右键菜单共用 */
+  const handleTogglePin = useCallback((pageId: string) => {
+    setPinnedPageIds(prev => {
+      const next = new Set(prev)
+      if (next.has(pageId)) next.delete(pageId)
+      else next.add(pageId)
+      return next
+    })
+  }, [])
+
+  /** 关闭其他：保留目标标签；编辑中（dirty）的标签需走未保存确认，这里直接跳过 */
+  const handleCloseOthers = useCallback((pageId: string) => {
+    const dirty = dirtyPageIdsRef.current
+    const keep = openPageIdsRef.current.filter(id => id === pageId || dirty.has(id))
+    setOpenPageIds(keep)
+    setOpenPageInfos(prev => {
+      const next: Record<string, PageInfo> = {}
+      for (const id of keep) if (prev[id]) next[id] = prev[id]
+      return next
+    })
+    setPinnedPageIds(prev => new Set([...prev].filter(id => keep.includes(id))))
+    setActivePageId(pageId)
+  }, [])
+
+  /** 全部关闭：编辑中（dirty）的标签保留（关闭它们要走未保存确认） */
+  const handleCloseAll = useCallback(() => {
+    const dirty = dirtyPageIdsRef.current
+    const keep = openPageIdsRef.current.filter(id => dirty.has(id))
+    setOpenPageIds(keep)
+    setOpenPageInfos(prev => {
+      const next: Record<string, PageInfo> = {}
+      for (const id of keep) if (prev[id]) next[id] = prev[id]
+      return next
+    })
+    setPinnedPageIds(prev => new Set([...prev].filter(id => keep.includes(id))))
+    if (!keep.includes(activePageIdRef.current ?? '')) {
+      if (keep.length === 0) { setActivePageId(null); setShowOutline(false) }
+      else setActivePageId(keep[keep.length - 1])
     }
   }, [])
 
@@ -949,6 +1013,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
       }
       if (isEditingInput(e)) return
 
+      // Ctrl+N — 新建知识页：跳编辑器触发内联命名行（读写分工：知识库为阅读器，建页在编辑器完成）
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('kb-open-in-editor', { detail: { from: 'knowledge' } }))
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent('kb-editor-new-page')), 180)
+        return
+      }
+
       if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
         e.preventDefault()
         void enterReading()
@@ -1235,8 +1307,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
     <ImportZone onImport={handleDropImport} onImportPdf={handleDropImportBinary} className="h-full">
       <div className="flex h-full flex-col bg-[var(--bg-primary)]">
         {readingMode ? (
-          /* ===== 沉浸阅读：只保留正文 ===== */
-          <div className="flex-1 min-w-0 relative">
+          /* ===== 沉浸阅读：只保留正文（进场淡入；可能含 iframe/PDF，故只做透明度、不做位移） ===== */
+          <div className="kb-view-fade flex-1 min-w-0 relative">
             {/* 顶部悬停退出区（平时隐形） */}
             <div
               className="absolute top-0 inset-x-0 h-9 z-40 group/rtop cursor-pointer"
@@ -1322,19 +1394,28 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             activePageId={activePageId}
             openPageInfos={openPageInfos}
             dirtyPageIds={dirtyPageIds}
+            pinnedPageIds={pinnedPageIds}
             onSelectTab={handleOpenPage}
             onCloseTab={handleCloseTab}
             onReorder={handleReorderTabs}
+            onTogglePin={handleTogglePin}
+            onTabContextMenu={handleTabContextMenu}
             rightActions={<div id="editor-toolbar-slot" className="flex items-center gap-0.5" />}
           />
         )}
-        <div className="flex min-h-0 flex-1">
+        <div className="kb-view-fade flex min-h-0 flex-1">
         {/* L1: File / Outline tabs — file tab drills into ChapterPanel when a notebook is selected */}
         <ResizablePanel storageKey="sidebarWidth_knowledgeCat" defaultWidth={240} minWidth={180} maxWidth={400} visible={!graphMode && panelsVisible && showCategoryPanel} initialWidth={sidebarWidths.sidebarWidth_knowledgeCat} onSnapClose={() => setShowCategoryPanel(false)} onSnapOpen={() => { setShowCategoryPanel(true); onSnapOpenSidebar?.() }}>
           <div className="flex flex-col h-full" style={sidebarItemVars as unknown as React.CSSProperties}>
             {/* 空间沉浸视图顶部：返回栏（仅空间内显示）；目录拖到本栏=移出空间（移到根级中转） */}
             {selectedSpaceId && selectedSpace && (
               <SpacePanel space={selectedSpace} onCollapse={handleCollapseSpace} onRename={handleRenameNotebook}
+                extraAction={
+                  <FolderFocusButton
+                    on={!!settings.knowledgeFolderFocus}
+                    onToggle={() => updateSettings('knowledgeFolderFocus', !settings.knowledgeFolderFocus)}
+                  />
+                }
                 onMoveOut={(id) => { void handleMoveCategory(id, null) }} />
             )}
 
@@ -1361,12 +1442,17 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               <div className="flex items-center gap-1 border-b border-[var(--border-color)] px-2 py-1 text-[11.5px] text-[var(--text-muted)] shrink-0 select-none">
                 <BookMarked size={12} />
                 知识库
+                <FolderFocusButton
+                  className="ml-auto"
+                  on={!!settings.knowledgeFolderFocus}
+                  onToggle={() => updateSettings('knowledgeFolderFocus', !settings.knowledgeFolderFocus)}
+                />
               </div>
             )}
 
             {/* 空间列表层：无大纲入口，直接显示文件树；空间内可切换大纲 */}
             {selectedSpaceId && showOutline ? (
-              <div className="flex-1 min-h-0">
+              <div className="kb-view-in flex-1 min-h-0">
                 <OutlinePanel
                   pageTitle={activePageForOutline?.title ?? ''}
                   headings={outlineHeadings}
@@ -1439,6 +1525,8 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
                       onSortPage={handleSortPage}
                       locatePageId={locatePageId}
                       locateCategoryId={locateCategoryId}
+                      focusOn={!!settings.knowledgeFolderFocus}
+                      onExitFocus={() => updateSettings('knowledgeFolderFocus', false)}
                       // vault（仓库文件）模式：移动由拖拽承担，复制副本暂不支持 → 隐藏复制/剪切/粘贴，避免点到报错
                       onCopy={vaultReadonly ? undefined : handleCopy}
                       onCut={vaultReadonly ? undefined : handleCut}
@@ -1497,16 +1585,14 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
             {/* 侧边栏底部：错题本 / 收藏 + 插件视图入口（仅空间内显示，顶层工作区列表不显示） */}
             {selectedSpaceId && selectedSpace && (
               <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5 space-y-0.5">
-                {/* 内置错题本：设置切到 plugin 模式后让位给插件版（不删除代码，可随时切回） */}
-                {settings.quizbookMode !== 'plugin' && (
-                  <button
-                    onClick={() => setShowQuizCollection(true)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                  >
-                    <BookMarked size={14} />
-                    错题本 / 收藏
-                  </button>
-                )}
+                {/* 内置错题本：唯一入口，恒驻 */}
+                <button
+                  onClick={() => setShowQuizCollection(true)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <BookMarked size={14} />
+                  错题本 / 收藏
+                </button>
                 {/* C 级模块插件声明的视图挂载点（slot=knowledge.sidebar） */}
                 {pluginViews.map(v => (
                   <button
@@ -1589,6 +1675,36 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
         )}
       </div>
 
+      {/* 页签右键菜单：固定/取消固定 + 关闭族 */}
+      {tabCtx && (
+        <div className="fixed inset-0 z-[70] kb-pop-layer" onClick={() => setTabCtx(null)} onContextMenu={(e) => { e.preventDefault(); setTabCtx(null) }}>
+          <div
+            className="absolute min-w-[160px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] py-1 shadow-xl"
+            style={{ left: tabCtx.x, top: tabCtx.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => { const pid = tabCtx.pageId; setTabCtx(null); handleTogglePin(pid) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              {pinnedPageIds.has(tabCtx.pageId) ? <PinOff size={13} className="text-[var(--text-muted)]" /> : <Pin size={13} className="text-[var(--text-muted)]" />}
+              {pinnedPageIds.has(tabCtx.pageId) ? '取消固定' : '固定标签'}
+            </button>
+            <div className="mx-2 my-0.5 border-t border-[var(--border-color)]" />
+            <button onClick={() => { const pid = tabCtx.pageId; setTabCtx(null); handleCloseTab(pid) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />关闭
+            </button>
+            <button onClick={() => { const pid = tabCtx.pageId; setTabCtx(null); handleCloseOthers(pid) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />关闭其他
+            </button>
+            <button onClick={() => { setTabCtx(null); handleCloseAll() }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[12.5px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">
+              <X size={13} className="text-[var(--text-muted)]" />全部关闭
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Unsaved changes confirm dialog */}
       <ConfirmDialog
         open={unsavedClosePageId !== null}
@@ -1627,30 +1743,10 @@ export function KnowledgeModule({ sidebarOpen = true, zoom = 1, sidebarWidths = 
               pluginId={activePluginView.pluginId}
               entry={activePluginView.entry}
               grantedCapabilities={activePluginView.granted}
-              onHostAction={(action, payload) => {
-                if (action === 'host.review') {
-                  const p = (payload ?? {}) as { title?: string; pageId?: string; items?: QuizItem[] }
-                  if (Array.isArray(p.items) && p.items.length > 0) {
-                    setPluginReview({ title: p.title || activePluginView.title, pageId: p.pageId, items: p.items })
-                    return true
-                  }
-                }
-                return false
-              }}
+              onHostAction={() => false}
             />
           </div>
         </div>
-      )}
-
-      {/* 插件模式重刷：宿主刷题器，判题/收藏写入插件命名空间表 */}
-      {pluginReview && activePluginView && (
-        <QuizMode
-          quizzes={pluginReview.items}
-          pageTitle={pluginReview.title}
-          pageId={pluginReview.pageId}
-          pluginReport={{ pluginId: activePluginView.pluginId }}
-          onClose={() => setPluginReview(null)}
-        />
       )}
     </ImportZone>
   )

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import type { ScheduleTodo, ScheduleTag } from '../../../types'
+import { usePresence } from '../../../lib/usePresence'
 
 interface Props {
   open: boolean
@@ -34,7 +35,9 @@ const QUADRANT_CONFIG: Record<number, { label: string; emoji: string; bg: string
 }
 
 export function QuadrantChart({ open, todos, tags, onClose }: Props) {
-  if (!open) return null
+  // 进出场动效（docs/ui-animation-plan.md B 类）：关闭时延迟卸载以播完退场
+  const { mounted, closing } = usePresence(open, 180)
+  if (!mounted) return null
 
   const grouped = new Map<number, ScheduleTodo[]>()
   for (const q of [0, 1, 2, 3]) grouped.set(q, [])
@@ -50,7 +53,7 @@ export function QuadrantChart({ open, todos, tags, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${closing ? 'kb-overlay-out' : 'kb-overlay'}`} onClick={onClose}>
       <div
         className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg w-[660px] shadow-2xl"
         onClick={e => e.stopPropagation()}

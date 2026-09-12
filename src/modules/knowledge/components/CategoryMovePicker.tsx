@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BookOpen, Folder, FolderOpen, Layers, X } from 'lucide-react'
 import type { KnowledgeCategory } from '../../../types'
+import { usePresence } from '../../../lib/usePresence'
 
 interface Props {
   open: boolean
@@ -35,7 +36,9 @@ export function CategoryMovePicker({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  if (!open) return null
+  // 进出场动效（docs/ui-animation-plan.md B 类）：关闭时延迟卸载以播完退场
+  const { mounted, closing } = usePresence(open, 180)
+  if (!mounted) return null
 
   // ---- validate a target for category moves ----
   function isValidTarget(targetId: string): boolean {
@@ -104,7 +107,7 @@ export function CategoryMovePicker({
   const title = moveType === 'category' ? '移动目录到...' : '移动页面到...'
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className={`fixed inset-0 z-[70] flex items-center justify-center bg-black/50 ${closing ? 'kb-overlay-out' : 'kb-overlay'}`} onClick={onClose}>
       <div
         className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl flex flex-col"
         style={{ width: '380px', maxHeight: '500px' }}

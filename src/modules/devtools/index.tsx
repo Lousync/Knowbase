@@ -83,9 +83,13 @@ export function DevToolsModule({ sidebarOpen = true, sidebarWidths = {} as Recor
         </div>
       </ResizablePanel>
 
-      {/* 右侧:当前工具 */}
+      {/* 右侧:当前工具（切换工具重放进场，见 docs/ui-animation-plan.md A 类） */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {ActiveComponent && <ActiveComponent />}
+        {ActiveComponent && (
+          <div key={activeId} className="kb-view-in flex min-h-0 flex-1 flex-col">
+            <ActiveComponent />
+          </div>
+        )}
       </div>
       </div>
     </div>

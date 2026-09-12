@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { consumePendingAnchor, subscribePendingAnchor } from '../sections'
+import { usePresence } from '../../../lib/usePresence'
 
 interface Props {
   title: string
@@ -24,6 +25,9 @@ export function CollapseList({
   title, count, anchorId, defaultOpen = false, titleClassName, headerRight, children,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen)
+  // 展开/收起动效：常驻到退场动画播完再卸载（保持原有的「收起时不渲染子内容」懒挂载语义，
+  // 只是把卸载推迟一个动画时长）。见 docs/ui-animation-plan.md C 类。
+  const { mounted } = usePresence(open, 220)
 
   // 消费待跳转锚点：挂载时查一次（覆盖切换大项后的重挂载），订阅后续跳转（覆盖停留本页时的二次跳转）
   useEffect(() => {
@@ -37,7 +41,9 @@ export function CollapseList({
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-1.5 mb-3 group text-left"
       >
-        <ChevronRight size={12} className={`text-[var(--text-muted)] transition-transform ${open ? 'rotate-90' : ''}`} />
+        {/* Tailwind v4 的 rotate-90 写的是 rotate 属性，transition-transform 收不到它 →
+            统一用 .kb-chevron（同时过渡 transform 与 rotate） */}
+        <ChevronRight size={12} className={`kb-chevron text-[var(--text-muted)] ${open ? 'rotate-90' : ''}`} />
         <h3 className={titleClassName ?? 'text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wide group-hover:text-[var(--text-primary)]'}>
           {title}
         </h3>
@@ -46,7 +52,12 @@ export function CollapseList({
         )}
         {headerRight && <span className="ml-auto shrink-0">{headerRight}</span>}
       </button>
-      {open && children}
+      {/* 外层 grid 容器常驻、只懒挂载内层子树：随 mounted 一起挂载会让展开变成「已展开」状态下
+          新建元素，没有起始态可过渡 → 展开动画不播。子内容用 open || mounted 求值，与 open 类
+          同一次提交出现。见 docs/ui-animation-plan.md C 类。 */}
+      <div className={`kb-collapse ${open ? 'open' : ''}`}>
+        {open || mounted ? <div>{children}</div> : null}
+      </div>
     </div>
   )
 }

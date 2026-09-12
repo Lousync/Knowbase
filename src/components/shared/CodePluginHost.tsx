@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { hostBridgeOpen, hostBridgeClose, hostRpc, pluginAuditWrite } from '../../lib/ipc'
+import { registerCodePluginDispatcher } from '../../lib/pluginCommandBus'
 import { showToast } from '../../lib/toast'
 
 /**
@@ -27,6 +28,7 @@ export function CodePluginHost({ pluginId, entry, onDenied }: {
     let alive = true
     let worker: Worker | null = null
     let token: string | null = null
+    let unregisterDispatcher: (() => void) | null = null
 
     // 会话开启后通知 Worker（Worker 内 postMessage 上报请求）
     const openSession = async (): Promise<void> => {
@@ -36,6 +38,12 @@ export function CodePluginHost({ pluginId, entry, onDenied }: {
         if (r.ok && r.token) {
           token = r.token
           worker?.postMessage({ channel: CHANNEL, v: 2, action: 'init', payload: { token, hostVersion: '2' } })
+          // 生命周期 enable（plugin-phase1-design C5）：会话就绪即通知
+          worker?.postMessage({ channel: CHANNEL, v: 2, action: 'lifecycle', payload: { phase: 'enable' } })
+          // 宿主 → Worker 单向推送通道（plugin-phase1-design C3/C4/C5）：命令 / 事件 / 生命周期
+          unregisterDispatcher = registerCodePluginDispatcher(pluginId, (action, payload) => {
+            workerRef.current?.postMessage({ channel: CHANNEL, v: 2, action, payload })
+          })
         } else {
           onDenied?.(r.message ?? 'bridge-open 失败')
         }
@@ -104,9 +112,15 @@ export function CodePluginHost({ pluginId, entry, onDenied }: {
 
     return () => {
       alive = false
-      worker?.terminate()
+      unregisterDispatcher?.()
+      // 生命周期 disable（plugin-phase1-design C5）：尽力而为——先通知，500ms 宽限后 terminate
+      try { worker?.postMessage({ channel: CHANNEL, v: 2, action: 'lifecycle', payload: { phase: 'disable' } }) } catch { /* Worker 已死 */ }
+      const doomed = worker
+      const closedToken = token
+      worker = null
       workerRef.current = null
-      if (token) void hostBridgeClose(token)
+      if (doomed) setTimeout(() => { doomed.terminate() }, 500)
+      if (closedToken) void hostBridgeClose(closedToken)
     }
   }, [pluginId, entry, onDenied])
 

@@ -83,7 +83,7 @@ export function DataClearSection() {
 
       {/* Two-step modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={close}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 kb-overlay" onClick={close}>
           <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-[440px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">

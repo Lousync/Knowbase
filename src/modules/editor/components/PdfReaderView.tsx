@@ -381,19 +381,19 @@ export function PdfReaderView({ rootId, relPath, name }: Props) {
   )
 
   const sidePanel = (
-    <div className={`flex w-64 shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)] ${immersive || sideTab === null ? 'hidden' : ''}`}>
+    <div className={`kb-view-fade flex w-64 shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-secondary)] ${immersive || sideTab === null ? 'hidden' : ''}`}>
       <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)]">
         {sideTab === 'outline' ? <><ListTree size={13} />大纲</> : <><Search size={13} />搜索</>}
         <button onClick={() => setSideTab(null)} className="ml-auto rounded p-0.5 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><X size={12} /></button>
       </div>
       {sideTab === 'outline' && (
-        <div className="min-h-0 flex-1 overflow-auto py-1">
+        <div className="kb-view-in min-h-0 flex-1 overflow-auto py-1">
           {outline.length === 0 && <div className="px-3 py-2 text-[12px] text-[var(--text-muted)]">此 PDF 没有书签</div>}
           <OutlineTree nodes={outline} onJump={(n) => void jumpOutline(n)} depth={0} />
         </div>
       )}
       {sideTab === 'search' && (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="kb-view-in flex min-h-0 flex-1 flex-col">
           <div className="flex items-center gap-1.5 p-2">
             <input
               id="kb-pdf-search-input"

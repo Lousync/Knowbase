@@ -211,7 +211,7 @@ export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenHtml, 
       </div>
 
       {ctx && (
-        <div className="fixed inset-0 z-[70]" onClick={() => setCtx(null)} onContextMenu={(e) => { e.preventDefault(); setCtx(null) }}>
+        <div className="fixed inset-0 z-[70] kb-pop-layer" onClick={() => setCtx(null)} onContextMenu={(e) => { e.preventDefault(); setCtx(null) }}>
           {/* UI 优化条目7：w-max 显式内容宽（修 shrink-to-fit+ w-full 子项测量歧义导致的拉宽），长文案换行兜底，钳制按实际宽 */}
           <div className="absolute min-w-[160px] w-max max-w-[280px] rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-xl py-1"
             style={{ left: Math.min(ctx.x, window.innerWidth - 290), top: Math.min(ctx.y, window.innerHeight - 300) }}>
@@ -226,7 +226,7 @@ export function AiTeachFileTree({ activeRel, subRel = '', onOpenMd, onOpenHtml, 
       )}
 
       {modal && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30" onClick={() => setModal(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30 kb-overlay" onClick={() => setModal(null)}>
           <div className="w-80 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="mb-2 text-[13px] font-medium text-[var(--text-primary)]">{modal.title}</div>
             <input autoFocus value={modalValue} onChange={e => setModalValue(e.target.value)} placeholder={modal.placeholder}

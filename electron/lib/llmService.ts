@@ -1,6 +1,6 @@
 import { ipcMain, net } from 'electron'
 import { randomUUID } from 'crypto'
-import { appendAudit, countMonthLlmTokens, countMonthVisionTokens, countMonthVisionPages } from './pluginAudit'
+import { appendAudit, countMonthLlmTokens, countMonthVisionTokens, countMonthVisionPages, summarizeMonthLlmUsage } from './pluginAudit'
 import { encryptSecret, decryptSecret } from './secretBox'
 import { scanCcSwitch, importCcSwitchIds, bindCcSwitchSaver } from './ccSwitchImport'
 
@@ -28,6 +28,8 @@ export interface ProviderConfig {
   /** 自定义请求头（明文存设置，勿放 API Key 类敏感值——密钥走 apiKey 字段走 DPAPI）。
    *  2026-09-08：opencode 等网关要求 x-opencode-session 之类的会话/路由头，按服务商在设置里配 */
   headers?: Record<string, string>
+  /** 嵌入模型名（知识语义索引用，knowledge-index-design §6）；不配 = 该供应商不参与嵌入 */
+  embeddingModel?: string
 }
 
 interface ChatMessage {
@@ -54,12 +56,18 @@ interface ChatRequest {
   effort?: 'off' | 'low' | 'medium' | 'high'
 }
 
+/**
+ * 网关归一化后的用量。cachedTokens 表示命中提示缓存的输入 token 数（观测用，
+ * 已包含在 promptTokens 之内，勿重复计入预算）；不支持缓存的供应商恒为 0/undefined。
+ */
+type LlmUsage = { promptTokens: number; completionTokens: number; cachedTokens?: number }
+
 interface ChatResult {
   content: string
   toolCalls: ToolCallNormalized[]
   /** OpenAI 线格式的 assistant 消息（多轮回喂时原样使用） */
   assistantMessage: ChatMessage
-  usage: { promptTokens: number; completionTokens: number }
+  usage: LlmUsage
   rawError?: never
 }
 
@@ -73,7 +81,7 @@ export type LlmStreamEvent =
   | { type: 'text'; delta: string }
   | { type: 'reasoning'; delta: string }
   | { type: 'tool_call'; index: number; id?: string; name?: string; argsDelta?: string }
-  | { type: 'usage'; promptTokens: number; completionTokens: number }
+  | { type: 'usage'; promptTokens: number; completionTokens: number; cachedTokens?: number }
   | { type: 'done' }
 
 const STREAM_FIRST_BYTE_MS = 60_000
@@ -232,6 +240,9 @@ interface Adapter {
   /** 流式对话：逐块回调归一化事件，返回值与非流式 chat 同构（上层逻辑无需分叉）。
    *  未实现时 invokeLlmStream 自动回退为「一次返回全部 content」——功能不受损，仅失去过程感。 */
   chatStream?(p: ProviderConfig, req: ChatRequest, onEvent: (e: LlmStreamEvent) => void): Promise<ChatResult>
+  /** 文本嵌入（语义索引用）：texts 与返回向量按序一一对应。
+   *  未实现（如 anthropic）= 该供应商类型不支持嵌入，resolveEmbedProvider 自动跳过。 */
+  embed?(p: ProviderConfig, texts: string[], model: string): Promise<number[][]>
 }
 
 async function httpJson(url: string, init: { method: string; headers: Record<string, string>; body?: string }, externalSignal?: AbortSignal): Promise<{ status: number; json: any }> {
@@ -330,6 +341,8 @@ function parseOpenAiChoice(json: any): ChatResult {
     usage: {
       promptTokens: Number(json?.usage?.prompt_tokens ?? 0),
       completionTokens: Number(json?.usage?.completion_tokens ?? 0),
+      // OpenAI / DeepSeek 等的自动前缀缓存命中量（不支持的网关返回 undefined → 0）
+      cachedTokens: Number(json?.usage?.prompt_tokens_details?.cached_tokens ?? 0),
     },
   }
 }
@@ -375,7 +388,7 @@ const openAiCompatibleAdapter: Adapter = {
       }
       let content = ''
       const acc = new Map<number, { id: string; name: string; args: string }>()
-      let usage = { promptTokens: 0, completionTokens: 0 }
+      let usage: LlmUsage = { promptTokens: 0, completionTokens: 0 }
       for await (const frame of readFrames(res)) {
         sa.chunk()
         const data = sseData(frame)
@@ -413,6 +426,7 @@ const openAiCompatibleAdapter: Adapter = {
           usage = {
             promptTokens: Number(json.usage.prompt_tokens ?? 0),
             completionTokens: Number(json.usage.completion_tokens ?? 0),
+            cachedTokens: Number(json.usage.prompt_tokens_details?.cached_tokens ?? 0),
           }
         }
       }
@@ -438,6 +452,18 @@ const openAiCompatibleAdapter: Adapter = {
     } finally {
       sa.dispose()
     }
+  },
+  async embed(p, texts, model) {
+    // OpenAI 兼容 /embeddings：input 数组一次批；返回 data[].embedding 与入参按序对应
+    const { status, json } = await httpJson(`${p.baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: authHeaders(p),
+      body: JSON.stringify({ model, input: texts }),
+    })
+    if (status !== 200 || !json) throw new Error(friendlyHttpError(status, json))
+    const vectors = (json?.data ?? []).map((d: any) => d?.embedding).filter((v: unknown) => Array.isArray(v))
+    if (vectors.length !== texts.length) throw new Error(`嵌入返回数不符（请求 ${texts.length}，返回 ${vectors.length}）`)
+    return vectors as number[][]
   },
 }
 
@@ -572,9 +598,35 @@ const ollamaAdapter: Adapter = {
       sa.dispose()
     }
   },
+  async embed(p, texts, model) {
+    // Ollama /api/embeddings 逐条（本地无批接口兼容性顾虑；新 /api/batch-embed 未普及时保持简单）
+    const out: number[][] = []
+    for (const text of texts) {
+      const { status, json } = await httpJson(`${ollamaBase(p)}/api/embeddings`, {
+        method: 'POST',
+        headers: {},
+        body: JSON.stringify({ model, prompt: text }),
+      })
+      if (status !== 200 || !json) throw new Error(`HTTP ${status}（Ollama 服务未启动或嵌入模型未拉取？）`)
+      if (!Array.isArray(json?.embedding)) throw new Error('Ollama 嵌入返回格式异常')
+      out.push(json.embedding as number[])
+    }
+    return out
+  },
 }
 
 // ---- Anthropic Messages API 适配器（非流式） ----
+
+/**
+ * 提示缓存断点（P0，2026-09-12）。Anthropic 是**唯一需要显式标记**的 provider ——
+ * OpenAI / DeepSeek 等对 ≥1024 token 的前缀自动缓存，Ollama 本地无此机制。
+ *
+ * 缓存按「前缀」生效，Anthropic 的固定顺序是 tools → system → messages，断点语义是
+ * "到此为止的前缀可缓存"，所以打在 tools 末元素与 system 末尾，正好覆盖 agent loop
+ * 每轮重发且恒定不变的那一段（内置工具 schema ~7.4k tok + 系统提示）。
+ * 命中后按约 10% 计价（写入 1.25x，TTL 5 分钟）；messages 每轮增长，不打断点。
+ */
+const CACHE_CONTROL = { type: 'ephemeral' } as const
 
 /** OpenAI 线格式 → Anthropic 请求体（流式 / 非流式共用） */
 function buildAnthropicBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
@@ -603,17 +655,22 @@ function buildAnthropicBody(req: ChatRequest, stream: boolean): Record<string, u
     }
     if (blocks.length > 0) pushTurn('assistant', blocks.length === 1 ? blocks[0] : blocks)
   }
-  const tools = (req.tools ?? []).map((t: any) => ({
+  const tools = (req.tools ?? []).map((t: any, i: number) => ({
     name: String(t?.function?.name ?? ''),
     description: String(t?.function?.description ?? ''),
     input_schema: t?.function?.parameters ?? { type: 'object' },
+    // 只给最后一个工具打断点（断点 = 到此为止的前缀全可缓存，逐个打是浪费断点配额，上限 4 个）
+    ...(req.tools && i === req.tools.length - 1 ? { cache_control: CACHE_CONTROL } : {}),
   }))
   return {
     model: req.model,
     max_tokens: req.maxTokens,
     messages: turns,
     ...(stream ? { stream: true } : {}),
-    ...(systemParts.length > 0 ? { system: systemParts.join('\n\n') } : {}),
+    // system 必须用数组形式才能带 cache_control（字符串形式无法附加标记）
+    ...(systemParts.length > 0
+      ? { system: [{ type: 'text', text: systemParts.join('\n\n'), cache_control: CACHE_CONTROL }] }
+      : {}),
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
@@ -666,6 +723,8 @@ const anthropicAdapter: Adapter = {
       usage: {
         promptTokens: Number(json.usage?.input_tokens ?? 0),
         completionTokens: Number(json.usage?.output_tokens ?? 0),
+        // 缓存命中量（读取价）。cache_creation_input_tokens 是写入量，不计入此处
+        cachedTokens: Number(json.usage?.cache_read_input_tokens ?? 0),
       },
     }
   },
@@ -683,7 +742,7 @@ const anthropicAdapter: Adapter = {
         throw new Error(`HTTP ${res.status}: ${String(json?.error?.message ?? '').slice(0, 200) || '响应解析失败'}`)
       }
       let text = ''
-      let usage = { promptTokens: 0, completionTokens: 0 }
+      let usage: LlmUsage = { promptTokens: 0, completionTokens: 0 }
       /** 按 content block index 收集 tool_use（入参是 input_json_delta 分片拼接） */
       const blocks = new Map<number, { id: string; name: string; json: string }>()
       for await (const frame of readFrames(res)) {
@@ -694,7 +753,12 @@ const anthropicAdapter: Adapter = {
         if (!json) continue
         const type = String(json.type ?? '')
         if (type === 'message_start') {
-          usage = { ...usage, promptTokens: Number(json.message?.usage?.input_tokens ?? 0) }
+          // message_start 里就带完整的输入侧用量（含缓存命中量），一次取齐
+          usage = {
+            ...usage,
+            promptTokens: Number(json.message?.usage?.input_tokens ?? 0),
+            cachedTokens: Number(json.message?.usage?.cache_read_input_tokens ?? 0),
+          }
         } else if (type === 'content_block_start') {
           const cb = json.content_block ?? {}
           if (cb.type === 'tool_use') {
@@ -754,6 +818,42 @@ function getAdapter(type: ProviderType): Adapter {
   return a
 }
 
+// ===== 嵌入通道（knowledge-index-design §6）=====
+
+/** 取第一个「已启用 + 配了 embeddingModel + 适配器支持嵌入」的供应商；无则 null（语义层降级） */
+export function resolveEmbedProvider(): { provider: ProviderConfig; model: string } | null {
+  for (const p of getProviders()) {
+    if (!p.enabled || !p.embeddingModel?.trim()) continue
+    if (!getAdapter(p.type).embed) continue
+    return { provider: p, model: p.embeddingModel.trim() }
+  }
+  return null
+}
+
+export type LlmEmbedResult =
+  | { ok: true; vectors: number[][]; model: string; providerName: string }
+  | { ok: false; error: string }
+
+/** 批量嵌入入口（语义索引管线用）：批 ≤64，失败直接上抛错误信息由调用方降级 */
+export async function llmEmbed(texts: string[]): Promise<LlmEmbedResult> {
+  const resolved = resolveEmbedProvider()
+  if (!resolved) return { ok: false, error: '未配置嵌入模型（设置 → 模型 → 供应商的 embeddingModel）' }
+  const adapter = getAdapter(resolved.provider.type).embed
+  if (!adapter) return { ok: false, error: '该供应商类型不支持嵌入' }
+  const vectors: number[][] = []
+  try {
+    for (let i = 0; i < texts.length; i += 64) {
+      const batch = texts.slice(i, i + 64)
+      vectors.push(...await adapter(resolved.provider, batch, resolved.model))
+    }
+  } catch (err) {
+    appendAudit(resolved.provider.id, 'llm.embed', { ok: false, count: texts.length })
+    return { ok: false, error: String((err as Error)?.message || err) }
+  }
+  appendAudit(resolved.provider.id, 'llm.embed', { ok: true, count: texts.length })
+  return { ok: true, vectors, model: resolved.model, providerName: resolved.provider.name }
+}
+
 // ===== invoke 主流程 =====
 
 export interface LlmInvokeRequest {
@@ -776,6 +876,10 @@ export type LlmInvokeResponse = {
   tokens: number
   promptTokens: number
   completionTokens: number
+  /** 命中提示缓存的输入 token 数（观测用，已含在 promptTokens 内） */
+  cachedTokens?: number
+  /** 故障转移：本次实际应答的供应商 ≠ 默认供应商时，记录被接管的默认供应商名（网关补强） */
+  fallbackFrom?: string
 } | {
   ok: false
   error: string
@@ -815,24 +919,26 @@ function streamEnabled(): boolean {
   return depsRef?.getSettingValue('aiStreamEnabled') !== false
 }
 
-async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
-  const t = resolveLlmTarget(req)
-  if (!t.ok) return { ok: false, error: t.error, code: t.code }
+/** 供应商级错误（网络/超时/限频/上游 5xx）→ 触发故障转移；参数/鉴权类错误换供应商也没用 */
+function isProviderLevelError(error: string): boolean {
+  return /timeout|timed?\s*out|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|网络|HTTP 5\d\d|HTTP 429|限频/i.test(error)
+}
 
-  const adapter = getAdapter(t.provider.type)
+async function llmInvokeOnce(provider: ProviderConfig, model: string, req: LlmInvokeRequest, maxTokens: number): Promise<LlmInvokeResponse> {
+  const adapter = getAdapter(provider.type)
   const started = Date.now()
   try {
-    const r = await adapter.chat(t.provider, {
-      model: t.model,
+    const r = await adapter.chat(provider, {
+      model,
       messages: req.messages,
       tools: req.tools,
-      maxTokens: t.maxTokens,
+      maxTokens,
       effort: req.effort,
       signal: req.signal,
     })
-    appendAudit(t.provider.id, 'llm.invoke', {
-      provider: t.provider.name,
-      model: t.model,
+    appendAudit(provider.id, 'llm.invoke', {
+      provider: provider.name,
+      model,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
@@ -844,21 +950,39 @@ async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
       content: r.content,
       toolCalls: r.toolCalls,
       assistantMessage: r.assistantMessage,
-      model: t.model,
+      model,
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
     }
   } catch (err) {
-    appendAudit(t.provider.id, 'llm.invoke', {
-      provider: t.provider.name,
-      model: t.model,
+    appendAudit(provider.id, 'llm.invoke', {
+      provider: provider.name,
+      model,
       durationMs: Date.now() - started,
       ok: false,
       error: String((err as Error)?.message ?? err).slice(0, 300),
     })
     return { ok: false, error: String((err as Error)?.message ?? err) }
   }
+}
+
+async function llmInvoke(req: LlmInvokeRequest): Promise<LlmInvokeResponse> {
+  const t = resolveLlmTarget(req)
+  if (!t.ok) return { ok: false, error: t.error, code: t.code }
+
+  const r = await llmInvokeOnce(t.provider, t.model, req, t.maxTokens)
+  if (r.ok) return r
+  // 故障转移（网关补强）：仅「默认模型路径」（用户未钉死供应商/模型）且供应商级错误时，
+  // 换一个可用供应商重试一次。流式路径不做（中途切换会造成内容拼接错乱）。
+  if (req.providerId || req.modelId) return r
+  if (!isProviderLevelError(r.error)) return r
+  const fallback = getProviders().find(p => p.enabled && p.id !== t.provider.id && p.models.length > 0)
+  if (!fallback) return r
+  const r2 = await llmInvokeOnce(fallback, fallback.models[0], req, t.maxTokens)
+  if (!r2.ok) return r // 仍返回原始错误（fallback 失败细节已在审计）
+  appendAudit(fallback.id, 'llm.fallback', { from: t.provider.name, to: fallback.name })
+  return { ...r2, fallbackFrom: t.provider.name }
 }
 
 /**
@@ -880,7 +1004,7 @@ export async function invokeLlmStreamInternal(
     const r = await llmInvoke(req)
     if (r.ok) {
       if (r.content) onEvent({ type: 'text', delta: r.content })
-      onEvent({ type: 'usage', promptTokens: r.promptTokens, completionTokens: r.completionTokens })
+      onEvent({ type: 'usage', promptTokens: r.promptTokens, completionTokens: r.completionTokens, ...(r.cachedTokens ? { cachedTokens: r.cachedTokens } : {}) })
     }
     onEvent({ type: 'done' })
     return r
@@ -903,6 +1027,7 @@ export async function invokeLlmStreamInternal(
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
+      ...(r.usage.cachedTokens ? { cachedTokens: r.usage.cachedTokens } : {}),
       durationMs: Date.now() - started,
       ok: true,
     })
@@ -915,6 +1040,7 @@ export async function invokeLlmStreamInternal(
       tokens: r.usage.promptTokens + r.usage.completionTokens,
       promptTokens: r.usage.promptTokens,
       completionTokens: r.usage.completionTokens,
+      ...(r.usage.cachedTokens ? { cachedTokens: r.usage.cachedTokens } : {}),
     }
   } catch (err) {
     appendAudit(t.provider.id, 'llm.invoke', {
@@ -941,6 +1067,7 @@ function sanitizeInfo(p: ProviderConfig, defaultChatModel: string) {
     hasKey: !!p.apiKeyEncrypted,
     models: p.models,
     headers: p.headers ?? {},
+    embeddingModel: p.embeddingModel ?? '',
     isDefault: defaultChatModel.startsWith(`${p.id}:`),
   }
 }
@@ -949,6 +1076,7 @@ function sanitizeInfo(p: ProviderConfig, defaultChatModel: string) {
 function saveProviderDraft(draft: {
   id?: string; name: string; type: ProviderType; baseUrl: string; apiKey?: string; enabled?: boolean
   headers?: Record<string, string>
+  embeddingModel?: string
 }): { ok: boolean; id?: string; error?: string } {
   if (!draft || typeof draft.name !== 'string' || !draft.name.trim()) return { ok: false, error: '名称不能为空' }
   if (!['openai-compatible', 'ollama', 'anthropic'].includes(draft.type)) return { ok: false, error: '不支持的类型' }
@@ -973,6 +1101,7 @@ function saveProviderDraft(draft: {
   p.type = draft.type
   p.baseUrl = urlCheck.url
   p.headers = headers
+  p.embeddingModel = typeof draft.embeddingModel === 'string' && draft.embeddingModel.trim() ? draft.embeddingModel.trim() : undefined
   if (typeof draft.apiKey === 'string' && draft.apiKey.length > 0) {
     p.apiKeyEncrypted = encryptSecret(draft.apiKey) // 明文只在此瞬间存在，随即加密
   }
@@ -1119,6 +1248,8 @@ export function registerLlmHandlers(deps: {
     visionMonthTokens: countMonthVisionTokens(),
     visionPages: countMonthVisionPages(),
   }))
+  // 用量细分（网关补强）：本月按供应商/模型聚合（审计数据源，只读）
+  ipcMain.handle('llm:usageBreakdown', () => summarizeMonthLlmUsage())
 }
 
 /** 供 agentService 复用（不经 IPC） */

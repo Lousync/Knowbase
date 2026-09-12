@@ -111,7 +111,7 @@ export function registerImportHandlers(): void {
       filters: [
         { name: '支持的文件（备份包 zip / JSON）', extensions: ['zip', 'json'] },
       ],
-      title: '导入 Knowbase 数据'
+      title: '导入 Phrontis 数据'
     })
     return result.canceled ? [] : result.filePaths
   })

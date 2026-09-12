@@ -3,6 +3,7 @@ import type { ScheduleTag, ScheduleTodo } from '../../../types'
 import { X, Plus, Trash2, Check } from 'lucide-react'
 import { localToday } from '../../../lib/date'
 import { isSummaryTagName } from '../../../lib/summary'
+import { usePresence } from '../../../lib/usePresence'
 import {
   orderedQuadrants, QuadrantIconGlyph, QUADRANT_TEXT_CLASS,
   type QuadrantIcon, type QuadrantOrder,
@@ -40,6 +41,8 @@ export function TodoEditModal({
 }: Props) {
   const [form, setForm] = useState<TodoForm>(initial)
   const [timeWarning, setTimeWarning] = useState('')
+  // 进出场动效（docs/ui-animation-plan.md B 类）：关闭时延迟卸载以播完退场
+  const { mounted, closing } = usePresence(open, 180)
 
   /** 象限选项展示顺序（默认按紧迫度从左到右递增） */
   const quadrants = useMemo(() => orderedQuadrants(quadrantOrder), [quadrantOrder])
@@ -85,7 +88,7 @@ export function TodoEditModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!mounted) return null
 
   const canSave = form.title.trim().length > 0
 
@@ -156,8 +159,8 @@ export function TodoEditModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[500px] shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${closing ? 'kb-overlay-out' : 'kb-overlay'}`}>
+      <div className={`bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg w-[500px] shadow-2xl ${closing ? 'kb-modal-out' : 'kb-modal-in'}`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
           <h3 className="text-[14px] font-medium text-[var(--text-primary)]">{initial.title ? '编辑任务' : '新建任务'}</h3>
           <button onClick={onClose} className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={16} /></button>

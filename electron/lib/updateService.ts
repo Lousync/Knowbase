@@ -13,7 +13,7 @@ import { pipeline } from 'stream/promises'
  *       失效自动回退直连;安装:运行下载好的安装包。
  */
 
-const REPO = 'Lousync/Knowbase'
+const REPO = 'Lousync/Phrontis'
 const API_LATEST = `https://api.github.com/repos/${REPO}/releases/latest`
 const RELEASES_PAGE = `https://github.com/${REPO}/releases`
 
@@ -241,7 +241,7 @@ async function verifyInstaller(dest: string, expectedSize: number | undefined, a
       const hash = createHash('sha512')
       const buf = await new Promise<Buffer>((res, rej) => {
         const s = require('fs').createReadStream(dest)
-        s.on('data', c => hash.update(c))
+        s.on('data', (c: Buffer) => hash.update(c))
         s.on('end', () => res(hash.digest()))
         s.on('error', rej)
       })

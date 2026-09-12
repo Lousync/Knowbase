@@ -1,12 +1,22 @@
 // R6 去库化（D9）：全局数据 = userData/data/*.json（sql.js 已移除）
 import { app, ipcMain, net, dialog, BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync } from 'fs'
-import { join, resolve, sep, extname, basename } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync, statSync, lstatSync } from 'fs'
+import { join, resolve, sep, extname, basename, dirname } from 'path'
 import { unzipBuffer } from './zip'
 import { safePathInside } from './pathGuard'
 import { isNewerVersion } from './updateService'
 import { createGateway } from './pluginHostGateway'
 import { pluginStoreGet, pluginStoreSet, pluginStoreDelete, pluginStoreHas, pluginStoreUsage } from './kbStore/pluginStore'
+import { subscribePluginEvents, unsubscribePluginEvents, unsubscribeAllPluginEvents } from './pluginEvents'
+import { searchKnowledge } from './knowledgeSearch'
+import { getKnowledgeIndex } from './kbStore/knowledgeIndex'
+import { vaultGetBacklinks } from './kbStore/knowledgeVaultRepo'
+import { evaluateFrontmatterQuery } from './kbStore/frontmatterQuery'
+import { enforceVaultScope } from './kbStore/vaultScope'
+import { resolveSafe, writeWorkspaceFile, trashWorkspacePath, invalidateIndexIfCurrentVault } from './workspaceManager'
+import { getCurrentVault } from './kbStore/vaultContext'
+// kb.vault.* 复用 builtin.vault.* 同一套经审计的安全 helper（不另写规则，防两套规则漂移）
+import { vaultRootPath, childAiAllowed, isAiReadableFile, isAiWritableFile, assertAiWritable, MAX_VAULT_FILE, MAX_VAULT_LIST_ENTRIES } from './builtinTools'
 import { verifyPluginSignature, buildKeyring } from './pluginSigning'
 import { getPackState, importPack } from './knowledgePackImporter'
 import { appendAudit, readAuditRaw, clearAudit } from './pluginAudit'
@@ -37,10 +47,10 @@ function userGhMirror(): string | null {
 
 // registry 拉取顺序:ghproxy 节点(实时性好,jsDelivr CDN 缓存可达 24h 会给陈旧列表) → raw → jsDelivr
 const REGISTRY_MIRRORS = [
-  `${DEFAULT_PLUGIN_MIRROR}/https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json`,
-  'https://raw.githubusercontent.com/Lousync/Knowbase-plugins/main/registry.json',
-  'https://cdn.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
-  'https://fastly.jsdelivr.net/gh/Lousync/Knowbase-plugins@main/registry.json',
+  `${DEFAULT_PLUGIN_MIRROR}/https://raw.githubusercontent.com/Lousync/Phrontis-plugins/main/registry.json`,
+  'https://raw.githubusercontent.com/Lousync/Phrontis-plugins/main/registry.json',
+  'https://cdn.jsdelivr.net/gh/Lousync/Phrontis-plugins@main/registry.json',
+  'https://fastly.jsdelivr.net/gh/Lousync/Phrontis-plugins@main/registry.json',
 ]
 // 下载镜像:raw 失败时自动改走 jsDelivr 的 GitHub 镜像(国内可达性好)
 const TRUSTED_HOSTS = new Set([
@@ -57,7 +67,7 @@ const ENTRY_RE = /^[\w][\w.-]{0,64}\.html$/
 /** code 插件入口：单文件 .js/.mjs（Worker 加载）；拒绝目录/嵌套，防路径穿越 */
 const CODE_ENTRY_RE = /^[\w][\w.-]{0,64}\.(js|mjs)$/
 const ICON_RE = /^[\w][\w.-]{0,64}\.(svg|png|jpg|jpeg|webp|gif)$/i
-const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx', 'tables', 'views']
+const KNOWN_CONTRIBUTIONS = ['blogTemplates', 'theme', 'habitPresets', 'bookmarkPresets', 'pomodoroPresets', 'helpDocs', 'tools', 'skills', 'automationRule', 'knowledgePages', 'sidebarIcons', 'deleteFx', 'tables', 'views', 'commands', 'settings', 'renderers']
 /** Skill 变量名规则（提示词 {{var}} 占位符） */
 const SKILL_VAR_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,30}$/
 /** Skill 声明依赖的工具名（命名空间规则与 ToolRegistry 一致，一期仅展示不校验执行权） */
@@ -70,7 +80,7 @@ const DATA_LEVEL_KEYS = ['habitPresets', 'bookmarkPresets', 'automationRule', 'k
 // 内容级贡献键(仅含这些为 S 级)
 const CONTENT_LEVEL_KEYS = ['theme', 'blogTemplates', 'helpDocs', 'pomodoroPresets', 'skills', 'sidebarIcons', 'deleteFx']
 // UI 插件能力白名单:theme/clipboard 为一期放行;data/knowledge/navigation 为 C 级模块插件(需显式授权)
-const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files']
+const KNOWN_CAPABILITIES = ['theme', 'clipboard', 'data', 'knowledge', 'navigation', 'files', 'vault:read', 'vault:write']
 
 export interface PluginManifest {
   id: string
@@ -244,6 +254,18 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
     if (!opts?.legacy) return { error: 'UI 插件必须声明 capabilities(可为空数组 = 零能力)' }
     raw.capabilities = ['theme', 'clipboard']
   }
+  if (raw.vaultScope !== undefined) {
+    // P2 kb.vault.*：写路径收敛前缀（plugin-api-v2-design §5.2 ADR-7）
+    if (raw.type !== 'ui' && raw.type !== 'code') return { error: 'vaultScope 仅可执行插件(type: ui / code)可声明' }
+    if (!Array.isArray(raw.vaultScope) || raw.vaultScope.length > 8) return { error: 'vaultScope 必须是数组(最多 8 项)' }
+    for (const s of raw.vaultScope) {
+      if (typeof s !== 'string' || !s.trim()) return { error: 'vaultScope 项需为非空字符串' }
+      const norm = s.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+      if (!norm || norm.split('/').includes('..') || !/^[\w\u4e00-\u9fa5][\w\u4e00-\u9fa5 .\-/]*$/.test(norm)) {
+        return { error: `vaultScope 项非法（需为仓库内相对目录前缀，禁止越界）: ${s}` }
+      }
+    }
+  }
   if (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 300)) return { error: 'description 过长' }
   if (raw.author !== undefined && (typeof raw.author !== 'string' || raw.author.length > 50)) return { error: 'author 过长' }
   if (raw.contributes !== undefined) {
@@ -274,6 +296,53 @@ function validateManifest(m: unknown, opts?: { legacy?: boolean }): { manifest: 
           if (typeof v.slot !== 'string' || !/^[a-z][a-z0-9.]{0,40}$/.test(v.slot)) return { error: 'views: slot 非法(如 knowledge.sidebar)' }
           if (typeof v.title !== 'string' || !v.title.trim() || v.title.length > 20) return { error: 'views: title 缺失或过长(≤20)' }
           if (v.mode !== undefined && !['fullscreen', 'panel'].includes(v.mode as string)) return { error: 'views: mode 仅支持 fullscreen / panel' }
+        }
+      }
+      if (key === 'commands') {
+        // plugin-phase1-design C3：三类插件均可声明；全局名 = <pluginId>.<id>，执行只触发已授权能力
+        const arr = (raw.contributes as Record<string, unknown>).commands
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 32) return { error: 'commands 需为 1-32 个命令的数组' }
+        const cids = new Set<string>()
+        for (const c of arr as Record<string, unknown>[]) {
+          if (!c || typeof c !== 'object') return { error: 'commands: 命令条目非法' }
+          if (typeof c.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(c.id)) return { error: 'commands: id 非法（小写字母/数字/连字符开头，≤40）' }
+          if (cids.has(c.id)) return { error: `commands: 重复的命令 id ${c.id}` }
+          cids.add(c.id)
+          if (typeof c.title !== 'string' || !c.title.trim() || c.title.length > 30) return { error: 'commands: title 缺失或过长(≤30)' }
+          if (c.desc !== undefined && (typeof c.desc !== 'string' || c.desc.length > 80)) return { error: 'commands: desc 需为 ≤80 字符的字符串' }
+        }
+      }
+      if (key === 'settings') {
+        // plugin-phase1-design C5：声明式设置 schema（宿主自动渲染表单，值落 kb.store settings.*）
+        const arr = (raw.contributes as Record<string, unknown>).settings
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 16) return { error: 'settings 需为 1-16 个设置项的数组' }
+        const skeys = new Set<string>()
+        for (const it of arr as Record<string, unknown>[]) {
+          if (!it || typeof it !== 'object') return { error: 'settings: 设置条目非法' }
+          if (typeof it.key !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(it.key)) return { error: 'settings: key 非法（小写字母/数字/连字符，≤40）' }
+          if (skeys.has(it.key)) return { error: `settings: 重复的 key ${it.key}` }
+          skeys.add(it.key)
+          if (typeof it.label !== 'string' || !it.label.trim() || it.label.length > 30) return { error: 'settings: label 缺失或过长(≤30)' }
+          if (!['boolean', 'number', 'string', 'select'].includes(it.type as string)) return { error: 'settings: type 仅支持 boolean / number / string / select' }
+          if (it.type === 'select' && (!Array.isArray(it.options) || it.options.length === 0 || it.options.length > 12)) return { error: 'settings: select 需为 1-12 个 options' }
+          if (it.desc !== undefined && (typeof it.desc !== 'string' || it.desc.length > 80)) return { error: 'settings: desc 需为 ≤80 字符的字符串' }
+        }
+      }
+      if (key === 'renderers') {
+        // plugin-phase1-design C6：自定义 fenced-code 渲染器（type:ui 专属；内容只读沙箱，无 RPC 桥）
+        if (raw.type !== 'ui') return { error: 'renderers 贡献仅 UI 插件(type: ui)可声明' }
+        const arr = (raw.contributes as Record<string, unknown>).renderers
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > 8) return { error: 'renderers 需为 1-8 个渲染器的数组' }
+        const langs = new Set<string>()
+        for (const r of arr as Record<string, unknown>[]) {
+          if (!r || typeof r !== 'object') return { error: 'renderers: 渲染器条目非法' }
+          if (typeof r.lang !== 'string' || !/^[a-z0-9-]{1,20}$/.test(r.lang)) return { error: 'renderers: lang 非法（小写字母/数字/连字符，≤20）' }
+          if (r.lang === 'quiz' || r.lang === 'json' || r.lang === 'plan' || r.lang === 'ask') return { error: `renderers: lang ${r.lang} 为宿主保留围栏` }
+          if (langs.has(r.lang)) return { error: `renderers: 重复的 lang ${r.lang}` }
+          langs.add(r.lang)
+          if (typeof r.entry !== 'string' || !r.entry.trim() || !/^(?!\/)[\w][\w./-]{0,80}\.html?$/i.test(r.entry)) return { error: 'renderers: entry 需为插件内 .html 相对路径' }
+          if (r.height !== undefined && (typeof r.height !== 'number' || r.height < 40 || r.height > 2000)) return { error: 'renderers: height 需为 40-2000 的数值' }
+          if (r.title !== undefined && (typeof r.title !== 'string' || !r.title.trim() || r.title.length > 20)) return { error: 'renderers: title 需为 ≤20 字符的字符串' }
         }
       }
       if (key === 'tools' && raw.type !== 'ui') return { error: 'tools 贡献仅 UI 插件(type: ui)可声明' }
@@ -395,7 +464,9 @@ function computeRiskLevel(m: PluginManifest): RiskLevel {
     const caps = Array.isArray(m.capabilities) ? m.capabilities : []
     const keys = Object.keys(m.contributes || {})
     // 声明自有数据表并申请 data / knowledge / navigation 能力 = 模块级插件
-    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files')) return 'C'
+    // vault:read = 读知识库元数据/检索（kb.metadata.*），只读但暴露全部笔记内容面 → 同 C 级
+    // vault:write = 写仓库文件（kb.vault.*，可改用户笔记）→ C 级
+    if (keys.includes('tables') || caps.includes('data') || caps.includes('knowledge') || caps.includes('navigation') || caps.includes('files') || caps.includes('vault:read') || caps.includes('vault:write')) return 'C'
     return 'B'
   }
   const keys = Object.keys(m.contributes || {})
@@ -529,7 +600,7 @@ async function fetchRegistryRaw(): Promise<any> {
   let lastErr: unknown = null
   for (const url of REGISTRY_MIRRORS) {
     try {
-      const res = await fetchWithTimeout(url, { Accept: 'application/vnd.github+json', 'User-Agent': 'Knowbase-App' })
+      const res = await fetchWithTimeout(url, { Accept: 'application/vnd.github+json', 'User-Agent': 'Phrontis-App' })
       if (!res.ok) { lastErr = new Error(`${new URL(url).hostname} 返回 ${res.status}`); continue }
       const data = await res.json()
       if (!data || !Array.isArray(data.plugins)) throw new Error('registry.json 格式非法')
@@ -682,8 +753,46 @@ function notifyPluginsChanged(): void {
 
 // ---------- IPC ----------
 
+/**
+ * 已退役的插件 id —— 曾以 C 级模块插件形态存在，后改为内置模块（宿主接管其数据域）。
+ *
+ * 为什么需要「摘牌」这一步：旧版本升级上来的用户 `installed.json` 里仍留着这些注册项，
+ * 而插件的 `contributes.views`（如 `knowledge.sidebar`）在卸载前始终生效 → 知识库侧栏
+ * 会多出一个点开即坏的死入口（如「错题本(插件版)」），与内置的同名入口重复。
+ *
+ * 处置口径（2026-09-12）：**只摘掉注册项，不动磁盘目录、不删数据桶**。
+ * - 目录留着可追溯、可手动再装（不触发沙箱 safe-delete 拦截）
+ * - 数据桶（plugin_knowbase_quizbook_*）已确认在各 profile 下均为空文件不存在，
+ *   且「数据」面板已改接 vault 真实错题数据（quizDataAdmin.ts），桶不再有出口，
+ *   保留仅为可追溯；需要清理时走插件卸载流程（plugin:uninstall，含导出备份）
+ */
+export const RETIRED_PLUGIN_IDS: readonly string[] = ['knowbase.quizbook']
+
+/** 启动时摘除退役插件的注册项（幂等；无命中则不写盘） */
+function retirePlugins(): void {
+  const idx = readIndex()
+  let changed = false
+  for (const id of RETIRED_PLUGIN_IDS) {
+    const entry = idx[id]
+    if (!entry) continue
+    auditWrite(id, 'retire', {
+      version: entry.version,
+      reason: '插件形态已退役，改为内置模块（知识库侧栏入口与数据均由宿主接管）',
+    })
+    delete idx[id]
+    changed = true
+    console.log(`[Plugins] 已摘除退役插件的注册项: ${id}（插件目录与数据桶保留，未删除）`)
+  }
+  if (changed) {
+    writeIndex(idx)
+    notifyPluginsChanged()
+  }
+}
+
 export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) => unknown }): void {
   if (deps?.getSettingValue) pluginSettingReader = deps.getSettingValue
+  // 退役插件清理：必须在注册 IPC 之前跑，避免插件页/知识库侧栏先拿到旧快照
+  retirePlugins()
   ipcMain.handle('plugin:fetchRegistry', async () => {
     try {
       const now = Date.now()
@@ -721,7 +830,7 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
         if (round > 0) await new Promise(r => setTimeout(r, round === 1 ? 2000 : 6000))
         for (const u of mirrorCandidates(url)) {
           try {
-            buf = await downloadZipStreaming(u, { 'User-Agent': 'Knowbase-App' }, (r, t) => {
+            buf = await downloadZipStreaming(u, { 'User-Agent': 'Phrontis-App' }, (r, t) => {
               try { push(r, t, new URL(u).hostname) } catch { /* ignore */ }
             })
             usedHost = new URL(u).hostname
@@ -849,6 +958,118 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       } catch { /* 单个插件读取失败不影响其他插件 */ }
     }
     return views
+  })
+
+  /** 列出所有已启用插件声明的命令（plugin-phase1-design C3）：附首个 view 槽位供宿主导航激活 */
+  ipcMain.handle('plugin:listCommands', () => {
+    const idx = readIndex()
+    const out: Array<{ pluginId: string; name: string; id: string; title: string; desc?: string; viewSlot?: string; type: string }> = []
+    for (const [id, entry] of Object.entries(idx)) {
+      if (!entry.enabled) continue
+      const dir = safePathInside(getPluginsRoot(), id)
+      if (!dir || !existsSync(dir)) continue
+      try {
+        const parsed = readManifestAt(dir)
+        if ('error' in parsed) continue
+        const m = parsed.manifest
+        const cs = (m.contributes?.commands ?? []) as Array<Record<string, unknown>>
+        const firstView = ((m.contributes?.views ?? []) as Array<Record<string, unknown>>)[0]
+        for (const c of cs) {
+          if (typeof c?.id !== 'string') continue
+          out.push({
+            pluginId: id,
+            name: m.name,
+            id: c.id,
+            title: String(c.title || c.id),
+            ...(typeof c.desc === 'string' && c.desc ? { desc: c.desc.slice(0, 80) } : {}),
+            ...(m.type === 'ui' && typeof firstView?.slot === 'string' ? { viewSlot: firstView.slot } : {}),
+            type: m.type,
+          })
+        }
+      } catch { /* 单个插件读取失败不影响其他插件 */ }
+    }
+    return out
+  })
+
+  /** 声明式设置（plugin-phase1-design C5）：schema / 当前值 / 写值（值落 kb.store settings.*） */
+  ipcMain.handle('plugin:getSettingsSchema', (_e, id: string) => {
+    const dir = safePathInside(getPluginsRoot(), String(id ?? ''))
+    if (!dir || !existsSync(dir)) return { schema: [] }
+    try {
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) return { schema: [] }
+      return { schema: (parsed.manifest.contributes?.settings ?? []) as unknown[] }
+    } catch { return { schema: [] } }
+  })
+
+  ipcMain.handle('plugin:getSettingValues', (_e, id: string) => {
+    const dir = safePathInside(getPluginsRoot(), String(id ?? ''))
+    const values: Record<string, unknown> = {}
+    if (!dir || !existsSync(dir)) return { values }
+    try {
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) return { values }
+      const schema = (parsed.manifest.contributes?.settings ?? []) as Array<Record<string, unknown>>
+      for (const it of schema) {
+        if (typeof it.key !== 'string') continue
+        const r = pluginStoreGet(String(id), `settings.${it.key}`)
+        values[it.key] = r.ok && r.value !== undefined ? r.value : it.default
+      }
+      return { values }
+    } catch { return { values } }
+  })
+
+  ipcMain.handle('plugin:setSettingValue', (_e, id: string, key: string, value: unknown) => {
+    const dir = safePathInside(getPluginsRoot(), String(id ?? ''))
+    if (!dir || !existsSync(dir)) return { ok: false, error: '插件不存在' }
+    try {
+      const parsed = readManifestAt(dir)
+      if ('error' in parsed) return { ok: false, error: '清单读取失败' }
+      const schema = (parsed.manifest.contributes?.settings ?? []) as Array<Record<string, unknown>>
+      const it = schema.find(s => s.key === String(key ?? ''))
+      if (!it) return { ok: false, error: '未知设置项' }
+      // 类型白名单校验（select 额外校验取值在 options 内）
+      const type = it.type as string
+      const valid = type === 'boolean' ? typeof value === 'boolean'
+        : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
+        : type === 'string' ? typeof value === 'string' && value.length <= 200
+        : Array.isArray(it.options) && (it.options as unknown[]).some(o => String((o as Record<string, unknown>)?.value ?? o) === String(value))
+      if (!valid) return { ok: false, error: '取值类型不符合 schema' }
+      const r = pluginStoreSet(String(id), `settings.${String(key)}`, value)
+      return r.ok ? { ok: true } : { ok: false, error: r.error }
+    } catch (e) {
+      return { ok: false, error: String((e as Error)?.message || e) }
+    }
+  })
+
+  /** 列出已启用 ui 插件声明的 fenced-code 渲染器（plugin-phase1-design C6） */
+  ipcMain.handle('plugin:listRenderers', () => {
+    const idx = readIndex()
+    const out: Array<{ pluginId: string; name: string; lang: string; entry: string; height?: number; title?: string }> = []
+    for (const [id, entry] of Object.entries(idx)) {
+      if (!entry.enabled) continue
+      const dir = safePathInside(getPluginsRoot(), id)
+      if (!dir || !existsSync(dir)) continue
+      try {
+        const parsed = readManifestAt(dir)
+        if ('error' in parsed) continue
+        const m = parsed.manifest
+        if (m.type !== 'ui') continue
+        const rs = (m.contributes?.renderers ?? []) as Array<Record<string, unknown>>
+        for (const r of rs) {
+          if (typeof r?.lang !== 'string' || typeof r?.entry !== 'string') continue
+          out.push({
+            pluginId: id,
+            name: m.name,
+            lang: r.lang,
+            entry: r.entry,
+            ...(typeof r.height === 'number' ? { height: r.height } : {}),
+            ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
+          })
+        }
+      } catch { /* 单个插件读取失败不影响其他插件 */ }
+    }
+    return out
   })
 
   ipcMain.handle('plugin:listInstalled', (): PluginSummary[] => {
@@ -1109,14 +1330,21 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
   // 渲染层 PluginFrame 不再做 grantedRef.includes 判断；一切 v2 请求经 host:rpc 在此裁决。
   // 复用函数内已定义的 assertDataAccess / readIndex / readManifestAt（同一作用域）。
   const gateway = createGateway({
-    sessionState(pluginId: string): { enabled: boolean; capabilities: string[] } | null {
+    sessionState(pluginId: string): { enabled: boolean; capabilities: string[]; vaultScope?: string[] } | null {
       if (typeof pluginId !== 'string' || !ID_RE.test(pluginId)) return null
       const idx = readIndex()
       const entry = idx[pluginId]
       if (!entry) return null
-      return { enabled: entry.enabled, capabilities: entry.grantedCapabilities ?? [] }
+      // vaultScope 存 manifest（写路径收敛前缀）；读取失败按「未声明=全库可写」回退
+      let vaultScope: string[] | undefined
+      try {
+        const m = readManifestAt(join(getPluginsRoot(), pluginId))
+        if (!('error' in m) && Array.isArray(m.manifest.vaultScope)) vaultScope = m.manifest.vaultScope
+      } catch { /* 未声明 */ }
+      return { enabled: entry.enabled, capabilities: entry.grantedCapabilities ?? [], vaultScope }
     },
     audit: (pluginId, action, detail) => auditWrite(pluginId, action, detail),
+    onSessionClosed: (pluginId) => unsubscribeAllPluginEvents(pluginId),
     methods: {
       // data 表 CRUD（v2 通道；执行复用 v1 逻辑但 pluginId 取自 token 会话，不信任调用方）
       'kb.data.query': {
@@ -1261,6 +1489,241 @@ export function registerPluginHandlers(deps?: { getSettingValue?: (key: string) 
       'kb.store.usage': {
         capability: '',
         run: (ctx) => pluginStoreUsage(ctx.pluginId),
+      },
+
+      // ---- kb.events.* 事件订阅（plugin-phase1-design C4）----
+      // capability '' + run 内逐事件校验（ADR-2：映射现有模块 capability，不新增 events:* 权限面）；
+      // 仅 code 插件可订阅（ADR-3，查清单类型——ui 无后台生命、declarative 无逻辑）。
+      'kb.events.subscribe': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { events?: unknown }
+          const list = Array.isArray(p.events) ? p.events.filter((e): e is string => typeof e === 'string') : []
+          if (list.length === 0) throw Object.assign(new Error('events 缺失'), { code: 'EPARAM' })
+          const dir = safePathInside(getPluginsRoot(), ctx.pluginId)
+          let pluginType = 'declarative'
+          if (dir && existsSync(dir)) {
+            try {
+              const m = readManifestAt(dir)
+              if (!('error' in m)) pluginType = m.manifest.type
+            } catch { /* 清单异常按 declarative 拒绝 */ }
+          }
+          if (pluginType !== 'code') throw Object.assign(new Error('仅 code 插件可订阅事件'), { code: 'EPERMISSION' })
+          const r = subscribePluginEvents(ctx.pluginId, list, ctx.capabilities)
+          if (r.subscribed.length === 0) {
+            throw Object.assign(new Error(`无可用订阅：${r.denied.map(d => `${d.event}（${d.reason}）`).join('；')}`), { code: 'EPERMISSION' })
+          }
+          return { subscribed: r.subscribed, denied: r.denied }
+        },
+      },
+      'kb.events.unsubscribe': {
+        capability: '',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { events?: unknown }
+          const list = Array.isArray(p.events) ? p.events.filter((e): e is string => typeof e === 'string') : undefined
+          unsubscribePluginEvents(ctx.pluginId, list)
+          return { ok: true }
+        },
+      },
+
+      // ---- kb.metadata.* 知识库元数据只读面（knowledge-index-design §9 / plugin-api-v2-design §5.3）----
+      // capability 统一 vault:read（只读，但暴露全部笔记元数据与检索结果 → C 级授权）。
+      // 范围与知识库 UI 搜索同口径：草稿页不出（status !== 'draft'），二进制归档文件除外。
+      'kb.metadata.search': {
+        capability: 'vault:read',
+        run: async (_ctx, params) => {
+          const p = (params ?? {}) as { query?: unknown; topK?: unknown; mode?: unknown }
+          const q = typeof p.query === 'string' ? p.query.trim() : ''
+          if (!q) throw Object.assign(new Error('query 缺失'), { code: 'EPARAM' })
+          const topK = Math.min(Math.max(Math.floor(Number(p.topK) || 8), 1), 30)
+          const mode = p.mode === 'keyword' || p.mode === 'semantic' ? p.mode : 'auto'
+          const r = await searchKnowledge({ query: q, topK, mode })
+          return { hits: r.hits, semantic: r.semantic }
+        },
+      },
+      'kb.metadata.get': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { pageId?: unknown; path?: unknown }
+          const idx = getKnowledgeIndex()
+          let entry = null
+          if (typeof p.pageId === 'string' && p.pageId) {
+            entry = idx.byId[p.pageId] ?? null
+          } else if (typeof p.path === 'string' && p.path) {
+            // 只做字符串匹配（不触盘），路径归一化后与索引条目比对——无越界面
+            const norm = p.path.replace(/\\/g, '/').replace(/^\/+/, '')
+            entry = idx.pages.find((x) => x.path === norm) ?? null
+          } else {
+            throw Object.assign(new Error('pageId 或 path 缺失'), { code: 'EPARAM' })
+          }
+          if (!entry || entry.entryKind === 'file') throw Object.assign(new Error('页面不存在'), { code: 'ENOTFOUND' })
+          return {
+            pageId: entry.id, path: entry.path, title: entry.title, tags: entry.tags,
+            status: entry.status, createdAt: entry.createdAt, updatedAt: entry.updatedAt,
+            frontmatter: entry.frontmatter, outgoingTitles: entry.outgoingTitles,
+          }
+        },
+      },
+      'kb.metadata.query': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { tag?: unknown; folder?: unknown; frontmatter?: unknown; limit?: unknown }
+          const idx = getKnowledgeIndex()
+          const tag = typeof p.tag === 'string' ? p.tag.trim().toLowerCase() : ''
+          const folder = typeof p.folder === 'string' ? p.folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : ''
+          const expr = typeof p.frontmatter === 'string' ? p.frontmatter.trim() : ''
+          if (!tag && !folder && !expr) throw Object.assign(new Error('tag / folder / frontmatter 至少给一个'), { code: 'EPARAM' })
+          const limit = Math.min(Math.max(Math.floor(Number(p.limit) || 50), 1), 200)
+          const results: Array<{ pageId: string; path: string; title: string; tags: string[]; updatedAt: string }> = []
+          for (const e of idx.pages) {
+            if (e.status === 'draft' || e.entryKind === 'file') continue
+            if (tag && !e.tags.some((t) => t.toLowerCase().includes(tag))) continue
+            if (folder && !e.path.startsWith(folder + '/')) continue
+            if (expr) {
+              try {
+                if (!evaluateFrontmatterQuery(expr, e.frontmatter)) continue
+              } catch (err) {
+                throw Object.assign(new Error(String((err as Error).message)), { code: 'EPARAM' })
+              }
+            }
+            results.push({ pageId: e.id, path: e.path, title: e.title, tags: e.tags, updatedAt: e.updatedAt })
+            if (results.length >= limit) break
+          }
+          return { results, total: results.length }
+        },
+      },
+      'kb.metadata.backlinks': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { pageId?: unknown; path?: unknown }
+          const idx = getKnowledgeIndex()
+          let pageId = typeof p.pageId === 'string' ? p.pageId : ''
+          if (!pageId && typeof p.path === 'string' && p.path) {
+            const norm = p.path.replace(/\\/g, '/').replace(/^\/+/, '')
+            pageId = idx.pages.find((x) => x.path === norm)?.id ?? ''
+          }
+          if (!pageId || !idx.byId[pageId]) throw Object.assign(new Error('页面不存在'), { code: 'ENOTFOUND' })
+          // 复用知识库反链面板同一份 GraphIndex 解析（R2/R4），不新写链接解析
+          const backlinks = vaultGetBacklinks(pageId).map((v) => ({ pageId: v.id, title: v.title, path: v.path }))
+          return { backlinks, total: backlinks.length }
+        },
+      },
+
+      // ---- kb.vault.* 仓库文件只读/受控写（P2，plugin-api-v2-design §5.2）----
+      // 安全链：resolveSafe（拒越界/盘符/符号链接逐段校验）→ 保护区规则（assertAiWritable 等
+      // builtin.vault.* 同款 helper）→ 写/删额外过 manifest.vaultScope 前缀收敛（ADR-7：读全库、写限域）。
+      'kb.vault.getInfo': {
+        capability: 'vault:read',
+        run: () => {
+          const cur = getCurrentVault()
+          if (!cur?.rootPath) throw Object.assign(new Error('仓库未打开'), { code: 'EHOST' })
+          // 红线：永不返回 rootPath（插件永不接触绝对路径）
+          return { rootId: cur.rootId, name: cur.name ?? '' }
+        },
+      },
+      'kb.vault.list': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel || '.')
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel || '.'}`), { code: 'EPATH' })
+          let isDir = false
+          try { isDir = statSync(abs).isDirectory() } catch { throw Object.assign(new Error(`路径不存在: ${rel || '.'}`), { code: 'ENOTFOUND' }) }
+          if (!isDir) throw Object.assign(new Error('kb.vault.list 只接受目录（读文件用 kb.vault.read）'), { code: 'EPARAM' })
+          const entries: Array<{ name: string; type: 'dir' | 'file'; size?: number }> = []
+          for (const name of readdirSync(abs)) {
+            if (entries.length >= MAX_VAULT_LIST_ENTRIES) break
+            const full = join(abs, name)
+            if (!childAiAllowed(root, full)) continue
+            let st: ReturnType<typeof lstatSync>
+            try { st = lstatSync(full) } catch { continue }
+            if (st.isSymbolicLink()) continue
+            if (st.isDirectory()) entries.push({ name, type: 'dir' })
+            else if (st.isFile() && isAiReadableFile(root, full)) entries.push({ name, type: 'file', size: st.size })
+          }
+          entries.sort((a, b) => a.type !== b.type ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name, 'zh-Hans-CN'))
+          return { path: rel || '.', total: entries.length, entries }
+        },
+      },
+      'kb.vault.read': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          if (!rel) throw Object.assign(new Error('path 缺失'), { code: 'EPARAM' })
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          let st: ReturnType<typeof statSync>
+          try { st = statSync(abs) } catch { throw Object.assign(new Error(`文件不存在: ${rel}`), { code: 'ENOTFOUND' }) }
+          if (!st.isFile()) throw Object.assign(new Error('仅支持文件（列目录用 kb.vault.list）'), { code: 'EPARAM' })
+          if (st.size > MAX_VAULT_FILE) throw Object.assign(new Error(`文件过大（${st.size} 字节 > 10MB），拒绝读取`), { code: 'ELIMIT' })
+          if (!isAiReadableFile(root, abs)) throw Object.assign(new Error('该文件类型不可读（仅 .md/.txt 与 .knowbase/modules/*.json）'), { code: 'EPARAM' })
+          return { path: rel, content: readFileSync(abs, 'utf-8'), size: st.size, mtimeMs: st.mtimeMs }
+        },
+      },
+      'kb.vault.stat': {
+        capability: 'vault:read',
+        run: (_ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          if (!rel) throw Object.assign(new Error('path 缺失'), { code: 'EPARAM' })
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          let st: ReturnType<typeof lstatSync>
+          try { st = lstatSync(abs) } catch { throw Object.assign(new Error(`路径不存在: ${rel}`), { code: 'ENOTFOUND' }) }
+          if (st.isSymbolicLink()) throw Object.assign(new Error('拒绝符号链接'), { code: 'EPATH' })
+          return {
+            path: rel,
+            type: st.isDirectory() ? 'dir' : st.isFile() ? 'file' : 'other',
+            ...(st.isFile() ? { size: st.size } : {}),
+            mtimeMs: st.mtimeMs,
+          }
+        },
+      },
+      'kb.vault.write': {
+        capability: 'vault:write',
+        run: (ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown; content?: unknown; expectedMtimeMs?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          const content = typeof p.content === 'string' ? p.content : null
+          if (!rel || content === null) throw Object.assign(new Error('path / content 缺失'), { code: 'EPARAM' })
+          if (content.length > 2_000_000) throw Object.assign(new Error('内容过大（>2MB），拒绝写入'), { code: 'ELIMIT' })
+          if (content.includes('\u0000')) throw Object.assign(new Error('内容含 NUL 字符，拒绝写入'), { code: 'EPARAM' })
+          enforceVaultScope(rel, ctx.vaultScope)
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          let existing = false
+          try { existing = statSync(abs).isFile() } catch { /* 新建 */ }
+          assertAiWritable(root, abs, existing && typeof p.expectedMtimeMs === 'number' ? p.expectedMtimeMs : null)
+          if (!existing) mkdirSync(dirname(abs), { recursive: true })
+          writeWorkspaceFile(abs, content)
+          if (rel.toLowerCase().endsWith('.md')) invalidateIndexIfCurrentVault(getCurrentVault()?.rootId ?? '')
+          const st = statSync(abs)
+          return { ok: true, path: rel, created: !existing, size: st.size, mtimeMs: st.mtimeMs }
+        },
+      },
+      'kb.vault.trash': {
+        capability: 'vault:write',
+        run: async (ctx, params) => {
+          const p = (params ?? {}) as { path?: unknown }
+          const rel = typeof p.path === 'string' ? p.path.trim() : ''
+          if (!rel) throw Object.assign(new Error('path 缺失'), { code: 'EPARAM' })
+          enforceVaultScope(rel, ctx.vaultScope)
+          const root = vaultRootPath()
+          const abs = resolveSafe(root, rel)
+          if (!abs) throw Object.assign(new Error(`路径非法或越出仓库: ${rel}`), { code: 'EPATH' })
+          if (!isAiWritableFile(root, abs)) throw Object.assign(new Error('仅可移入回收站普通区 .md/.txt 文件（.knowbase 内部数据禁动）'), { code: 'EPARAM' })
+          if (!statSync(abs).isFile()) throw Object.assign(new Error('kb.vault.trash 仅支持文件'), { code: 'EPARAM' })
+          const rootId = getCurrentVault()?.rootId
+          if (!rootId) throw Object.assign(new Error('仓库上下文未就绪'), { code: 'EHOST' })
+          await trashWorkspacePath(rootId, rel)
+          return { ok: true, trashed: rel }
+        },
       },
     },
   })

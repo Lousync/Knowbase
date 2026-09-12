@@ -63,10 +63,35 @@ export function EditorView() {
             <SettingSwitch checked={s.markdownDim} onChange={(v) => update('markdownDim', v)} />
           </label>
         </div>
+        <div data-setting-anchor="editor.treeGuides" className="mt-4 max-w-md">
+          <SettingSelect
+            title="侧栏层级参考线"
+            description="编辑器 / 知识库 / AI教学 左栏多层树的层级竖线，辅助辨认嵌套归属"
+            value={(s.sidebarTreeGuides as string) ?? 'line'}
+            onChange={(v) => update('sidebarTreeGuides', v)}
+            options={[
+              { id: 'line', label: '实线', isDefault: true },
+              { id: 'dashed', label: '虚线' },
+              { id: 'none', label: '关闭' },
+            ]}
+          />
+        </div>
         <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
           编辑 .md 时光标所在行之外的格式标记（**、#、链接、[[双链]] 等）会淡化显示，
           被包裹的内容以加粗/斜体/链接色呈现——写作时更接近阅读效果。
         </p>
+        <div data-setting-anchor="editor.folderFocus" className="mt-4 max-w-md">
+          <SettingSelect
+            title="目录聚焦样式"
+            description="目录聚焦开启时（编辑器/知识库侧栏的准星按钮），非当前路径分支的呈现方式"
+            value={(s.folderFocusStyle as string) ?? 'skeleton'}
+            onChange={(v) => update('folderFocusStyle', v)}
+            options={[
+              { id: 'skeleton', label: '骨架式', desc: '其余分支保留占位条，悬停显示原名', isDefault: true },
+              { id: 'hidden', label: '隐藏式', desc: '只保留当前目录链，更干净' },
+            ]}
+          />
+        </div>
       </div>
     </div>
   )

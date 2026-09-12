@@ -132,7 +132,7 @@ export function FillPopup() {
     <div className="flex flex-col h-screen bg-[var(--bg-primary)] overflow-hidden" onKeyDown={handleKeyDown} tabIndex={-1}>
       {/* Title bar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-        <div className="flex items-center gap-2"><Shield size={14} className="text-[var(--accent)]" /><span className="text-[12px] font-semibold text-[var(--text-primary)]">Knowbase 填充</span></div>
+        <div className="flex items-center gap-2"><Shield size={14} className="text-[var(--accent)]" /><span className="text-[12px] font-semibold text-[var(--text-primary)]">Phrontis 填充</span></div>
         <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <button
             onClick={togglePin}
