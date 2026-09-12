@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
 import type { ToolDescription } from './aiTools'
 import { invokeLlmStreamInternal } from './llmService'
+import { trimHistoryByBudget } from './agentContextBudget'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
   sessionExists, appendAgentMessage, ensureSessionTitle, getAgentMessages,
@@ -126,6 +127,8 @@ export interface AgentChatResult {
   changes?: AgentChange[]
   /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（渲染层据此估算「上下文构成」摘要；其它来源不设） */
   injection?: AiTeachInjectionStats
+  /** 上下文预算裁剪统计（agentContextBudget；渲染层暂不展示，诊断/后续 UI 预留） */
+  contextBudget?: { totalTurns: number; keptTurns: number; estimatedHistoryTokens: number }
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -347,10 +350,15 @@ async function runAgentLoop(
   opts?: { allowEmptyHistory?: boolean }
 ): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
-  const history = getAgentMessages(sessionId)
+  // 条数硬上限（-40）之后再做 token 预算裁剪（agentContextBudget）：
+  // 中间轮丢弃、首尾保留、只在轮边界断开——长会话不再全量进模型（费用/爆上下文双解）
+  const historyAll = getAgentMessages(sessionId)
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-40)
     .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  const budgetTokens = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
+  const budget = trimHistoryByBudget(historyAll, budgetTokens)
+  const history = budget.kept
   const virtualKickoff = opts?.allowEmptyHistory === true && history.length === 0
   if (!virtualKickoff && (history.length === 0 || history[history.length - 1].role !== 'user')) {
     return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
@@ -514,7 +522,10 @@ async function runAgentLoop(
         : ''
       const reply = r.content + changesText
       appendAgentMessage(sessionId, 'assistant', reply, trace)
-      return { ok: true, sessionId, reply, changes, trace, injection }
+      return {
+        ok: true, sessionId, reply, changes, trace, injection,
+        contextBudget: { totalTurns: budget.totalTurns, keptTurns: budget.totalTurns - budget.droppedTurns, estimatedHistoryTokens: budget.estimatedTokens },
+      }
     }
 
     // ---- 记录 assistant(带 tool_calls)，逐个执行并回喂 ----
