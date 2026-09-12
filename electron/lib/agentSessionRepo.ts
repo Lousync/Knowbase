@@ -28,6 +28,17 @@ const SESSIONS_FILE = 'agent-sessions.json'
  */
 export type AgentSessionSource = 'assistant' | 'aiTeaching'
 
+/** 会话压缩纪要（docs/conversation-compaction-design.md）：覆盖 upto_id 及之前的消息 */
+export interface SessionDigest {
+  /** 纪要正文（markdown，生成侧 ≤4000 chars 截断保护） */
+  text: string
+  /** 检查点：已纳入纪要的最后一条消息 id（之后的消息仍以原文进上下文） */
+  upto_id: string
+  /** 累计被折叠的消息条数（跨多次增量压缩累加） */
+  covered: number
+  updated_at: string
+}
+
 export interface AgentSessionRow {
   id: string
   title: string
@@ -37,10 +48,12 @@ export interface AgentSessionRow {
   source?: AgentSessionSource
   created_at: string
   updated_at: string
+  /** 会话压缩纪要（缺省=未压缩）。原消息永不删除，置 null 即回滚 */
+  digest?: SessionDigest
 }
 
 /** 等价 datetime('now','localtime')：本地时间 "YYYY-MM-DD HH:MM:SS" */
-function nowLocal(): string {
+export function nowLocal(): string {
   const d = new Date()
   const p = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
@@ -145,6 +158,19 @@ export function getAgentSession(id: string): AgentSessionRow | undefined {
   return readSessions().find((s) => s.id === id)
 }
 
+/**
+ * 写回/清除会话压缩纪要（null = 清除，即回滚到未压缩态）。
+ * 不动 updated_at：会话列表排序由消息活跃驱动，压缩本身不应把会话顶到最上。
+ */
+export function updateSessionDigest(id: string, digest: SessionDigest | null): void {
+  const sessions = readSessions()
+  const row = sessions.find((s) => s.id === id)
+  if (!row) return
+  if (digest) row.digest = digest
+  else delete row.digest
+  globalWriteJson(SESSIONS_FILE, sessions)
+}
+
 export function deleteAgentSession(id: string): void {
   // 显式先删子消息（不依赖原 SQL 外键级联；v2 = 删整个会话消息文件）
   ensureMigrated()
@@ -198,19 +224,44 @@ export function getMessageById(sessionId: string, id: string): AgentMessageRow |
   return readMessages(globalDataDir(), sessionId).find((m) => m.id === id) ?? null
 }
 
+/**
+ * 消息删改与纪要一致性（压缩设计 §13）：删改命中纪要覆盖范围时作废 digest，
+ * 下次压缩自动重建。mode 'at' = 目标消息本身被删/改（位置 ≤ 检查点即作废）；
+ * mode 'after' = 目标之后的消息被删（检查点被删才作废，即检查点位置 > 锚点位置）。
+ */
+function invalidateDigestOnMutation(sessionId: string, targetId: string, mode: 'at' | 'after'): void {
+  try {
+    const row = getAgentSession(sessionId)
+    if (!row?.digest) return
+    const rows = getAgentMessages(sessionId)
+    const uptoIdx = rows.findIndex((m) => m.id === row.digest!.upto_id)
+    if (uptoIdx === -1) {
+      updateSessionDigest(sessionId, null)
+      return
+    }
+    const tIdx = rows.findIndex((m) => m.id === targetId)
+    if (tIdx === -1) return
+    const covered = mode === 'at' ? tIdx <= uptoIdx : tIdx < uptoIdx
+    if (covered) updateSessionDigest(sessionId, null)
+  } catch { /* 一致性作废失败不阻断消息操作本身 */ }
+}
+
 /** 编辑消息内容（仅用于用户消息改写后重推） */
 export function updateMessageContent(sessionId: string, id: string, content: string): void {
   ensureMigrated()
   storeUpdateMessageContent(globalDataDir(), sessionId, id, content)
+  invalidateDigestOnMutation(sessionId, id, 'at')
 }
 
 export function deleteMessage(sessionId: string, id: string): void {
   ensureMigrated()
   deleteMessageById(globalDataDir(), sessionId, id)
+  invalidateDigestOnMutation(sessionId, id, 'at')
 }
 
 /** 删除某条消息之后的所有消息（重新生成/编辑重推时清掉旧回复） */
 export function deleteMessagesAfter(sessionId: string, messageId: string): void {
   ensureMigrated()
   deleteMessagesAfterId(globalDataDir(), sessionId, messageId)
+  invalidateDigestOnMutation(sessionId, messageId, 'after')
 }

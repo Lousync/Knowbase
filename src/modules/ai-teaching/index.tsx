@@ -18,6 +18,7 @@ import { ResizablePanel } from '../../components/shared/ResizablePanel'
 import { QuizMode } from '../../components/shared/QuizMode'
 import { extractQuizzes } from '../../components/shared/QuizParser'
 import { showToast } from '../../lib/toast'
+import { handleChatCommand } from '../../lib/chatCommands'
 import { showGlobalConfirm } from '../../lib/globalConfirm'
 import { registerSelectionAskHost } from '../../lib/assistantContext'
 import { MarkdownPreview } from '../../components/shared/MarkdownPreview'
@@ -649,6 +650,8 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
     setMessages(prev => [...prev, { role: 'user', content: text, createdAt: new Date().toISOString() }]) // 条目4：乐观时间存 ISO（原纯时刻串必 Invalid Date）
     const ov = convoLlm.current.get(sid)
     const r = await agentChat(sid, text, undefined, cid, 'aiTeaching', ov?.modelId, ov?.effort)
+    // 自动压缩告知（会话压缩 §6.1）：主进程发送前折叠旧轮为纪要，用户应知道上下文变了
+    if (r?.ok && r.compressed) showToast({ type: 'info', message: `上下文已自动压缩 ${r.compressed.covered} 条历史 → 纪要（/compress 可手动触发）` })
     // V-2：失败提示下沉到 sendText——模板开场/ask 发送/PPT 逐页讲解等 5 处 void sendText 路径统一覆盖（原先只有 doSend 有 toast）
     if (r && !r.ok && r.code !== 'ABORTED') showToast({ type: 'error', message: `AI 调用失败：${r.error ?? ''}` })
     // 条目9②：本轮 system 注入分段按会话留存（hover 构成摘要）；条目9③：月度用量随每轮刷新
@@ -666,6 +669,15 @@ export function AiTeachingModule({ isActive, zenLevel = 0, onZenLevelChange }: {
   const doSend = useCallback(async () => {
     const text = input.trim()
     if (!text || pending) return
+    // 斜杠指令（/compress 等）：命中即拦截执行，不进对话（无会话时也拦截并提示）
+    if (text.startsWith('/')) {
+      const sid0 = activeIdRef.current
+      const ov0 = sid0 ? convoLlm.current.get(sid0) : undefined
+      if (await handleChatCommand(text, { sessionId: sid0 ?? '', surface: 'aiTeaching', modelId: ov0?.modelId, effort: ov0?.effort })) {
+        setInput('')
+        return
+      }
+    }
     setInput('')
     const cid = crypto.randomUUID()
     chatIdRef.current = cid

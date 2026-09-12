@@ -9,6 +9,7 @@ import { getLesson } from '../AiLearn/lessons'
 import { useSettings } from '../../../lib/SettingsContext'
 import { getAssistantContext, getSelectionAskHost } from '../../../lib/assistantContext'
 import { showToast } from '../../../lib/toast'
+import { handleChatCommand } from '../../../lib/chatCommands'
 import { TranslateCard } from '../TranslateCard'
 import { MessageList, fmtTime, type UiMessage } from './MessageList'
 import { useAgentStream } from './useAgentStream'
@@ -379,6 +380,13 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
       showToastSafe('正在回复上一条消息，请等待完成或点击「停止」', 'info')
       return
     }
+    // 斜杠指令（/compress 等）：命中即拦截执行，不进对话（置于 pending 检查后，避免生成中并发压缩）
+    if (body.startsWith('/')) {
+      if (await handleChatCommand(body, { sessionId: activeId ?? '', surface: full ? 'aiLearn' : 'assistant' })) {
+        if (!override) setInput('')
+        return
+      }
+    }
     let sid = activeId
     if (!sid) {
       const sRow = await agentNewSession().catch(() => null)
@@ -400,6 +408,8 @@ useEffect(() => { if (open) void refreshSessions() }, [open, refreshSessions])
     chatIdRef.current = cid
     try {
       const r = await agentChat(sid, text, ctx ?? undefined, cid)
+      // 自动压缩告知（会话压缩 §6.1）：主进程发送前折叠旧轮为纪要，用户应知道上下文变了
+      if (r.ok && r.compressed) showToastSafe(`上下文已自动压缩 ${r.compressed.covered} 条历史 → 纪要`, 'info')
       // 用户在等待期间切换了会话：回复已落库，但不注入当前视图
       if (activeIdRef.current !== sid) {
         showToastSafe('回复已保存到原会话，可在会话列表中查看', 'info')

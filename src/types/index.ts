@@ -857,6 +857,20 @@ export interface AgentChatResult {
   changes?: AgentChange[]
   /** UI 优化条目9②：AI教学本轮 system 注入分段字符数（上下文构成摘要；其它来源无此字段） */
   injection?: AiTeachInjectionStats
+  /** 触达轮数/token 预算上限：本次回答来自强制总结轮（渲染层可提示） */
+  hitCap?: boolean
+  /** 本次请求前自动压缩了历史（会话压缩 §6.1；渲染层据此 toast 告知） */
+  compressed?: { covered: number; digestChars: number }
+}
+
+/** 会话压缩结果（agent:compressSession；AgentCompressResult 的渲染层镜像） */
+export interface AgentCompressResult {
+  ok: boolean
+  skipped?: 'nothing-to-compress'
+  covered?: number
+  digestChars?: number
+  slices?: number
+  error?: string
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -1395,6 +1409,8 @@ export interface ElectronAPI {
   agentStartScene: (req: { sessionId: string; context?: AgentContextInfo; chatId?: string; source?: string; modelId?: string }) => Promise<AgentChatResult>
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: AgentContextInfo; chatId?: string }) => Promise<AgentChatResult>
   agentDeleteMessage: (sessionId: string, messageId: string) => Promise<boolean>
+  /** 会话压缩（/compress 指令 + 自动预检共用）：折叠检查点后旧轮为纪要并推进检查点 */
+  agentCompressSession: (req: { sessionId: string; modelId?: string; providerId?: string; effort?: string }) => Promise<AgentCompressResult>
   agentAbort: (chatId: string) => Promise<boolean>
   /** AgentRunner 实时过程步骤（llm/tool 每步完成即推送，payload {chatId, step}） */
   onAgentStep: (cb: (p: { chatId: string; step: AgentTraceStep }) => void) => () => void

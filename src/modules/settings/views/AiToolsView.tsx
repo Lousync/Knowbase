@@ -6,6 +6,7 @@ import {
   aiToolsList, aiToolsGetRecentAudit,
   mcpListServers, mcpAddServer, mcpRemoveServer, mcpToggleServer, mcpRefreshTools, mcpTestConnection,
   aiToolsListSkills, aiToolsCopySkillPrompt, aiToolsInstallSkill, aiToolsInstallSkillFromFile, aiToolsUninstallSkill, aiToolsToggleSkill,
+  llmListProviders,
 } from '../../../lib/ipc'
 import { AiModelsTab } from './AiModelsTab'
 import { SettingSwitch } from '../../../components/shared/SettingSwitch'
@@ -128,6 +129,15 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
   const agentMaxRounds = s.agentMaxRounds ?? 16
   const agentRunTokenBudget = s.agentRunTokenBudget ?? 500000
   const agentContextBudgetTokens = s.agentContextBudgetTokens ?? 24000
+  const agentCompressionEnabled = s.agentCompressionEnabled !== false
+  const agentCompressModelId = s.agentCompressModelId ?? ''
+  // 压缩专用模型下拉：全部供应商的全部模型（'' = 跟随当前会话模型）
+  const [compressModelOptions, setCompressModelOptions] = useState<Array<{ value: string; label: string }>>([])
+  useEffect(() => {
+    void llmListProviders().then(({ providers }) => {
+      setCompressModelOptions(providers.flatMap(p => (p.models ?? []).map(m => ({ value: `${p.id}:${m}`, label: `${p.name} / ${m}` }))))
+    }).catch(() => setCompressModelOptions([]))
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -213,7 +223,26 @@ function BuiltinToolsTab({ usage, onUsageChange, monthlyLimit }: {
               className="w-24 px-2.5 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] text-right outline-none focus:border-[var(--accent)]"
             />
           </label>
-          <p className="text-[11px] text-[var(--text-muted)]">历史上下文预算控制带进模型的历史消息量，0 表示不裁剪（不推荐：长会话费用会快速上涨）。</p>
+          <div className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)]">历史自动压缩</span>
+            <SettingSwitch checked={agentCompressionEnabled} onChange={v => { void update('agentCompressionEnabled', v) }} aria-label="历史自动压缩" />
+          </div>
+          <label className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[var(--text-primary)] shrink-0">压缩专用模型</span>
+            <select
+              value={agentCompressModelId}
+              onChange={e => { void update('agentCompressModelId', e.target.value) }}
+              className="w-44 px-2 py-1.5 rounded-md border border-[var(--border-color)] bg-[var(--input-bg)] text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] truncate"
+            >
+              <option value="">跟随当前会话模型</option>
+              {compressModelOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            历史上下文预算控制带进模型的历史消息量，0 表示不裁剪（不推荐：长会话费用会快速上涨）。
+            开启自动压缩后，上下文逼近预算（80%）时先把较早的对话折叠为持久化纪要再发送（代替直接丢弃）；
+           也可随时在聊天框输入 /compress 手动压缩。
+          </p>
         </div>
       </div>
 

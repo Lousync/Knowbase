@@ -3,7 +3,10 @@ import { randomUUID } from 'crypto'
 import { listTools, invokeToolInternal, getSettingReader, checkModulePermission, checkVaultFilePermission } from './aiTools'
 import type { ToolDescription, AiToolInvokeResult } from './aiTools'
 import { invokeLlmStreamInternal } from './llmService'
-import { trimHistoryByBudget } from './agentContextBudget'
+import { estimateTokens, trimHistoryByBudget } from './agentContextBudget'
+import { COMPRESS_AT_RATIO, composeContextWithDigest, rowsAfterDigest } from './agentCompressCore'
+import { compressSession } from './agentCompress'
+import type { SessionDigest } from './agentSessionRepo'
 import { clampMaxRounds, clampRunTokenBudget, isParallelSafe, partitionToolBatches, PARALLEL_CHUNK, PARALLEL_HINT, FINAL_ROUND_NOTICE, FORCED_SUMMARY_NOTICE } from './agentLoopPolicy'
 import {
   createAgentSession, listAgentSessions, renameAgentSession, deleteAgentSession,
@@ -132,6 +135,8 @@ export interface AgentChatResult {
   contextBudget?: { totalTurns: number; keptTurns: number; estimatedHistoryTokens: number }
   /** 触达轮数/token 预算上限：本次回答来自强制总结轮（渲染层可提示「已达预算，以上为基于已获信息的总结」） */
   hitCap?: boolean
+  /** 本次请求前自动压缩了历史（会话压缩 §6.1；渲染层据此 toast 告知） */
+  compressed?: { covered: number; digestChars: number }
 }
 
 /** AI教学 system 注入分段字符数（基础人设 / CONSTRAINTS / 三层画像 / SOURCE 目录 / 教学规则） */
@@ -341,6 +346,31 @@ async function agentChat(req: AgentChatRequest, signal: AbortSignal, _chatId: st
   return runAgentLoop(sessionId, req.context, signal, trace, req.source, { modelId: req.modelId, effort: req.effort })
 }
 
+/**
+ * 历史装配（会话压缩改造）：digest 检查点之后的消息 → 条数硬上限（-40）→ token 轮级裁剪。
+ * 检查点之前的旧轮已被纪要替代、不再进上下文；无 digest / 检查点失效时与原行为一致
+ * （裁剪兜底语义不变：压缩失败/关闭时行为逐字节同改造前）。
+ */
+function assembleAgentHistory(sessionId: string): {
+  digest: SessionDigest | null
+  history: { role: 'user' | 'assistant'; content: string }[]
+  budget: { totalTurns: number; keptTurns: number; estimatedHistoryTokens: number }
+} {
+  const rowsAll = getAgentMessages(sessionId).filter(m => m.role === 'user' || m.role === 'assistant')
+  const digest = getAgentSession(sessionId)?.digest ?? null
+  const baseRows = digest ? (rowsAfterDigest(rowsAll, digest.upto_id) ?? rowsAll) : rowsAll
+  const historyAll = baseRows
+    .slice(-40)
+    .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  const budgetTokens = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
+  const budget = trimHistoryByBudget(historyAll, budgetTokens)
+  return {
+    digest,
+    history: budget.kept,
+    budget: { totalTurns: budget.totalTurns, keptTurns: budget.totalTurns - budget.droppedTurns, estimatedHistoryTokens: budget.estimatedTokens },
+  }
+}
+
 /** 从会话库当前内容直接推理（不追加新用户消息）——重新生成/编辑重推共用 */
 async function runAgentLoop(
   sessionId: string,
@@ -357,15 +387,10 @@ async function runAgentLoop(
   opts?: { allowEmptyHistory?: boolean }
 ): Promise<AgentChatResult> {
   // ---- 从会话库重建对话历史（仅 user/assistant 文本轮） ----
-  // 条数硬上限（-40）之后再做 token 预算裁剪（agentContextBudget）：
-  // 中间轮丢弃、首尾保留、只在轮边界断开——长会话不再全量进模型（费用/爆上下文双解）
-  const historyAll = getAgentMessages(sessionId)
-    .filter(m => m.role === 'user' || m.role === 'assistant')
-    .slice(-40)
-    .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
-  const budgetTokens = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
-  const budget = trimHistoryByBudget(historyAll, budgetTokens)
-  const history = budget.kept
+  // 会话压缩：检查点之前的旧轮已被纪要替代（assembleAgentHistory）；其后再做
+  // 条数硬上限（-40）与 token 轮级裁剪——压缩失败/关闭时兜底，长会话不再全量进模型
+  let asm = assembleAgentHistory(sessionId)
+  let history = asm.history
   const virtualKickoff = opts?.allowEmptyHistory === true && history.length === 0
   if (!virtualKickoff && (history.length === 0 || history[history.length - 1].role !== 'user')) {
     return { ok: false, sessionId, error: '没有可重新生成的用户消息', trace }
@@ -460,10 +485,31 @@ async function runAgentLoop(
         ruleChars: titleRuleHint.length + quizRuleHint.length + planRuleHint.length + askRuleHint.length + visualHint.length,
       }
     : undefined
-  const convo: AgentMessage[] = [
-    { role: 'system', content: baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint + PARALLEL_HINT },
-    ...history,
+  const systemFull = baseSystem + globalInstHint + instHint + profileHint + titleRuleHint + quizRuleHint + planRuleHint + askRuleHint + visualHint + sourcesHint + toolsHint + executionHint + deniedHint + vaultFileHint + skillHint + PARALLEL_HINT
+  // 纪要以首条 user 消息注入（composeContextWithDigest）——system+tools 是 prompt cache
+  // 前缀必须逐字稳定，纪要变化只重建一次性前缀
+  let convo: AgentMessage[] = [
+    { role: 'system', content: systemFull },
+    ...composeContextWithDigest(asm.digest?.text, history),
   ]
+
+  // ---- 自动压缩预检（会话压缩 §6.1）：逼近预算时先把旧轮折叠为纪要再发送 ----
+  // 估算面 = 实际发送串（system + 纪要 + 历史）+ tools payload。压缩后重装配
+  // （检查点推进 → base 变小）；无可压段时 skipped 不调 LLM；失败静默回退现有裁剪。
+  let compressed: { covered: number; digestChars: number } | undefined
+  const budgetSetting = Math.floor(Number(getSettingReader()('agentContextBudgetTokens')) || 24000)
+  if (!virtualKickoff && budgetSetting > 0 && getSettingReader()('agentCompressionEnabled') !== false) {
+    const est = estimateTokens(convo.map(m => m.content ?? '').join('\n')) + estimateTokens(JSON.stringify(toolPayload))
+    if (est > Math.floor(budgetSetting * COMPRESS_AT_RATIO)) {
+      const cr = await compressSession({ sessionId, modelId: llmOpts?.modelId, effort: llmOpts?.effort })
+      if (cr.ok && typeof cr.covered === 'number' && cr.covered > 0) {
+        compressed = { covered: cr.covered, digestChars: cr.digestChars ?? 0 }
+        asm = assembleAgentHistory(sessionId)
+        history = asm.history
+        convo = [{ role: 'system', content: systemFull }, ...composeContextWithDigest(asm.digest?.text, history)]
+      }
+    }
+  }
   // 虚拟首轮：仅存在于本次请求的 convo，不写会话库、不渲染气泡。
   // 场景规则本身随 CONSTRAINTS.md 每轮注入（持久），这里只负责「让 AI 开口说第一句」。
   if (virtualKickoff) convo.push({ role: 'user', content: '（请按上述会话要求开始）' })
@@ -546,7 +592,8 @@ async function runAgentLoop(
       appendAgentMessage(sessionId, 'assistant', reply, trace)
       return {
         ok: true, sessionId, reply, changes, trace, injection,
-        contextBudget: { totalTurns: budget.totalTurns, keptTurns: budget.totalTurns - budget.droppedTurns, estimatedHistoryTokens: budget.estimatedTokens },
+        ...(compressed ? { compressed } : {}),
+        contextBudget: asm.budget,
       }
     }
 
@@ -712,7 +759,7 @@ async function runAgentLoop(
       : ''
     const reply = fr.content + changesText
     appendAgentMessage(sessionId, 'assistant', reply, trace)
-    return { ok: true, sessionId, reply, changes, trace, injection, hitCap: true }
+    return { ok: true, sessionId, reply, changes, trace, injection, hitCap: true, ...(compressed ? { compressed } : {}) }
   }
   return { ok: false, sessionId, error: `已达最大推理轮数（${maxRounds}）且总结失败，请缩小问题范围后重试`, code: 'MAX_ITERATIONS', trace }
 }

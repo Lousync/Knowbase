@@ -203,6 +203,8 @@ const api = {
   agentStartScene: (req: { sessionId: string; context?: unknown; chatId?: string; source?: string; modelId?: string }) => ipcRenderer.invoke('agent:startScene', req),
   agentEditMessage: (req: { sessionId: string; messageId: string; message: string; context?: unknown; chatId?: string }) => ipcRenderer.invoke('agent:editMessage', req),
   agentDeleteMessage: (sessionId: string, messageId: string) => ipcRenderer.invoke('agent:deleteMessage', { sessionId, messageId }),
+  /** 会话压缩（/compress 指令 + 自动预检共用）：折叠检查点后旧轮为纪要并推进检查点 */
+  agentCompressSession: (req: { sessionId: string; modelId?: string; providerId?: string; effort?: string }) => ipcRenderer.invoke('agent:compressSession', req),
   agentAbort: (chatId: string) => ipcRenderer.invoke('agent:abort', chatId),
   /** AgentRunner 实时过程步骤（chatId 过滤后驱动前端活动气泡） */
   onAgentStep: (cb: (p: { chatId: string; step: unknown }) => void) => {
