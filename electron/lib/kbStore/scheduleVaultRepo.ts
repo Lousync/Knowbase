@@ -282,6 +282,7 @@ export function vaultUpdateTodo(id: string, patch: Record<string, unknown>, upda
       case 'parent_id': next.parent_id = v as string | null; break
       case 'scheduled_start': next.scheduled_start = v as number | null; break
       case 'scheduled_end': next.scheduled_end = v as number | null; break
+      case 'snooze_until': next.snooze_until = v as string | null; break
     }
   }
   // preset：updated_at 总被刷新（sqlite handler 里恒定附加）
